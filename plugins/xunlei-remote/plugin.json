@@ -1,0 +1,29 @@
+{
+  "id": "xunlei-remote",
+  "name": "迅雷远程",
+  "version": "0.1.0-recovered",
+  "type": "downloader",
+  "description": "通过群晖迅雷 NAS Web API 管理远程下载任务。",
+  "capabilities": ["downloader", "remote_tasks", "network_outbound"],
+  "enabled_by_default": false,
+  "default_config": {
+    "base_url": "",
+    "entry_path": "/webman/3rdparty/pan-xunlei-com/index.cgi/",
+    "authorization": "",
+    "pan_auth": "",
+    "verify_tls": false,
+    "savepath": "",
+    "mobile_parent_folder_id": "",
+    "timeout": 20
+  },
+  "config_schema": {
+    "base_url": {"type": "string", "label": "群晖地址", "description": "例如 https://nas:5001"},
+    "entry_path": {"type": "string", "label": "迅雷入口路径"},
+    "authorization": {"type": "password", "label": "DSM Authorization", "description": "从迅雷 NAS 请求头复制完整 Authorization: Basic ... 值。"},
+    "pan_auth": {"type": "password", "label": "pan_auth（可选）", "description": "留空时从迅雷页面自动提取。"},
+    "verify_tls": {"type": "boolean", "label": "校验证书"},
+    "savepath": {"type": "string", "label": "默认保存路径", "description": "必须能被迅雷 NAS 解析为实际目录；解析失败时不会回退到默认目录。"},
+    "mobile_parent_folder_id": {"type": "string", "label": "默认目录 ID（可选）", "description": "仅在提交时未指定保存路径时使用。"},
+    "timeout": {"type": "number", "label": "请求超时（秒）", "min": 5, "max": 120}
+  }
+}
