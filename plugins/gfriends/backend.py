@@ -407,6 +407,9 @@ async def test(config: dict[str, Any]) -> PluginTestResult:
 
 
 async def handle_action(action: str, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    if action == "test":
+        result = await test(config)
+        return {"ok": result.ok, "message": result.message, "details": result.details or {}}
     if action == "sync":
         index = await _sync_index(config, force=bool(payload.get("force")))
         return {"ok": True, "index": _stats(index)}

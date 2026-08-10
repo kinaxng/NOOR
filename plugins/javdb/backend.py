@@ -1110,6 +1110,9 @@ async def build_knowledge_contributions(config: dict[str, Any], limit: int = 100
 async def handle_action(action: str, payload: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or {}
     payload = payload or {}
+    if action == "test":
+        result = await test(config)
+        return {"ok": result.ok, "message": result.message, "details": result.details or {}}
     if action in {"rankings", "latest", "videos", "top250", "recommend"}:
         return await _list_action(config, action, payload)
     if action == "search":
