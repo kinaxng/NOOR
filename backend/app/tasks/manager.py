@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import select
 
 from app.core.database import async_session_maker
+from app.core.config import get_settings
 from app.core.models import Job, JobCreate, JobResponse
 from app.pipeline.facefusion.runner import run_facefusion_restoration
 from app.pipeline.lada.runner import run_lada_restoration
@@ -218,7 +219,12 @@ class JobManager:
         await self._emit(job_id, 'progress', progress=0, detail='任务执行中')
         try:
             if job_type == 'lada':
-                output_path = build_lada_output_path(input_path, settings)
+                runtime_settings = get_settings()
+                output_path = build_lada_output_path(
+                    input_path,
+                    str(settings.get('source_dir') or runtime_settings.source_dir or ''),
+                    str(settings.get('output_dir') or runtime_settings.output_dir or ''),
+                )
                 progress_queue: asyncio.Queue = asyncio.Queue()
                 runner = asyncio.create_task(run_lada_restoration(job_id, input_path, output_path, settings, progress_queue, cancel_event))
                 while not runner.done():
