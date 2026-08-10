@@ -1,0 +1,6 @@
+{
+  "id": "av-recommend",
+  "name": "推荐中心",
+  "version": "1.0.0-recovered",
+  "description": "从保留的完整候选池提供本地推荐与搜索。"
+}
