@@ -10,7 +10,9 @@ type JavdbDetail = JavdbItem & { origin_title?: string; duration?: string; maker
 type Actor = { id: string; name: string; avatar_url?: string; name_zht?: string; other_name?: string }
 type EmbyActor = { id: string; name: string; display_name?: string; sort_name?: string; avatar_url?: string; name_jp?: string; name_zh_cn?: string; name_zh_tw?: string; aliases?: string; emby_url?: string }
 type HardlinkGroup = { code: string; hardlink_count?: number; orphan_count?: number; status?: string; entries?: Array<{ source_path?: string; hardlink_paths?: string[] }> }
-type Page = 'overview' | 'recommendations' | 'javdb' | 'actors' | 'files' | 'tasks' | 'plugins' | 'settings'
+type MediaLibrary = { id: string; name: string; collection_type?: string }
+type MediaItem = { id: string; name: string; type?: string; poster_path?: string; date_created?: string; path?: string; tags?: { is_cracked?: boolean; has_chinese?: boolean; is_uncensored?: boolean; is_leaked?: boolean } }
+type Page = 'overview' | 'library' | 'recommendations' | 'javdb' | 'actors' | 'files' | 'tasks' | 'plugins' | 'settings'
 
 const page = ref<Page>('overview')
 const loading = ref(true)
@@ -50,9 +52,19 @@ const duplicatesLoading = ref(false)
 const gfriendsCandidates = ref<Array<{ url: string; remote_url: string; name: string; aliases?: string[] }>>([])
 const gfriendsLoading = ref(false)
 const avatarSaving = ref(false)
+const mediaLibraries = ref<MediaLibrary[]>([])
+const mediaItems = ref<MediaItem[]>([])
+const mediaTotal = ref(0)
+const mediaLoading = ref(false)
+const mediaLibraryId = ref('')
+const mediaOffset = ref(0)
+const mediaPageSize = 48
+const selectedMediaItem = ref<MediaItem | null>(null)
 
-const title = computed(() => ({ overview: '概览', recommendations: '推荐中心', javdb: 'JavDB', actors: '演员', files: '文件', tasks: '任务', plugins: '插件', settings: '设置' }[page.value]))
+const title = computed(() => ({ overview: '概览', library: '媒体库', recommendations: '推荐中心', javdb: 'JavDB', actors: '演员', files: '文件', tasks: '任务', plugins: '插件', settings: '设置' }[page.value]))
 const runningJobs = computed(() => jobs.value.filter((job) => ['queued', 'running', 'blocked'].includes(job.status)))
+const mediaPage = computed(() => Math.floor(mediaOffset.value / mediaPageSize) + 1)
+const mediaPageCount = computed(() => Math.max(1, Math.ceil(mediaTotal.value / mediaPageSize)))
 const filteredActors = computed(() => {
   const query = actorQuery.value.trim().toLowerCase()
   if (!query) return actors.value
@@ -144,6 +156,45 @@ async function openJavdbDetail(item: JavdbItem) {
     const result = await pluginAction<{ data: JavdbDetail }>('javdb', 'video', { code: item.code })
     javdbDetail.value = result.data || null
   } catch (cause) { error.value = cause instanceof Error ? cause.message : '作品详情加载失败' }
+}
+
+async function loadMediaLibrary(resetOffset = false) {
+  if (resetOffset) mediaOffset.value = 0
+  mediaLoading.value = true
+  error.value = ''
+  try {
+    if (!mediaLibraries.value.length) {
+      const libraries = await request<{ libraries: MediaLibrary[] }>('/api/media-library/libraries')
+      mediaLibraries.value = libraries.libraries || []
+    }
+    const params = new URLSearchParams({ limit: String(mediaPageSize), offset: String(mediaOffset.value) })
+    if (mediaLibraryId.value) params.set('library_id', mediaLibraryId.value)
+    const data = await request<{ items: MediaItem[]; total: number }>(`/api/media-library/items?${params.toString()}`)
+    mediaItems.value = data.items || []
+    mediaTotal.value = data.total || 0
+  } catch (cause) {
+    mediaItems.value = []
+    mediaTotal.value = 0
+    error.value = cause instanceof Error ? cause.message : '媒体库加载失败'
+  } finally { mediaLoading.value = false }
+}
+
+async function openMediaItem(item: MediaItem) {
+  try {
+    selectedMediaItem.value = await request<MediaItem>(`/api/media-library/item/${encodeURIComponent(item.id)}`)
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : '媒体详情加载失败' }
+}
+
+async function openMediaLibrary() {
+  page.value = 'library'
+  await loadMediaLibrary()
+}
+
+async function changeMediaPage(direction: number) {
+  const next = Math.max(0, Math.min(mediaOffset.value + direction * mediaPageSize, Math.max(0, (mediaPageCount.value - 1) * mediaPageSize)))
+  if (next === mediaOffset.value) return
+  mediaOffset.value = next
+  await loadMediaLibrary()
 }
 
 async function loadActors() {
@@ -304,6 +355,7 @@ onMounted(refresh)
       <div class="brand"><span class="brand-mark">N</span><span>NOOR</span></div>
       <nav aria-label="主导航">
         <button :class="{ active: page === 'overview' }" @click="page = 'overview'">概览</button>
+        <button :class="{ active: page === 'library' }" @click="openMediaLibrary">媒体库</button>
         <button :class="{ active: page === 'recommendations' }" @click="page = 'recommendations'">推荐</button>
         <button :class="{ active: page === 'javdb' }" @click="page = 'javdb'; loadJavdb()">JavDB</button>
         <button :class="{ active: page === 'actors' }" @click="page = 'actors'; loadActors()">演员</button>
@@ -327,6 +379,12 @@ onMounted(refresh)
           <section class="panel wide"><div class="panel-heading"><h2>最近任务</h2><button @click="page = 'tasks'">查看全部</button></div><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs.slice(0, 6)" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.detail || job.status }}</small></div><span>{{ job.progress }}%</span></div></section>
         </section>
         <section v-else-if="page === 'tasks'" class="panel"><div class="panel-heading"><h2>任务队列</h2><button @click="refresh">刷新</button></div><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.detail || job.status }}</small><div class="progress"><i :style="{ width: `${job.progress}%` }" /></div></div><span :class="['badge', job.status]">{{ job.status }}</span></div></section>
+        <section v-else-if="page === 'library'" class="media-library">
+          <div class="panel-heading media-library__controls"><div class="library-picker"><button :class="{ active: !mediaLibraryId }" @click="mediaLibraryId = ''; loadMediaLibrary(true)">全部</button><button v-for="library in mediaLibraries" :key="library.id" :class="{ active: mediaLibraryId === library.id }" @click="mediaLibraryId = library.id; loadMediaLibrary(true)">{{ library.name }}</button></div><button @click="loadMediaLibrary()">刷新</button></div>
+          <p v-if="mediaLoading" class="empty">正在读取媒体库...</p>
+          <template v-else><p v-if="!mediaItems.length" class="empty">当前媒体库没有影片</p><div class="media-grid"><article v-for="item in mediaItems" :key="item.id" class="media-card" @click="openMediaItem(item)"><div class="media-poster"><img v-if="item.poster_path" :src="item.poster_path" :alt="item.name" loading="lazy" /><span v-if="item.tags?.is_cracked">换脸</span></div><div><b>{{ item.name }}</b><small>{{ item.date_created ? new Date(item.date_created).toLocaleDateString() : '日期未知' }}</small></div></article></div><div v-if="mediaTotal > mediaPageSize" class="media-pagination"><button :disabled="mediaPage <= 1" @click="changeMediaPage(-1)">上一页</button><span>{{ mediaPage }} / {{ mediaPageCount }} · {{ mediaTotal }} 部</span><button :disabled="mediaPage >= mediaPageCount" @click="changeMediaPage(1)">下一页</button></div></template>
+          <section v-if="selectedMediaItem" class="detail-panel"><div class="panel-heading"><div><h2>{{ selectedMediaItem.name }}</h2><small>{{ selectedMediaItem.type || '媒体项目' }}</small></div><button title="关闭详情" aria-label="关闭详情" @click="selectedMediaItem = null">x</button></div><img v-if="selectedMediaItem.poster_path" class="detail-cover" :src="selectedMediaItem.poster_path" :alt="selectedMediaItem.name" /><p v-if="selectedMediaItem.path" class="media-path">{{ selectedMediaItem.path }}</p></section>
+        </section>
         <section v-else-if="page === 'recommendations'"><div class="panel-heading recommendation-controls"><div class="segmented" aria-label="推荐范围"><button :class="{ active: recommendationMode === 'latest' }" @click="setRecommendationMode('latest')">最新推荐</button><button :class="{ active: recommendationMode === 'full' }" @click="setRecommendationMode('full')">完整推荐</button></div><span class="muted">{{ recommendations.length }} 部作品</span></div><div class="recommendations"><p v-if="!recommendations.length" class="empty">候选池暂无作品</p><article v-for="item in recommendations" :key="item.code" class="work-card"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /><span v-if="item.is_today_increment">今日</span></div><div><div class="card-title"><b>{{ item.code }}</b><strong>{{ item.recommendation_score ?? item.score ?? 0 }}</strong></div><p>{{ item.title }}</p><small>{{ item.release_date || '日期未知' }}<template v-if="item.actors.length"> · {{ item.actors.slice(0, 2).join('、') }}</template></small><div class="card-actions"><button title="喜欢" aria-label="喜欢" @click="feedback(item, 'like')">+</button><button title="不喜欢" aria-label="不喜欢" @click="feedback(item, 'dislike')">-</button><button title="忽略" aria-label="忽略" @click="feedback(item, 'ignore')">x</button></div></div></article></div></section>
         <section v-else-if="page === 'javdb'"><form class="javdb-search" @submit.prevent="loadJavdb"><input v-model="javdbQuery" aria-label="搜索作品" placeholder="番号或标题" /><button type="submit">搜索</button><button type="button" title="恢复最近更新" @click="javdbQuery = ''; loadJavdb()">最新</button></form><p v-if="javdbLoading" class="empty">正在读取 JavDB...</p><div v-else class="recommendations"><p v-if="!javdbItems.length" class="empty">没有找到作品</p><article v-for="item in javdbItems" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><div class="card-title"><b>{{ item.code }}</b><strong v-if="item.magnets_count">{{ item.magnets_count }} 磁链</strong></div><p>{{ item.title }}</p><small>{{ item.release_date || '日期未知' }}<template v-if="item.actors?.length"> · {{ item.actors.slice(0, 2).join('、') }}</template></small></div></article></div><section v-if="javdbDetail" class="detail-panel"><div class="panel-heading"><div><h2>{{ javdbDetail.code }}</h2><small>{{ javdbDetail.title }}</small></div><button title="关闭详情" aria-label="关闭详情" @click="javdbDetail = null">x</button></div><img v-if="javdbDetail.cover_url" class="detail-cover" :src="javdbDetail.cover_url" :alt="javdbDetail.title" /><p v-if="javdbDetail.origin_title">{{ javdbDetail.origin_title }}</p><p><b>演员：</b>{{ javdbDetail.actors?.join('、') || '未知' }}</p><p><b>类型：</b>{{ javdbDetail.categories?.join('、') || '未知' }}</p><p><b>磁链：</b>{{ javdbDetail.magnets?.length || 0 }}</p></section></section>
         <section v-else-if="page === 'actors'"><div class="javdb-search"><input v-model="actorQuery" aria-label="筛选演员" placeholder="筛选演员名称" /><button type="button" title="刷新演员列表" @click="loadActors()">刷新</button></div><p v-if="actorLoading" class="empty">正在读取演员列表...</p><div v-else class="actor-grid"><button v-for="actor in filteredActors" :key="actor.id" class="actor-card" @click="openActor(actor)"><img v-if="actor.avatar_url" :src="actor.avatar_url" :alt="actor.name" loading="lazy" /><span v-else class="actor-placeholder">{{ actor.name.slice(0, 1) }}</span><b>{{ actor.name }}</b><small>{{ actor.name_zht || actor.other_name }}</small></button></div><section v-if="selectedActor" class="detail-panel"><div class="panel-heading"><div class="actor-heading"><img v-if="selectedActor.avatar_url" :src="selectedActor.avatar_url" :alt="selectedActor.name" /><div><h2>{{ selectedActor.name }}</h2><small>{{ selectedActor.name_zht || selectedActor.other_name }}</small></div></div><button title="关闭演员详情" aria-label="关闭演员详情" @click="selectedActor = null">x</button></div><div class="recommendations compact"><article v-for="item in actorMovies" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><b>{{ item.code }}</b><p>{{ item.title }}</p></div></article></div></section></section>
@@ -376,6 +434,7 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .icon-button { width: 36px; height: 36px; border: 1px solid #3a4655; background: #202833; color: #e9edf2; border-radius: 5px; font-size: 20px; }
 .overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }.stat, .panel, .notice { background: #1a212b; border: 1px solid #303a47; border-radius: 6px; }.stat { padding: 18px; display: grid; gap: 8px; }.stat span, small { color: #98a6b7; }.stat strong { font-size: 30px; }.wide { grid-column: 1 / -1; }.panel { padding: 18px; }.panel-heading { display: flex; align-items: center; justify-content: space-between; }.panel-heading button { color: #8fc9f5; border: 0; background: none; }.job-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid #2b3440; }.job-row div { min-width: 0; }.job-row b, .job-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.job-row small { margin-top: 4px; }.badge { font-size: 12px; padding: 4px 8px; border-radius: 999px; background: #394553; color: #dce5ee; }.badge.completed { background: #173f31; color: #8fe4b8; }.badge.failed { background: #4b2830; color: #ffafb9; }.progress { margin-top: 8px; height: 4px; background: #303a47; width: min(300px, 100%); }.progress i { display: block; height: 100%; background: #168bdf; }.notice { padding: 14px; color: #aeb9c6; }.notice.error { border-color: #80424d; color: #ffbec6; } .empty { color: #93a0b0; padding: 22px 0; } pre { max-height: 60vh; overflow: auto; color: #cdd9e6; font-size: 12px; line-height: 1.55; }
 .recommendation-controls { margin-bottom: 14px; }.segmented { display: inline-flex; border: 1px solid #3a4655; border-radius: 5px; overflow: hidden; }.segmented button { border: 0; background: transparent; color: #aab4c1; padding: 7px 11px; }.segmented button.active { background: #26394c; color: #fff; }.muted { color: #98a6b7; font-size: 12px; }.javdb-search { display: flex; gap: 8px; margin-bottom: 14px; }.javdb-search input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.javdb-search button { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; }.recommendations { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }.work-card { min-width: 0; background: #1a212b; border: 1px solid #303a47; border-radius: 6px; overflow: hidden; }.work-card.clickable { cursor: pointer; }.poster { position: relative; aspect-ratio: 2 / 3; background: #242d39; }.poster img { display: block; width: 100%; height: 100%; object-fit: cover; }.poster span { position: absolute; top: 8px; left: 8px; padding: 3px 6px; background: #168bdf; color: white; font-size: 11px; border-radius: 4px; }.work-card > div:last-child { padding: 10px; }.card-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.work-card b { color: #a9d5f7; font-size: 12px; }.card-title strong { color: #8fe4b8; font-size: 14px; }.work-card p { margin: 6px 0; font-size: 13px; line-height: 1.4; min-height: 54px; overflow: hidden; }.work-card small { line-height: 1.4; }.card-actions { display: flex; justify-content: flex-end; gap: 5px; margin-top: 10px; }.card-actions button { width: 25px; height: 25px; border: 1px solid #3a4655; background: #202833; color: #c9d3dd; border-radius: 4px; }.actor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; }.actor-card { min-width: 0; border: 1px solid #303a47; border-radius: 6px; padding: 8px; background: #1a212b; color: #dce5ee; text-align: left; display: grid; gap: 6px; }.actor-card img, .actor-placeholder { width: 100%; aspect-ratio: 1; object-fit: cover; background: #242d39; display: grid; place-items: center; color: #98a6b7; }.actor-card b, .actor-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.actor-card small { color: #98a6b7; }.detail-panel { margin-top: 18px; padding: 18px; background: #1a212b; border: 1px solid #303a47; border-radius: 6px; overflow: auto; }.detail-panel .panel-heading button { width: 30px; height: 30px; border: 1px solid #3a4655; background: #202833; color: #dce5ee; border-radius: 4px; }.detail-cover { width: min(240px, 100%); margin: 12px 0; display: block; }.actor-heading { display: flex; align-items: center; gap: 12px; }.actor-heading img { width: 64px; height: 64px; object-fit: cover; }.compact { margin-top: 14px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.media-library__controls { margin-bottom: 16px; }.library-picker { display: flex; min-width: 0; gap: 6px; overflow-x: auto; padding-bottom: 2px; }.library-picker button, .media-pagination button { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; white-space: nowrap; }.library-picker button.active { background: #1b5b88; border-color: #218bd0; color: #fff; }.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }.media-card { min-width: 0; cursor: pointer; border: 1px solid #303a47; border-radius: 6px; overflow: hidden; background: #1a212b; }.media-card:hover { border-color: #4e7492; }.media-poster { position: relative; aspect-ratio: 2 / 3; background: #242d39; }.media-poster img { display: block; width: 100%; height: 100%; object-fit: cover; }.media-poster span { position: absolute; top: 7px; left: 7px; background: #177ebc; color: #fff; font-size: 11px; padding: 3px 5px; border-radius: 3px; }.media-card > div:last-child { display: grid; gap: 5px; padding: 9px; }.media-card b { color: #dce5ee; font-size: 13px; line-height: 1.35; height: 3.9em; overflow: hidden; }.media-card small { font-size: 11px; }.media-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 22px 0 4px; color: #98a6b7; font-size: 12px; }.media-pagination button:disabled { opacity: .45; cursor: default; }.media-path { color: #98a6b7; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .file-tabs { display: flex; gap: 4px; border-bottom: 1px solid #303a47; margin-bottom: 20px; }.file-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #9ba8b6; padding: 9px 12px; }.file-tabs button.active { border-bottom-color: #168bdf; color: #fff; }.hardlink-list { display: grid; gap: 8px; }.hardlink-row { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid #2b3440; }.hardlink-row div { min-width: 0; }.hardlink-row b, .hardlink-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.hardlink-row small { margin-top: 5px; }.actor-management-tools { display: flex; align-items: center; gap: 8px; margin: 14px 0; }.actor-management-tools input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.actor-management-tools button, .detail-actions a { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; text-decoration: none; }.detail-actions { display: flex; align-items: center; gap: 8px; }.emby-actor-grid { margin-top: 12px; }
 .settings-section { border-top: 1px solid #2b3440; border-bottom: 1px solid #2b3440; padding: 16px 0; margin: 16px 0; }.settings-section h3 { margin: 0 0 6px; font-size: 14px; }.settings-section p { color: #98a6b7; font-size: 13px; }.settings-inline { display: flex; gap: 8px; }.settings-inline input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.settings-inline button { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; }
 .gfriends-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin: 16px 0; }.gfriends-candidate { min-width: 0; padding: 5px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; display: grid; gap: 5px; text-align: left; }.gfriends-candidate img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #171c24; }.gfriends-candidate span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
