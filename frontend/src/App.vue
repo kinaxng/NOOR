@@ -313,6 +313,8 @@ const hardlinkConfigLoading = ref(false);
 const hardlinkConfigSaving = ref(false);
 const embyActors = ref<EmbyActor[]>([]);
 const embyActorsTotal = ref(0);
+const embyActorsOffset = ref(0);
+const embyActorsPageSize = 60;
 const embyActorsLoading = ref(false);
 const embyActorDetailLoading = ref(false);
 const embyActorQuery = ref("");
@@ -489,6 +491,9 @@ const filteredActors = computed(() => {
 });
 const coverBlurActive = computed(
   () => coverBlurBrowserOverride.value ?? coverBlurGlobal.value,
+);
+const embyActorsHasMore = computed(
+  () => embyActorsOffset.value < embyActorsTotal.value,
 );
 const embyWebhookUrl = computed(() => {
   if (typeof window === "undefined") return "/api/webhooks/emby";
@@ -2043,16 +2048,18 @@ async function confirmHardlinkDelete() {
   }
 }
 
-async function loadEmbyActors() {
+async function loadEmbyActorsPage(append: boolean) {
   embyActorsLoading.value = true;
   error.value = "";
   try {
+    const offset = append ? embyActorsOffset.value : 0;
+    if (!append) embyActorsOffset.value = 0;
     const query = embyActorQuery.value.trim();
     const sortBy = embyActorSort.value === "recent" ? "DateCreated" : "SortName";
     const sortOrder = embyActorSort.value === "recent" ? "Descending" : "Ascending";
     const [actorsData, status] = await Promise.all([
       request<{ actors: EmbyActor[]; total: number }>(
-        `/api/media-library/actors?limit=60&sort_by=${sortBy}&sort_order=${sortOrder}&lang=${actorDisplayLanguage.value}${query ? `&q=${encodeURIComponent(query)}` : ""}`,
+        `/api/media-library/actors?limit=${embyActorsPageSize}&offset=${offset}&sort_by=${sortBy}&sort_order=${sortOrder}&lang=${actorDisplayLanguage.value}${query ? `&q=${encodeURIComponent(query)}` : ""}`,
       ),
       request<{
         exists?: boolean;
@@ -2061,8 +2068,12 @@ async function loadEmbyActors() {
         configured_root?: string;
       }>("/api/media-library/actors/mapping/status"),
     ]);
-    embyActors.value = actorsData.actors || [];
+    const received = actorsData.actors || [];
+    embyActors.value = append
+      ? [...embyActors.value, ...received.filter((actor) => !embyActors.value.some((current) => current.id === actor.id))]
+      : received;
     embyActorsTotal.value = actorsData.total || 0;
+    embyActorsOffset.value = offset + received.length;
     mappingStatus.value = status;
     mdcNgPath.value = status.configured_root || "";
   } catch (cause) {
@@ -2074,6 +2085,15 @@ async function loadEmbyActors() {
   } finally {
     embyActorsLoading.value = false;
   }
+}
+
+async function loadEmbyActors() {
+  await loadEmbyActorsPage(false);
+}
+
+async function loadMoreEmbyActors() {
+  if (embyActorsLoading.value || !embyActorsHasMore.value) return;
+  await loadEmbyActorsPage(true);
 }
 
 async function loadMappingStatus() {
@@ -3648,6 +3668,11 @@ onMounted(async () => {
                 }}</small>
               </button>
             </div>
+            <div v-if="embyActorsHasMore" class="actor-load-more">
+              <button :disabled="embyActorsLoading" @click="loadMoreEmbyActors">
+                {{ embyActorsLoading ? "正在读取..." : `加载更多（${embyActors.length}/${embyActorsTotal}）` }}
+              </button>
+            </div>
             <section v-if="selectedEmbyActor" class="detail-panel">
               <div class="panel-heading">
                 <div class="actor-heading">
@@ -4822,6 +4847,22 @@ pre {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
   gap: 10px;
+}
+.actor-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+.actor-load-more button {
+  border: 1px solid #3a4655;
+  border-radius: 5px;
+  background: #202833;
+  color: #dce5ee;
+  padding: 8px 12px;
+}
+.actor-load-more button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 .actor-card {
   min-width: 0;
