@@ -356,6 +356,7 @@ const globalSearchGroups = ref<
 >([]);
 const globalResourceSubmitting = ref("");
 const facefusionOpen = ref(false);
+const restorationTab = ref<"lada" | "facefusion">("lada");
 const facefusionSources = ref<FaceFusionSourceImage[]>([]);
 const selectedFacefusionSourceIds = ref<string[]>([]);
 const facefusionLoading = ref(false);
@@ -1199,6 +1200,7 @@ async function openFacefusion() {
     return;
   }
   facefusionOpen.value = true;
+  restorationTab.value = "facefusion";
   facefusionLoading.value = true;
   facefusionPreviewUrl.value = "";
   facefusionPreviewMetadata.value = {};
@@ -1230,6 +1232,20 @@ async function openFacefusion() {
   } finally {
     facefusionLoading.value = false;
   }
+}
+
+function openLadaPanel() {
+  if (!selectedMediaItem.value?.path) {
+    error.value = "当前媒体项目没有可处理的本地文件路径";
+    return;
+  }
+  restorationTab.value = "lada";
+  facefusionOpen.value = true;
+}
+
+async function openMediaCrackingPanel(item: MediaItem) {
+  await openMediaItem(item);
+  openLadaPanel();
 }
 
 function facefusionPreviewSettings() {
@@ -2732,7 +2748,14 @@ onMounted(async () => {
                     :src="item.poster_path"
                     :alt="item.name"
                     loading="lazy"
-                  /><span v-if="isFacefusionItem(item)" class="facefusion-badge">换脸</span
+                  /><button
+                    v-if="item.tags?.is_cracked"
+                    class="media-tag media-tag-cracked"
+                    title="打开去码面板"
+                    @click.stop="openMediaCrackingPanel(item)"
+                  >
+                    已破
+                  </button><span v-if="isFacefusionItem(item)" class="facefusion-badge">换脸</span
                   ><button
                     v-if="mediaDeleteGroup?.code === mediaCode(item)"
                     class="media-delete-button"
@@ -2778,7 +2801,7 @@ onMounted(async () => {
                   :disabled="ladaSubmitting"
                   title="LADA 去码"
                   aria-label="LADA 去码"
-                  @click="submitLada"
+                  @click="openLadaPanel"
                 >
                   {{ ladaSubmitting ? "提交中" : "去码" }}</button
                 ><button
@@ -2903,17 +2926,41 @@ onMounted(async () => {
             <section v-if="facefusionOpen" class="facefusion-panel">
               <div class="panel-heading">
                 <div>
-                  <h2>换脸</h2>
+                  <h2>破解处理</h2>
                   <small>任务将由 NOOR 队列执行</small>
                 </div>
                 <button
-                  title="关闭换脸面板"
-                  aria-label="关闭换脸面板"
+                  title="关闭破解处理面板"
+                  aria-label="关闭破解处理面板"
                   @click="facefusionOpen = false"
                 >
                   x
                 </button>
               </div>
+              <div class="segmented restoration-tabs" aria-label="破解处理方式">
+                <button
+                  :class="{ active: restorationTab === 'lada' }"
+                  @click="openLadaPanel"
+                >
+                  去码
+                </button><button
+                  :class="{ active: restorationTab === 'facefusion' }"
+                  @click="openFacefusion"
+                >
+                  换脸
+                </button>
+              </div>
+              <template v-if="restorationTab === 'lada'">
+                <div class="restoration-lada">
+                  <p>使用已保存的 LADA 检测、恢复与编码默认参数处理当前作品。</p>
+                  <div class="facefusion-submit">
+                    <button :disabled="ladaSubmitting" @click="submitLada">
+                      {{ ladaSubmitting ? "提交中" : "提交去码任务" }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
               <div class="facefusion-controls">
                 <label
                   >执行后端<select v-model="facefusionProvider">
@@ -3033,6 +3080,7 @@ onMounted(async () => {
                   {{ facefusionSubmitting ? "提交中" : "提交换脸任务" }}
                 </button>
               </div>
+              </template>
             </section>
           </section>
         </section>
@@ -4946,6 +4994,20 @@ pre {
   background: #a04fba;
   transition: opacity 0.15s ease;
 }
+.media-poster .media-tag {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 1;
+  border: 0;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 5px;
+}
+.media-poster .media-tag-cracked {
+  background: #b54b5a;
+}
 .media-card:hover .media-poster .facefusion-badge,
 .media-card:focus-within .media-poster .facefusion-badge {
   opacity: 1;
@@ -5345,6 +5407,18 @@ pre {
   margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid #303a47;
+}
+.restoration-tabs {
+  margin-top: 14px;
+}
+.restoration-lada {
+  padding: 14px 0 2px;
+}
+.restoration-lada p {
+  margin: 0;
+  color: #aebac7;
+  font-size: 13px;
+  line-height: 1.55;
 }
 .facefusion-controls {
   display: grid;
