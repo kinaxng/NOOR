@@ -532,10 +532,9 @@ async def upload_facefusion_source_images(files: list[UploadFile] = File(...)):
             "path": str(target_path),
             "preview_url": f"/api/facefusion/source-images/{image_id}",
         })
-    return {
-        "success": True,
-        "files": saved_files,
-    }
+    # Keep ``files`` for callers that use the native FaceFusion-shaped response,
+    # and expose ``items`` for the NOOR media-panel contract.
+    return {"success": True, "files": saved_files, "items": saved_files}
 
 
 @router.get("/source-images")
@@ -547,10 +546,8 @@ async def list_facefusion_source_images():
         if path.is_file() and path.suffix.lower() in FACEFUSION_SOURCE_IMAGE_EXTENSIONS
     ]
     files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    return {
-        "success": True,
-        "files": [_source_image_payload(path) for path in files[:200]],
-    }
+    items = [_source_image_payload(path) for path in files[:200]]
+    return {"success": True, "files": items, "items": items}
 
 
 @router.get("/source-images/{image_id}")

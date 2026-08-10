@@ -1174,10 +1174,13 @@ async function openFacefusion() {
   facefusionLoading.value = true;
   error.value = "";
   try {
-    const result = await request<{ items: FaceFusionSourceImage[] }>(
+    const result = await request<{
+      items?: FaceFusionSourceImage[];
+      files?: FaceFusionSourceImage[];
+    }>(
       "/api/facefusion/source-images",
     );
-    facefusionSources.value = result.items || [];
+    facefusionSources.value = result.items || result.files || [];
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "源脸图片库加载失败";
   } finally {
@@ -1209,12 +1212,39 @@ async function uploadFacefusionSources(event: Event) {
       throw new Error(`${response.status} ${response.statusText}`);
     const result = (await response.json()) as {
       items?: FaceFusionSourceImage[];
+      files?: FaceFusionSourceImage[];
     };
-    facefusionSources.value = result.items || facefusionSources.value;
+    facefusionSources.value = result.items || result.files || facefusionSources.value;
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "源脸图片上传失败";
   } finally {
     input.value = "";
+    facefusionLoading.value = false;
+  }
+}
+
+async function deleteFacefusionSource(source: FaceFusionSourceImage) {
+  if (!source.id) return;
+  facefusionLoading.value = true;
+  error.value = "";
+  try {
+    const response = await fetch(
+      `/api/facefusion/source-images/${encodeURIComponent(source.id)}`,
+      { method: "DELETE" },
+    );
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `${response.status} ${response.statusText}`,
+      );
+    facefusionSources.value = facefusionSources.value.filter(
+      (item) => item.id !== source.id,
+    );
+    selectedFacefusionSourceIds.value = selectedFacefusionSourceIds.value.filter(
+      (id) => id !== source.id,
+    );
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "删除源脸图片失败";
+  } finally {
     facefusionLoading.value = false;
   }
 }
@@ -2826,24 +2856,33 @@ onMounted(async () => {
               </div>
               <p v-if="facefusionLoading" class="empty">正在读取图片库...</p>
               <div v-else class="facefusion-source-grid">
-                <button
+                <article
                   v-for="source in facefusionSources"
                   :key="source.id"
-                  :class="[
-                    'facefusion-source',
-                    {
-                      selected: selectedFacefusionSourceIds.includes(source.id),
-                    },
-                  ]"
-                  :title="source.name"
-                  @click="toggleFacefusionSource(source.id)"
+                  class="facefusion-source"
                 >
-                  <img
-                    :src="source.preview_url"
-                    :alt="source.name"
-                    loading="lazy"
-                  /><span>{{ source.name }}</span>
-                </button>
+                  <button
+                    :class="{
+                      selected: selectedFacefusionSourceIds.includes(source.id),
+                    }"
+                    :title="source.name"
+                    @click="toggleFacefusionSource(source.id)"
+                  >
+                    <img
+                      :src="source.preview_url"
+                      :alt="source.name"
+                      loading="lazy"
+                    /><span>{{ source.name }}</span>
+                  </button>
+                  <button
+                    class="facefusion-source-delete"
+                    title="从图库删除"
+                    aria-label="从图库删除"
+                    @click="deleteFacefusionSource(source)"
+                  >
+                    x
+                  </button>
+                </article>
                 <p v-if="!facefusionSources.length" class="empty">
                   尚未上传源脸图片
                 </p>
@@ -5236,6 +5275,11 @@ pre {
   gap: 8px;
 }
 .facefusion-source {
+  position: relative;
+  min-width: 0;
+}
+.facefusion-source > button:first-child {
+  width: 100%;
   min-width: 0;
   padding: 4px;
   border: 1px solid #3a4655;
@@ -5246,21 +5290,33 @@ pre {
   gap: 5px;
   text-align: left;
 }
-.facefusion-source.selected {
+.facefusion-source > button:first-child.selected {
   border-color: #33a3ed;
   box-shadow: inset 0 0 0 1px #33a3ed;
 }
-.facefusion-source img {
+.facefusion-source > button:first-child img {
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
   background: #171c24;
 }
-.facefusion-source span {
+.facefusion-source > button:first-child span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
+}
+.facefusion-source-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #6d424a;
+  border-radius: 4px;
+  background: #2c2025;
+  color: #ffd8dc;
+  line-height: 1;
 }
 .facefusion-submit {
   display: flex;
