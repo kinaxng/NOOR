@@ -8,7 +8,7 @@ type Recommendation = { code: string; title: string; cover_url?: string; release
 type JavdbItem = { code: string; title: string; cover_url?: string; release_date?: string; actors?: string[]; categories?: string[]; magnets_count?: number }
 type JavdbDetail = JavdbItem & { origin_title?: string; duration?: string; maker?: string; series?: string; director?: string; magnets?: Array<{ name?: string; size?: string; size_mb?: number }> }
 type Actor = { id: string; name: string; avatar_url?: string; name_zht?: string; other_name?: string }
-type EmbyActor = { id: string; name: string; sort_name?: string; avatar_url?: string; name_jp?: string; name_zh_cn?: string; name_zh_tw?: string; aliases?: string; emby_url?: string }
+type EmbyActor = { id: string; name: string; display_name?: string; sort_name?: string; avatar_url?: string; name_jp?: string; name_zh_cn?: string; name_zh_tw?: string; aliases?: string; emby_url?: string }
 type HardlinkGroup = { code: string; hardlink_count?: number; orphan_count?: number; status?: string; entries?: Array<{ source_path?: string; hardlink_paths?: string[] }> }
 type Page = 'overview' | 'recommendations' | 'javdb' | 'actors' | 'files' | 'tasks' | 'plugins' | 'settings'
 
@@ -45,6 +45,8 @@ const mdcNgPath = ref('')
 const mappingSaving = ref(false)
 const selectedEmbyActor = ref<EmbyActor | null>(null)
 const selectedEmbyActorMovies = ref<JavdbItem[]>([])
+const duplicateGroups = ref<Array<{ key: string; actors: EmbyActor[] }>>([])
+const duplicatesLoading = ref(false)
 const gfriendsCandidates = ref<Array<{ url: string; remote_url: string; name: string; aliases?: string[] }>>([])
 const gfriendsLoading = ref(false)
 const avatarSaving = ref(false)
@@ -224,6 +226,15 @@ async function openEmbyActor(actor: EmbyActor) {
   } catch (cause) { error.value = cause instanceof Error ? cause.message : '演员作品加载失败' }
 }
 
+async function loadActorDuplicates() {
+  duplicatesLoading.value = true
+  error.value = ''
+  try {
+    const data = await request<{ groups: Array<{ key: string; actors: EmbyActor[] }> }>('/api/media-library/actors/duplicates?limit=3000')
+    duplicateGroups.value = data.groups || []
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : '演员重名检测失败' } finally { duplicatesLoading.value = false }
+}
+
 async function loadGfriendsCandidates() {
   const actor = selectedEmbyActor.value
   if (!actor) return
@@ -330,8 +341,9 @@ onMounted(refresh)
             <div v-else class="hardlink-list"><article v-for="group in hardlinkGroups" :key="group.code" class="hardlink-row"><div><b>{{ group.code }}</b><small v-for="(entry, index) in group.entries?.slice(0, 2)" :key="index">{{ entry.source_path || '源文件缺失' }}</small></div><span :class="['badge', group.status === 'healthy' ? 'completed' : 'failed']">{{ group.hardlink_count || 0 }} 个硬链接</span></article><p v-if="!hardlinkGroups.length" class="empty">暂无硬链接记录</p></div>
           </template>
           <template v-else>
-            <div class="panel-heading"><div><h2>演员管理</h2><small>{{ embyActorsTotal ? `${embyActorsTotal} 位 Emby 演员` : '以 Emby 演员库为准' }}</small></div><button @click="loadEmbyActors">刷新</button></div>
+            <div class="panel-heading"><div><h2>演员管理</h2><small>{{ embyActorsTotal ? `${embyActorsTotal} 位 Emby 演员` : '以 Emby 演员库为准' }}</small></div><div class="detail-actions"><button :disabled="duplicatesLoading" @click="loadActorDuplicates">{{ duplicatesLoading ? '检测中' : '检查重名' }}</button><button @click="loadEmbyActors">刷新</button></div></div>
             <div class="actor-management-tools"><input v-model="embyActorQuery" aria-label="搜索 Emby 演员" placeholder="搜索 Emby 演员" @keyup.enter="loadEmbyActors" /><button @click="loadEmbyActors">搜索</button><span v-if="mappingStatus" class="muted">映射表：{{ mappingStatus.exists ? `${mappingStatus.record_count || 0} 条` : '未配置' }}</span></div>
+            <section v-if="duplicateGroups.length" class="duplicate-groups"><div class="panel-heading"><div><h2>重名候选</h2><small>{{ duplicateGroups.length }} 组，点击演员查看资料与关联作品</small></div><button @click="duplicateGroups = []">关闭</button></div><div v-for="group in duplicateGroups" :key="group.key" class="duplicate-group"><span class="muted">{{ group.key }}</span><button v-for="actor in group.actors" :key="actor.id" class="duplicate-actor" @click="openEmbyActor(actor)"><img v-if="actor.avatar_url" :src="actor.avatar_url" :alt="actor.name" loading="lazy" /><span>{{ actor.display_name || actor.name }}</span></button></div></section>
             <p v-if="embyActorsLoading" class="empty">正在读取 Emby 演员...</p>
             <div v-else class="actor-grid emby-actor-grid"><button v-for="actor in embyActors" :key="actor.id" class="actor-card" @click="openEmbyActor(actor)"><img v-if="actor.avatar_url" :src="actor.avatar_url" :alt="actor.name" loading="lazy" /><span v-else class="actor-placeholder">{{ actor.name.slice(0, 1) }}</span><b>{{ actor.name_zh_cn || actor.name }}</b><small>{{ actor.name_jp || actor.sort_name || actor.name }}</small></button></div>
             <section v-if="selectedEmbyActor" class="detail-panel"><div class="panel-heading"><div class="actor-heading"><img v-if="selectedEmbyActor.avatar_url" :src="selectedEmbyActor.avatar_url" :alt="selectedEmbyActor.name" /><div><h2>{{ selectedEmbyActor.name_zh_cn || selectedEmbyActor.name }}</h2><small>{{ selectedEmbyActor.name_jp || selectedEmbyActor.sort_name }}</small></div></div><div class="detail-actions"><button :disabled="gfriendsLoading" @click="loadGfriendsCandidates">{{ gfriendsLoading ? '加载中' : 'Gfriends' }}</button><a v-if="selectedEmbyActor.emby_url" :href="selectedEmbyActor.emby_url" target="_blank" rel="noopener">Emby</a><button title="关闭演员详情" aria-label="关闭演员详情" @click="selectedEmbyActor = null">x</button></div></div><div v-if="gfriendsCandidates.length" class="gfriends-grid"><button v-for="candidate in gfriendsCandidates" :key="candidate.remote_url" :disabled="avatarSaving" class="gfriends-candidate" :title="candidate.name" @click="applyGfriendsAvatar(candidate)"><img :src="candidate.url" :alt="candidate.name" loading="lazy" /><span>{{ candidate.name }}</span></button></div><div class="recommendations compact"><article v-for="item in selectedEmbyActorMovies" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><b>{{ item.code }}</b><p>{{ item.title }}</p></div></article><p v-if="!selectedEmbyActorMovies.length" class="empty">未读取到关联作品</p></div></section>
@@ -369,5 +381,6 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .gfriends-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin: 16px 0; }.gfriends-candidate { min-width: 0; padding: 5px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; display: grid; gap: 5px; text-align: left; }.gfriends-candidate img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #171c24; }.gfriends-candidate span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .plugin-actions { display: inline-flex; align-items: center; gap: 9px; }.plugin-toggle { width: 32px; height: 18px; border: 0; border-radius: 9px; padding: 2px; background: #485463; }.plugin-toggle i { display: block; width: 14px; height: 14px; border-radius: 50%; background: #d7dee7; transition: transform .16s ease; }.plugin-toggle.enabled { background: #168bdf; }.plugin-toggle.enabled i { transform: translateX(14px); }
 .plugin-config-button { width: 28px; height: 28px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; }.config-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }.config-fields label { display: grid; align-content: start; gap: 6px; color: #cdd9e6; font-size: 13px; }.config-fields input[type='text'], .config-fields input[type='password'], .config-fields input[type='number'] { width: 100%; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.config-fields input[type='checkbox'] { width: 16px; height: 16px; margin: 2px 0; accent-color: #168bdf; }.config-fields small { color: #98a6b7; line-height: 1.4; }.config-save { display: flex; justify-content: flex-end; margin-top: 18px; }.config-save button { border: 1px solid #177bc2; border-radius: 5px; background: #168bdf; color: white; padding: 8px 12px; }
+.duplicate-groups { border-top: 1px solid #303a47; border-bottom: 1px solid #303a47; margin: 16px 0; padding: 13px 0; }.duplicate-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 9px 0; border-top: 1px solid #2b3440; }.duplicate-group > .muted { flex-basis: 100%; }.duplicate-actor { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 220px; border: 1px solid #3a4655; border-radius: 5px; padding: 4px 7px 4px 4px; color: #dce5ee; background: #202833; }.duplicate-actor img { width: 28px; height: 28px; object-fit: cover; background: #171c24; }.duplicate-actor span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .app-shell { grid-template-columns: 1fr; }.sidebar { position: sticky; top: 0; z-index: 2; padding: 10px; flex-direction: row; align-items: center; gap: 12px; }.brand { padding: 0; }.sidebar nav { display: flex; overflow-x: auto; flex: 1; }.sidebar nav button { white-space: nowrap; }.sidebar-foot { display: none; } main { padding: 18px; }.overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.wide { grid-column: 1 / -1; } }
 </style>
