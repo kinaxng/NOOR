@@ -98,6 +98,20 @@ type HardlinkDeletePreview = {
   [key: string]: unknown;
 };
 type HardlinkScanGroup = { source_dir: string; hardlink_dir: string };
+type EmbySettings = {
+  server: string;
+  api_key: string;
+  user_id: string;
+  enabled_library_ids: string[];
+};
+type NetworkSettings = {
+  acceleration_mode: string;
+  http_proxy: string;
+  github_mirror: string;
+  hf_mirror: string;
+  pip_mirror: string;
+  hf_token: string;
+};
 type MediaLibrary = { id: string; name: string; collection_type?: string };
 type MediaItem = {
   id: string;
@@ -214,6 +228,23 @@ const pluginConfigSaving = ref(false);
 const pluginTesting = ref(false);
 const pluginTestMessage = ref("");
 const settings = ref<Record<string, unknown>>({});
+const embySettings = ref<EmbySettings>({
+  server: "",
+  api_key: "",
+  user_id: "",
+  enabled_library_ids: [],
+});
+const networkSettings = ref<NetworkSettings>({
+  acceleration_mode: "mirror",
+  http_proxy: "",
+  github_mirror: "",
+  hf_mirror: "",
+  pip_mirror: "",
+  hf_token: "",
+});
+const coreSettingsLoading = ref(false);
+const embySettingsSaving = ref(false);
+const networkSettingsSaving = ref(false);
 const recommendations = ref<Recommendation[]>([]);
 const recommendationMode = ref<"latest" | "full">("latest");
 const javdbItems = ref<JavdbItem[]>([]);
@@ -493,6 +524,85 @@ async function request<T>(path: string): Promise<T> {
   if (!response.ok)
     throw new Error(`${response.status} ${response.statusText}`);
   return response.json() as Promise<T>;
+}
+
+function applyCoreSettings(data: Record<string, unknown>) {
+  settings.value = data;
+  const emby = data.emby as Partial<EmbySettings> | undefined;
+  const network = data.network as Partial<NetworkSettings> | undefined;
+  if (emby) {
+    embySettings.value = {
+      server: String(emby.server || ""),
+      api_key: String(emby.api_key || ""),
+      user_id: String(emby.user_id || ""),
+      enabled_library_ids: Array.isArray(emby.enabled_library_ids)
+        ? emby.enabled_library_ids.map(String)
+        : [],
+    };
+  }
+  if (network) {
+    networkSettings.value = {
+      acceleration_mode: String(network.acceleration_mode || "mirror"),
+      http_proxy: String(network.http_proxy || ""),
+      github_mirror: String(network.github_mirror || ""),
+      hf_mirror: String(network.hf_mirror || ""),
+      pip_mirror: String(network.pip_mirror || ""),
+      hf_token: String(network.hf_token || ""),
+    };
+  }
+}
+
+async function loadCoreSettings() {
+  coreSettingsLoading.value = true;
+  try {
+    applyCoreSettings(await request<Record<string, unknown>>("/api/settings"));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "基础设置读取失败";
+  } finally {
+    coreSettingsLoading.value = false;
+  }
+}
+
+async function saveEmbySettings() {
+  embySettingsSaving.value = true;
+  error.value = "";
+  try {
+    const response = await fetch("/api/settings/emby", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(embySettings.value),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `${response.status} ${response.statusText}`,
+      );
+    await loadCoreSettings();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "Emby 设置保存失败";
+  } finally {
+    embySettingsSaving.value = false;
+  }
+}
+
+async function saveNetworkSettings() {
+  networkSettingsSaving.value = true;
+  error.value = "";
+  try {
+    const response = await fetch("/api/settings/network", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(networkSettings.value),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `${response.status} ${response.statusText}`,
+      );
+    await loadCoreSettings();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "网络设置保存失败";
+  } finally {
+    networkSettingsSaving.value = false;
+  }
 }
 
 async function pluginAction<T>(
@@ -1725,7 +1835,7 @@ async function refresh() {
     healthy.value = health.status === "ok";
     jobs.value = jobData.jobs || [];
     plugins.value = pluginData.items || [];
-    settings.value = settingsData;
+    applyCoreSettings(settingsData);
     recommendations.value = recommendationData.items || [];
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "无法连接 NOOR 后端";
@@ -1806,6 +1916,7 @@ onMounted(refresh);
           :class="{ active: page === 'settings' }"
           @click="
             page = 'settings';
+            loadCoreSettings();
             loadMappingStatus();
             loadHardlinkConfig();
             loadFacefusionSettings();
@@ -3163,6 +3274,7 @@ onMounted(refresh);
             <button
               @click="
                 loadMappingStatus();
+                loadCoreSettings();
                 loadHardlinkConfig();
                 loadFacefusionSettings();
                 loadWhisperSettings();
@@ -3171,6 +3283,81 @@ onMounted(refresh);
               刷新
             </button>
           </div>
+          <section class="settings-section">
+            <div class="panel-heading">
+              <div>
+                <h3>Emby</h3>
+                <small>媒体库、演员与封面读取使用此连接</small>
+              </div>
+              <button :disabled="coreSettingsLoading" @click="loadCoreSettings">
+                刷新
+              </button>
+            </div>
+            <div class="config-fields">
+              <label
+                ><span>服务器地址</span
+                ><input v-model="embySettings.server" type="text" placeholder="http://host:8096"
+              /></label>
+              <label
+                ><span>API 密钥</span
+                ><input v-model="embySettings.api_key" type="password" autocomplete="off"
+              /></label>
+              <label
+                ><span>用户 ID</span
+                ><input v-model="embySettings.user_id" type="text"
+              /></label>
+            </div>
+            <div class="config-save">
+              <button :disabled="embySettingsSaving" @click="saveEmbySettings">
+                {{ embySettingsSaving ? "保存中" : "保存 Emby 设置" }}
+              </button>
+            </div>
+          </section>
+          <section class="settings-section">
+            <div class="panel-heading">
+              <div>
+                <h3>网络</h3>
+                <small>下载模型、插件和映射表时使用</small>
+              </div>
+              <button :disabled="coreSettingsLoading" @click="loadCoreSettings">
+                刷新
+              </button>
+            </div>
+            <div class="config-fields">
+              <label
+                ><span>加速模式</span
+                ><select v-model="networkSettings.acceleration_mode">
+                  <option value="mirror">镜像</option>
+                  <option value="proxy">代理</option>
+                  <option value="direct">直连</option>
+                </select></label>
+              <label
+                ><span>HTTP 代理</span
+                ><input v-model="networkSettings.http_proxy" type="text" placeholder="http://host:port"
+              /></label>
+              <label
+                ><span>GitHub 镜像</span
+                ><input v-model="networkSettings.github_mirror" type="text"
+              /></label>
+              <label
+                ><span>Hugging Face 镜像</span
+                ><input v-model="networkSettings.hf_mirror" type="text"
+              /></label>
+              <label
+                ><span>PyPI 镜像</span
+                ><input v-model="networkSettings.pip_mirror" type="text"
+              /></label>
+              <label
+                ><span>Hugging Face Token</span
+                ><input v-model="networkSettings.hf_token" type="password" autocomplete="off"
+              /></label>
+            </div>
+            <div class="config-save">
+              <button :disabled="networkSettingsSaving" @click="saveNetworkSettings">
+                {{ networkSettingsSaving ? "保存中" : "保存网络设置" }}
+              </button>
+            </div>
+          </section>
           <section class="settings-section">
             <h3>Emby 演员映射</h3>
             <p>
