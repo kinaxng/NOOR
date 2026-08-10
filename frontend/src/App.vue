@@ -3627,7 +3627,7 @@ onMounted(async () => {
                 日文
               </button>
             </div>
-            <section v-if="duplicateGroups.length" class="duplicate-groups">
+            <section v-if="!selectedEmbyActor && duplicateGroups.length" class="duplicate-groups">
               <div class="panel-heading">
                 <div>
                   <h2>重名候选</h2>
@@ -3662,7 +3662,7 @@ onMounted(async () => {
               </div>
             </section>
             <p v-if="embyActorsLoading" class="empty">正在读取 Emby 演员...</p>
-            <div v-else class="actor-grid emby-actor-grid">
+            <div v-else-if="!selectedEmbyActor" class="actor-grid emby-actor-grid">
               <button
                 v-for="actor in embyActors"
                 :key="actor.id"
@@ -3683,7 +3683,7 @@ onMounted(async () => {
                 }}</small>
               </button>
             </div>
-            <div v-if="embyActorsHasMore" class="actor-load-more">
+            <div v-if="!selectedEmbyActor && embyActorsHasMore" class="actor-load-more">
               <button :disabled="embyActorsLoading" @click="loadMoreEmbyActors">
                 {{ embyActorsLoading ? "正在读取..." : `加载更多（${embyActors.length}/${embyActorsTotal}）` }}
               </button>
