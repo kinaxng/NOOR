@@ -1,0 +1,15 @@
+{
+  "id": "javdb",
+  "name": "JavDB",
+  "version": "0.1.0-recovered",
+  "type": "source",
+  "description": "通过 DBOnline API 提供 JavDB 作品、演员、榜单和资源信息。",
+  "capabilities": ["sidebar_page", "resource_search", "actor_lookup", "knowledge_contributions"],
+  "enabled_by_default": true,
+  "default_config": {"base_url": "", "api_key": "", "timeout": 15},
+  "config_schema": {
+    "base_url": {"type": "string", "label": "DBOnline 地址", "description": "例如 http://host:9090"},
+    "api_key": {"type": "password", "label": "API Key", "default": ""},
+    "timeout": {"type": "number", "label": "请求超时（秒）", "default": 15, "min": 3, "max": 60}
+  }
+}

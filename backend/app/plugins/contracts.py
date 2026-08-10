@@ -27,3 +27,12 @@ class PluginTestResult:
     ok: bool
     message: str = ''
     details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class DashboardWidget:
+    plugin_id: str = ''
+    key: str = ''
+    title: str = ''
+    badge: str = ''
+    payload: dict[str, Any] = field(default_factory=dict)
