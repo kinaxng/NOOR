@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.plugins.runtime import runtime
@@ -88,3 +89,20 @@ async def plugin_action(plugin_id: str, action: str, payload: PluginActionPayloa
         return await runtime.handle_action(plugin_id, action, payload.payload)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get('/{plugin_id}/images/{image_id}')
+async def get_plugin_cached_image(plugin_id: str, image_id: str):
+    """Serve an image that a plugin explicitly cached under its runtime data."""
+    handler = runtime._handlers.get(plugin_id)
+    resolver = getattr(handler, 'get_cached_image', None) if handler is not None else None
+    if not callable(resolver):
+        raise HTTPException(status_code=404, detail='Plugin image provider not found')
+    try:
+        result = resolver(image_id)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail='Cached image not found') from exc
+    if not result:
+        raise HTTPException(status_code=404, detail='Cached image not found')
+    path, content_type = result
+    return FileResponse(path, media_type=content_type, filename=path.name)
