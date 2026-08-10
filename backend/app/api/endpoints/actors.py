@@ -299,11 +299,21 @@ async def actor_duplicates(limit: int = Query(3000, ge=1, le=5000)):
 async def get_actor(actor_id: str, lang: str = Query("zh_cn", pattern="^(zh_cn|zh_tw|jp)$")):
     config = _require_config()
     async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+        # Emby exposes person entities through a user's item view on a number
+        # of deployments.  The bare /Items/{id} form can return 404 even
+        # though the same person appears in /Persons and has related movies.
+        item_prefix = f"/emby/Users/{quote(str(config.get('user_id') or ''))}/Items" if config.get("user_id") else "/emby/Items"
         response = await client.get(
-            f"{_base_url(config)}/emby/Items/{quote(actor_id)}",
+            f"{_base_url(config)}{item_prefix}/{quote(actor_id)}",
             headers=_headers(config),
             params={"Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName"},
         )
+        if response.status_code == 404 and config.get("user_id"):
+            response = await client.get(
+                f"{_base_url(config)}/emby/Items/{quote(actor_id)}",
+                headers=_headers(config),
+                params={"Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName"},
+            )
         if response.status_code == 404:
             raise HTTPException(status_code=404, detail="未找到演员")
         response.raise_for_status()
