@@ -27,3 +27,20 @@ This tree is an isolated recovery workspace. It does not replace `/home/kinax/no
 
 The next reconstruction phase should rebuild only these missing modules from session
 history and verified API behavior, while keeping the recovered `.pyc` modules unchanged.
+
+## Reconstruction Status (2026-08-11)
+
+- Recreated the application entrypoint from an exact session-recorded source read.
+- Restored the FaceFusion API, runner, preview worker, and path helpers from exact
+  session-recorded source reads.
+- Rebuilt the task queue around the recovered job/API contract and verified imports
+  for Jobs, Settings, Media Library, Whisper, LADA, and FaceFusion.
+- Recovered compatibility helpers required by the Whisper pipeline after the retired
+  optional audio-enhancement chain was removed.
+- Remaining startup blockers are the plugin framework and plugin sources, global
+  search, knowledge graph modules, and the Vue frontend. They were not present in the
+  recovered disk sectors and must be reconstructed from session records.
+
+The isolated recovery repository has commits `616866a` and `7150e12`. Generated
+`__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
+outside cache directories remain versioned as forensic evidence.
