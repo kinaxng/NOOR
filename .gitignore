@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 backend/noor.db
 data/plugins_config.json
+data/plugins_state.json
 data/actor_management_settings.json
 data/plugin_cache/
 .env
