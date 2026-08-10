@@ -48,6 +48,9 @@ the recovered bytecode modules remain unchanged.
   against the preserved bytecode.
 - Reconstructed `api/whisper_presets.py` as maintainable source and verified its
   historical `best` preset behavior against the preserved bytecode.
+- Reconstructed `core/config.py` as maintainable source and verified its settings
+  fields, environment aliases, runtime paths, and network environment behavior
+  against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
