@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 
 type Job = {
   id: string;
@@ -217,6 +217,7 @@ type Page =
   | "settings";
 
 const page = ref<Page>("overview");
+let applyingBrowserRoute = false;
 const loading = ref(true);
 const error = ref("");
 const healthy = ref(false);
@@ -363,6 +364,27 @@ const title = computed(
       settings: "设置",
     })[page.value],
 );
+
+const pagePaths: Record<Page, string> = {
+  overview: "/",
+  library: "/library",
+  recommendations: "/recommendations",
+  javdb: "/javdb",
+  actors: "/actors",
+  subscriptions: "/subscriptions",
+  files: "/files",
+  tasks: "/tasks",
+  plugins: "/plugins",
+  settings: "/settings",
+};
+
+function pageFromPath(pathname = window.location.pathname): Page {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  return (
+    (Object.entries(pagePaths).find(([, path]) => path === normalized)?.[0] as Page | undefined) ||
+    "overview"
+  );
+}
 const runningJobs = computed(() =>
   jobs.value.filter((job) =>
     ["queued", "running", "blocked"].includes(job.status),
@@ -1899,7 +1921,45 @@ async function refresh() {
   }
 }
 
-onMounted(refresh);
+async function loadPageData(target: Page) {
+  if (target === "library") await loadMediaLibrary();
+  else if (target === "javdb") await loadJavdb();
+  else if (target === "actors") await loadActors();
+  else if (target === "subscriptions") await openSubscriptions();
+  else if (target === "files") await openFiles();
+  else if (target === "tasks") await openTasks();
+  else if (target === "settings") {
+    await Promise.all([
+      loadCoreSettings(),
+      loadSystemLogs(),
+      loadMappingStatus(),
+      loadHardlinkConfig(),
+      loadFacefusionSettings(),
+      loadWhisperSettings(),
+      loadLadaSettings(),
+    ]);
+  }
+}
+
+watch(page, (target) => {
+  if (applyingBrowserRoute) return;
+  const path = pagePaths[target];
+  if (window.location.pathname !== path) window.history.pushState({ page: target }, "", path);
+});
+
+onMounted(async () => {
+  applyingBrowserRoute = true;
+  page.value = pageFromPath();
+  applyingBrowserRoute = false;
+  await refresh();
+  await loadPageData(page.value);
+  window.addEventListener("popstate", async () => {
+    applyingBrowserRoute = true;
+    page.value = pageFromPath();
+    applyingBrowserRoute = false;
+    await loadPageData(page.value);
+  });
+});
 </script>
 
 <template>
