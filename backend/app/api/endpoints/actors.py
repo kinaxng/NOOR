@@ -1,0 +1,248 @@
+"""Emby actor management endpoints recovered independently from media_library.
+
+This module deliberately builds on the still-working media-library adapter
+instead of replacing its recovered bytecode.  It is safe to evolve while the
+rest of that adapter is reconstructed.
+"""
+from __future__ import annotations
+
+import json
+import re
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
+import httpx
+from fastapi import APIRouter, HTTPException, Query
+
+from app.api.endpoints import media_library as media
+from app.core.runtime_paths import data_path
+
+
+router = APIRouter(prefix="/api/media-library", tags=["media-library-actors"])
+
+
+def _require_config() -> dict[str, Any]:
+    config = media._load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail="媒体库适配器尚未配置")
+    return config
+
+
+def _base_url(config: dict[str, Any]) -> str:
+    return str(media._server_url(config)).rstrip("/")
+
+
+def _headers(config: dict[str, Any]) -> dict[str, str]:
+    return media._headers(str(config.get("api_key") or ""))
+
+
+def _normalize_name(value: str | None) -> str:
+    return re.sub(r"[\s\u3000・·._\-]", "", str(value or "")).casefold()
+
+
+def _mapping_path(config: dict[str, Any]) -> Path | None:
+    explicit = str(config.get("mdc_ng_path") or "").strip()
+    if explicit:
+        candidate = Path(explicit).expanduser()
+        if candidate.is_dir():
+            candidate = candidate / "data" / "mapping_actor.xml"
+        return candidate
+    fallback = data_path() / "media_actor_mapping.xml"
+    return fallback if fallback.is_file() else None
+
+
+def _element_values(element: ET.Element) -> dict[str, str]:
+    values = {str(key).casefold(): str(value).strip() for key, value in element.attrib.items() if str(value).strip()}
+    for child in element.iter():
+        if child is element:
+            continue
+        key = child.tag.rsplit("}", 1)[-1].casefold()
+        text = (child.text or "").strip()
+        if text and key not in values:
+            values[key] = text
+    return values
+
+
+def _first(values: dict[str, str], *keys: str) -> str:
+    for key in keys:
+        value = values.get(key.casefold(), "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _mapping_records(config: dict[str, Any]) -> list[dict[str, Any]]:
+    path = _mapping_path(config)
+    if not path or not path.is_file():
+        return []
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return []
+    records: list[dict[str, Any]] = []
+    for element in root.iter():
+        values = _element_values(element)
+        jp = _first(values, "jp", "name_jp", "japanese", "ja")
+        zh_cn = _first(values, "zh_cn", "name_zh_cn", "simplified", "cn")
+        zh_tw = _first(values, "zh_tw", "name_zh_tw", "traditional", "tw")
+        aliases = _first(values, "aliases", "alias", "other_name", "other_names")
+        if not (jp or zh_cn or zh_tw):
+            continue
+        names = [name for name in [jp, zh_cn, zh_tw] if name]
+        names.extend(part.strip() for part in re.split(r"[|,;/]", aliases) if part.strip())
+        key = tuple(sorted({_normalize_name(name) for name in names if _normalize_name(name)}))
+        if not key:
+            continue
+        record = {"jp": jp, "zh_cn": zh_cn, "zh_tw": zh_tw, "aliases": aliases, "names": names}
+        if not any(record["names"] == prior["names"] for prior in records):
+            records.append(record)
+    return records
+
+
+def _mapping_index(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    index: dict[str, dict[str, Any]] = {}
+    for record in _mapping_records(config):
+        for name in record["names"]:
+            key = _normalize_name(name)
+            if key:
+                index.setdefault(key, record)
+    return index
+
+
+def _actor_from_emby(raw: dict[str, Any], config: dict[str, Any], mapping: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    name = str(raw.get("Name") or "")
+    record = mapping.get(_normalize_name(name), {})
+    actor_id = str(raw.get("Id") or "")
+    tags = raw.get("ImageTags") or {}
+    tag = tags.get("Primary")
+    avatar_url = None
+    if actor_id and tag:
+        avatar_url = f"{_base_url(config)}/emby/Items/{quote(actor_id)}/Images/Primary?tag={quote(str(tag))}"
+    server_id = str(raw.get("ServerId") or config.get("server_id") or "")
+    emby_url = f"{_base_url(config)}/web/index.html#!/item?id={quote(actor_id)}"
+    if server_id:
+        emby_url += f"&serverId={quote(server_id)}"
+    return {
+        "id": actor_id,
+        "name": name,
+        "sort_name": str(raw.get("SortName") or ""),
+        "overview": str(raw.get("Overview") or ""),
+        "provider_ids": raw.get("ProviderIds") or {},
+        "avatar_url": avatar_url,
+        "emby_url": emby_url,
+        "name_jp": record.get("jp", ""),
+        "name_zh_cn": record.get("zh_cn", ""),
+        "name_zh_tw": record.get("zh_tw", ""),
+        "aliases": record.get("aliases", ""),
+        "date_created": raw.get("DateCreated"),
+    }
+
+
+async def _list_actors(config: dict[str, Any], *, limit: int, offset: int, query: str | None, sort_by: str, sort_order: str) -> tuple[list[dict[str, Any]], int]:
+    params: dict[str, Any] = {
+        "IncludeItemTypes": "Person",
+        "Recursive": "true",
+        "Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName",
+        "StartIndex": max(0, offset),
+        "Limit": max(1, min(limit, 500)),
+        "SortBy": sort_by if sort_by in {"SortName", "DateCreated", "Name"} else "SortName",
+        "SortOrder": sort_order if sort_order in {"Ascending", "Descending"} else "Ascending",
+    }
+    if query:
+        params["SearchTerm"] = query
+    async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+        response = await client.get(f"{_base_url(config)}/emby/Persons", headers=_headers(config), params=params)
+        response.raise_for_status()
+    payload = response.json()
+    mapping = _mapping_index(config)
+    actors = [_actor_from_emby(item, config, mapping) for item in payload.get("Items") or []]
+    return actors, int(payload.get("TotalRecordCount") or len(actors))
+
+
+@router.get("/actors")
+async def get_actors(
+    limit: int = Query(60, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    q: str | None = None,
+    sort_by: str = "SortName",
+    sort_order: str = "Ascending",
+):
+    config = _require_config()
+    try:
+        actors, total = await _list_actors(config, limit=limit, offset=offset, query=q, sort_by=sort_by, sort_order=sort_order)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"获取 Emby 演员失败: {exc}") from exc
+    return {"actors": actors, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/actors/mapping/status")
+async def actor_mapping_status():
+    config = _require_config()
+    path = _mapping_path(config)
+    records = _mapping_records(config)
+    return {
+        "configured_path": str(path) if path else "",
+        "exists": bool(path and path.is_file()),
+        "record_count": len(records),
+        "source": "mdc-ng" if config.get("mdc_ng_path") else "noor-local",
+    }
+
+
+@router.get("/actors/duplicates")
+async def actor_duplicates(limit: int = Query(3000, ge=1, le=5000)):
+    config = _require_config()
+    actors, _ = await _list_actors(config, limit=limit, offset=0, query=None, sort_by="SortName", sort_order="Ascending")
+    grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    mapping = _mapping_index(config)
+    for actor in actors:
+        record = mapping.get(_normalize_name(actor["name"]))
+        if record:
+            key = tuple(sorted(_normalize_name(name) for name in record["names"] if _normalize_name(name)))
+        else:
+            key = (_normalize_name(actor["name"]),)
+        if key and key != (""):
+            grouped.setdefault(key, []).append(actor)
+    groups = []
+    for members in grouped.values():
+        if len(members) > 1:
+            groups.append({"key": " / ".join(member["name"] for member in members), "actors": members})
+    groups.sort(key=lambda group: (-len(group["actors"]), group["key"]))
+    return {"groups": groups, "total": len(groups)}
+
+
+@router.get("/actor/{actor_id}")
+async def get_actor(actor_id: str):
+    config = _require_config()
+    async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+        response = await client.get(
+            f"{_base_url(config)}/emby/Items/{quote(actor_id)}",
+            headers=_headers(config),
+            params={"Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName"},
+        )
+        if response.status_code == 404:
+            raise HTTPException(status_code=404, detail="未找到演员")
+        response.raise_for_status()
+    return {"ok": True, "actor": _actor_from_emby(response.json(), config, _mapping_index(config))}
+
+
+@router.get("/actor/{actor_id}/movies")
+async def get_actor_movies(actor_id: str, limit: int = Query(120, ge=1, le=500), offset: int = Query(0, ge=0)):
+    config = _require_config()
+    params = {
+        "PersonIds": actor_id,
+        "Recursive": "true",
+        "IncludeItemTypes": "Movie",
+        "Fields": "Path,ProviderIds,People,ImageTags,Overview,PremiereDate,DateCreated",
+        "StartIndex": offset,
+        "Limit": limit,
+        "SortBy": "DateCreated",
+        "SortOrder": "Descending",
+    }
+    async with httpx.AsyncClient(timeout=45, trust_env=False) as client:
+        response = await client.get(f"{_base_url(config)}/emby/Items", headers=_headers(config), params=params)
+        response.raise_for_status()
+    payload = response.json()
+    items = [media._parse_item(item, config) for item in payload.get("Items") or []]
+    return {"items": items, "total": int(payload.get("TotalRecordCount") or len(items)), "limit": limit, "offset": offset}
