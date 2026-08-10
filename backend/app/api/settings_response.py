@@ -1,0 +1,126 @@
+"""Settings-page response payload assembly.
+
+Reconstructed from preserved Python 3.13 bytecode.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from app.api.endpoints.media_library_helpers import load_config as load_media_library_config
+from app.pipeline.whisper.strategy import apply_whisper_strategy, normalize_whisper_strategy
+
+
+def split_enabled_library_ids(raw_value: str) -> list[str]:
+    return raw_value.split(",") if raw_value else []
+
+
+def build_settings_payload(
+    *,
+    env_data: dict[str, str],
+    version_info: dict[str, Any],
+    lada_model_weights_dir: str,
+    whisper_features: dict[str, Any],
+    custom_whisper_config: dict[str, Any],
+) -> dict[str, Any]:
+    media_library_config = load_media_library_config()
+    whisper_strategy = normalize_whisper_strategy(
+        env_data.get("WHISPER_STRATEGY", "recommended")
+    )
+    whisper_payload: dict[str, Any] = {
+        "strategy": whisper_strategy,
+        "model": env_data.get("WHISPER_MODEL", "anime-whisper"),
+        "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "ensemble"),
+        "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
+        "language": env_data.get("WHISPER_LANGUAGE", "ja"),
+        "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
+        "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
+        "audio_preprocess_mode": env_data.get("WHISPER_AUDIO_PREPROCESS_MODE", "none"),
+        "audio_preprocess_model": env_data.get(
+            "WHISPER_AUDIO_PREPROCESS_MODEL", "vocal_balanced"
+        ),
+        "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
+        "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+        "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),
+        "translate_base_url": env_data.get(
+            "WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1"
+        ),
+        "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
+        "pass1_pipeline": env_data.get("WHISPER_PASS1_PIPELINE", "anime"),
+        "pass2_pipeline": env_data.get("WHISPER_PASS2_PIPELINE", ""),
+        "timestamp_mode": custom_whisper_config.get(
+            "timestamp_mode", "aligner_interpolation"
+        ),
+        "aligner_backend": custom_whisper_config.get("aligner_backend", "qwen3"),
+        "framer_backend": custom_whisper_config.get("framer_backend", "vad-grouped"),
+        "custom_config": custom_whisper_config,
+    }
+    if whisper_strategy in frozenset({"recommended", "baseline", "reazon_nemo"}):
+        whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
+        whisper_payload["custom_config"] = {
+            **custom_whisper_config,
+            "timestamp_mode": whisper_payload.get(
+                "timestamp_mode", "aligner_interpolation"
+            ),
+            "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
+            "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
+        }
+
+    return {
+        "emby": {
+            "server": env_data.get("EMBY_SERVER", "")
+            or media_library_config.get("server_url", ""),
+            "api_key": env_data.get("EMBY_API_KEY", "")
+            or media_library_config.get("api_key", ""),
+            "user_id": env_data.get("EMBY_USER_ID", "")
+            or media_library_config.get("user_id", ""),
+            "enabled_library_ids": split_enabled_library_ids(
+                env_data.get("EMBY_ENABLED_LIBRARY_IDS", "")
+                or media_library_config.get("enabled_library_ids", "")
+            ),
+        },
+        "storage": {
+            "source_dir": env_data.get("SOURCE_DIR", ""),
+            "output_dir": env_data.get("OUTPUT_DIR", ""),
+            "whisper_model_dir": env_data.get("WHISPER_MODEL_DIR", ""),
+            "lada_model_dir": lada_model_weights_dir,
+            "lada_model_weights_dir": lada_model_weights_dir,
+        },
+        "lada": {
+            "cli_path": env_data.get("LADA_CLI_PATH", "python3 -m lada.cli.main"),
+            "version": version_info["version"],
+            "is_docker": version_info["is_docker"],
+            "is_submodule": version_info["is_submodule"],
+            "install_mode": version_info["install_mode"],
+            "can_self_upgrade": version_info["can_self_upgrade"],
+            "upgrade_strategy": version_info["upgrade_strategy"],
+            "upgrade_hint": version_info["upgrade_hint"],
+            "repo_path": version_info["repo_path"],
+        },
+        "lada_defaults": {
+            "device": env_data.get("LADA_DEVICE", "cuda:0"),
+            "fp16": env_data.get("LADA_FP16", "true").lower() == "true",
+            "detection_model": env_data.get("LADA_DETECTION_MODEL", "v4-fast"),
+            "restoration_model": env_data.get(
+                "LADA_RESTORATION_MODEL", "basicvsrpp-v1.2"
+            ),
+            "encoding_preset": env_data.get(
+                "LADA_ENCODING_PRESET", "hevc-nvidia-gpu-hq"
+            ),
+            "max_clip_length": int(env_data.get("LADA_MAX_CLIP_LENGTH", "180")),
+            "detect_face_mosaics": env_data.get(
+                "LADA_DETECT_FACE_MOSAICS", "false"
+            ).lower()
+            == "true",
+        },
+        "whisper": {**whisper_payload, "features": whisper_features},
+        "network": {
+            "acceleration_mode": env_data.get("ACCELERATION_MODE", "mirror"),
+            "http_proxy": env_data.get("HTTP_PROXY", ""),
+            "github_mirror": env_data.get("GITHUB_MIRROR", "https://ghproxy.com"),
+            "hf_mirror": env_data.get("HF_MIRROR", "https://hf-mirror.com"),
+            "pip_mirror": env_data.get(
+                "PIP_MIRROR", "https://pypi.tuna.tsinghua.edu.cn/simple"
+            ),
+            "hf_token": env_data.get("HF_TOKEN", ""),
+        },
+    }
