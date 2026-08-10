@@ -45,6 +45,25 @@ history and verified API behavior, while keeping the recovered `.pyc` modules un
   search, knowledge graph modules, and the Vue frontend. They were not present in the
   recovered disk sectors and must be reconstructed from session records.
 
-The isolated recovery repository has commits `616866a` and `7150e12`. Generated
+## Validated Recovery Progress (2026-08-11)
+
+- The isolated frontend and backend are running at `http://192.168.31.3:5173/` and
+  `127.0.0.1:9899` respectively.
+- Emby media paths returned as `/data/...` or `/volume1/data/...` are translated to
+  the host's `~/Videos/...` mount before being passed to LADA, Whisper, FaceFusion,
+  or subtitle operations.
+- LADA and the recovered Whisper queue have each completed an isolated one-second
+  test job. This validates runner integration, queue state, progress callbacks, and
+  result writing, but not quality on production videos.
+- The file page restores manual hardlink scanning and a dry-run-first deletion flow.
+  Deletion is blocked unless scan groups are configured, and the media library's
+  right-click delete entry resolves only an already scanned hardlink group before it
+  presents the same confirmation dialog.
+- The surviving actor APIs support Emby actor browsing, mapped multilingual names,
+  duplicate detection, movie lookup, and explicitly selected GFriends avatar writes.
+  Actor merge, actor deletion, and arbitrary metadata writes have not been recreated
+  because the original Emby mutation contracts could not be verified.
+
+The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
 outside cache directories remain versioned as forensic evidence.
