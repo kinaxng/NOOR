@@ -227,6 +227,7 @@ const actorMovies = ref<JavdbItem[]>([]);
 const fileTab = ref<"hardlinks" | "actor-management">("hardlinks");
 const hardlinkGroups = ref<HardlinkGroup[]>([]);
 const hardlinksLoading = ref(false);
+const hardlinksScanning = ref(false);
 const hardlinkDeleteGroup = ref<HardlinkGroup | null>(null);
 const hardlinkDeletePreview = ref<HardlinkDeletePreview | null>(null);
 const hardlinkDeleteLoading = ref(false);
@@ -261,6 +262,8 @@ const mediaLibraryId = ref("");
 const mediaOffset = ref(0);
 const mediaPageSize = 48;
 const selectedMediaItem = ref<MediaItem | null>(null);
+const mediaDeleteGroup = ref<HardlinkGroup | null>(null);
+const mediaDeleteLoading = ref("");
 const subscriptions = ref<Subscription[]>([]);
 const subscriptionLoading = ref(false);
 const subscriptionCreating = ref(false);
@@ -772,6 +775,33 @@ async function openMediaItem(item: MediaItem) {
     );
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "媒体详情加载失败";
+  }
+}
+
+function mediaCode(item: MediaItem) {
+  const match = item.name.match(/\b([a-z]{2,6}-\d+)\b/i);
+  return match?.[1]?.toUpperCase() || "";
+}
+
+async function openMediaDeleteMenu(item: MediaItem) {
+  const code = mediaCode(item);
+  if (!code) {
+    error.value = "无法从作品名称识别番号，不能执行删除";
+    return;
+  }
+  mediaDeleteLoading.value = item.id;
+  error.value = "";
+  try {
+    if (!hardlinkGroups.value.length) await loadHardlinks();
+    const group = hardlinkGroups.value.find((candidate) => candidate.code === code);
+    if (!group?.entries?.length) {
+      throw new Error("未找到已扫描的硬链接记录，请先在文件 - 硬链接中扫描后再删除");
+    }
+    mediaDeleteGroup.value = group;
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "读取作品删除信息失败";
+  } finally {
+    mediaDeleteLoading.value = "";
   }
 }
 
@@ -1355,6 +1385,26 @@ async function loadHardlinks() {
   }
 }
 
+async function scanHardlinks() {
+  hardlinksScanning.value = true;
+  error.value = "";
+  try {
+    const response = await fetch("/api/media-library/hardlinks/scan", {
+      method: "POST",
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `${response.status} ${response.statusText}`,
+      );
+    const data = (await response.json()) as { groups?: HardlinkGroup[] };
+    hardlinkGroups.value = data.groups || [];
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "硬链接扫描失败";
+  } finally {
+    hardlinksScanning.value = false;
+  }
+}
+
 async function hardlinkDeleteRequest(
   group: HardlinkGroup,
   dryRun: boolean,
@@ -1403,6 +1453,7 @@ async function openHardlinkDelete(group: HardlinkGroup) {
 function closeHardlinkDelete() {
   hardlinkDeleteGroup.value = null;
   hardlinkDeletePreview.value = null;
+  mediaDeleteGroup.value = null;
 }
 
 async function confirmHardlinkDelete() {
@@ -1414,6 +1465,10 @@ async function confirmHardlinkDelete() {
     await hardlinkDeleteRequest(group, false);
     closeHardlinkDelete();
     await loadHardlinks();
+    if (page.value === "library") {
+      selectedMediaItem.value = null;
+      await loadMediaLibrary();
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "删除硬链接组失败";
   } finally {
@@ -2021,8 +2076,12 @@ onMounted(refresh);
               <article
                 v-for="item in mediaItems"
                 :key="item.id"
-                class="media-card"
+                :class="[
+                  'media-card',
+                  { 'delete-menu-open': mediaDeleteGroup?.code === mediaCode(item) },
+                ]"
                 @click="openMediaItem(item)"
+                @contextmenu.prevent="openMediaDeleteMenu(item)"
               >
                 <div class="media-poster">
                   <img
@@ -2030,7 +2089,15 @@ onMounted(refresh);
                     :src="item.poster_path"
                     :alt="item.name"
                     loading="lazy"
-                  /><span v-if="item.tags?.is_cracked">换脸</span>
+                  /><span v-if="item.tags?.is_cracked">换脸</span
+                  ><button
+                    v-if="mediaDeleteGroup?.code === mediaCode(item)"
+                    class="media-delete-button"
+                    :disabled="mediaDeleteLoading === item.id"
+                    @click.stop="openHardlinkDelete(mediaDeleteGroup)"
+                  >
+                    删除作品
+                  </button>
                 </div>
                 <div>
                   <b>{{ item.name }}</b
@@ -2644,7 +2711,14 @@ onMounted(refresh);
                 <h2>硬链接</h2>
                 <small>源文件与媒体库硬链接关系</small>
               </div>
-              <button @click="loadHardlinks">刷新</button>
+              <div class="detail-actions">
+                <button :disabled="hardlinksScanning" @click="scanHardlinks">
+                  {{ hardlinksScanning ? "扫描中" : "扫描" }}
+                </button>
+                <button :disabled="hardlinksScanning" @click="loadHardlinks">
+                  刷新
+                </button>
+              </div>
             </div>
             <p v-if="hardlinksLoading" class="empty">正在读取硬链接...</p>
             <div v-else class="hardlink-list">
@@ -3852,6 +3926,25 @@ pre {
   font-size: 11px;
   padding: 3px 5px;
   border-radius: 3px;
+}
+.media-delete-button {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  border: 1px solid #b15862;
+  border-radius: 5px;
+  background: rgba(67, 30, 37, 0.96);
+  color: #fff1f2;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+.media-card.delete-menu-open .media-poster::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: rgba(4, 8, 12, 0.48);
 }
 .media-card > div:last-child {
   display: grid;
