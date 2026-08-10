@@ -41,6 +41,8 @@ the recovered bytecode modules remain unchanged.
   verified without submitting a video job.
 - Recovered compatibility helpers required by the Whisper pipeline after the retired
   optional audio-enhancement chain was removed.
+- Reconstructed `pipeline/whisper/strategy.py` as maintainable source and verified
+  its presets, aliases, and execution plans against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
