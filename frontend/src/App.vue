@@ -1612,10 +1612,25 @@ async function saveWhisperSettings() {
   whisperSettingsSaving.value = true;
   error.value = "";
   try {
+    // The recovered backend still understands historical ensemble payloads. New
+    // defaults must be explicit single-model jobs so this control is truthful.
+    const model = String(whisperSettings.value.model || "anime-whisper");
+    const payload = {
+      ...whisperSettings.value,
+      strategy: "advanced",
+      model,
+      pipeline_mode: "single",
+      merge_strategy: "smart_merge",
+      audio_preprocess_mode: "none",
+      speech_enhancer: "none",
+      pass1_pipeline: "",
+      pass2_pipeline: "",
+      custom_config: null,
+    };
     const response = await fetch("/api/settings/whisper", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(whisperSettings.value),
+      body: JSON.stringify(payload),
     });
     if (!response.ok)
       throw new Error(
@@ -4070,8 +4085,7 @@ onMounted(async () => {
                 ><select v-model="whisperSettings.model">
                   <option value="anime-whisper">Anime Whisper</option>
                   <option value="large-v3">Faster Whisper large-v3</option>
-                  <option value="whisper-ja">Whisper Japanese</option>
-                  <option value="qwen">Qwen ASR</option>
+                  <option value="large-v3-turbo">Faster Whisper large-v3-turbo</option>
                 </select></label
               ><label
                 ><span>语言</span
