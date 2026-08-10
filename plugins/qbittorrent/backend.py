@@ -200,7 +200,7 @@ async def test(config: dict[str, Any]) -> PluginTestResult:
         return PluginTestResult(ok=False, message=f"qb failed: {e}")
 
 
-async def submit_download(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+async def submit_download(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     urls = payload.get("urls") or payload.get("url")
     category = payload.get("category") or config.get("category") or ""
     savepath = payload.get("savepath") or config.get("savepath") or ""
