@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-type Job = { id: string; job_type: string; emby_item_name: string; status: string; progress: number; detail?: string }
+type Job = { id: string; job_type: string; emby_item_name: string; status: string; progress: number; detail?: string; phase_label?: string; phase_progress?: number }
 type PluginSetting = { type?: 'string' | 'password' | 'number' | 'boolean'; label?: string; description?: string; min?: number; max?: number }
 type Plugin = { id: string; name?: string; description?: string; enabled: boolean; loaded: boolean; config?: Record<string, unknown>; default_config?: Record<string, unknown>; config_schema?: Record<string, PluginSetting> }
 type Recommendation = { code: string; title: string; cover_url?: string; release_date?: string; score?: number; recommendation_score?: number; actors: string[]; categories: string[]; is_today_increment: boolean }
@@ -488,9 +488,9 @@ onMounted(refresh)
           <article class="stat"><span>全部任务</span><strong>{{ jobs.length }}</strong></article>
           <article class="stat"><span>已加载插件</span><strong>{{ plugins.filter((item) => item.loaded).length }}</strong></article>
           <article class="stat"><span>媒体服务器</span><strong>{{ settings.emby ? '已配置' : '未配置' }}</strong></article>
-          <section class="panel wide"><div class="panel-heading"><h2>最近任务</h2><button @click="page = 'tasks'">查看全部</button></div><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs.slice(0, 6)" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.detail || job.status }}</small></div><span>{{ job.progress }}%</span></div></section>
+          <section class="panel wide"><div class="panel-heading"><h2>最近任务</h2><button @click="page = 'tasks'">查看全部</button></div><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs.slice(0, 6)" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.phase_label || job.detail || job.status }}</small></div><span>{{ job.progress }}%</span></div></section>
         </section>
-        <section v-else-if="page === 'tasks'" class="panel"><div class="panel-heading"><h2>任务队列</h2><button @click="refresh">刷新</button></div><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.detail || job.status }}</small><div class="progress"><i :style="{ width: `${job.progress}%` }" /></div></div><span :class="['badge', job.status]">{{ job.status }}</span></div></section>
+        <section v-else-if="page === 'tasks'" class="panel"><div class="panel-heading"><h2>任务队列</h2><button @click="refresh">刷新</button></div><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.phase_label || job.detail || job.status }}<template v-if="job.phase_progress != null"> {{ job.phase_progress }}%</template></small><div class="progress"><i :style="{ width: `${job.progress}%` }" /></div></div><span :class="['badge', job.status]">{{ job.status }}</span></div></section>
         <section v-else-if="page === 'library'" class="media-library">
           <div class="panel-heading media-library__controls"><div class="library-picker"><button :class="{ active: !mediaLibraryId }" @click="mediaLibraryId = ''; loadMediaLibrary(true)">全部</button><button v-for="library in mediaLibraries" :key="library.id" :class="{ active: mediaLibraryId === library.id }" @click="mediaLibraryId = library.id; loadMediaLibrary(true)">{{ library.name }}</button></div><button @click="loadMediaLibrary()">刷新</button></div>
           <p v-if="mediaLoading" class="empty">正在读取媒体库...</p>

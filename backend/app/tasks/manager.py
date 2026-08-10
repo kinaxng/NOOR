@@ -159,7 +159,7 @@ class JobManager:
         if queued:
             self._ensure_worker()
 
-    async def _set_state(self, job_id: str, *, status: str | None = None, progress: int | None = None, detail: str | None = None, error: str | None = None, output_path: str | None = None, result_metadata: dict | None = None) -> Job | None:
+    async def _set_state(self, job_id: str, *, status: str | None = None, progress: int | None = None, detail: str | None = None, error: str | None = None, output_path: str | None = None, result_metadata: dict | None = None, phase_key: str | None = None, phase_label: str | None = None, phase_progress: int | None = None) -> Job | None:
         async with async_session_maker() as session:
             job = await session.get(Job, job_id)
             if not job:
@@ -178,14 +178,20 @@ class JobManager:
                 job.output_path = output_path
             if result_metadata is not None:
                 job.result_metadata = result_metadata
+            if phase_key is not None:
+                job.phase_key = phase_key
+            if phase_label is not None:
+                job.phase_label = phase_label
+            if phase_progress is not None:
+                job.phase_progress = max(0, min(100, int(phase_progress)))
             await session.commit()
             await session.refresh(job)
             return job
 
-    async def _progress(self, job_id: str, progress: int, detail: str | None = None) -> None:
-        job = await self._set_state(job_id, progress=progress, detail=detail)
+    async def _progress(self, job_id: str, progress: int, detail: str | None = None, *, phase_key: str | None = None, phase_label: str | None = None, phase_progress: int | None = None) -> None:
+        job = await self._set_state(job_id, progress=progress, detail=detail, phase_key=phase_key, phase_label=phase_label, phase_progress=phase_progress)
         if job:
-            await self._emit(job_id, 'progress', progress=job.progress, phase_progress=job.progress, detail=job.detail)
+            await self._emit(job_id, 'progress', progress=job.progress, phase_key=job.phase_key, phase_label=job.phase_label, phase_progress=job.phase_progress or job.progress, detail=job.detail)
 
     async def _process_queue(self) -> None:
         while True:
@@ -313,7 +319,14 @@ class JobManager:
             await self._log(job_id, str(update.get('line') or ''))
             return
         if update.get('type') == 'progress':
-            await self._progress(job_id, int(update.get('progress', 0)), update.get('detail') or update.get('message'))
+            await self._progress(
+                job_id,
+                int(update.get('progress', 0)),
+                update.get('detail') or update.get('message'),
+                phase_key=update.get('phase_key'),
+                phase_label=update.get('phase_label'),
+                phase_progress=update.get('phase_progress'),
+            )
 
     async def _complete(self, job_id: str, output_path: str, metadata: dict | None = None) -> None:
         job = await self._set_state(job_id, status='completed', progress=100, detail='任务完成', output_path=output_path, result_metadata=metadata)
