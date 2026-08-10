@@ -382,10 +382,21 @@ function pageFromPath(pathname = window.location.pathname): Page {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   if (/^\/actor\/emby\/[^/]+$/.test(normalized)) return "files";
   if (/^\/javdb\/[^/]+$/.test(normalized)) return "javdb";
+  if (/^\/library\/[^/]+$/.test(normalized)) return "library";
   return (
     (Object.entries(pagePaths).find(([, path]) => path === normalized)?.[0] as Page | undefined) ||
     "overview"
   );
+}
+
+function mediaItemIdFromPath(pathname = window.location.pathname) {
+  const match = pathname.replace(/\/+$/, "").match(/^\/library\/([^/]+)$/);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return "";
+  }
 }
 
 function javdbCodeFromPath(pathname = window.location.pathname) {
@@ -985,7 +996,12 @@ async function cancelJob(job: Job) {
   }
 }
 
-async function openMediaItem(item: MediaItem) {
+async function openMediaItem(item: MediaItem, pushRoute = true) {
+  if (pushRoute) {
+    const path = `/library/${encodeURIComponent(item.id)}`;
+    if (window.location.pathname !== path)
+      window.history.pushState({ mediaItemId: item.id }, "", path);
+  }
   try {
     selectedMediaItem.value = await request<MediaItem>(
       `/api/media-library/item/${encodeURIComponent(item.id)}`,
@@ -993,6 +1009,13 @@ async function openMediaItem(item: MediaItem) {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "媒体详情加载失败";
   }
+}
+
+function closeMediaItem() {
+  selectedMediaItem.value = null;
+  facefusionOpen.value = false;
+  subtitlesOpen.value = false;
+  if (mediaItemIdFromPath()) window.history.replaceState({ page: "library" }, "", "/library");
 }
 
 function mediaCode(item: MediaItem) {
@@ -1987,6 +2010,13 @@ async function loadPageData(target: Page) {
 }
 
 async function loadBrowserRoute() {
+  const mediaItemId = mediaItemIdFromPath();
+  if (mediaItemId) {
+    page.value = "library";
+    await loadMediaLibrary();
+    await openMediaItem({ id: mediaItemId, name: "" }, false);
+    return;
+  }
   const javdbCode = javdbCodeFromPath();
   if (javdbCode) {
     page.value = "javdb";
@@ -2522,11 +2552,7 @@ onMounted(async () => {
                 ><button
                   title="关闭详情"
                   aria-label="关闭详情"
-                  @click="
-                    selectedMediaItem = null;
-                    facefusionOpen = false;
-                    subtitlesOpen = false;
-                  "
+                  @click="closeMediaItem"
                 >
                   x
                 </button>
