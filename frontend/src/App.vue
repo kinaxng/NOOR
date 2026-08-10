@@ -897,6 +897,11 @@ function mediaCode(item: MediaItem) {
   return match?.[1]?.toUpperCase() || "";
 }
 
+function isFacefusionItem(item: MediaItem) {
+  const value = `${item.name} ${item.path || ""}`;
+  return /facefusion|(?:^|[._\s-])ff(?:$|[._\s-])/i.test(value);
+}
+
 async function openMediaDeleteMenu(item: MediaItem) {
   const code = mediaCode(item);
   if (!code) {
@@ -2266,7 +2271,7 @@ onMounted(refresh);
                     :src="item.poster_path"
                     :alt="item.name"
                     loading="lazy"
-                  /><span v-if="item.tags?.is_cracked">换脸</span
+                  /><span v-if="isFacefusionItem(item)" class="facefusion-badge">换脸</span
                   ><button
                     v-if="mediaDeleteGroup?.code === mediaCode(item)"
                     class="media-delete-button"
@@ -4306,6 +4311,15 @@ pre {
   font-size: 11px;
   padding: 3px 5px;
   border-radius: 3px;
+}
+.media-poster .facefusion-badge {
+  opacity: 0;
+  background: #a04fba;
+  transition: opacity 0.15s ease;
+}
+.media-card:hover .media-poster .facefusion-badge,
+.media-card:focus-within .media-poster .facefusion-badge {
+  opacity: 1;
 }
 .media-delete-button {
   position: absolute;
