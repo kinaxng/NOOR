@@ -4388,6 +4388,7 @@ onMounted(async () => {
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
 }
 button {
   font: inherit;
@@ -5957,7 +5958,7 @@ pre {
 }
 @media (max-width: 760px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: sticky;
@@ -5967,6 +5968,9 @@ pre {
     flex-direction: row;
     align-items: center;
     gap: 12px;
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
   }
   .brand {
     padding: 0;
@@ -5975,6 +5979,12 @@ pre {
     display: flex;
     overflow-x: auto;
     flex: 1;
+    min-width: 0;
+    scrollbar-width: none;
+  }
+  .sidebar nav::-webkit-scrollbar,
+  .library-picker::-webkit-scrollbar {
+    display: none;
   }
   .sidebar nav button {
     white-space: nowrap;
@@ -5984,6 +5994,37 @@ pre {
   }
   main {
     padding: 18px;
+    max-width: 100%;
+  }
+  header {
+    min-width: 0;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  header > div:first-child {
+    min-width: 0;
+  }
+  .header-actions {
+    flex: none;
+    gap: 5px;
+  }
+  .header-command {
+    padding: 8px;
+  }
+  .media-library__controls {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .media-library__controls .library-picker {
+    flex: 1 1 100%;
+    scrollbar-width: none;
+  }
+  .media-library__controls > button {
+    margin-left: auto;
+    width: 56px;
+    height: 36px;
+    white-space: nowrap;
   }
   .overview-grid,
   .facefusion-controls {
