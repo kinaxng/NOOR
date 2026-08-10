@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import datetime as dt
 import json
 import math
 from pathlib import Path
 from typing import Any
 
 from app.core.config import PROJECT_ROOT
+
+
+_pool_lock = asyncio.Lock()
+_scheduler_task: asyncio.Task[None] | None = None
+_scheduler_stop: asyncio.Event | None = None
 
 
 def _pool_path() -> Path:
@@ -26,6 +34,142 @@ def _pool() -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def _save_pool(pool: dict[str, Any]) -> None:
+    path = _pool_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pool['updated_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(pool, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporary.replace(path)
+
+
+def _pool_scan_due(pool: dict[str, Any], interval_minutes: int = 360) -> bool:
+    previous = (pool.get('last_full_scan') or {}).get('at')
+    try:
+        value = dt.datetime.fromisoformat(str(previous).replace('Z', '+00:00'))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.timezone.utc)
+        return (dt.datetime.now(dt.timezone.utc) - value.astimezone(dt.timezone.utc)).total_seconds() >= interval_minutes * 60
+    except (TypeError, ValueError):
+        return True
+
+
+def _merge_candidate(existing: dict[str, Any] | None, item: dict[str, Any], source: str, label: str) -> dict[str, Any]:
+    current = dict(existing or {})
+    if not current:
+        current.update(item)
+        current['first_seen_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
+    else:
+        for key, value in item.items():
+            if value not in (None, '', [], {}) and (not current.get(key) or key in {'magnets_count', 'has_cnsub', 'is_cracked'}):
+                current[key] = max(int(current.get(key) or 0), int(value or 0)) if key == 'magnets_count' else bool(current.get(key) or value) if key in {'has_cnsub', 'is_cracked'} else value
+    tags = current.get('source_tags') if isinstance(current.get('source_tags'), list) else []
+    if not any(isinstance(tag, dict) and tag.get('id') == source for tag in tags):
+        tags.append({'id': source, 'label': label, 'date': dt.date.today().isoformat()})
+    current['source_tags'] = tags[:16]
+    current['last_seen_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
+    current['is_today_increment'] = bool(current.get('first_seen_at', '').startswith(dt.date.today().isoformat()))
+    return current
+
+
+async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    from app.plugins.runtime import runtime
+
+    if not runtime.is_enabled('javdb'):
+        return {'ok': False, 'message': 'JavDB 插件未启用'}
+    async with _pool_lock:
+        pool = _pool()
+        background = pool.get('background') if isinstance(pool.get('background'), dict) else {}
+        if background.get('running') and not force:
+            return {'ok': True, 'skipped': True, 'reason': 'running', 'pool': _candidate_pool_stats(pool)}
+        pool['background'] = {**background, 'running': True, 'started_at': dt.datetime.now(dt.timezone.utc).isoformat(), 'last_error': ''}
+        _save_pool(pool)
+
+    pages = max(1, min(int(config.get('full_scan_pages') or 5), 30))
+    requests: list[tuple[str, str, dict[str, Any]]] = [
+        ('latest', '最新更新', {'page': 1, 'limit': 48, 'type': 'all', 'filter_by': 'magnets', 'sort_by': 'update'}),
+        ('rankings', '日榜', {'page': 1, 'limit': 24, 'period': 'daily', 'type': 0}),
+        ('rankings', '周榜', {'page': 1, 'limit': 24, 'period': 'weekly', 'type': 0}),
+        ('rankings', '月榜', {'page': 1, 'limit': 24, 'period': 'monthly', 'type': 0}),
+        ('recommend', 'JavDB 推荐', {'page': 1, 'limit': 24}),
+    ]
+    requests.extend(('videos', f'完整库 P{page}', {'page': page, 'limit': 80, 'sort': 'update', 'order': 'desc'}) for page in range(1, pages + 1))
+    scanned = added = updated = 0
+    warnings: list[str] = []
+    try:
+        for action, label, payload in requests:
+            try:
+                response = await runtime.handle_action('javdb', action, payload)
+            except Exception as exc:
+                warnings.append(f'{label}: {exc}')
+                continue
+            values = response.get('items') if isinstance(response, dict) else []
+            async with _pool_lock:
+                pool = _pool()
+                items = pool.get('items') if isinstance(pool.get('items'), dict) else {}
+                for value in values or []:
+                    if not isinstance(value, dict):
+                        continue
+                    code = _norm_code(value)
+                    if not code:
+                        continue
+                    existed = code in items
+                    items[code] = _merge_candidate(items.get(code), value, f'{action}:{label}', label)
+                    scanned += 1
+                    added += 0 if existed else 1
+                    updated += 1 if existed else 0
+                pool['items'] = items
+                _save_pool(pool)
+        async with _pool_lock:
+            pool = _pool()
+            pool['last_full_scan'] = {'at': dt.datetime.now(dt.timezone.utc).isoformat(), 'pages': pages, 'scanned': scanned, 'added': added, 'updated': updated, 'warnings': warnings[:8]}
+            pool['background'] = {**(pool.get('background') or {}), 'running': False, 'finished_at': dt.datetime.now(dt.timezone.utc).isoformat(), 'last_error': ''}
+            _save_pool(pool)
+            return {'ok': True, 'scanned': scanned, 'added': added, 'updated': updated, 'warnings': warnings, 'pool': _candidate_pool_stats(pool)}
+    except Exception as exc:
+        async with _pool_lock:
+            pool = _pool()
+            pool['background'] = {**(pool.get('background') or {}), 'running': False, 'failed_at': dt.datetime.now(dt.timezone.utc).isoformat(), 'last_error': str(exc)}
+            _save_pool(pool)
+        raise
+
+
+async def _scheduler_loop() -> None:
+    global _scheduler_stop
+    _scheduler_stop = asyncio.Event()
+    while not _scheduler_stop.is_set():
+        try:
+            from app.plugins.runtime import runtime
+            config = runtime.get_config('av-recommend')
+            if _pool_scan_due(_pool(), max(30, min(int(config.get('scan_interval_minutes') or 360), 1440))):
+                await _scan_candidate_pool(config)
+            minutes = max(30, min(int(config.get('scan_interval_minutes') or 360), 1440))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            minutes = 30
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(_scheduler_stop.wait(), timeout=minutes * 60)
+
+
+async def start_background(_config: dict[str, Any] | None = None) -> None:
+    global _scheduler_task
+    if not _scheduler_task or _scheduler_task.done():
+        _scheduler_task = asyncio.create_task(_scheduler_loop())
+
+
+async def stop_background() -> None:
+    global _scheduler_task, _scheduler_stop
+    if _scheduler_stop:
+        _scheduler_stop.set()
+    if _scheduler_task:
+        _scheduler_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _scheduler_task
+    _scheduler_task = None
+    _scheduler_stop = None
 
 
 def _candidate_pool_stats(pool: dict[str, Any]) -> dict[str, Any]:
@@ -134,6 +278,7 @@ async def search_resources(query: dict[str, Any], _config: dict[str, Any] | None
 
 async def handle_action(action: str, payload: dict[str, Any], _config: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = payload or {}
+    config = _config or {}
     feedback, subscribed = _feedback(), _subscription_codes()
     if action in {'list', 'recommendations', 'get_recommendations'}:
         mode = str(payload.get('source_mode') or payload.get('mode') or 'latest').lower()
@@ -162,6 +307,10 @@ async def handle_action(action: str, payload: dict[str, Any], _config: dict[str,
     if action == 'reset_feedback':
         _feedback_path().unlink(missing_ok=True)
         return {'ok': True}
+    if action == 'scan_candidate_pool':
+        return await _scan_candidate_pool(config, force=bool(payload.get('force')))
+    if action == 'candidate_pool':
+        return {'ok': True, 'pool': _candidate_pool_stats(_pool())}
     raise LookupError(action)
 
 
