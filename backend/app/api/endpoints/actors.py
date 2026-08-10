@@ -15,12 +15,39 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.api.endpoints import media_library as media
 from app.core.runtime_paths import data_path
 
 
 router = APIRouter(prefix="/api/media-library", tags=["media-library-actors"])
+
+
+class ActorMappingSourceRequest(BaseModel):
+    mdc_ng_path: str
+
+
+def _mapping_settings_path() -> Path:
+    path = data_path() / "actor_management_settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _mapping_settings() -> dict[str, Any]:
+    path = _mapping_settings_path()
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        return value if isinstance(value, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_mapping_settings(value: dict[str, Any]) -> None:
+    _mapping_settings_path().write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _require_config() -> dict[str, Any]:
@@ -43,11 +70,20 @@ def _normalize_name(value: str | None) -> str:
 
 
 def _mapping_path(config: dict[str, Any]) -> Path | None:
-    explicit = str(config.get("mdc_ng_path") or "").strip()
+    explicit = str(config.get("mdc_ng_path") or _mapping_settings().get("mdc_ng_path") or "").strip()
     if explicit:
         candidate = Path(explicit).expanduser()
+        if candidate.is_file():
+            return candidate
         if candidate.is_dir():
-            candidate = candidate / "data" / "mapping_actor.xml"
+            # MDC-NG normally mounts its persistent directory at ``data``;
+            # depending on whether the user points at the project root or the
+            # mounted data directory, the mapping lives in one of these forms.
+            for relative in ("data/data/mapping_actor.xml", "data/mapping_actor.xml", "mapping_actor.xml"):
+                mapped = candidate / relative
+                if mapped.is_file():
+                    return mapped
+            return candidate / "data/data/mapping_actor.xml"
         return candidate
     fallback = data_path() / "media_actor_mapping.xml"
     return fallback if fallback.is_file() else None
@@ -87,7 +123,7 @@ def _mapping_records(config: dict[str, Any]) -> list[dict[str, Any]]:
         jp = _first(values, "jp", "name_jp", "japanese", "ja")
         zh_cn = _first(values, "zh_cn", "name_zh_cn", "simplified", "cn")
         zh_tw = _first(values, "zh_tw", "name_zh_tw", "traditional", "tw")
-        aliases = _first(values, "aliases", "alias", "other_name", "other_names")
+        aliases = _first(values, "aliases", "alias", "other_name", "other_names", "keyword")
         if not (jp or zh_cn or zh_tw):
             continue
         names = [name for name in [jp, zh_cn, zh_tw] if name]
@@ -179,14 +215,38 @@ async def get_actors(
 
 @router.get("/actors/mapping/status")
 async def actor_mapping_status():
-    config = _require_config()
+    # Mapping setup is useful before Emby is configured, so do not require a
+    # live media server for this status endpoint.
+    config = media._load_config()
     path = _mapping_path(config)
     records = _mapping_records(config)
     return {
         "configured_path": str(path) if path else "",
+        "configured_root": str(config.get("mdc_ng_path") or _mapping_settings().get("mdc_ng_path") or ""),
         "exists": bool(path and path.is_file()),
         "record_count": len(records),
-        "source": "mdc-ng" if config.get("mdc_ng_path") else "noor-local",
+        "source": "mdc-ng" if (config.get("mdc_ng_path") or _mapping_settings().get("mdc_ng_path")) else "noor-local",
+    }
+
+
+@router.post("/actors/mapping/source")
+async def set_actor_mapping_source(req: ActorMappingSourceRequest):
+    root = req.mdc_ng_path.strip()
+    if not root:
+        raise HTTPException(status_code=400, detail="请填写 MDC-NG 路径")
+    candidate = Path(root).expanduser()
+    if not candidate.exists():
+        raise HTTPException(status_code=400, detail="MDC-NG 路径不存在")
+    config = media._load_config()
+    config["mdc_ng_path"] = root
+    resolved = _mapping_path(config)
+    if not resolved or not resolved.is_file():
+        raise HTTPException(status_code=400, detail="在该路径下未找到 data/data/mapping_actor.xml")
+    _save_mapping_settings({"mdc_ng_path": root})
+    return {
+        "ok": True,
+        "configured_path": str(resolved),
+        "record_count": len(_mapping_records(config)),
     }
 
 

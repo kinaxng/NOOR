@@ -36,7 +36,9 @@ const embyActors = ref<EmbyActor[]>([])
 const embyActorsTotal = ref(0)
 const embyActorsLoading = ref(false)
 const embyActorQuery = ref('')
-const mappingStatus = ref<{ exists?: boolean; record_count?: number; configured_path?: string } | null>(null)
+const mappingStatus = ref<{ exists?: boolean; record_count?: number; configured_path?: string; configured_root?: string } | null>(null)
+const mdcNgPath = ref('')
+const mappingSaving = ref(false)
 const selectedEmbyActor = ref<EmbyActor | null>(null)
 const selectedEmbyActorMovies = ref<JavdbItem[]>([])
 
@@ -136,17 +138,38 @@ async function loadEmbyActors() {
     const query = embyActorQuery.value.trim()
     const [actorsData, status] = await Promise.all([
       request<{ actors: EmbyActor[]; total: number }>(`/api/media-library/actors?limit=60&sort_by=SortName&sort_order=Ascending${query ? `&q=${encodeURIComponent(query)}` : ''}`),
-      request<{ exists?: boolean; record_count?: number; configured_path?: string }>('/api/media-library/actors/mapping/status'),
+      request<{ exists?: boolean; record_count?: number; configured_path?: string; configured_root?: string }>('/api/media-library/actors/mapping/status'),
     ])
     embyActors.value = actorsData.actors || []
     embyActorsTotal.value = actorsData.total || 0
     mappingStatus.value = status
+    mdcNgPath.value = status.configured_root || ''
   } catch (cause) {
     embyActors.value = []
     embyActorsTotal.value = 0
     mappingStatus.value = null
     error.value = cause instanceof Error ? cause.message : 'Emby 演员列表加载失败'
   } finally { embyActorsLoading.value = false }
+}
+
+async function loadMappingStatus() {
+  try {
+    const status = await request<{ exists?: boolean; record_count?: number; configured_path?: string; configured_root?: string }>('/api/media-library/actors/mapping/status')
+    mappingStatus.value = status
+    mdcNgPath.value = status.configured_root || ''
+  } catch { mappingStatus.value = null }
+}
+
+async function saveMdcNgPath() {
+  mappingSaving.value = true
+  error.value = ''
+  try {
+    const response = await fetch('/api/media-library/actors/mapping/source', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mdc_ng_path: mdcNgPath.value }),
+    })
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+    await loadMappingStatus()
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : '映射表路径保存失败' } finally { mappingSaving.value = false }
 }
 
 async function openEmbyActor(actor: EmbyActor) {
@@ -204,7 +227,7 @@ onMounted(refresh)
         <button :class="{ active: page === 'files' }" @click="openFiles()">文件</button>
         <button :class="{ active: page === 'tasks' }" @click="page = 'tasks'">任务 <span v-if="runningJobs.length" class="count">{{ runningJobs.length }}</span></button>
         <button :class="{ active: page === 'plugins' }" @click="page = 'plugins'">插件</button>
-        <button :class="{ active: page === 'settings' }" @click="page = 'settings'">设置</button>
+        <button :class="{ active: page === 'settings' }" @click="page = 'settings'; loadMappingStatus()">设置</button>
       </nav>
       <div class="sidebar-foot"><span :class="['status-dot', { online: healthy }]" />{{ healthy ? '后端已连接' : '后端未连接' }}</div>
     </aside>
@@ -243,7 +266,7 @@ onMounted(refresh)
           </template>
         </section>
         <section v-else-if="page === 'plugins'" class="panel"><div class="panel-heading"><h2>插件</h2><button @click="refresh">重新扫描</button></div><p v-if="!plugins.length" class="empty">尚未恢复插件源码</p><div v-for="plugin in plugins" :key="plugin.id" class="job-row"><div><b>{{ plugin.name || plugin.id }}</b><small>{{ plugin.id }}</small></div><span :class="['badge', plugin.loaded ? 'completed' : 'failed']">{{ plugin.loaded ? '已加载' : '加载失败' }}</span></div></section>
-        <section v-else class="panel"><h2>设置</h2><p class="empty">已恢复的设置 API 可用。复杂设置界面将在原组件源码恢复后接回。</p><pre>{{ JSON.stringify(settings, null, 2) }}</pre></section>
+        <section v-else class="panel"><div class="panel-heading"><div><h2>设置</h2><small>恢复中的基础配置</small></div><button @click="loadMappingStatus">刷新</button></div><section class="settings-section"><h3>Emby 演员映射</h3><p>填写 MDC-NG 根目录，NOOR 会自动读取其 `data/data/mapping_actor.xml`。</p><div class="settings-inline"><input v-model="mdcNgPath" aria-label="MDC-NG 路径" placeholder="/path/to/mdc-ng" /><button :disabled="mappingSaving" @click="saveMdcNgPath">{{ mappingSaving ? '保存中' : '保存' }}</button></div><small v-if="mappingStatus">{{ mappingStatus.exists ? `已加载 ${mappingStatus.record_count || 0} 条映射` : '尚未找到映射表' }}</small></section><pre>{{ JSON.stringify(settings, null, 2) }}</pre></section>
       </template>
     </main>
   </div>
@@ -270,5 +293,6 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }.stat, .panel, .notice { background: #1a212b; border: 1px solid #303a47; border-radius: 6px; }.stat { padding: 18px; display: grid; gap: 8px; }.stat span, small { color: #98a6b7; }.stat strong { font-size: 30px; }.wide { grid-column: 1 / -1; }.panel { padding: 18px; }.panel-heading { display: flex; align-items: center; justify-content: space-between; }.panel-heading button { color: #8fc9f5; border: 0; background: none; }.job-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid #2b3440; }.job-row div { min-width: 0; }.job-row b, .job-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.job-row small { margin-top: 4px; }.badge { font-size: 12px; padding: 4px 8px; border-radius: 999px; background: #394553; color: #dce5ee; }.badge.completed { background: #173f31; color: #8fe4b8; }.badge.failed { background: #4b2830; color: #ffafb9; }.progress { margin-top: 8px; height: 4px; background: #303a47; width: min(300px, 100%); }.progress i { display: block; height: 100%; background: #168bdf; }.notice { padding: 14px; color: #aeb9c6; }.notice.error { border-color: #80424d; color: #ffbec6; } .empty { color: #93a0b0; padding: 22px 0; } pre { max-height: 60vh; overflow: auto; color: #cdd9e6; font-size: 12px; line-height: 1.55; }
 .recommendation-controls { margin-bottom: 14px; }.segmented { display: inline-flex; border: 1px solid #3a4655; border-radius: 5px; overflow: hidden; }.segmented button { border: 0; background: transparent; color: #aab4c1; padding: 7px 11px; }.segmented button.active { background: #26394c; color: #fff; }.muted { color: #98a6b7; font-size: 12px; }.javdb-search { display: flex; gap: 8px; margin-bottom: 14px; }.javdb-search input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.javdb-search button { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; }.recommendations { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }.work-card { min-width: 0; background: #1a212b; border: 1px solid #303a47; border-radius: 6px; overflow: hidden; }.work-card.clickable { cursor: pointer; }.poster { position: relative; aspect-ratio: 2 / 3; background: #242d39; }.poster img { display: block; width: 100%; height: 100%; object-fit: cover; }.poster span { position: absolute; top: 8px; left: 8px; padding: 3px 6px; background: #168bdf; color: white; font-size: 11px; border-radius: 4px; }.work-card > div:last-child { padding: 10px; }.card-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.work-card b { color: #a9d5f7; font-size: 12px; }.card-title strong { color: #8fe4b8; font-size: 14px; }.work-card p { margin: 6px 0; font-size: 13px; line-height: 1.4; min-height: 54px; overflow: hidden; }.work-card small { line-height: 1.4; }.card-actions { display: flex; justify-content: flex-end; gap: 5px; margin-top: 10px; }.card-actions button { width: 25px; height: 25px; border: 1px solid #3a4655; background: #202833; color: #c9d3dd; border-radius: 4px; }.actor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; }.actor-card { min-width: 0; border: 1px solid #303a47; border-radius: 6px; padding: 8px; background: #1a212b; color: #dce5ee; text-align: left; display: grid; gap: 6px; }.actor-card img, .actor-placeholder { width: 100%; aspect-ratio: 1; object-fit: cover; background: #242d39; display: grid; place-items: center; color: #98a6b7; }.actor-card b, .actor-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.actor-card small { color: #98a6b7; }.detail-panel { margin-top: 18px; padding: 18px; background: #1a212b; border: 1px solid #303a47; border-radius: 6px; overflow: auto; }.detail-panel .panel-heading button { width: 30px; height: 30px; border: 1px solid #3a4655; background: #202833; color: #dce5ee; border-radius: 4px; }.detail-cover { width: min(240px, 100%); margin: 12px 0; display: block; }.actor-heading { display: flex; align-items: center; gap: 12px; }.actor-heading img { width: 64px; height: 64px; object-fit: cover; }.compact { margin-top: 14px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 .file-tabs { display: flex; gap: 4px; border-bottom: 1px solid #303a47; margin-bottom: 20px; }.file-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #9ba8b6; padding: 9px 12px; }.file-tabs button.active { border-bottom-color: #168bdf; color: #fff; }.hardlink-list { display: grid; gap: 8px; }.hardlink-row { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid #2b3440; }.hardlink-row div { min-width: 0; }.hardlink-row b, .hardlink-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.hardlink-row small { margin-top: 5px; }.actor-management-tools { display: flex; align-items: center; gap: 8px; margin: 14px 0; }.actor-management-tools input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.actor-management-tools button, .detail-actions a { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; text-decoration: none; }.detail-actions { display: flex; align-items: center; gap: 8px; }.emby-actor-grid { margin-top: 12px; }
+.settings-section { border-top: 1px solid #2b3440; border-bottom: 1px solid #2b3440; padding: 16px 0; margin: 16px 0; }.settings-section h3 { margin: 0 0 6px; font-size: 14px; }.settings-section p { color: #98a6b7; font-size: 13px; }.settings-inline { display: flex; gap: 8px; }.settings-inline input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.settings-inline button { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; }
 @media (max-width: 760px) { .app-shell { grid-template-columns: 1fr; }.sidebar { position: sticky; top: 0; z-index: 2; padding: 10px; flex-direction: row; align-items: center; gap: 12px; }.brand { padding: 0; }.sidebar nav { display: flex; overflow-x: auto; flex: 1; }.sidebar nav button { white-space: nowrap; }.sidebar-foot { display: none; } main { padding: 18px; }.overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.wide { grid-column: 1 / -1; } }
 </style>
