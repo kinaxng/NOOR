@@ -281,6 +281,7 @@ const embyActors = ref<EmbyActor[]>([]);
 const embyActorsTotal = ref(0);
 const embyActorsLoading = ref(false);
 const embyActorQuery = ref("");
+const embyActorSort = ref<"name" | "recent">("name");
 const actorDisplayLanguage = ref<"zh_cn" | "zh_tw" | "jp">("zh_cn");
 const mappingStatus = ref<{
   exists?: boolean;
@@ -1707,9 +1708,11 @@ async function loadEmbyActors() {
   error.value = "";
   try {
     const query = embyActorQuery.value.trim();
+    const sortBy = embyActorSort.value === "recent" ? "DateCreated" : "SortName";
+    const sortOrder = embyActorSort.value === "recent" ? "Descending" : "Ascending";
     const [actorsData, status] = await Promise.all([
       request<{ actors: EmbyActor[]; total: number }>(
-        `/api/media-library/actors?limit=60&sort_by=SortName&sort_order=Ascending&lang=${actorDisplayLanguage.value}${query ? `&q=${encodeURIComponent(query)}` : ""}`,
+        `/api/media-library/actors?limit=60&sort_by=${sortBy}&sort_order=${sortOrder}&lang=${actorDisplayLanguage.value}${query ? `&q=${encodeURIComponent(query)}` : ""}`,
       ),
       request<{
         exists?: boolean;
@@ -3008,6 +3011,10 @@ onMounted(refresh);
                 placeholder="搜索 Emby 演员"
                 @keyup.enter="loadEmbyActors"
               /><button @click="loadEmbyActors">搜索</button
+              ><select v-model="embyActorSort" aria-label="演员排序" @change="loadEmbyActors">
+                <option value="name">名称</option>
+                <option value="recent">最近更新</option>
+              </select
               ><span v-if="mappingStatus" class="muted"
                 >映射表：{{
                   mappingStatus.exists
@@ -4611,7 +4618,8 @@ pre {
   gap: 8px;
   margin: 14px 0;
 }
-.actor-management-tools input {
+.actor-management-tools input,
+.actor-management-tools select {
   flex: 1;
   min-width: 0;
   border: 1px solid #3a4655;
@@ -4619,6 +4627,10 @@ pre {
   background: #171c24;
   color: #e9edf2;
   padding: 8px 10px;
+}
+.actor-management-tools select {
+  flex: 0 0 auto;
+  max-width: 112px;
 }
 .actor-management-tools button,
 .detail-actions a {
