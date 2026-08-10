@@ -13,6 +13,8 @@ type HardlinkGroup = { code: string; hardlink_count?: number; orphan_count?: num
 type MediaLibrary = { id: string; name: string; collection_type?: string }
 type MediaItem = { id: string; name: string; type?: string; poster_path?: string; date_created?: string; path?: string; tags?: { is_cracked?: boolean; has_chinese?: boolean; is_uncensored?: boolean; is_leaked?: boolean } }
 type FaceFusionSourceImage = { id: string; name: string; preview_url: string; path: string; size?: number }
+type LadaChoice = { id: string; name?: string; downloaded?: boolean; description_zh?: string }
+type LadaInfo = { devices?: Array<{ id: string; name?: string }>; detection_models?: LadaChoice[]; restoration_models?: LadaChoice[]; encoding_presets?: Array<{ id: string; name?: string; desc?: string }> }
 type SubtitleFile = { filename: string; path: string; size: number; ext: string }
 type OnlineSubtitle = { name: string; url: string; ext: string; language: string; source: string; source_key?: string; source_type?: string }
 type Subscription = { id: string; code?: string; title?: string; type?: 'subscribe' | 'upgrade'; status?: string; mode?: string; require_cracked?: boolean; require_subtitle?: boolean; push_status?: string; last_submit_error?: string; retry_after_at?: string }
@@ -96,6 +98,12 @@ const facefusionSettings = ref<Record<string, string | number>>({})
 const facefusionSettingsLoading = ref(false)
 const facefusionSettingsSaving = ref(false)
 const whisperSubmitting = ref(false)
+const ladaSubmitting = ref(false)
+const ladaInfoLoading = ref(false)
+const ladaSettingsSaving = ref(false)
+const ladaInfo = ref<LadaInfo>({})
+const ladaConfig = ref<{ cli_path: string }>({ cli_path: '' })
+const ladaDefaults = ref<Record<string, string | number | boolean>>({})
 const whisperSettings = ref<Record<string, unknown>>({})
 const whisperSettingsLoading = ref(false)
 const whisperSettingsSaving = ref(false)
@@ -441,6 +449,30 @@ async function submitWhisper() {
   }
 }
 
+async function submitLada() {
+  const item = selectedMediaItem.value
+  if (!item?.path) {
+    error.value = '当前媒体项目没有可处理的本地文件路径'
+    return
+  }
+  ladaSubmitting.value = true
+  error.value = ''
+  try {
+    const response = await fetch('/api/jobs', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ emby_item_id: item.id, emby_item_name: item.name, input_path: item.path, settings: ladaDefaults.value }),
+    })
+    if (!response.ok) throw new Error(await response.text() || `${response.status} ${response.statusText}`)
+    selectedMediaItem.value = null
+    await refresh()
+    await openTasks()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'LADA 任务提交失败'
+  } finally {
+    ladaSubmitting.value = false
+  }
+}
+
 function subtitleSize(size: number) {
   return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`
 }
@@ -561,6 +593,41 @@ async function saveWhisperSettings() {
     error.value = cause instanceof Error ? cause.message : 'Whisper 设置保存失败'
   } finally {
     whisperSettingsSaving.value = false
+  }
+}
+
+async function loadLadaSettings() {
+  ladaInfoLoading.value = true
+  try {
+    const [settingsData, info] = await Promise.all([
+      request<{ lada?: { cli_path?: string }; lada_defaults?: Record<string, string | number | boolean> }>('/api/settings'),
+      request<LadaInfo>('/api/settings/lada/info'),
+    ])
+    ladaConfig.value = { cli_path: settingsData.lada?.cli_path || '' }
+    ladaDefaults.value = { ...(settingsData.lada_defaults || {}) }
+    ladaInfo.value = info || {}
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'LADA 设置读取失败'
+  } finally {
+    ladaInfoLoading.value = false
+  }
+}
+
+async function saveLadaSettings() {
+  ladaSettingsSaving.value = true
+  error.value = ''
+  try {
+    const [cliResponse, defaultsResponse] = await Promise.all([
+      fetch('/api/settings/lada', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cli_path: ladaConfig.value.cli_path, is_docker: false }) }),
+      fetch('/api/settings/lada/defaults', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ladaDefaults.value) }),
+    ])
+    if (!cliResponse.ok) throw new Error(await cliResponse.text() || `${cliResponse.status} ${cliResponse.statusText}`)
+    if (!defaultsResponse.ok) throw new Error(await defaultsResponse.text() || `${defaultsResponse.status} ${defaultsResponse.statusText}`)
+    await loadLadaSettings()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'LADA 设置保存失败'
+  } finally {
+    ladaSettingsSaving.value = false
   }
 }
 
@@ -836,7 +903,7 @@ onMounted(refresh)
         <button :class="{ active: page === 'files' }" @click="openFiles()">文件</button>
         <button :class="{ active: page === 'tasks' }" @click="openTasks()">任务 <span v-if="runningJobs.length" class="count">{{ runningJobs.length }}</span></button>
         <button :class="{ active: page === 'plugins' }" @click="page = 'plugins'">插件</button>
-        <button :class="{ active: page === 'settings' }" @click="page = 'settings'; loadMappingStatus(); loadFacefusionSettings(); loadWhisperSettings()">设置</button>
+        <button :class="{ active: page === 'settings' }" @click="page = 'settings'; loadMappingStatus(); loadFacefusionSettings(); loadWhisperSettings(); loadLadaSettings()">设置</button>
       </nav>
       <div class="sidebar-foot"><span :class="['status-dot', { online: healthy }]" />{{ healthy ? '后端已连接' : '后端未连接' }}</div>
     </aside>
@@ -858,7 +925,7 @@ onMounted(refresh)
           <div class="panel-heading media-library__controls"><div class="library-picker"><button :class="{ active: !mediaLibraryId }" @click="mediaLibraryId = ''; loadMediaLibrary(true)">全部</button><button v-for="library in mediaLibraries" :key="library.id" :class="{ active: mediaLibraryId === library.id }" @click="mediaLibraryId = library.id; loadMediaLibrary(true)">{{ library.name }}</button></div><button @click="loadMediaLibrary()">刷新</button></div>
           <p v-if="mediaLoading" class="empty">正在读取媒体库...</p>
           <template v-else><p v-if="!mediaItems.length" class="empty">当前媒体库没有影片</p><div class="media-grid"><article v-for="item in mediaItems" :key="item.id" class="media-card" @click="openMediaItem(item)"><div class="media-poster"><img v-if="item.poster_path" :src="item.poster_path" :alt="item.name" loading="lazy" /><span v-if="item.tags?.is_cracked">换脸</span></div><div><b>{{ item.name }}</b><small>{{ item.date_created ? new Date(item.date_created).toLocaleDateString() : '日期未知' }}</small></div></article></div><div v-if="mediaTotal > mediaPageSize" class="media-pagination"><button :disabled="mediaPage <= 1" @click="changeMediaPage(-1)">上一页</button><span>{{ mediaPage }} / {{ mediaPageCount }} · {{ mediaTotal }} 部</span><button :disabled="mediaPage >= mediaPageCount" @click="changeMediaPage(1)">下一页</button></div></template>
-          <section v-if="selectedMediaItem" class="detail-panel"><div class="panel-heading"><div><h2>{{ selectedMediaItem.name }}</h2><small>{{ selectedMediaItem.type || '媒体项目' }}</small></div><div class="detail-actions"><button v-if="selectedMediaItem.path" title="字幕库" aria-label="字幕库" @click="openSubtitles">字幕库</button><button v-if="selectedMediaItem.path" :disabled="whisperSubmitting" title="生成字幕" aria-label="生成字幕" @click="submitWhisper">{{ whisperSubmitting ? '提交中' : '生成字幕' }}</button><button v-if="selectedMediaItem.path" title="换脸" aria-label="换脸" @click="openFacefusion">换脸</button><button title="关闭详情" aria-label="关闭详情" @click="selectedMediaItem = null; facefusionOpen = false; subtitlesOpen = false">x</button></div></div><img v-if="selectedMediaItem.poster_path" class="detail-cover" :src="selectedMediaItem.poster_path" :alt="selectedMediaItem.name" /><p v-if="selectedMediaItem.path" class="media-path">{{ selectedMediaItem.path }}</p><section v-if="subtitlesOpen" class="subtitle-panel"><div class="panel-heading"><div><h3>字幕库</h3><small>本地字幕与在线搜索</small></div><div class="detail-actions"><button :disabled="subtitleSearchLoading" @click="searchOnlineSubtitles">{{ subtitleSearchLoading ? '搜索中' : '搜索在线字幕' }}</button><button title="关闭字幕库" aria-label="关闭字幕库" @click="subtitlesOpen = false">x</button></div></div><p v-if="subtitlesLoading" class="empty">正在读取本地字幕...</p><template v-else><div class="subtitle-list"><div v-for="subtitle in localSubtitles" :key="subtitle.path" class="subtitle-row"><div><b>{{ subtitle.filename }}</b><small>{{ subtitle.ext.toUpperCase() }} · {{ subtitleSize(subtitle.size) }}</small></div><a :href="`/api/subtitles/file?path=${encodeURIComponent(subtitle.path)}`" target="_blank" rel="noopener">打开</a></div><p v-if="!localSubtitles.length" class="empty">当前作品目录没有字幕文件</p></div><div v-if="onlineSubtitles.length" class="subtitle-online"><h3>在线结果</h3><div class="subtitle-list"><div v-for="subtitle in onlineSubtitles" :key="subtitle.url" class="subtitle-row"><div><b>{{ subtitle.name }}</b><small>{{ subtitle.source }} · {{ subtitle.language || subtitle.ext }}</small></div><button :disabled="subtitleDownloading === subtitle.url" @click="downloadOnlineSubtitle(subtitle)">{{ subtitleDownloading === subtitle.url ? '下载中' : '下载' }}</button></div></div></div></template></section><section v-if="facefusionOpen" class="facefusion-panel"><div class="panel-heading"><div><h2>换脸</h2><small>任务将由 NOOR 队列执行</small></div><button title="关闭换脸面板" aria-label="关闭换脸面板" @click="facefusionOpen = false">x</button></div><div class="facefusion-controls"><label>执行后端<select v-model="facefusionProvider"><option value="cuda">CUDA</option><option value="tensorrt">TensorRT</option><option value="cpu">CPU</option></select></label><label>处理器<div class="processor-options"><label><input v-model="facefusionProcessors" value="face_swapper" type="checkbox" />换脸</label><label><input v-model="facefusionProcessors" value="face_enhancer" type="checkbox" />人脸增强</label></div></label></div><div class="panel-heading facefusion-source-heading"><div><h3>源脸图片</h3><small>可多选；上传后会保留在图片库</small></div><label class="upload-button">上传图片<input type="file" accept="image/*" multiple @change="uploadFacefusionSources" /></label></div><p v-if="facefusionLoading" class="empty">正在读取图片库...</p><div v-else class="facefusion-source-grid"><button v-for="source in facefusionSources" :key="source.id" :class="['facefusion-source', { selected: selectedFacefusionSourceIds.includes(source.id) }]" :title="source.name" @click="toggleFacefusionSource(source.id)"><img :src="source.preview_url" :alt="source.name" loading="lazy" /><span>{{ source.name }}</span></button><p v-if="!facefusionSources.length" class="empty">尚未上传源脸图片</p></div><div class="facefusion-submit"><button :disabled="facefusionSubmitting || !selectedFacefusionSourceIds.length || !facefusionProcessors.length" @click="submitFacefusion">{{ facefusionSubmitting ? '提交中' : '提交换脸任务' }}</button></div></section></section>
+          <section v-if="selectedMediaItem" class="detail-panel"><div class="panel-heading"><div><h2>{{ selectedMediaItem.name }}</h2><small>{{ selectedMediaItem.type || '媒体项目' }}</small></div><div class="detail-actions"><button v-if="selectedMediaItem.path" :disabled="ladaSubmitting" title="LADA 去码" aria-label="LADA 去码" @click="submitLada">{{ ladaSubmitting ? '提交中' : '去码' }}</button><button v-if="selectedMediaItem.path" title="字幕库" aria-label="字幕库" @click="openSubtitles">字幕库</button><button v-if="selectedMediaItem.path" :disabled="whisperSubmitting" title="生成字幕" aria-label="生成字幕" @click="submitWhisper">{{ whisperSubmitting ? '提交中' : '生成字幕' }}</button><button v-if="selectedMediaItem.path" title="换脸" aria-label="换脸" @click="openFacefusion">换脸</button><button title="关闭详情" aria-label="关闭详情" @click="selectedMediaItem = null; facefusionOpen = false; subtitlesOpen = false">x</button></div></div><img v-if="selectedMediaItem.poster_path" class="detail-cover" :src="selectedMediaItem.poster_path" :alt="selectedMediaItem.name" /><p v-if="selectedMediaItem.path" class="media-path">{{ selectedMediaItem.path }}</p><section v-if="subtitlesOpen" class="subtitle-panel"><div class="panel-heading"><div><h3>字幕库</h3><small>本地字幕与在线搜索</small></div><div class="detail-actions"><button :disabled="subtitleSearchLoading" @click="searchOnlineSubtitles">{{ subtitleSearchLoading ? '搜索中' : '搜索在线字幕' }}</button><button title="关闭字幕库" aria-label="关闭字幕库" @click="subtitlesOpen = false">x</button></div></div><p v-if="subtitlesLoading" class="empty">正在读取本地字幕...</p><template v-else><div class="subtitle-list"><div v-for="subtitle in localSubtitles" :key="subtitle.path" class="subtitle-row"><div><b>{{ subtitle.filename }}</b><small>{{ subtitle.ext.toUpperCase() }} · {{ subtitleSize(subtitle.size) }}</small></div><a :href="`/api/subtitles/file?path=${encodeURIComponent(subtitle.path)}`" target="_blank" rel="noopener">打开</a></div><p v-if="!localSubtitles.length" class="empty">当前作品目录没有字幕文件</p></div><div v-if="onlineSubtitles.length" class="subtitle-online"><h3>在线结果</h3><div class="subtitle-list"><div v-for="subtitle in onlineSubtitles" :key="subtitle.url" class="subtitle-row"><div><b>{{ subtitle.name }}</b><small>{{ subtitle.source }} · {{ subtitle.language || subtitle.ext }}</small></div><button :disabled="subtitleDownloading === subtitle.url" @click="downloadOnlineSubtitle(subtitle)">{{ subtitleDownloading === subtitle.url ? '下载中' : '下载' }}</button></div></div></div></template></section><section v-if="facefusionOpen" class="facefusion-panel"><div class="panel-heading"><div><h2>换脸</h2><small>任务将由 NOOR 队列执行</small></div><button title="关闭换脸面板" aria-label="关闭换脸面板" @click="facefusionOpen = false">x</button></div><div class="facefusion-controls"><label>执行后端<select v-model="facefusionProvider"><option value="cuda">CUDA</option><option value="tensorrt">TensorRT</option><option value="cpu">CPU</option></select></label><label>处理器<div class="processor-options"><label><input v-model="facefusionProcessors" value="face_swapper" type="checkbox" />换脸</label><label><input v-model="facefusionProcessors" value="face_enhancer" type="checkbox" />人脸增强</label></div></label></div><div class="panel-heading facefusion-source-heading"><div><h3>源脸图片</h3><small>可多选；上传后会保留在图片库</small></div><label class="upload-button">上传图片<input type="file" accept="image/*" multiple @change="uploadFacefusionSources" /></label></div><p v-if="facefusionLoading" class="empty">正在读取图片库...</p><div v-else class="facefusion-source-grid"><button v-for="source in facefusionSources" :key="source.id" :class="['facefusion-source', { selected: selectedFacefusionSourceIds.includes(source.id) }]" :title="source.name" @click="toggleFacefusionSource(source.id)"><img :src="source.preview_url" :alt="source.name" loading="lazy" /><span>{{ source.name }}</span></button><p v-if="!facefusionSources.length" class="empty">尚未上传源脸图片</p></div><div class="facefusion-submit"><button :disabled="facefusionSubmitting || !selectedFacefusionSourceIds.length || !facefusionProcessors.length" @click="submitFacefusion">{{ facefusionSubmitting ? '提交中' : '提交换脸任务' }}</button></div></section></section>
         </section>
         <section v-else-if="page === 'recommendations'"><div class="panel-heading recommendation-controls"><div class="segmented" aria-label="推荐范围"><button :class="{ active: recommendationMode === 'latest' }" @click="setRecommendationMode('latest')">最新推荐</button><button :class="{ active: recommendationMode === 'full' }" @click="setRecommendationMode('full')">完整推荐</button></div><span class="muted">{{ recommendations.length }} 部作品</span></div><div class="recommendations"><p v-if="!recommendations.length" class="empty">候选池暂无作品</p><article v-for="item in recommendations" :key="item.code" class="work-card"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /><span v-if="item.is_today_increment">今日</span></div><div><div class="card-title"><b>{{ item.code }}</b><strong>{{ item.recommendation_score ?? item.score ?? 0 }}</strong></div><p>{{ item.title }}</p><small>{{ item.release_date || '日期未知' }}<template v-if="item.actors.length"> · {{ item.actors.slice(0, 2).join('、') }}</template></small><div class="card-actions"><button title="喜欢" aria-label="喜欢" @click="feedback(item, 'like')">+</button><button title="不喜欢" aria-label="不喜欢" @click="feedback(item, 'dislike')">-</button><button title="忽略" aria-label="忽略" @click="feedback(item, 'ignore')">x</button></div></div></article></div></section>
         <section v-else-if="page === 'javdb'"><form class="javdb-search" @submit.prevent="loadJavdb"><input v-model="javdbQuery" aria-label="搜索作品" placeholder="番号或标题" /><button type="submit">搜索</button><button type="button" title="恢复最近更新" @click="javdbQuery = ''; loadJavdb()">最新</button></form><p v-if="javdbLoading" class="empty">正在读取 JavDB...</p><div v-else class="recommendations"><p v-if="!javdbItems.length" class="empty">没有找到作品</p><article v-for="item in javdbItems" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><div class="card-title"><b>{{ item.code }}</b><strong v-if="item.magnets_count">{{ item.magnets_count }} 磁链</strong></div><p>{{ item.title }}</p><small>{{ item.release_date || '日期未知' }}<template v-if="item.actors?.length"> · {{ item.actors.slice(0, 2).join('、') }}</template></small></div></article></div><section v-if="javdbDetail" class="detail-panel"><div class="panel-heading"><div><h2>{{ javdbDetail.code }}</h2><small>{{ javdbDetail.title }}</small></div><button title="关闭详情" aria-label="关闭详情" @click="javdbDetail = null">x</button></div><img v-if="javdbDetail.cover_url" class="detail-cover" :src="javdbDetail.cover_url" :alt="javdbDetail.title" /><p v-if="javdbDetail.origin_title">{{ javdbDetail.origin_title }}</p><p><b>演员：</b>{{ javdbDetail.actors?.join('、') || '未知' }}</p><p><b>类型：</b>{{ javdbDetail.categories?.join('、') || '未知' }}</p><p><b>磁链：</b>{{ javdbDetail.magnets?.length || 0 }}</p></section></section>

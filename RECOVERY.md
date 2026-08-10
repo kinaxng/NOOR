@@ -35,6 +35,10 @@ history and verified API behavior, while keeping the recovered `.pyc` modules un
   session-recorded source reads.
 - Rebuilt the task queue around the recovered job/API contract and verified imports
   for Jobs, Settings, Media Library, Whisper, LADA, and FaceFusion.
+- Restored LADA 0.11.1-dev source under `backend/app/pipeline/lada/source` and
+  reconnected its dedicated CLI to the recovered runtime. The existing NOOR LADA
+  model directory, CUDA device, detection models, and restoration models were
+  verified without submitting a video job.
 - Recovered compatibility helpers required by the Whisper pipeline after the retired
   optional audio-enhancement chain was removed.
 - Remaining startup blockers are the plugin framework and plugin sources, global
