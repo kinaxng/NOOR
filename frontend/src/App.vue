@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-type Job = { id: string; job_type: string; emby_item_name: string; status: string; progress: number; detail?: string; phase_label?: string; phase_progress?: number }
+type Job = { id: string; job_type: string; emby_item_name: string; status: string; progress: number; detail?: string; error_message?: string; phase_label?: string; phase_progress?: number }
 type PluginSetting = { type?: 'string' | 'password' | 'number' | 'boolean'; label?: string; description?: string; min?: number; max?: number }
 type Plugin = { id: string; name?: string; description?: string; type?: string; enabled: boolean; loaded: boolean; config?: Record<string, unknown>; default_config?: Record<string, unknown>; config_schema?: Record<string, PluginSetting> }
 type Recommendation = { code: string; title: string; cover_url?: string; release_date?: string; score?: number; recommendation_score?: number; actors: string[]; categories: string[]; is_today_increment: boolean }
@@ -25,6 +25,10 @@ const loading = ref(true)
 const error = ref('')
 const healthy = ref(false)
 const jobs = ref<Job[]>([])
+const selectedJob = ref<Job | null>(null)
+const selectedJobLogs = ref<string[]>([])
+const jobLogsLoading = ref(false)
+const jobCancelling = ref('')
 const taskTab = ref<'queue' | 'background'>('queue')
 const backgroundTasks = ref<BackgroundTask[]>([])
 const backgroundTasksLoading = ref(false)
@@ -258,6 +262,37 @@ async function openTasks(tab: 'queue' | 'background' = 'queue') {
   page.value = 'tasks'
   taskTab.value = tab
   if (tab === 'background') await loadBackgroundTasks()
+}
+
+async function openJob(job: Job) {
+  selectedJob.value = job
+  selectedJobLogs.value = []
+  jobLogsLoading.value = true
+  error.value = ''
+  try {
+    const result = await request<{ logs?: string[] }>(`/api/jobs/${encodeURIComponent(job.id)}/logs`)
+    selectedJobLogs.value = result.logs || []
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '任务日志读取失败'
+  } finally {
+    jobLogsLoading.value = false
+  }
+}
+
+async function cancelJob(job: Job) {
+  if (!['queued', 'running', 'blocked'].includes(job.status)) return
+  jobCancelling.value = job.id
+  error.value = ''
+  try {
+    const response = await fetch(`/api/jobs/${encodeURIComponent(job.id)}/cancel`, { method: 'POST' })
+    if (!response.ok) throw new Error(await response.text() || `${response.status} ${response.statusText}`)
+    await refresh()
+    if (selectedJob.value?.id === job.id) await openJob({ ...job, status: 'cancelled' })
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '取消任务失败'
+  } finally {
+    jobCancelling.value = ''
+  }
 }
 
 async function openMediaItem(item: MediaItem) {
@@ -777,7 +812,7 @@ onMounted(refresh)
           <article class="stat"><span>媒体服务器</span><strong>{{ settings.emby ? '已配置' : '未配置' }}</strong></article>
           <section class="panel wide"><div class="panel-heading"><h2>最近任务</h2><button @click="openTasks()">查看全部</button></div><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs.slice(0, 6)" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.phase_label || job.detail || job.status }}</small></div><span>{{ job.progress }}%</span></div></section>
         </section>
-        <section v-else-if="page === 'tasks'" class="panel"><div class="panel-heading"><div><h2>任务</h2><small>执行队列与后台维护</small></div><button @click="taskTab === 'background' ? loadBackgroundTasks() : refresh()">刷新</button></div><div class="file-tabs task-tabs" role="tablist" aria-label="任务类型"><button :class="{ active: taskTab === 'queue' }" @click="taskTab = 'queue'">任务队列</button><button :class="{ active: taskTab === 'background' }" @click="taskTab = 'background'; loadBackgroundTasks()">后台</button></div><template v-if="taskTab === 'queue'"><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs" :key="job.id" class="job-row"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.phase_label || job.detail || job.status }}<template v-if="job.phase_progress != null"> {{ job.phase_progress }}%</template></small><div class="progress"><i :style="{ width: `${job.progress}%` }" /></div></div><span :class="['badge', job.status]">{{ job.status }}</span></div></template><template v-else><p v-if="backgroundTasksLoading" class="empty">正在读取后台任务...</p><p v-else-if="!backgroundTasks.length" class="empty">没有已启用插件的后台任务</p><div v-else v-for="task in backgroundTasks" :key="`${task.plugin_id}:${task.id}`" class="job-row"><div><b>{{ task.title || task.id }}</b><small>{{ task.plugin_name || task.plugin_id }} · {{ task.summary || task.detail || task.status || '未知状态' }}</small><small v-if="task.last_finished_at">上次完成：{{ new Date(task.last_finished_at).toLocaleString() }}</small></div><span :class="['badge', task.status === 'completed' ? 'completed' : task.status === 'failed' ? 'failed' : 'queued']">{{ task.status || 'idle' }}</span></div></template></section>
+        <section v-else-if="page === 'tasks'" class="panel"><div class="panel-heading"><div><h2>任务</h2><small>执行队列与后台维护</small></div><button @click="taskTab === 'background' ? loadBackgroundTasks() : refresh()">刷新</button></div><div class="file-tabs task-tabs" role="tablist" aria-label="任务类型"><button :class="{ active: taskTab === 'queue' }" @click="taskTab = 'queue'">任务队列</button><button :class="{ active: taskTab === 'background' }" @click="taskTab = 'background'; loadBackgroundTasks()">后台</button></div><template v-if="taskTab === 'queue'"><p v-if="!jobs.length" class="empty">暂无任务</p><div v-for="job in jobs" :key="job.id" class="job-row job-row-actionable" @click="openJob(job)"><div><b>{{ job.emby_item_name || job.job_type }}</b><small>{{ job.job_type }} · {{ job.phase_label || job.detail || job.status }}<template v-if="job.phase_progress != null"> {{ job.phase_progress }}%</template></small><div class="progress"><i :style="{ width: `${job.progress}%` }" /></div></div><div class="job-actions"><span :class="['badge', job.status]">{{ job.status }}</span><button v-if="['queued', 'running', 'blocked'].includes(job.status)" :disabled="jobCancelling === job.id" title="取消任务" aria-label="取消任务" @click.stop="cancelJob(job)">{{ jobCancelling === job.id ? '取消中' : '取消' }}</button></div></div><section v-if="selectedJob" class="detail-panel job-detail"><div class="panel-heading"><div><h2>{{ selectedJob.emby_item_name || selectedJob.job_type }}</h2><small>{{ selectedJob.job_type }} · {{ selectedJob.status }} · {{ selectedJob.progress }}%</small></div><div class="detail-actions"><a v-if="selectedJob.status === 'completed'" :href="`/api/jobs/${encodeURIComponent(selectedJob.id)}/download`" target="_blank" rel="noopener">下载结果</a><button title="关闭任务详情" aria-label="关闭任务详情" @click="selectedJob = null">x</button></div></div><p v-if="selectedJob.detail" class="muted">{{ selectedJob.detail }}</p><p v-if="selectedJob.error_message" class="job-error">{{ selectedJob.error_message }}</p><p v-if="jobLogsLoading" class="empty">正在读取任务日志...</p><pre v-else-if="selectedJobLogs.length" class="job-log">{{ selectedJobLogs.join('\n') }}</pre><p v-else class="empty">该任务尚未产生日志</p></section></template><template v-else><p v-if="backgroundTasksLoading" class="empty">正在读取后台任务...</p><p v-else-if="!backgroundTasks.length" class="empty">没有已启用插件的后台任务</p><div v-else v-for="task in backgroundTasks" :key="`${task.plugin_id}:${task.id}`" class="job-row"><div><b>{{ task.title || task.id }}</b><small>{{ task.plugin_name || task.plugin_id }} · {{ task.summary || task.detail || task.status || '未知状态' }}</small><small v-if="task.last_finished_at">上次完成：{{ new Date(task.last_finished_at).toLocaleString() }}</small></div><span :class="['badge', task.status === 'completed' ? 'completed' : task.status === 'failed' ? 'failed' : 'queued']">{{ task.status || 'idle' }}</span></div></template></section>
         <section v-else-if="page === 'library'" class="media-library">
           <div class="panel-heading media-library__controls"><div class="library-picker"><button :class="{ active: !mediaLibraryId }" @click="mediaLibraryId = ''; loadMediaLibrary(true)">全部</button><button v-for="library in mediaLibraries" :key="library.id" :class="{ active: mediaLibraryId === library.id }" @click="mediaLibraryId = library.id; loadMediaLibrary(true)">{{ library.name }}</button></div><button @click="loadMediaLibrary()">刷新</button></div>
           <p v-if="mediaLoading" class="empty">正在读取媒体库...</p>
@@ -845,6 +880,7 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .plugin-actions { display: inline-flex; align-items: center; gap: 9px; }.plugin-toggle { width: 32px; height: 18px; border: 0; border-radius: 9px; padding: 2px; background: #485463; }.plugin-toggle i { display: block; width: 14px; height: 14px; border-radius: 50%; background: #d7dee7; transition: transform .16s ease; }.plugin-toggle.enabled { background: #168bdf; }.plugin-toggle.enabled i { transform: translateX(14px); }
 .plugin-config-button { width: 28px; height: 28px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; }.config-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }.config-fields label { display: grid; align-content: start; gap: 6px; color: #cdd9e6; font-size: 13px; }.config-fields input[type='text'], .config-fields input[type='password'], .config-fields input[type='number'], .config-fields select { width: 100%; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.config-fields input[type='checkbox'] { width: 16px; height: 16px; margin: 2px 0; accent-color: #168bdf; }.config-fields small { color: #98a6b7; line-height: 1.4; }.config-save { display: flex; justify-content: flex-end; margin-top: 18px; }.config-save button { border: 1px solid #177bc2; border-radius: 5px; background: #168bdf; color: white; padding: 8px 12px; }
 .plugin-test-message { margin: 14px 0 0; color: #aabbd0; font-size: 13px; line-height: 1.5; }
+.job-row-actionable { cursor: pointer; }.job-row-actionable:hover { background: #1d2732; }.job-actions { display: inline-flex; align-items: center; gap: 8px; }.job-actions button { border: 1px solid #854550; border-radius: 5px; background: #362229; color: #ffc0c8; padding: 6px 9px; }.job-actions button:disabled { opacity: .55; cursor: default; }.job-detail { margin-top: 16px; }.job-log { margin: 12px 0 0; padding: 12px; border: 1px solid #303a47; border-radius: 5px; background: #121820; max-height: 380px; white-space: pre-wrap; word-break: break-word; }.job-error { color: #ffb4bc; margin: 10px 0; }
 .duplicate-groups { border-top: 1px solid #303a47; border-bottom: 1px solid #303a47; margin: 16px 0; padding: 13px 0; }.duplicate-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 9px 0; border-top: 1px solid #2b3440; }.duplicate-group > .muted { flex-basis: 100%; }.duplicate-actor { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 220px; border: 1px solid #3a4655; border-radius: 5px; padding: 4px 7px 4px 4px; color: #dce5ee; background: #202833; }.duplicate-actor img { width: 28px; height: 28px; object-fit: cover; background: #171c24; }.duplicate-actor span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .app-shell { grid-template-columns: 1fr; }.sidebar { position: sticky; top: 0; z-index: 2; padding: 10px; flex-direction: row; align-items: center; gap: 12px; }.brand { padding: 0; }.sidebar nav { display: flex; overflow-x: auto; flex: 1; }.sidebar nav button { white-space: nowrap; }.sidebar-foot { display: none; } main { padding: 18px; }.overview-grid, .facefusion-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }.wide { grid-column: 1 / -1; } }
 </style>
