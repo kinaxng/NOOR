@@ -167,4 +167,20 @@ def enrich_hardlink_groups_impl(groups: list[dict], *, source_file_size_fn: Call
         orphan_entries += group_orphans
         issue_groups += int(bool(issues))
         enriched.append({**group, 'entries': entries, 'hardlink_count': group_hardlinks, 'orphan_count': group_orphans, 'issue_count': issues, 'status': 'issue' if issues else 'healthy'})
-    return {'groups': enriched, 'summary': {'group_count': len(enriched), 'entry_count': total_entries, 'hardlink_count': total_hardlinks, 'issue_group_count': issue_groups, 'orphan_entry_count': orphan_entries}}
+    return {
+        'groups': enriched,
+        'summary': {
+            'total_groups': len(enriched),
+            'total_entries': total_entries,
+            'total_hardlinks': total_hardlinks,
+            'issue_groups': issue_groups,
+            'orphan_entries': orphan_entries,
+            # Preserve the names used by early callers while the recovered API
+            # consumes the newer total_* keys above.
+            'group_count': len(enriched),
+            'entry_count': total_entries,
+            'hardlink_count': total_hardlinks,
+            'issue_group_count': issue_groups,
+            'orphan_entry_count': orphan_entries,
+        },
+    }
