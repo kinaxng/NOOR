@@ -218,6 +218,15 @@ type Page =
 
 const page = ref<Page>("overview");
 let applyingBrowserRoute = false;
+
+function storedCoverBlurOverride(): boolean | null {
+  try {
+    const value = window.localStorage.getItem("noor.cover_blur.browser");
+    return value === "1" ? true : value === "0" ? false : null;
+  } catch {
+    return null;
+  }
+}
 const loading = ref(true);
 const error = ref("");
 const healthy = ref(false);
@@ -253,6 +262,9 @@ const networkSettings = ref<NetworkSettings>({
 const coreSettingsLoading = ref(false);
 const embySettingsSaving = ref(false);
 const networkSettingsSaving = ref(false);
+const coverBlurGlobal = ref(false);
+const coverBlurBrowserOverride = ref<boolean | null>(storedCoverBlurOverride());
+const coverBlurSaving = ref(false);
 const systemLogs = ref<SystemLog[]>([]);
 const systemLogsLoading = ref(false);
 const webhookInstructionsVisible = ref(false);
@@ -439,6 +451,9 @@ const filteredActors = computed(() => {
       .includes(query),
   );
 });
+const coverBlurActive = computed(
+  () => coverBlurBrowserOverride.value ?? coverBlurGlobal.value,
+);
 const embyWebhookUrl = computed(() => {
   if (typeof window === "undefined") return "/api/webhooks/emby";
   return `${window.location.origin}/api/webhooks/emby`;
@@ -685,6 +700,58 @@ async function loadSystemLogs() {
   } finally {
     systemLogsLoading.value = false;
   }
+}
+
+async function loadUiSettings() {
+  try {
+    const settings = await request<{ cover_blur?: boolean }>("/api/ui-settings");
+    coverBlurGlobal.value = Boolean(settings.cover_blur);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "界面设置读取失败";
+  }
+}
+
+async function saveCoverBlurGlobal() {
+  coverBlurSaving.value = true;
+  error.value = "";
+  try {
+    const response = await fetch("/api/ui-settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cover_blur: coverBlurGlobal.value }),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `${response.status} ${response.statusText}`,
+      );
+    const result = (await response.json()) as { cover_blur?: boolean };
+    coverBlurGlobal.value = Boolean(result.cover_blur);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "封面模糊设置保存失败";
+  } finally {
+    coverBlurSaving.value = false;
+  }
+}
+
+function toggleCoverBlurBrowser() {
+  const next = !coverBlurActive.value;
+  coverBlurBrowserOverride.value = next;
+  try {
+    window.localStorage.setItem("noor.cover_blur.browser", next ? "1" : "0");
+  } catch {
+    // The control remains effective for this session when browser storage is unavailable.
+  }
+}
+
+function handleCoverBlurShortcut(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null;
+  if (
+    event.key.toLowerCase() !== "h" ||
+    target?.matches("input, textarea, select, [contenteditable='true']")
+  )
+    return;
+  event.preventDefault();
+  toggleCoverBlurBrowser();
 }
 
 async function copyEmbyWebhookUrl() {
@@ -2056,11 +2123,13 @@ onMounted(async () => {
     applyingBrowserRoute = false;
     await loadBrowserRoute();
   });
+  window.addEventListener("keydown", handleCoverBlurShortcut);
+  await loadUiSettings();
 });
 </script>
 
 <template>
-  <div class="app-shell">
+  <div :class="['app-shell', { 'cover-blurred': coverBlurActive }]">
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark">N</span><span>NOOR</span>
@@ -2134,6 +2203,7 @@ onMounted(async () => {
             loadFacefusionSettings();
             loadWhisperSettings();
             loadLadaSettings();
+            loadUiSettings();
           "
         >
           设置
@@ -2159,6 +2229,13 @@ onMounted(async () => {
           >
             搜索</button
           ><button
+            :class="['icon-button', { active: coverBlurActive }]"
+            title="封面模糊 (H)"
+            aria-label="封面模糊 (H)"
+            @click="toggleCoverBlurBrowser"
+          >
+            ◐
+          </button><button
             class="icon-button"
             title="刷新"
             aria-label="刷新"
@@ -3492,11 +3569,29 @@ onMounted(async () => {
                 loadFacefusionSettings();
                 loadWhisperSettings();
                 loadLadaSettings();
+                loadUiSettings();
               "
             >
               刷新
             </button>
           </div>
+          <section class="settings-section">
+            <div class="panel-heading">
+              <div>
+                <h3>界面</h3>
+                <small>设定所有浏览器的封面模糊默认状态</small>
+              </div>
+            </div>
+            <label class="settings-toggle">
+              <input
+                v-model="coverBlurGlobal"
+                type="checkbox"
+                :disabled="coverBlurSaving"
+                @change="saveCoverBlurGlobal"
+              />
+              <span>{{ coverBlurSaving ? "正在保存..." : "默认模糊作品封面" }}</span>
+            </label>
+          </section>
           <section class="settings-section">
             <div class="panel-heading">
               <div>
@@ -4128,6 +4223,26 @@ h2 {
   color: #e9edf2;
   border-radius: 5px;
   font-size: 20px;
+}
+.header-actions .icon-button {
+  width: 36px;
+  height: 36px;
+}
+.header-actions .icon-button.active {
+  background: #176fae;
+  border-color: #38a2ec;
+  color: #fff;
+}
+.cover-blurred .poster,
+.cover-blurred .media-poster {
+  overflow: hidden;
+}
+.cover-blurred .poster img,
+.cover-blurred .media-poster img,
+.cover-blurred .detail-cover,
+.cover-blurred .work-card img {
+  filter: blur(18px);
+  transform: scale(1.04);
 }
 .overview-grid {
   display: grid;
@@ -4875,6 +4990,19 @@ pre {
 .settings-section p {
   color: #98a6b7;
   font-size: 13px;
+}
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #dce5ee;
+  font-size: 13px;
+}
+.settings-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #168bdf;
 }
 .settings-inline {
   display: flex;

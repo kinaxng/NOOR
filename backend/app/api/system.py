@@ -7,12 +7,33 @@ import os
 import platform
 import threading
 from typing import Any
+from pathlib import Path
 
 import json
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.core.runtime_paths import data_path
+
 router = APIRouter(prefix='/api', tags=['system'])
+
+
+def _ui_settings_path() -> Path:
+    return data_path('ui_settings.json')
+
+
+def _ui_settings() -> dict[str, Any]:
+    try:
+        value = json.loads(_ui_settings_path().read_text(encoding='utf-8'))
+        return value if isinstance(value, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_ui_settings(value: dict[str, Any]) -> None:
+    path = _ui_settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
 class SystemLogManager:
@@ -58,6 +79,23 @@ class SystemLogManager:
 @router.get('/logs')
 async def get_logs(tail: int = Query(200, ge=1, le=1000), cursor: int | None = None):
     return SystemLogManager.get_instance().get_logs(tail=tail, cursor=cursor)
+
+
+@router.get('/ui-settings')
+async def get_ui_settings():
+    value = _ui_settings()
+    return {'cover_blur': bool(value.get('cover_blur', False))}
+
+
+@router.put('/ui-settings')
+async def update_ui_settings(payload: dict[str, Any]):
+    if 'cover_blur' in payload and not isinstance(payload['cover_blur'], bool):
+        raise HTTPException(status_code=422, detail='cover_blur 必须为布尔值')
+    value = _ui_settings()
+    if 'cover_blur' in payload:
+        value['cover_blur'] = payload['cover_blur']
+    _save_ui_settings(value)
+    return {'cover_blur': bool(value.get('cover_blur', False))}
 
 
 def _webhook_source(request: Request) -> str:
