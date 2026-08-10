@@ -21,6 +21,19 @@ _scheduler_stop: asyncio.Event | None = None
 _run_lock = asyncio.Lock()
 
 
+def _select_enabled_downloader(preferred: str, compatible: list[str], runtime: Any) -> str:
+    """Select the preferred compatible downloader only when it is actually enabled."""
+    candidates: list[str] = []
+    for plugin_id in (preferred, *compatible):
+        plugin_id = str(plugin_id or "").strip()
+        if plugin_id and plugin_id not in candidates:
+            candidates.append(plugin_id)
+    for plugin_id in candidates:
+        if runtime.is_enabled(plugin_id):
+            return plugin_id
+    return ""
+
+
 def _now() -> str:
     import datetime as dt
     return dt.datetime.now(dt.timezone.utc).isoformat()
@@ -768,9 +781,10 @@ async def _submit_best_download(config: dict[str, Any], sub: dict[str, Any], res
         raise ValueError("资源链接解析失败")
     compatible = [str(x) for x in (resolved_item.get("compatible_downloaders") or []) if str(x or "").strip()]
     preferred = str(resolved_item.get("preferred_downloader") or "").strip()
-    downloader_id = preferred or (compatible[0] if compatible else "")
+    downloader_id = _select_enabled_downloader(preferred, compatible, runtime)
     if not downloader_id:
-        raise ValueError("没有兼容的下载器")
+        choices = "、".join(([preferred] if preferred else []) + compatible)
+        raise ValueError(f"没有已启用的兼容下载器{f'（{choices}）' if choices else ''}")
 
     savepath = str(config.get("default_savepath") or "").strip()
 
