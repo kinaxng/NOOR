@@ -8,7 +8,7 @@ type Recommendation = { code: string; title: string; cover_url?: string; release
 type JavdbItem = { code: string; title: string; cover_url?: string; release_date?: string; actors?: string[]; categories?: string[]; magnets_count?: number }
 type JavdbDetail = JavdbItem & { origin_title?: string; duration?: string; maker?: string; series?: string; director?: string; magnets?: Array<{ name?: string; size?: string; size_mb?: number }> }
 type Actor = { id: string; name: string; avatar_url?: string; name_zht?: string; other_name?: string }
-type EmbyActor = { id: string; name: string; display_name?: string; sort_name?: string; avatar_url?: string; name_jp?: string; name_zh_cn?: string; name_zh_tw?: string; aliases?: string; emby_url?: string }
+type EmbyActor = { id: string; name: string; display_name?: string; sort_name?: string; avatar_url?: string; name_jp?: string; name_zh_cn?: string; name_zh_tw?: string; aliases?: string; overview?: string; provider_ids?: Record<string, string>; emby_url?: string }
 type HardlinkGroup = { code: string; hardlink_count?: number; orphan_count?: number; status?: string; entries?: Array<{ source_path?: string; hardlink_paths?: string[] }> }
 type MediaLibrary = { id: string; name: string; collection_type?: string }
 type MediaItem = { id: string; name: string; type?: string; poster_path?: string; date_created?: string; path?: string; tags?: { is_cracked?: boolean; has_chinese?: boolean; is_uncensored?: boolean; is_leaked?: boolean } }
@@ -57,6 +57,7 @@ const embyActors = ref<EmbyActor[]>([])
 const embyActorsTotal = ref(0)
 const embyActorsLoading = ref(false)
 const embyActorQuery = ref('')
+const actorDisplayLanguage = ref<'zh_cn' | 'zh_tw' | 'jp'>('zh_cn')
 const mappingStatus = ref<{ exists?: boolean; record_count?: number; configured_path?: string; configured_root?: string } | null>(null)
 const mdcNgPath = ref('')
 const mappingSaving = ref(false)
@@ -114,6 +115,19 @@ const filteredActors = computed(() => {
   if (!query) return actors.value
   return actors.value.filter((actor) => [actor.name, actor.name_zht, actor.other_name].join(' ').toLowerCase().includes(query))
 })
+
+function actorName(actor: EmbyActor) {
+  if (actorDisplayLanguage.value === 'jp') return actor.name_jp || actor.sort_name || actor.name
+  if (actorDisplayLanguage.value === 'zh_tw') return actor.name_zh_tw || actor.name_zh_cn || actor.name_jp || actor.name
+  return actor.name_zh_cn || actor.name_jp || actor.name
+}
+
+function providerUrl(provider: string, value: string) {
+  const key = provider.toLowerCase()
+  if (key === 'tmdb') return `https://www.themoviedb.org/person/${encodeURIComponent(value)}`
+  if (key === 'imdb') return `https://www.imdb.com/name/${encodeURIComponent(value)}`
+  return ''
+}
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(path)
@@ -664,7 +678,7 @@ async function loadEmbyActors() {
   try {
     const query = embyActorQuery.value.trim()
     const [actorsData, status] = await Promise.all([
-      request<{ actors: EmbyActor[]; total: number }>(`/api/media-library/actors?limit=60&sort_by=SortName&sort_order=Ascending${query ? `&q=${encodeURIComponent(query)}` : ''}`),
+      request<{ actors: EmbyActor[]; total: number }>(`/api/media-library/actors?limit=60&sort_by=SortName&sort_order=Ascending&lang=${actorDisplayLanguage.value}${query ? `&q=${encodeURIComponent(query)}` : ''}`),
       request<{ exists?: boolean; record_count?: number; configured_path?: string; configured_root?: string }>('/api/media-library/actors/mapping/status'),
     ])
     embyActors.value = actorsData.actors || []
@@ -704,8 +718,12 @@ async function openEmbyActor(actor: EmbyActor) {
   selectedEmbyActorMovies.value = []
   gfriendsCandidates.value = []
   try {
-    const result = await request<{ items: JavdbItem[] }>(`/api/media-library/actor/${encodeURIComponent(actor.id)}/movies?limit=48`)
-    selectedEmbyActorMovies.value = result.items || []
+    const [detail, movies] = await Promise.all([
+      request<{ actor?: EmbyActor }>(`/api/media-library/actor/${encodeURIComponent(actor.id)}?lang=${actorDisplayLanguage.value}`),
+      request<{ items: JavdbItem[] }>(`/api/media-library/actor/${encodeURIComponent(actor.id)}/movies?limit=48`),
+    ])
+    selectedEmbyActor.value = detail.actor || actor
+    selectedEmbyActorMovies.value = movies.items || []
   } catch (cause) { error.value = cause instanceof Error ? cause.message : '演员作品加载失败' }
 }
 
@@ -835,11 +853,11 @@ onMounted(refresh)
           </template>
           <template v-else>
             <div class="panel-heading"><div><h2>演员管理</h2><small>{{ embyActorsTotal ? `${embyActorsTotal} 位 Emby 演员` : '以 Emby 演员库为准' }}</small></div><div class="detail-actions"><button :disabled="duplicatesLoading" @click="loadActorDuplicates">{{ duplicatesLoading ? '检测中' : '检查重名' }}</button><button @click="loadEmbyActors">刷新</button></div></div>
-            <div class="actor-management-tools"><input v-model="embyActorQuery" aria-label="搜索 Emby 演员" placeholder="搜索 Emby 演员" @keyup.enter="loadEmbyActors" /><button @click="loadEmbyActors">搜索</button><span v-if="mappingStatus" class="muted">映射表：{{ mappingStatus.exists ? `${mappingStatus.record_count || 0} 条` : '未配置' }}</span></div>
+            <div class="actor-management-tools"><input v-model="embyActorQuery" aria-label="搜索 Emby 演员" placeholder="搜索 Emby 演员" @keyup.enter="loadEmbyActors" /><button @click="loadEmbyActors">搜索</button><span v-if="mappingStatus" class="muted">映射表：{{ mappingStatus.exists ? `${mappingStatus.record_count || 0} 条` : '未配置' }}</span></div><div class="segmented actor-language" aria-label="演员名称显示语言"><button :class="{ active: actorDisplayLanguage === 'zh_cn' }" @click="actorDisplayLanguage = 'zh_cn'; loadEmbyActors()">简中</button><button :class="{ active: actorDisplayLanguage === 'zh_tw' }" @click="actorDisplayLanguage = 'zh_tw'; loadEmbyActors()">繁中</button><button :class="{ active: actorDisplayLanguage === 'jp' }" @click="actorDisplayLanguage = 'jp'; loadEmbyActors()">日文</button></div>
             <section v-if="duplicateGroups.length" class="duplicate-groups"><div class="panel-heading"><div><h2>重名候选</h2><small>{{ duplicateGroups.length }} 组，点击演员查看资料与关联作品</small></div><button @click="duplicateGroups = []">关闭</button></div><div v-for="group in duplicateGroups" :key="group.key" class="duplicate-group"><span class="muted">{{ group.key }}</span><button v-for="actor in group.actors" :key="actor.id" class="duplicate-actor" @click="openEmbyActor(actor)"><img v-if="actor.avatar_url" :src="actor.avatar_url" :alt="actor.name" loading="lazy" /><span>{{ actor.display_name || actor.name }}</span></button></div></section>
             <p v-if="embyActorsLoading" class="empty">正在读取 Emby 演员...</p>
-            <div v-else class="actor-grid emby-actor-grid"><button v-for="actor in embyActors" :key="actor.id" class="actor-card" @click="openEmbyActor(actor)"><img v-if="actor.avatar_url" :src="actor.avatar_url" :alt="actor.name" loading="lazy" /><span v-else class="actor-placeholder">{{ actor.name.slice(0, 1) }}</span><b>{{ actor.name_zh_cn || actor.name }}</b><small>{{ actor.name_jp || actor.sort_name || actor.name }}</small></button></div>
-            <section v-if="selectedEmbyActor" class="detail-panel"><div class="panel-heading"><div class="actor-heading"><img v-if="selectedEmbyActor.avatar_url" :src="selectedEmbyActor.avatar_url" :alt="selectedEmbyActor.name" /><div><h2>{{ selectedEmbyActor.name_zh_cn || selectedEmbyActor.name }}</h2><small>{{ selectedEmbyActor.name_jp || selectedEmbyActor.sort_name }}</small></div></div><div class="detail-actions"><button :disabled="gfriendsLoading" @click="loadGfriendsCandidates">{{ gfriendsLoading ? '加载中' : 'Gfriends' }}</button><a v-if="selectedEmbyActor.emby_url" :href="selectedEmbyActor.emby_url" target="_blank" rel="noopener">Emby</a><button title="关闭演员详情" aria-label="关闭演员详情" @click="selectedEmbyActor = null">x</button></div></div><div v-if="gfriendsCandidates.length" class="gfriends-grid"><button v-for="candidate in gfriendsCandidates" :key="candidate.remote_url" :disabled="avatarSaving" class="gfriends-candidate" :title="candidate.name" @click="applyGfriendsAvatar(candidate)"><img :src="candidate.url" :alt="candidate.name" loading="lazy" /><span>{{ candidate.name }}</span></button></div><div class="recommendations compact"><article v-for="item in selectedEmbyActorMovies" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><b>{{ item.code }}</b><p>{{ item.title }}</p></div></article><p v-if="!selectedEmbyActorMovies.length" class="empty">未读取到关联作品</p></div></section>
+            <div v-else class="actor-grid emby-actor-grid"><button v-for="actor in embyActors" :key="actor.id" class="actor-card" @click="openEmbyActor(actor)"><img v-if="actor.avatar_url" :src="actor.avatar_url" :alt="actor.name" loading="lazy" /><span v-else class="actor-placeholder">{{ actor.name.slice(0, 1) }}</span><b>{{ actorName(actor) }}</b><small>{{ actor.name_jp || actor.sort_name || actor.name }}</small></button></div>
+            <section v-if="selectedEmbyActor" class="detail-panel"><div class="panel-heading"><div class="actor-heading"><img v-if="selectedEmbyActor.avatar_url" :src="selectedEmbyActor.avatar_url" :alt="selectedEmbyActor.name" /><div><h2>{{ actorName(selectedEmbyActor) }}</h2><small>{{ selectedEmbyActor.name_jp || selectedEmbyActor.sort_name }}</small></div></div><div class="detail-actions"><button :disabled="gfriendsLoading" @click="loadGfriendsCandidates">{{ gfriendsLoading ? '加载中' : 'Gfriends' }}</button><a v-if="selectedEmbyActor.emby_url" :href="selectedEmbyActor.emby_url" target="_blank" rel="noopener">Emby</a><button title="关闭演员详情" aria-label="关闭演员详情" @click="selectedEmbyActor = null">x</button></div></div><div class="actor-profile"><div><span>Emby 名称</span><b>{{ selectedEmbyActor.name || '未设置' }}</b></div><div><span>Emby 排序名</span><b>{{ selectedEmbyActor.sort_name || '未设置' }}</b></div><div><span>简中名</span><b>{{ selectedEmbyActor.name_zh_cn || '未匹配' }}</b></div><div><span>繁中名</span><b>{{ selectedEmbyActor.name_zh_tw || '未匹配' }}</b></div><div><span>日文名</span><b>{{ selectedEmbyActor.name_jp || '未匹配' }}</b></div><div class="actor-profile-aliases"><span>别名</span><b>{{ selectedEmbyActor.aliases || '无' }}</b></div></div><p v-if="selectedEmbyActor.overview" class="actor-overview">{{ selectedEmbyActor.overview }}</p><div v-if="selectedEmbyActor.provider_ids && Object.keys(selectedEmbyActor.provider_ids).length" class="actor-provider-links"><template v-for="(value, provider) in selectedEmbyActor.provider_ids" :key="provider"><a v-if="providerUrl(provider, value)" :href="providerUrl(provider, value)" target="_blank" rel="noopener">{{ provider }}</a><span v-else>{{ provider }}: {{ value }}</span></template></div><div v-if="gfriendsCandidates.length" class="gfriends-grid"><button v-for="candidate in gfriendsCandidates" :key="candidate.remote_url" :disabled="avatarSaving" class="gfriends-candidate" :title="candidate.name" @click="applyGfriendsAvatar(candidate)"><img :src="candidate.url" :alt="candidate.name" loading="lazy" /><span>{{ candidate.name }}</span></button></div><div class="recommendations compact"><article v-for="item in selectedEmbyActorMovies" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><b>{{ item.code }}</b><p>{{ item.title }}</p></div></article><p v-if="!selectedEmbyActorMovies.length" class="empty">未读取到关联作品</p></div></section>
           </template>
         </section>
         <section v-else-if="page === 'plugins'" class="panel"><div class="panel-heading"><h2>插件</h2><button @click="refresh">重新扫描</button></div><p v-if="!plugins.length" class="empty">尚未恢复插件源码</p><div v-for="plugin in plugins" :key="plugin.id" class="job-row"><div><b>{{ plugin.name || plugin.id }}</b><small>{{ plugin.description || plugin.id }}</small></div><div class="plugin-actions"><button class="plugin-config-button" title="配置插件" aria-label="配置插件" @click="openPluginConfig(plugin)">⚙</button><span :class="['badge', plugin.loaded ? 'completed' : 'failed']">{{ plugin.loaded ? '已加载' : '加载失败' }}</span><button :class="['plugin-toggle', { enabled: plugin.enabled }]" :title="plugin.enabled ? '停用插件' : '启用插件'" :aria-label="plugin.enabled ? '停用插件' : '启用插件'" @click="togglePlugin(plugin)"><i /></button></div></div><section v-if="selectedPlugin" class="detail-panel plugin-config-panel"><div class="panel-heading"><div><h2>{{ selectedPlugin.name || selectedPlugin.id }}</h2><small>插件配置</small></div><button title="关闭配置" aria-label="关闭配置" @click="selectedPlugin = null">x</button></div><div class="config-fields"><label v-for="(schema, key) in selectedPlugin.config_schema || {}" :key="key"><span>{{ schema.label || key }}</span><input v-if="schema.type !== 'boolean'" v-model="pluginConfig[key]" :type="schema.type === 'password' ? 'password' : schema.type === 'number' ? 'number' : 'text'" :min="schema.min" :max="schema.max" /><input v-else v-model="pluginConfig[key]" type="checkbox" /><small v-if="schema.description">{{ schema.description }}</small></label></div><p v-if="pluginTestMessage" class="plugin-test-message">{{ pluginTestMessage }}</p><div class="config-save"><button v-if="canTestPlugin(selectedPlugin)" :disabled="pluginTesting" @click="testPlugin">{{ pluginTesting ? '测试中' : '测试连接' }}</button><button :disabled="pluginConfigSaving" @click="savePluginConfig">{{ pluginConfigSaving ? '保存中' : '保存配置' }}</button></div></section></section>
@@ -882,5 +900,6 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .plugin-test-message { margin: 14px 0 0; color: #aabbd0; font-size: 13px; line-height: 1.5; }
 .job-row-actionable { cursor: pointer; }.job-row-actionable:hover { background: #1d2732; }.job-actions { display: inline-flex; align-items: center; gap: 8px; }.job-actions button { border: 1px solid #854550; border-radius: 5px; background: #362229; color: #ffc0c8; padding: 6px 9px; }.job-actions button:disabled { opacity: .55; cursor: default; }.job-detail { margin-top: 16px; }.job-log { margin: 12px 0 0; padding: 12px; border: 1px solid #303a47; border-radius: 5px; background: #121820; max-height: 380px; white-space: pre-wrap; word-break: break-word; }.job-error { color: #ffb4bc; margin: 10px 0; }
 .duplicate-groups { border-top: 1px solid #303a47; border-bottom: 1px solid #303a47; margin: 16px 0; padding: 13px 0; }.duplicate-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 9px 0; border-top: 1px solid #2b3440; }.duplicate-group > .muted { flex-basis: 100%; }.duplicate-actor { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 220px; border: 1px solid #3a4655; border-radius: 5px; padding: 4px 7px 4px 4px; color: #dce5ee; background: #202833; }.duplicate-actor img { width: 28px; height: 28px; object-fit: cover; background: #171c24; }.duplicate-actor span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.actor-language { margin: 0 0 14px; }.actor-profile { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 16px 0; }.actor-profile > div { min-width: 0; padding: 10px; border: 1px solid #303a47; border-radius: 5px; background: #171c24; display: grid; gap: 5px; }.actor-profile span { color: #98a6b7; font-size: 11px; }.actor-profile b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.actor-profile-aliases { grid-column: 1 / -1; }.actor-overview { color: #c4cfda; white-space: pre-wrap; line-height: 1.6; }.actor-provider-links { display: flex; flex-wrap: wrap; gap: 7px; margin: 14px 0; }.actor-provider-links a, .actor-provider-links span { border: 1px solid #3a4655; border-radius: 5px; padding: 5px 8px; color: #b9dfff; background: #202833; font-size: 12px; text-decoration: none; }
 @media (max-width: 760px) { .app-shell { grid-template-columns: 1fr; }.sidebar { position: sticky; top: 0; z-index: 2; padding: 10px; flex-direction: row; align-items: center; gap: 12px; }.brand { padding: 0; }.sidebar nav { display: flex; overflow-x: auto; flex: 1; }.sidebar nav button { white-space: nowrap; }.sidebar-foot { display: none; } main { padding: 18px; }.overview-grid, .facefusion-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }.wide { grid-column: 1 / -1; } }
 </style>
