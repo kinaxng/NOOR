@@ -97,6 +97,7 @@ type HardlinkDeletePreview = {
   errors?: string[];
   [key: string]: unknown;
 };
+type HardlinkScanGroup = { source_dir: string; hardlink_dir: string };
 type MediaLibrary = { id: string; name: string; collection_type?: string };
 type MediaItem = {
   id: string;
@@ -232,6 +233,9 @@ const hardlinkDeleteGroup = ref<HardlinkGroup | null>(null);
 const hardlinkDeletePreview = ref<HardlinkDeletePreview | null>(null);
 const hardlinkDeleteLoading = ref(false);
 const hardlinkDeleting = ref(false);
+const hardlinkScanGroups = ref<HardlinkScanGroup[]>([]);
+const hardlinkConfigLoading = ref(false);
+const hardlinkConfigSaving = ref(false);
 const embyActors = ref<EmbyActor[]>([]);
 const embyActorsTotal = ref(0);
 const embyActorsLoading = ref(false);
@@ -1405,6 +1409,67 @@ async function scanHardlinks() {
   }
 }
 
+async function loadHardlinkConfig() {
+  hardlinkConfigLoading.value = true;
+  try {
+    const data = await request<{ config?: { scan_groups?: HardlinkScanGroup[] } }>(
+      "/api/media-library/config",
+    );
+    hardlinkScanGroups.value = (data.config?.scan_groups || []).map((group) => ({
+      source_dir: String(group.source_dir || ""),
+      hardlink_dir: String(group.hardlink_dir || ""),
+    }));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "硬链接配置读取失败";
+  } finally {
+    hardlinkConfigLoading.value = false;
+  }
+}
+
+function addHardlinkScanGroup() {
+  hardlinkScanGroups.value = [
+    ...hardlinkScanGroups.value,
+    { source_dir: "", hardlink_dir: "" },
+  ];
+}
+
+function removeHardlinkScanGroup(index: number) {
+  hardlinkScanGroups.value = hardlinkScanGroups.value.filter(
+    (_group, groupIndex) => groupIndex !== index,
+  );
+}
+
+async function saveHardlinkConfig() {
+  const groups = hardlinkScanGroups.value
+    .map((group) => ({
+      source_dir: group.source_dir.trim(),
+      hardlink_dir: group.hardlink_dir.trim(),
+    }))
+    .filter((group) => group.source_dir && group.hardlink_dir);
+  if (groups.length !== hardlinkScanGroups.value.length) {
+    error.value = "每组硬链接扫描路径都需要填写源目录和媒体库目录";
+    return;
+  }
+  hardlinkConfigSaving.value = true;
+  error.value = "";
+  try {
+    const response = await fetch("/api/media-library/config", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scan_groups: groups }),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `${response.status} ${response.statusText}`,
+      );
+    await loadHardlinkConfig();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "硬链接配置保存失败";
+  } finally {
+    hardlinkConfigSaving.value = false;
+  }
+}
+
 async function hardlinkDeleteRequest(
   group: HardlinkGroup,
   dryRun: boolean,
@@ -1742,6 +1807,7 @@ onMounted(refresh);
           @click="
             page = 'settings';
             loadMappingStatus();
+            loadHardlinkConfig();
             loadFacefusionSettings();
             loadWhisperSettings();
             loadLadaSettings();
@@ -3097,6 +3163,7 @@ onMounted(refresh);
             <button
               @click="
                 loadMappingStatus();
+                loadHardlinkConfig();
                 loadFacefusionSettings();
                 loadWhisperSettings();
               "
@@ -3185,6 +3252,56 @@ onMounted(refresh);
                 {{ whisperSettingsSaving ? "保存中" : "保存 Whisper 设置" }}
               </button>
             </div>
+          </section>
+          <section class="settings-section">
+            <div class="panel-heading">
+              <div>
+                <h3>硬链接扫描</h3>
+                <small>仅用于识别源文件与媒体库中的同一文件</small>
+              </div>
+              <button :disabled="hardlinkConfigLoading" @click="loadHardlinkConfig">
+                刷新
+              </button>
+            </div>
+            <p v-if="hardlinkConfigLoading" class="empty">正在读取扫描路径...</p>
+            <template v-else>
+              <div class="hardlink-settings-groups">
+                <div
+                  v-for="(group, index) in hardlinkScanGroups"
+                  :key="index"
+                  class="hardlink-settings-row"
+                >
+                  <label
+                    ><span>源目录</span
+                    ><input v-model="group.source_dir" type="text" placeholder="源文件目录"
+                  /></label>
+                  <label
+                    ><span>媒体库目录</span
+                    ><input v-model="group.hardlink_dir" type="text" placeholder="硬链接目录"
+                  /></label>
+                  <button
+                    class="icon-button"
+                    title="删除扫描组"
+                    aria-label="删除扫描组"
+                    @click="removeHardlinkScanGroup(index)"
+                  >
+                    x
+                  </button>
+                </div>
+              </div>
+              <div class="config-save hardlink-settings-actions">
+                <button :disabled="hardlinkConfigSaving" @click="addHardlinkScanGroup">
+                  添加扫描组
+                </button>
+                <button
+                  class="primary-button"
+                  :disabled="hardlinkConfigSaving"
+                  @click="saveHardlinkConfig"
+                >
+                  {{ hardlinkConfigSaving ? "保存中" : "保存扫描路径" }}
+                </button>
+              </div>
+            </template>
           </section>
           <section class="settings-section">
             <div class="panel-heading">
@@ -4543,6 +4660,45 @@ pre {
   color: white;
   padding: 8px 12px;
 }
+.primary-button {
+  border-color: #177bc2 !important;
+  background: #168bdf !important;
+  color: #fff !important;
+}
+.hardlink-settings-groups {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.hardlink-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px;
+  align-items: end;
+  gap: 10px;
+}
+.hardlink-settings-row label {
+  display: grid;
+  gap: 6px;
+  color: #cdd9e6;
+  font-size: 13px;
+}
+.hardlink-settings-row input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #3a4655;
+  border-radius: 5px;
+  background: #171c24;
+  color: #e9edf2;
+  padding: 8px 10px;
+}
+.hardlink-settings-actions {
+  justify-content: space-between;
+}
+.hardlink-settings-actions button:first-child {
+  border-color: #3a4655;
+  background: #202833;
+  color: #dce5ee;
+}
 .plugin-test-message {
   margin: 14px 0 0;
   color: #aabbd0;
@@ -4715,6 +4871,12 @@ pre {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .wide {
+    grid-column: 1 / -1;
+  }
+  .hardlink-settings-row {
+    grid-template-columns: minmax(0, 1fr) 30px;
+  }
+  .hardlink-settings-row label:first-child {
     grid-column: 1 / -1;
   }
 }
