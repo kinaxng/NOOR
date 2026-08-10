@@ -28,6 +28,10 @@ class ActorMappingSourceRequest(BaseModel):
     mdc_ng_path: str
 
 
+class ActorAvatarUrlRequest(BaseModel):
+    url: str
+
+
 def _mapping_settings_path() -> Path:
     path = data_path() / "actor_management_settings.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -325,3 +329,32 @@ async def get_actor_movies(actor_id: str, limit: int = Query(120, ge=1, le=500),
     payload = response.json()
     items = [media._parse_item(item, config) for item in payload.get("Items") or []]
     return {"items": items, "total": int(payload.get("TotalRecordCount") or len(items)), "limit": limit, "offset": offset}
+
+
+@router.post("/actor/{actor_id}/avatar-url")
+async def set_actor_avatar_from_url(actor_id: str, req: ActorAvatarUrlRequest):
+    """Download an explicitly selected avatar and send it to Emby's person API."""
+    config = _require_config()
+    url = req.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="头像地址必须是 HTTP(S) URL")
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True, trust_env=False) as client:
+            image = await client.get(url, headers={"Accept": "image/*,*/*;q=0.8", "User-Agent": "NOOR/1.0"})
+            image.raise_for_status()
+            content_type = str(image.headers.get("content-type") or "image/jpeg").split(";", 1)[0].strip()
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="远程地址未返回图片")
+            if len(image.content) > 12 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="头像图片超过 12 MB")
+            response = await client.post(
+                f"{_base_url(config)}/emby/Items/{quote(actor_id)}/Images/Primary",
+                headers={**_headers(config), "Content-Type": content_type},
+                content=image.content,
+            )
+            response.raise_for_status()
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"写入 Emby 头像失败: {exc}") from exc
+    return {"ok": True, "actor_id": actor_id}
