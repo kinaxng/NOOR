@@ -1058,6 +1058,32 @@ async def stop_background() -> None:
     _scheduler_stop = None
 
 
+def background_tasks(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Expose the subscription scheduler to NOOR's unified task view."""
+    config = config or {}
+    data = _ensure_store()
+    events = data.get("events") if isinstance(data.get("events"), list) else []
+    latest = next((event for event in events if isinstance(event, dict)), {})
+    interval = max(10, min(int(config.get("check_interval_minutes") or 60), 1440))
+    enabled = bool(config.get("auto_check_enabled", True))
+    running = bool(_scheduler_task and not _scheduler_task.done())
+    last_message = str(latest.get("message") or "")
+    last_level = str(latest.get("level") or "")
+    status = "running" if running and enabled else ("idle" if enabled else "disabled")
+    if last_level == "error":
+        status = "failed"
+    return [{
+        "id": "subscription-core.scheduler",
+        "title": "订阅自动检测",
+        "status": status,
+        "last_run_at": latest.get("created_at") or None,
+        "last_finished_at": latest.get("created_at") or None,
+        "summary": f"{len(data.get('subscriptions') or [])} 个订阅 · 每 {interval} 分钟检测",
+        "detail": last_message,
+        "metrics": {"subscriptions": len(data.get("subscriptions") or []), "interval_minutes": interval, "auto_check_enabled": enabled},
+    }]
+
+
 async def _refresh_current_media(data: dict[str, Any], sub: dict[str, Any]) -> dict[str, Any]:
     lookup_codes = _subscription_code_values(sub)
     media = await _find_media(*(lookup_codes or [str(sub.get("code") or "")]))
