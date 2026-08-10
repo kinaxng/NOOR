@@ -406,7 +406,7 @@ async def test(config: dict[str, Any]) -> PluginTestResult:
     return PluginTestResult(ok=True, message="Gfriends index ready", details=_stats(index))
 
 
-async def handle_action(action: str, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+async def handle_action(action: str, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     if action == "sync":
         index = await _sync_index(config, force=bool(payload.get("force")))
         return {"ok": True, "index": _stats(index)}
@@ -418,4 +418,3 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
     if action == "candidates":
         return await _candidates(config, payload)
     raise ValueError(f"unsupported action: {action}")
-

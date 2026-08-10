@@ -3,6 +3,7 @@ __pycache__/
 backend/noor.db
 data/plugins_config.json
 data/actor_management_settings.json
+data/plugin_cache/
 .env
 frontend/node_modules/
 frontend/dist/
