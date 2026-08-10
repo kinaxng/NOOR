@@ -50,7 +50,8 @@ class PluginRuntime:
 
     def _is_enabled(self, plugin_id: str) -> bool:
         state = self._states().get(plugin_id, {})
-        return bool(state.get('enabled', True)) if isinstance(state, dict) else True
+        default = bool((self._manifests.get(plugin_id) or {}).get('enabled_by_default', True))
+        return bool(state.get('enabled', default)) if isinstance(state, dict) else default
 
     def is_enabled(self, plugin_id: str) -> bool:
         return plugin_id in self._manifests and self._is_enabled(plugin_id)
@@ -95,9 +96,10 @@ class PluginRuntime:
         items = []
         for plugin_id, manifest in self._manifests.items():
             state = states.get(plugin_id, {}) if isinstance(states.get(plugin_id), dict) else {}
+            default = bool(manifest.get('enabled_by_default', True))
             item = {key: value for key, value in manifest.items() if key != '_directory'}
             item.update({
-                'enabled': bool(state.get('enabled', True)),
+                'enabled': bool(state.get('enabled', default)),
                 'loaded': plugin_id in self._handlers,
                 'config': configs.get(plugin_id, {}),
             })
