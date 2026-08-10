@@ -535,6 +535,9 @@ async def _remove_categories(config: dict[str, Any], payload: dict[str, Any]) ->
 
 
 async def handle_action(action: str, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    if action == "test":
+        result = await test(config)
+        return {"ok": result.ok, "message": result.message, "details": result.details or {}}
     if action == "overview":
         return await _overview(config)
     if action == "torrents":
