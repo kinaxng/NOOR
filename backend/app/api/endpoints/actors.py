@@ -73,6 +73,13 @@ def _normalize_name(value: str | None) -> str:
     return re.sub(r"[\s\u3000・·._\-]", "", str(value or "")).casefold()
 
 
+def _is_actor_name(value: str | None) -> bool:
+    name = str(value or "").strip()
+    if not name or name.isdecimal() or re.fullmatch(r"[-_ .·・]+", name):
+        return False
+    return not bool(re.fullmatch(r"\[(?:red|deleted|unknown)\]", name, flags=re.IGNORECASE))
+
+
 def _mapping_path(config: dict[str, Any]) -> Path | None:
     explicit = str(config.get("mdc_ng_path") or _mapping_settings().get("mdc_ng_path") or "").strip()
     if explicit:
@@ -201,6 +208,7 @@ async def _list_actors(
 ) -> tuple[list[dict[str, Any]], int]:
     params: dict[str, Any] = {
         "IncludeItemTypes": "Person",
+        "PersonTypes": "Actor",
         "Recursive": "true",
         "Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName",
         "StartIndex": max(0, offset),
@@ -215,7 +223,11 @@ async def _list_actors(
         response.raise_for_status()
     payload = response.json()
     mapping = _mapping_index(config)
-    actors = [_actor_from_emby(item, config, mapping, lang=lang) for item in payload.get("Items") or []]
+    actors = [
+        _actor_from_emby(item, config, mapping, lang=lang)
+        for item in payload.get("Items") or []
+        if _is_actor_name(item.get("Name"))
+    ]
     return actors, int(payload.get("TotalRecordCount") or len(actors))
 
 
