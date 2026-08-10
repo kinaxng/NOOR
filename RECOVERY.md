@@ -68,6 +68,8 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `api/settings_updates.py` as maintainable source and verified its
   Emby, storage, LADA, and network environment update mappings against the
   preserved bytecode.
+- Reconstructed `api/settings_directories.py` as maintainable source and verified
+  its allowed-directory checks and browse payloads against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
