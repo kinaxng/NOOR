@@ -147,9 +147,16 @@ def _mapping_index(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return index
 
 
-def _actor_from_emby(raw: dict[str, Any], config: dict[str, Any], mapping: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _actor_from_emby(
+    raw: dict[str, Any],
+    config: dict[str, Any],
+    mapping: dict[str, dict[str, Any]],
+    *,
+    lang: str = "zh_cn",
+) -> dict[str, Any]:
     name = str(raw.get("Name") or "")
-    record = mapping.get(_normalize_name(name), {})
+    sort_name = str(raw.get("SortName") or "")
+    record = mapping.get(_normalize_name(name)) or mapping.get(_normalize_name(sort_name)) or {}
     actor_id = str(raw.get("Id") or "")
     tags = raw.get("ImageTags") or {}
     tag = tags.get("Primary")
@@ -160,10 +167,12 @@ def _actor_from_emby(raw: dict[str, Any], config: dict[str, Any], mapping: dict[
     emby_url = f"{_base_url(config)}/web/index.html#!/item?id={quote(actor_id)}"
     if server_id:
         emby_url += f"&serverId={quote(server_id)}"
+    display_name = str(record.get(lang) or record.get("zh_cn") or record.get("jp") or name)
     return {
         "id": actor_id,
         "name": name,
-        "sort_name": str(raw.get("SortName") or ""),
+        "sort_name": sort_name,
+        "display_name": display_name,
         "overview": str(raw.get("Overview") or ""),
         "provider_ids": raw.get("ProviderIds") or {},
         "avatar_url": avatar_url,
@@ -176,7 +185,16 @@ def _actor_from_emby(raw: dict[str, Any], config: dict[str, Any], mapping: dict[
     }
 
 
-async def _list_actors(config: dict[str, Any], *, limit: int, offset: int, query: str | None, sort_by: str, sort_order: str) -> tuple[list[dict[str, Any]], int]:
+async def _list_actors(
+    config: dict[str, Any],
+    *,
+    limit: int,
+    offset: int,
+    query: str | None,
+    sort_by: str,
+    sort_order: str,
+    lang: str = "zh_cn",
+) -> tuple[list[dict[str, Any]], int]:
     params: dict[str, Any] = {
         "IncludeItemTypes": "Person",
         "Recursive": "true",
@@ -193,7 +211,7 @@ async def _list_actors(config: dict[str, Any], *, limit: int, offset: int, query
         response.raise_for_status()
     payload = response.json()
     mapping = _mapping_index(config)
-    actors = [_actor_from_emby(item, config, mapping) for item in payload.get("Items") or []]
+    actors = [_actor_from_emby(item, config, mapping, lang=lang) for item in payload.get("Items") or []]
     return actors, int(payload.get("TotalRecordCount") or len(actors))
 
 
@@ -204,10 +222,11 @@ async def get_actors(
     q: str | None = None,
     sort_by: str = "SortName",
     sort_order: str = "Ascending",
+    lang: str = Query("zh_cn", pattern="^(zh_cn|zh_tw|jp)$"),
 ):
     config = _require_config()
     try:
-        actors, total = await _list_actors(config, limit=limit, offset=offset, query=q, sort_by=sort_by, sort_order=sort_order)
+        actors, total = await _list_actors(config, limit=limit, offset=offset, query=q, sort_by=sort_by, sort_order=sort_order, lang=lang)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"获取 Emby 演员失败: {exc}") from exc
     return {"actors": actors, "total": total, "limit": limit, "offset": offset}
@@ -273,7 +292,7 @@ async def actor_duplicates(limit: int = Query(3000, ge=1, le=5000)):
 
 
 @router.get("/actor/{actor_id}")
-async def get_actor(actor_id: str):
+async def get_actor(actor_id: str, lang: str = Query("zh_cn", pattern="^(zh_cn|zh_tw|jp)$")):
     config = _require_config()
     async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
         response = await client.get(
@@ -284,7 +303,7 @@ async def get_actor(actor_id: str):
         if response.status_code == 404:
             raise HTTPException(status_code=404, detail="未找到演员")
         response.raise_for_status()
-    return {"ok": True, "actor": _actor_from_emby(response.json(), config, _mapping_index(config))}
+    return {"ok": True, "actor": _actor_from_emby(response.json(), config, _mapping_index(config), lang=lang)}
 
 
 @router.get("/actor/{actor_id}/movies")
