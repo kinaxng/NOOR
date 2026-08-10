@@ -3278,6 +3278,7 @@ onMounted(refresh);
                 loadHardlinkConfig();
                 loadFacefusionSettings();
                 loadWhisperSettings();
+                loadLadaSettings();
               "
             >
               刷新
@@ -3486,6 +3487,81 @@ onMounted(refresh);
                   @click="saveHardlinkConfig"
                 >
                   {{ hardlinkConfigSaving ? "保存中" : "保存扫描路径" }}
+                </button>
+              </div>
+            </template>
+          </section>
+          <section class="settings-section">
+            <div class="panel-heading">
+              <div>
+                <h3>LADA</h3>
+                <small>去码任务默认使用以下模型与编码参数</small>
+              </div>
+              <button :disabled="ladaInfoLoading" @click="loadLadaSettings">
+                刷新
+              </button>
+            </div>
+            <p v-if="ladaInfoLoading" class="empty">正在读取 LADA 设置...</p>
+            <template v-else>
+              <div class="config-fields">
+                <label
+                  ><span>CLI 路径</span
+                  ><input v-model="ladaConfig.cli_path" type="text"
+                /></label>
+                <label
+                  ><span>执行设备</span
+                  ><select v-model="ladaDefaults.device">
+                    <option v-for="device in ladaInfo.devices || []" :key="device.id" :value="device.id">
+                      {{ device.name || device.id }}
+                    </option>
+                  </select></label>
+                <label
+                  ><span>检测模型</span
+                  ><select v-model="ladaDefaults.detection_model">
+                    <option
+                      v-for="model in ladaInfo.detection_models || []"
+                      :key="model.id"
+                      :value="model.id"
+                      :disabled="!model.downloaded"
+                    >
+                      {{ model.name || model.id }}{{ model.downloaded ? "" : "（未下载）" }}
+                    </option>
+                  </select></label>
+                <label
+                  ><span>恢复模型</span
+                  ><select v-model="ladaDefaults.restoration_model">
+                    <option
+                      v-for="model in ladaInfo.restoration_models || []"
+                      :key="model.id"
+                      :value="model.id"
+                      :disabled="!model.downloaded"
+                    >
+                      {{ model.name || model.id }}{{ model.downloaded ? "" : "（未下载）" }}
+                    </option>
+                  </select></label>
+                <label
+                  ><span>编码预设</span
+                  ><select v-model="ladaDefaults.encoding_preset">
+                    <option v-for="preset in ladaInfo.encoding_presets || []" :key="preset.id" :value="preset.id">
+                      {{ preset.name || preset.id }}
+                    </option>
+                  </select></label>
+                <label
+                  ><span>最大分段秒数</span
+                  ><input v-model.number="ladaDefaults.max_clip_length" type="number" min="10" max="3600"
+                /></label>
+                <label
+                  ><span>半精度 FP16</span
+                  ><input v-model="ladaDefaults.fp16" type="checkbox"
+                /></label>
+                <label
+                  ><span>检测人脸马赛克</span
+                  ><input v-model="ladaDefaults.detect_face_mosaics" type="checkbox"
+                /></label>
+              </div>
+              <div class="config-save">
+                <button :disabled="ladaSettingsSaving" @click="saveLadaSettings">
+                  {{ ladaSettingsSaving ? "保存中" : "保存 LADA 设置" }}
                 </button>
               </div>
             </template>
