@@ -52,6 +52,9 @@ class PluginRuntime:
         state = self._states().get(plugin_id, {})
         return bool(state.get('enabled', True)) if isinstance(state, dict) else True
 
+    def is_enabled(self, plugin_id: str) -> bool:
+        return plugin_id in self._manifests and self._is_enabled(plugin_id)
+
     def _load_handler(self, plugin_id: str, plugin_dir: Path) -> Any | None:
         backend = plugin_dir / 'backend.py'
         if not backend.is_file():
@@ -174,6 +177,40 @@ class PluginRuntime:
             except Exception as exc:
                 groups.append({'provider': plugin_id, 'provider_name': self._manifests.get(plugin_id, {}).get('name', plugin_id), 'items': [], 'error': str(exc)})
         return groups
+
+    async def resolve_resource_download(self, plugin_id: str, resource: dict[str, Any]) -> dict[str, Any]:
+        """Ask a recovered provider to resolve a download URL when supported."""
+        handler = self._handlers.get(plugin_id)
+        if handler is None:
+            raise LookupError(plugin_id)
+        for name, args in (
+            ('resolve_resource_download', (resource, self.get_config(plugin_id))),
+            ('resolve_download', (resource, self.get_config(plugin_id))),
+        ):
+            try:
+                value = await self._call(handler, name, *args)
+                if isinstance(value, dict):
+                    return value
+            except (AttributeError, TypeError):
+                continue
+        return {'item': resource, 'url': resource.get('url') or resource.get('download_url') or resource.get('magnet') or ''}
+
+    async def submit_download(self, plugin_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.is_enabled(plugin_id):
+            raise ValueError('下载器插件未启用')
+        handler = self._handlers.get(plugin_id)
+        if handler is None:
+            raise LookupError(plugin_id)
+        for name, args in (
+            ('submit_download', (payload, self.get_config(plugin_id))),
+            ('handle_action', ('submit_download', payload, self.get_config(plugin_id))),
+        ):
+            try:
+                value = await self._call(handler, name, *args)
+                return value if isinstance(value, dict) else {'ok': bool(value)}
+            except (AttributeError, TypeError):
+                continue
+        raise ValueError('下载器插件缺少提交接口')
 
     async def _start_plugin_background(self, plugin_id: str) -> None:
         if plugin_id in self._background_started or not self._is_enabled(plugin_id):
