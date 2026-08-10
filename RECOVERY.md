@@ -18,15 +18,15 @@ This tree is an isolated recovery workspace. It does not replace `/home/kinax/no
   decoupled Qwen components.
 - Settings, subtitle APIs, media-library APIs, database models, and LADA runner.
 
-## Known Missing Areas
+## Initial Missing Areas
 
-- Application entrypoint and router assembly.
-- Job manager, system API, media-library hardlink helpers, and audio enhancer.
-- Plugin framework, FaceFusion integration, recommendation/subscription plugins, and
-  the Vue frontend source.
+The raw-image recovery did not contain source for the application entrypoint, task
+manager, plugin framework, FaceFusion integration, recommendation/subscription plugins,
+or the Vue frontend. The original Vue sources and router cannot be recovered from disk.
 
-The next reconstruction phase should rebuild only these missing modules from session
-history and verified API behavior, while keeping the recovered `.pyc` modules unchanged.
+Those areas are now reconstructed from verified API behavior and session evidence. They
+are deliberately kept as normal source files alongside the preserved `.pyc` evidence;
+the recovered bytecode modules remain unchanged.
 
 ## Reconstruction Status (2026-08-11)
 
@@ -41,9 +41,13 @@ history and verified API behavior, while keeping the recovered `.pyc` modules un
   verified without submitting a video job.
 - Recovered compatibility helpers required by the Whisper pipeline after the retired
   optional audio-enhancement chain was removed.
-- Remaining startup blockers are the plugin framework and plugin sources, global
-  search, knowledge graph modules, and the Vue frontend. They were not present in the
-  recovered disk sectors and must be reconstructed from session records.
+- Rebuilt the plugin runtime and recovered functional first-party plugin sources for
+  JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
+  Xunlei Remote, M-Team, and AVDB.
+- Rebuilt global resource search, browser History API routes, and the Vue recovery UI.
+- The full original component tree and several historical advanced interaction surfaces
+  remain unavailable as source artifacts; they must continue to be recreated from
+  verified behavior rather than treated as byte-for-byte recovery.
 
 ## Validated Recovery Progress (2026-08-11)
 
@@ -65,8 +69,13 @@ history and verified API behavior, while keeping the recovered `.pyc` modules un
   Emby JSON-content-type guidance, and the recent audit log.
 - The surviving actor APIs support Emby actor browsing, mapped multilingual names,
   duplicate detection, movie lookup, and explicitly selected GFriends avatar writes.
+  The list filters invalid Emby people before paginating, supports mapped-name search,
+  and browser actor detail routes load independently of the complete actor scan.
   Actor merge, actor deletion, and arbitrary metadata writes have not been recreated
   because the original Emby mutation contracts could not be verified.
+- FaceFusion source-image management and frame-preview controls are restored. Opening a
+  media detail reads only preview metadata; a preview is generated only after a source
+  image is selected and the frame slider is released.
 
 The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
