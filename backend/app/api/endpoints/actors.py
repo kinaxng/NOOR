@@ -196,6 +196,22 @@ def _actor_from_emby(
     }
 
 
+def _actor_matches_query(actor: dict[str, Any], query: str | None) -> bool:
+    needle = _normalize_name(query)
+    if not needle:
+        return True
+    values = (
+        actor.get("name"),
+        actor.get("sort_name"),
+        actor.get("display_name"),
+        actor.get("name_jp"),
+        actor.get("name_zh_cn"),
+        actor.get("name_zh_tw"),
+        actor.get("aliases"),
+    )
+    return any(needle in _normalize_name(str(value or "")) for value in values)
+
+
 async def _list_actors(
     config: dict[str, Any],
     *,
@@ -211,24 +227,43 @@ async def _list_actors(
         "PersonTypes": "Actor",
         "Recursive": "true",
         "Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName",
-        "StartIndex": max(0, offset),
-        "Limit": max(1, min(limit, 500)),
         "SortBy": sort_by if sort_by in {"SortName", "DateCreated", "Name"} else "SortName",
         "SortOrder": sort_order if sort_order in {"Ascending", "Descending"} else "Ascending",
     }
-    if query:
-        params["SearchTerm"] = query
+
+    # Emby applies pagination before filtering PersonTypes consistently on all
+    # deployments.  A library that starts with stale [RED] or numeric people
+    # can therefore return a visibly empty first page.  Read the compact
+    # person list in chunks, filter locally, then paginate the valid actors.
+    raw_items: list[dict[str, Any]] = []
+    raw_total = 0
     async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
-        response = await client.get(f"{_base_url(config)}/emby/Persons", headers=_headers(config), params=params)
-        response.raise_for_status()
-    payload = response.json()
+        start_index = 0
+        while True:
+            response = await client.get(
+                f"{_base_url(config)}/emby/Persons",
+                headers=_headers(config),
+                params={**params, "StartIndex": start_index, "Limit": 500},
+            )
+            response.raise_for_status()
+            payload = response.json()
+            values = [item for item in payload.get("Items") or [] if isinstance(item, dict)]
+            raw_items.extend(values)
+            raw_total = int(payload.get("TotalRecordCount") or len(raw_items))
+            start_index += len(values)
+            if not values or start_index >= raw_total:
+                break
+
     mapping = _mapping_index(config)
     actors = [
         _actor_from_emby(item, config, mapping, lang=lang)
-        for item in payload.get("Items") or []
+        for item in raw_items
         if _is_actor_name(item.get("Name"))
     ]
-    return actors, int(payload.get("TotalRecordCount") or len(actors))
+    if query:
+        actors = [actor for actor in actors if _actor_matches_query(actor, query)]
+    valid_total = len(actors)
+    return actors[max(0, offset) : max(0, offset) + limit], valid_total
 
 
 @router.get("/actors")

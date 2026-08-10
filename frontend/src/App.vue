@@ -314,6 +314,7 @@ const hardlinkConfigSaving = ref(false);
 const embyActors = ref<EmbyActor[]>([]);
 const embyActorsTotal = ref(0);
 const embyActorsLoading = ref(false);
+const embyActorDetailLoading = ref(false);
 const embyActorQuery = ref("");
 const embyActorSort = ref<"name" | "recent">("name");
 const actorDisplayLanguage = ref<"zh_cn" | "zh_tw" | "jp">("zh_cn");
@@ -455,6 +456,15 @@ function embyActorIdFromPath(pathname = window.location.pathname) {
   } catch {
     return "";
   }
+}
+
+function isDetailRouteForPage(pathname: string, target: Page) {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  return (
+    (target === "library" && /^\/library\/[^/]+$/.test(normalized)) ||
+    (target === "javdb" && /^\/javdb\/[^/]+$/.test(normalized)) ||
+    (target === "files" && /^\/actor\/emby\/[^/]+$/.test(normalized))
+  );
 }
 const runningJobs = computed(() =>
   jobs.value.filter((job) =>
@@ -2109,6 +2119,7 @@ async function openEmbyActor(actor: EmbyActor, pushRoute = true) {
     if (window.location.pathname !== path)
       window.history.pushState({ actorId: actor.id }, "", path);
   }
+  embyActorDetailLoading.value = true;
   try {
     const [detail, movies] = await Promise.all([
       request<{ actor?: EmbyActor }>(
@@ -2122,12 +2133,15 @@ async function openEmbyActor(actor: EmbyActor, pushRoute = true) {
     selectedEmbyActorMovies.value = movies.items || [];
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "演员作品加载失败";
+  } finally {
+    embyActorDetailLoading.value = false;
   }
 }
 
 function closeEmbyActor() {
   selectedEmbyActor.value = null;
   selectedEmbyActorMovies.value = [];
+  embyActorDetailLoading.value = false;
   if (embyActorIdFromPath()) window.history.replaceState({ page: "files" }, "", "/files");
 }
 
@@ -2289,7 +2303,9 @@ async function loadBrowserRoute() {
   if (actorId) {
     page.value = "files";
     fileTab.value = "actor-management";
-    await loadEmbyActors();
+    // The actor detail endpoint is independent of the full actor list.  Do
+    // not make a shareable actor URL wait for Emby's complete person scan.
+    void loadEmbyActors();
     await openEmbyActor({ id: actorId, name: "" }, false);
     return;
   }
@@ -2301,7 +2317,11 @@ async function loadBrowserRoute() {
 watch(page, (target) => {
   if (applyingBrowserRoute) return;
   const path = pagePaths[target];
-  if (window.location.pathname !== path) window.history.pushState({ page: target }, "", path);
+  if (
+    window.location.pathname !== path &&
+    !isDetailRouteForPage(window.location.pathname, target)
+  )
+    window.history.pushState({ page: target }, "", path);
 });
 
 onMounted(async () => {
@@ -3637,9 +3657,9 @@ onMounted(async () => {
                     :alt="selectedEmbyActor.name"
                   />
                   <div>
-                    <h2>{{ actorName(selectedEmbyActor) }}</h2>
+                    <h2>{{ actorName(selectedEmbyActor) || "正在读取演员资料" }}</h2>
                     <small>{{
-                      selectedEmbyActor.name_jp || selectedEmbyActor.sort_name
+                      selectedEmbyActor.name_jp || selectedEmbyActor.sort_name || (embyActorDetailLoading ? "正在读取关联作品..." : "")
                     }}</small>
                   </div>
                 </div>
