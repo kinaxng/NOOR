@@ -81,6 +81,9 @@ const facefusionSettings = ref<Record<string, string | number>>({})
 const facefusionSettingsLoading = ref(false)
 const facefusionSettingsSaving = ref(false)
 const whisperSubmitting = ref(false)
+const whisperSettings = ref<Record<string, unknown>>({})
+const whisperSettingsLoading = ref(false)
+const whisperSettingsSaving = ref(false)
 
 const title = computed(() => ({ overview: '概览', library: '媒体库', recommendations: '推荐中心', javdb: 'JavDB', actors: '演员', subscriptions: '订阅中心', files: '文件', tasks: '任务', plugins: '插件', settings: '设置' }[page.value]))
 const runningJobs = computed(() => jobs.value.filter((job) => ['queued', 'running', 'blocked'].includes(job.status)))
@@ -335,6 +338,37 @@ async function saveFacefusionSettings() {
   } finally { facefusionSettingsSaving.value = false }
 }
 
+async function loadWhisperSettings() {
+  whisperSettingsLoading.value = true
+  try {
+    const result = await request<{ whisper?: Record<string, unknown> }>('/api/settings')
+    whisperSettings.value = { ...(result.whisper || {}) }
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'Whisper 设置读取失败'
+  } finally {
+    whisperSettingsLoading.value = false
+  }
+}
+
+async function saveWhisperSettings() {
+  whisperSettingsSaving.value = true
+  error.value = ''
+  try {
+    const response = await fetch('/api/settings/whisper', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(whisperSettings.value),
+    })
+    if (!response.ok) throw new Error(await response.text() || `${response.status} ${response.statusText}`)
+    const refreshed = await request<{ whisper?: Record<string, unknown> }>('/api/settings')
+    whisperSettings.value = { ...(refreshed.whisper || whisperSettings.value) }
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'Whisper 设置保存失败'
+  } finally {
+    whisperSettingsSaving.value = false
+  }
+}
+
 async function openMediaLibrary() {
   page.value = 'library'
   await loadMediaLibrary()
@@ -566,7 +600,7 @@ onMounted(refresh)
         <button :class="{ active: page === 'files' }" @click="openFiles()">文件</button>
         <button :class="{ active: page === 'tasks' }" @click="page = 'tasks'">任务 <span v-if="runningJobs.length" class="count">{{ runningJobs.length }}</span></button>
         <button :class="{ active: page === 'plugins' }" @click="page = 'plugins'">插件</button>
-        <button :class="{ active: page === 'settings' }" @click="page = 'settings'; loadMappingStatus(); loadFacefusionSettings()">设置</button>
+        <button :class="{ active: page === 'settings' }" @click="page = 'settings'; loadMappingStatus(); loadFacefusionSettings(); loadWhisperSettings()">设置</button>
       </nav>
       <div class="sidebar-foot"><span :class="['status-dot', { online: healthy }]" />{{ healthy ? '后端已连接' : '后端未连接' }}</div>
     </aside>
@@ -614,7 +648,7 @@ onMounted(refresh)
           </template>
         </section>
         <section v-else-if="page === 'plugins'" class="panel"><div class="panel-heading"><h2>插件</h2><button @click="refresh">重新扫描</button></div><p v-if="!plugins.length" class="empty">尚未恢复插件源码</p><div v-for="plugin in plugins" :key="plugin.id" class="job-row"><div><b>{{ plugin.name || plugin.id }}</b><small>{{ plugin.description || plugin.id }}</small></div><div class="plugin-actions"><button class="plugin-config-button" title="配置插件" aria-label="配置插件" @click="openPluginConfig(plugin)">⚙</button><span :class="['badge', plugin.loaded ? 'completed' : 'failed']">{{ plugin.loaded ? '已加载' : '加载失败' }}</span><button :class="['plugin-toggle', { enabled: plugin.enabled }]" :title="plugin.enabled ? '停用插件' : '启用插件'" :aria-label="plugin.enabled ? '停用插件' : '启用插件'" @click="togglePlugin(plugin)"><i /></button></div></div><section v-if="selectedPlugin" class="detail-panel plugin-config-panel"><div class="panel-heading"><div><h2>{{ selectedPlugin.name || selectedPlugin.id }}</h2><small>插件配置</small></div><button title="关闭配置" aria-label="关闭配置" @click="selectedPlugin = null">x</button></div><div class="config-fields"><label v-for="(schema, key) in selectedPlugin.config_schema || {}" :key="key"><span>{{ schema.label || key }}</span><input v-if="schema.type !== 'boolean'" v-model="pluginConfig[key]" :type="schema.type === 'password' ? 'password' : schema.type === 'number' ? 'number' : 'text'" :min="schema.min" :max="schema.max" /><input v-else v-model="pluginConfig[key]" type="checkbox" /><small v-if="schema.description">{{ schema.description }}</small></label></div><div class="config-save"><button :disabled="pluginConfigSaving" @click="savePluginConfig">{{ pluginConfigSaving ? '保存中' : '保存配置' }}</button></div></section></section>
-        <section v-else class="panel"><div class="panel-heading"><div><h2>设置</h2><small>恢复中的基础配置</small></div><button @click="loadMappingStatus(); loadFacefusionSettings()">刷新</button></div><section class="settings-section"><h3>Emby 演员映射</h3><p>填写 MDC-NG 根目录，NOOR 会自动读取其 `data/data/mapping_actor.xml`。</p><div class="settings-inline"><input v-model="mdcNgPath" aria-label="MDC-NG 路径" placeholder="/path/to/mdc-ng" /><button :disabled="mappingSaving" @click="saveMdcNgPath">{{ mappingSaving ? '保存中' : '保存' }}</button></div><small v-if="mappingStatus">{{ mappingStatus.exists ? `已加载 ${mappingStatus.record_count || 0} 条映射` : '尚未找到映射表' }}</small></section><section class="settings-section"><div class="panel-heading"><div><h3>换脸</h3><small>默认参数会在提交任务时使用</small></div><button @click="loadFacefusionSettings">刷新</button></div><p v-if="facefusionSettingsLoading" class="empty">正在读取换脸设置...</p><div v-else class="config-fields"><label><span>FaceFusion 目录</span><input v-model="facefusionSettings.facefusion_dir" type="text" /></label><label><span>模型目录</span><input v-model="facefusionSettings.facefusion_model_dir" type="text" /></label><label><span>运行时缓存</span><input v-model="facefusionSettings.facefusion_cache_dir" type="text" /></label><label><span>临时文件</span><input v-model="facefusionSettings.facefusion_temp_dir" type="text" /></label><label><span>执行后端</span><select v-model="facefusionSettings.facefusion_execution_provider"><option value="cuda">CUDA</option><option value="tensorrt">TensorRT</option><option value="cpu">CPU</option></select></label><label><span>设备 ID</span><input v-model="facefusionSettings.facefusion_device_ids" type="text" /></label><label><span>处理器</span><input v-model="facefusionSettings.facefusion_processors" type="text" /></label><label><span>执行线程</span><input v-model.number="facefusionSettings.facefusion_thread_count" type="number" min="1" max="32" /></label><label><span>人脸选择</span><select v-model="facefusionSettings.facefusion_face_selector_mode"><option value="reference">参考脸</option><option value="many">全部</option><option value="one">单脸</option></select></label><label><span>视频编码</span><select v-model="facefusionSettings.facefusion_output_video_encoder"><option value="libx264">H.264</option><option value="h264_nvenc">H.264 NVENC</option><option value="hevc_nvenc">HEVC NVENC</option><option value="libx265">H.265</option></select></label></div><div class="config-save"><button :disabled="facefusionSettingsSaving || facefusionSettingsLoading" @click="saveFacefusionSettings">{{ facefusionSettingsSaving ? '保存中' : '保存换脸设置' }}</button></div></section></section>
+        <section v-else class="panel"><div class="panel-heading"><div><h2>设置</h2><small>恢复中的基础配置</small></div><button @click="loadMappingStatus(); loadFacefusionSettings(); loadWhisperSettings()">刷新</button></div><section class="settings-section"><h3>Emby 演员映射</h3><p>填写 MDC-NG 根目录，NOOR 会自动读取其 `data/data/mapping_actor.xml`。</p><div class="settings-inline"><input v-model="mdcNgPath" aria-label="MDC-NG 路径" placeholder="/path/to/mdc-ng" /><button :disabled="mappingSaving" @click="saveMdcNgPath">{{ mappingSaving ? '保存中' : '保存' }}</button></div><small v-if="mappingStatus">{{ mappingStatus.exists ? `已加载 ${mappingStatus.record_count || 0} 条映射` : '尚未找到映射表' }}</small></section><section class="settings-section"><div class="panel-heading"><div><h3>Whisper</h3><small>媒体详情中的字幕任务会使用这些默认参数</small></div><button @click="loadWhisperSettings">刷新</button></div><p v-if="whisperSettingsLoading" class="empty">正在读取 Whisper 设置...</p><div v-else class="config-fields"><label><span>识别模型</span><select v-model="whisperSettings.model"><option value="anime-whisper">Anime Whisper</option><option value="large-v3">Faster Whisper large-v3</option><option value="whisper-ja">Whisper Japanese</option><option value="qwen">Qwen ASR</option></select></label><label><span>语言</span><select v-model="whisperSettings.language"><option value="ja">日语</option><option value="auto">自动</option></select></label><label><span>VAD</span><select v-model="whisperSettings.vad_method"><option value="semantic">语义 VAD</option><option value="silero">Silero VAD</option><option value="none">关闭</option></select></label><label><span>翻译目标</span><select v-model="whisperSettings.translate_to"><option value="">不翻译</option><option value="zh">简体中文</option><option value="zh-TW">繁体中文</option></select></label><label><span>翻译模型</span><input v-model="whisperSettings.translate_model" type="text" /></label><label><span>翻译服务地址</span><input v-model="whisperSettings.translate_base_url" type="text" /></label></div><div class="config-save"><button :disabled="whisperSettingsSaving || whisperSettingsLoading" @click="saveWhisperSettings">{{ whisperSettingsSaving ? '保存中' : '保存 Whisper 设置' }}</button></div></section><section class="settings-section"><div class="panel-heading"><div><h3>换脸</h3><small>默认参数会在提交任务时使用</small></div><button @click="loadFacefusionSettings">刷新</button></div><p v-if="facefusionSettingsLoading" class="empty">正在读取换脸设置...</p><div v-else class="config-fields"><label><span>FaceFusion 目录</span><input v-model="facefusionSettings.facefusion_dir" type="text" /></label><label><span>模型目录</span><input v-model="facefusionSettings.facefusion_model_dir" type="text" /></label><label><span>运行时缓存</span><input v-model="facefusionSettings.facefusion_cache_dir" type="text" /></label><label><span>临时文件</span><input v-model="facefusionSettings.facefusion_temp_dir" type="text" /></label><label><span>执行后端</span><select v-model="facefusionSettings.facefusion_execution_provider"><option value="cuda">CUDA</option><option value="tensorrt">TensorRT</option><option value="cpu">CPU</option></select></label><label><span>设备 ID</span><input v-model="facefusionSettings.facefusion_device_ids" type="text" /></label><label><span>处理器</span><input v-model="facefusionSettings.facefusion_processors" type="text" /></label><label><span>执行线程</span><input v-model.number="facefusionSettings.facefusion_thread_count" type="number" min="1" max="32" /></label><label><span>人脸选择</span><select v-model="facefusionSettings.facefusion_face_selector_mode"><option value="reference">参考脸</option><option value="many">全部</option><option value="one">单脸</option></select></label><label><span>视频编码</span><select v-model="facefusionSettings.facefusion_output_video_encoder"><option value="libx264">H.264</option><option value="h264_nvenc">H.264 NVENC</option><option value="hevc_nvenc">HEVC NVENC</option><option value="libx265">H.265</option></select></label></div><div class="config-save"><button :disabled="facefusionSettingsSaving || facefusionSettingsLoading" @click="saveFacefusionSettings">{{ facefusionSettingsSaving ? '保存中' : '保存换脸设置' }}</button></div></section></section>
       </template>
     </main>
   </div>
