@@ -60,34 +60,39 @@ class FaceFusionDeepSwapperDownloadRequest(BaseModel):
     model_id: str
 
 
+def _facefusion_setting(name: str, default: Any = "") -> Any:
+    """Keep FaceFusion endpoints usable with pre-FaceFusion Settings bytecode."""
+    return getattr(get_settings(), name, default)
+
+
 def _preview_root() -> Path:
-    cache_dir = get_settings().facefusion_cache_dir
+    cache_dir = _facefusion_setting("facefusion_cache_dir")
     if cache_dir:
         return Path(cache_dir) / "previews"
     return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "previews"
 
 
 def _upload_root() -> Path:
-    cache_dir = get_settings().facefusion_cache_dir
+    cache_dir = _facefusion_setting("facefusion_cache_dir")
     if cache_dir:
         return Path(cache_dir) / "uploads"
     return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "uploads"
 
 
 def _reference_face_root() -> Path:
-    cache_dir = get_settings().facefusion_cache_dir
+    cache_dir = _facefusion_setting("facefusion_cache_dir")
     if cache_dir:
         return Path(cache_dir) / "reference_faces"
     return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "reference_faces"
 
 
 def _deep_swapper_custom_root() -> Path:
-    source = resolve_facefusion_source(get_settings().facefusion_dir)
+    source = resolve_facefusion_source(_facefusion_setting("facefusion_dir"))
     return source.source_dir / ".assets" / "models" / "custom"
 
 
 def _deep_swapper_choices_path() -> Path:
-    source = resolve_facefusion_source(get_settings().facefusion_dir)
+    source = resolve_facefusion_source(_facefusion_setting("facefusion_dir"))
     return source.source_dir / "facefusion" / "processors" / "modules" / "deep_swapper" / "choices.py"
 
 
@@ -396,7 +401,10 @@ def _deep_swapper_builtin_payload(model_id: str) -> dict[str, Any]:
 
 @router.get("/deep-swapper-models")
 async def list_facefusion_deep_swapper_models():
-    custom_root = _deep_swapper_custom_root()
+    try:
+        custom_root = _deep_swapper_custom_root()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     custom_root.mkdir(parents=True, exist_ok=True)
     custom_models = [
         _deep_swapper_model_payload(path)
@@ -675,4 +683,3 @@ async def get_facefusion_preview(preview_id: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="预览不存在")
     return FileResponse(path, media_type="image/png")
-
