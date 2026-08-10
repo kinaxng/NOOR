@@ -257,13 +257,24 @@ class JobManager:
     async def _run_whisper(self, job_id: str, input_path: str, settings: dict, cancel_event: asyncio.Event) -> None:
         from app.pipeline.whisper.orchestrator import create_task, run_whisper_task
         from app.pipeline.whisper.types import WhisperConfig
-        config = WhisperConfig(**settings)
+        # JobSettings is shared with LADA and therefore carries its default
+        # model fields. Keep only Whisper's declared dataclass options.
+        whisper_fields = set(WhisperConfig.__dataclass_fields__)
+        config = WhisperConfig(**{key: value for key, value in settings.items() if key in whisper_fields})
         task = create_task(input_path, config)
+        loop = asyncio.get_running_loop()
 
         def progress_callback(*args: Any, **kwargs: Any) -> None:
             value = kwargs.get('progress', args[0] if args else 0)
             detail = kwargs.get('detail') or kwargs.get('message')
-            asyncio.get_running_loop().create_task(self._progress(job_id, int(value), detail))
+            try:
+                progress = int(float(value))
+            except (TypeError, ValueError):
+                # The recovered pipeline also sends plain log lines through
+                # this callback. They are not task progress values.
+                loop.call_soon_threadsafe(lambda: asyncio.create_task(self._log(job_id, str(detail or value))))
+                return
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(self._progress(job_id, progress, detail)))
 
         result, srt_path = await run_whisper_task(task.id, progress_callback=progress_callback, cancel_callback=cancel_event.is_set)
         await self._complete(job_id, srt_path, {'segments': len(result.segments)})
