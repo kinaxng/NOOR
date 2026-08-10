@@ -1,0 +1,23 @@
+{
+  "id": "mteam-plugin",
+  "name": "M-Team",
+  "version": "0.1.0-recovered",
+  "type": "source",
+  "description": "通过 M-Team 官方 API 搜索 PT 种子资源。",
+  "capabilities": ["resource_search", "private_tracker", "network_outbound"],
+  "enabled_by_default": false,
+  "default_config": {
+    "api_base": "https://api.m-team.cc",
+    "api_key": "",
+    "passkey": "",
+    "timeout": 20,
+    "page_size": 30
+  },
+  "config_schema": {
+    "api_base": {"type": "string", "label": "M-Team API 地址"},
+    "api_key": {"type": "password", "label": "API Key"},
+    "passkey": {"type": "password", "label": "Passkey（可选）", "description": "仅当 API 未直接返回下载地址时用于拼接种子下载链接。"},
+    "timeout": {"type": "number", "label": "请求超时（秒）", "min": 5, "max": 120},
+    "page_size": {"type": "number", "label": "每次搜索数量", "min": 5, "max": 100}
+  }
+}
