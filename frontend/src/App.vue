@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 
 type Job = { id: string; job_type: string; emby_item_name: string; status: string; progress: number; detail?: string }
-type Plugin = { id: string; name?: string; enabled: boolean; loaded: boolean }
+type PluginSetting = { type?: 'string' | 'password' | 'number' | 'boolean'; label?: string; description?: string; min?: number; max?: number }
+type Plugin = { id: string; name?: string; description?: string; enabled: boolean; loaded: boolean; config?: Record<string, unknown>; default_config?: Record<string, unknown>; config_schema?: Record<string, PluginSetting> }
 type Recommendation = { code: string; title: string; cover_url?: string; release_date?: string; score?: number; recommendation_score?: number; actors: string[]; categories: string[]; is_today_increment: boolean }
 type JavdbItem = { code: string; title: string; cover_url?: string; release_date?: string; actors?: string[]; categories?: string[]; magnets_count?: number }
 type JavdbDetail = JavdbItem & { origin_title?: string; duration?: string; maker?: string; series?: string; director?: string; magnets?: Array<{ name?: string; size?: string; size_mb?: number }> }
@@ -17,6 +18,9 @@ const error = ref('')
 const healthy = ref(false)
 const jobs = ref<Job[]>([])
 const plugins = ref<Plugin[]>([])
+const selectedPlugin = ref<Plugin | null>(null)
+const pluginConfig = ref<Record<string, unknown>>({})
+const pluginConfigSaving = ref(false)
 const settings = ref<Record<string, unknown>>({})
 const recommendations = ref<Recommendation[]>([])
 const recommendationMode = ref<'latest' | 'full'>('latest')
@@ -76,6 +80,30 @@ async function togglePlugin(plugin: Plugin) {
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
     plugin.enabled = !plugin.enabled
   } catch (cause) { error.value = cause instanceof Error ? cause.message : '插件状态更新失败' }
+}
+
+async function openPluginConfig(plugin: Plugin) {
+  error.value = ''
+  try {
+    const response = await request<{ config: Record<string, unknown> }>(`/api/plugins/${encodeURIComponent(plugin.id)}/config`)
+    selectedPlugin.value = plugin
+    pluginConfig.value = { ...(plugin.default_config || {}), ...(response.config || {}) }
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : '插件配置读取失败' }
+}
+
+async function savePluginConfig() {
+  const plugin = selectedPlugin.value
+  if (!plugin) return
+  pluginConfigSaving.value = true
+  error.value = ''
+  try {
+    const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/config`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ config: pluginConfig.value }),
+    })
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+    plugin.config = { ...pluginConfig.value }
+    selectedPlugin.value = null
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : '插件配置保存失败' } finally { pluginConfigSaving.value = false }
 }
 
 async function loadRecommendations() {
@@ -309,7 +337,7 @@ onMounted(refresh)
             <section v-if="selectedEmbyActor" class="detail-panel"><div class="panel-heading"><div class="actor-heading"><img v-if="selectedEmbyActor.avatar_url" :src="selectedEmbyActor.avatar_url" :alt="selectedEmbyActor.name" /><div><h2>{{ selectedEmbyActor.name_zh_cn || selectedEmbyActor.name }}</h2><small>{{ selectedEmbyActor.name_jp || selectedEmbyActor.sort_name }}</small></div></div><div class="detail-actions"><button :disabled="gfriendsLoading" @click="loadGfriendsCandidates">{{ gfriendsLoading ? '加载中' : 'Gfriends' }}</button><a v-if="selectedEmbyActor.emby_url" :href="selectedEmbyActor.emby_url" target="_blank" rel="noopener">Emby</a><button title="关闭演员详情" aria-label="关闭演员详情" @click="selectedEmbyActor = null">x</button></div></div><div v-if="gfriendsCandidates.length" class="gfriends-grid"><button v-for="candidate in gfriendsCandidates" :key="candidate.remote_url" :disabled="avatarSaving" class="gfriends-candidate" :title="candidate.name" @click="applyGfriendsAvatar(candidate)"><img :src="candidate.url" :alt="candidate.name" loading="lazy" /><span>{{ candidate.name }}</span></button></div><div class="recommendations compact"><article v-for="item in selectedEmbyActorMovies" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><b>{{ item.code }}</b><p>{{ item.title }}</p></div></article><p v-if="!selectedEmbyActorMovies.length" class="empty">未读取到关联作品</p></div></section>
           </template>
         </section>
-        <section v-else-if="page === 'plugins'" class="panel"><div class="panel-heading"><h2>插件</h2><button @click="refresh">重新扫描</button></div><p v-if="!plugins.length" class="empty">尚未恢复插件源码</p><div v-for="plugin in plugins" :key="plugin.id" class="job-row"><div><b>{{ plugin.name || plugin.id }}</b><small>{{ plugin.id }}</small></div><div class="plugin-actions"><span :class="['badge', plugin.loaded ? 'completed' : 'failed']">{{ plugin.loaded ? '已加载' : '加载失败' }}</span><button :class="['plugin-toggle', { enabled: plugin.enabled }]" :title="plugin.enabled ? '停用插件' : '启用插件'" :aria-label="plugin.enabled ? '停用插件' : '启用插件'" @click="togglePlugin(plugin)"><i /></button></div></div></section>
+        <section v-else-if="page === 'plugins'" class="panel"><div class="panel-heading"><h2>插件</h2><button @click="refresh">重新扫描</button></div><p v-if="!plugins.length" class="empty">尚未恢复插件源码</p><div v-for="plugin in plugins" :key="plugin.id" class="job-row"><div><b>{{ plugin.name || plugin.id }}</b><small>{{ plugin.description || plugin.id }}</small></div><div class="plugin-actions"><button class="plugin-config-button" title="配置插件" aria-label="配置插件" @click="openPluginConfig(plugin)">⚙</button><span :class="['badge', plugin.loaded ? 'completed' : 'failed']">{{ plugin.loaded ? '已加载' : '加载失败' }}</span><button :class="['plugin-toggle', { enabled: plugin.enabled }]" :title="plugin.enabled ? '停用插件' : '启用插件'" :aria-label="plugin.enabled ? '停用插件' : '启用插件'" @click="togglePlugin(plugin)"><i /></button></div></div><section v-if="selectedPlugin" class="detail-panel plugin-config-panel"><div class="panel-heading"><div><h2>{{ selectedPlugin.name || selectedPlugin.id }}</h2><small>插件配置</small></div><button title="关闭配置" aria-label="关闭配置" @click="selectedPlugin = null">x</button></div><div class="config-fields"><label v-for="(schema, key) in selectedPlugin.config_schema || {}" :key="key"><span>{{ schema.label || key }}</span><input v-if="schema.type !== 'boolean'" v-model="pluginConfig[key]" :type="schema.type === 'password' ? 'password' : schema.type === 'number' ? 'number' : 'text'" :min="schema.min" :max="schema.max" /><input v-else v-model="pluginConfig[key]" type="checkbox" /><small v-if="schema.description">{{ schema.description }}</small></label></div><div class="config-save"><button :disabled="pluginConfigSaving" @click="savePluginConfig">{{ pluginConfigSaving ? '保存中' : '保存配置' }}</button></div></section></section>
         <section v-else class="panel"><div class="panel-heading"><div><h2>设置</h2><small>恢复中的基础配置</small></div><button @click="loadMappingStatus">刷新</button></div><section class="settings-section"><h3>Emby 演员映射</h3><p>填写 MDC-NG 根目录，NOOR 会自动读取其 `data/data/mapping_actor.xml`。</p><div class="settings-inline"><input v-model="mdcNgPath" aria-label="MDC-NG 路径" placeholder="/path/to/mdc-ng" /><button :disabled="mappingSaving" @click="saveMdcNgPath">{{ mappingSaving ? '保存中' : '保存' }}</button></div><small v-if="mappingStatus">{{ mappingStatus.exists ? `已加载 ${mappingStatus.record_count || 0} 条映射` : '尚未找到映射表' }}</small></section><pre>{{ JSON.stringify(settings, null, 2) }}</pre></section>
       </template>
     </main>
@@ -340,5 +368,6 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .settings-section { border-top: 1px solid #2b3440; border-bottom: 1px solid #2b3440; padding: 16px 0; margin: 16px 0; }.settings-section h3 { margin: 0 0 6px; font-size: 14px; }.settings-section p { color: #98a6b7; font-size: 13px; }.settings-inline { display: flex; gap: 8px; }.settings-inline input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.settings-inline button { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; }
 .gfriends-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin: 16px 0; }.gfriends-candidate { min-width: 0; padding: 5px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; display: grid; gap: 5px; text-align: left; }.gfriends-candidate img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #171c24; }.gfriends-candidate span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .plugin-actions { display: inline-flex; align-items: center; gap: 9px; }.plugin-toggle { width: 32px; height: 18px; border: 0; border-radius: 9px; padding: 2px; background: #485463; }.plugin-toggle i { display: block; width: 14px; height: 14px; border-radius: 50%; background: #d7dee7; transition: transform .16s ease; }.plugin-toggle.enabled { background: #168bdf; }.plugin-toggle.enabled i { transform: translateX(14px); }
+.plugin-config-button { width: 28px; height: 28px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; }.config-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }.config-fields label { display: grid; align-content: start; gap: 6px; color: #cdd9e6; font-size: 13px; }.config-fields input[type='text'], .config-fields input[type='password'], .config-fields input[type='number'] { width: 100%; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.config-fields input[type='checkbox'] { width: 16px; height: 16px; margin: 2px 0; accent-color: #168bdf; }.config-fields small { color: #98a6b7; line-height: 1.4; }.config-save { display: flex; justify-content: flex-end; margin-top: 18px; }.config-save button { border: 1px solid #177bc2; border-radius: 5px; background: #168bdf; color: white; padding: 8px 12px; }
 @media (max-width: 760px) { .app-shell { grid-template-columns: 1fr; }.sidebar { position: sticky; top: 0; z-index: 2; padding: 10px; flex-direction: row; align-items: center; gap: 12px; }.brand { padding: 0; }.sidebar nav { display: flex; overflow-x: auto; flex: 1; }.sidebar nav button { white-space: nowrap; }.sidebar-foot { display: none; } main { padding: 18px; }.overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.wide { grid-column: 1 / -1; } }
 </style>
