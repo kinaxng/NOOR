@@ -60,6 +60,8 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `tasks/job_phases.py` as maintainable source and verified its
   phase normalization, terminal state details, and task progress payloads against
   the preserved bytecode.
+- Reconstructed `tasks/manager_helpers.py` as maintainable source and verified its
+  task log handling and LADA output-path mirroring against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
