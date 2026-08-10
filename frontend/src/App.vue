@@ -380,10 +380,21 @@ const pagePaths: Record<Page, string> = {
 
 function pageFromPath(pathname = window.location.pathname): Page {
   const normalized = pathname.replace(/\/+$/, "") || "/";
+  if (/^\/actor\/emby\/[^/]+$/.test(normalized)) return "files";
   return (
     (Object.entries(pagePaths).find(([, path]) => path === normalized)?.[0] as Page | undefined) ||
     "overview"
   );
+}
+
+function embyActorIdFromPath(pathname = window.location.pathname) {
+  const match = pathname.replace(/\/+$/, "").match(/^\/actor\/emby\/([^/]+)$/);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return "";
+  }
 }
 const runningJobs = computed(() =>
   jobs.value.filter((job) =>
@@ -1792,10 +1803,15 @@ async function saveMdcNgPath() {
   }
 }
 
-async function openEmbyActor(actor: EmbyActor) {
+async function openEmbyActor(actor: EmbyActor, pushRoute = true) {
   selectedEmbyActor.value = actor;
   selectedEmbyActorMovies.value = [];
   gfriendsCandidates.value = [];
+  if (pushRoute) {
+    const path = `/actor/emby/${encodeURIComponent(actor.id)}`;
+    if (window.location.pathname !== path)
+      window.history.pushState({ actorId: actor.id }, "", path);
+  }
   try {
     const [detail, movies] = await Promise.all([
       request<{ actor?: EmbyActor }>(
@@ -1810,6 +1826,12 @@ async function openEmbyActor(actor: EmbyActor) {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "演员作品加载失败";
   }
+}
+
+function closeEmbyActor() {
+  selectedEmbyActor.value = null;
+  selectedEmbyActorMovies.value = [];
+  if (embyActorIdFromPath()) window.history.replaceState({ page: "files" }, "", "/files");
 }
 
 async function loadActorDuplicates() {
@@ -1941,6 +1963,20 @@ async function loadPageData(target: Page) {
   }
 }
 
+async function loadBrowserRoute() {
+  const actorId = embyActorIdFromPath();
+  if (actorId) {
+    page.value = "files";
+    fileTab.value = "actor-management";
+    await loadEmbyActors();
+    await openEmbyActor({ id: actorId, name: "" }, false);
+    return;
+  }
+  selectedEmbyActor.value = null;
+  selectedEmbyActorMovies.value = [];
+  await loadPageData(page.value);
+}
+
 watch(page, (target) => {
   if (applyingBrowserRoute) return;
   const path = pagePaths[target];
@@ -1952,12 +1988,12 @@ onMounted(async () => {
   page.value = pageFromPath();
   applyingBrowserRoute = false;
   await refresh();
-  await loadPageData(page.value);
+  await loadBrowserRoute();
   window.addEventListener("popstate", async () => {
     applyingBrowserRoute = true;
     page.value = pageFromPath();
     applyingBrowserRoute = false;
-    await loadPageData(page.value);
+    await loadBrowserRoute();
   });
 });
 </script>
@@ -3196,7 +3232,7 @@ onMounted(async () => {
                   ><button
                     title="关闭演员详情"
                     aria-label="关闭演员详情"
-                    @click="selectedEmbyActor = null"
+                    @click="closeEmbyActor"
                   >
                     x
                   </button>
