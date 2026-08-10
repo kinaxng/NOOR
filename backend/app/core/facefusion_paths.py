@@ -40,7 +40,10 @@ def resolve_embedded_facefusion_source() -> FaceFusionSource | None:
 
 def normalize_configured_facefusion_dir(value: str | None) -> str:
     configured = (value or "").strip()
-    if configured == LEGACY_EXTERNAL_FACEFUSION_DIR:
+    # An old migration treated the historical external path as an instruction
+    # to use an embedded copy. During recovery there is no embedded source, so
+    # preserve an explicit existing installation instead of making it unusable.
+    if configured == LEGACY_EXTERNAL_FACEFUSION_DIR and resolve_embedded_facefusion_source() is not None:
         return ""
     return configured
 
@@ -133,4 +136,3 @@ def inspect_facefusion_model_dir(source_dir: Path | str, configured_model_dir: s
         return str(native_model_dir), "native_assets_existing"
 
     return str(configured_path), "configured_pending_symlink"
-

@@ -11,9 +11,7 @@ from app.core.runtime_paths import data_path
 # The recovered core configuration bytecode predates FaceFusion. This keeps
 # recovered FaceFusion modules executable until the full settings API returns.
 FACEFUSION_DEFAULTS: dict[str, Any] = {
-    # A trailing slash intentionally keeps the legacy external install explicit.
-    # facefusion_paths reserves the exact legacy string for an embedded source.
-    "facefusion_dir": "/volume1/facefusion/facefusion/",
+    "facefusion_dir": "/volume1/facefusion/facefusion",
     "facefusion_python_path": "",
     "facefusion_model_dir": "/volume1/models/noor/facefusion",
     "facefusion_cache_dir": "/volume1/models/noor-runtime/facefusion/cache",
