@@ -381,10 +381,21 @@ const pagePaths: Record<Page, string> = {
 function pageFromPath(pathname = window.location.pathname): Page {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   if (/^\/actor\/emby\/[^/]+$/.test(normalized)) return "files";
+  if (/^\/javdb\/[^/]+$/.test(normalized)) return "javdb";
   return (
     (Object.entries(pagePaths).find(([, path]) => path === normalized)?.[0] as Page | undefined) ||
     "overview"
   );
+}
+
+function javdbCodeFromPath(pathname = window.location.pathname) {
+  const match = pathname.replace(/\/+$/, "").match(/^\/javdb\/([^/]+)$/);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]).trim().toUpperCase();
+  } catch {
+    return "";
+  }
 }
 
 function embyActorIdFromPath(pathname = window.location.pathname) {
@@ -859,15 +870,27 @@ async function loadJavdb() {
   }
 }
 
-async function openJavdbDetail(item: JavdbItem) {
+async function openJavdbDetail(item: JavdbItem, pushRoute = true) {
+  const code = item.code.trim().toUpperCase();
+  if (!code) return;
+  if (pushRoute) {
+    const path = `/javdb/${encodeURIComponent(code)}`;
+    if (window.location.pathname !== path)
+      window.history.pushState({ javdbCode: code }, "", path);
+  }
   try {
     const result = await pluginAction<{ data: JavdbDetail }>("javdb", "video", {
-      code: item.code,
+      code,
     });
     javdbDetail.value = result.data || null;
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "作品详情加载失败";
   }
+}
+
+function closeJavdbDetail() {
+  javdbDetail.value = null;
+  if (javdbCodeFromPath()) window.history.replaceState({ page: "javdb" }, "", "/javdb");
 }
 
 async function loadMediaLibrary(resetOffset = false) {
@@ -1964,6 +1987,14 @@ async function loadPageData(target: Page) {
 }
 
 async function loadBrowserRoute() {
+  const javdbCode = javdbCodeFromPath();
+  if (javdbCode) {
+    page.value = "javdb";
+    javdbDetail.value = null;
+    await loadJavdb();
+    await openJavdbDetail({ code: javdbCode, title: javdbCode }, false);
+    return;
+  }
   const actorId = embyActorIdFromPath();
   if (actorId) {
     page.value = "files";
@@ -2813,7 +2844,7 @@ onMounted(async () => {
               <button
                 title="关闭详情"
                 aria-label="关闭详情"
-                @click="javdbDetail = null"
+                @click="closeJavdbDetail"
               >
                 x
               </button>
