@@ -59,6 +59,10 @@ history and verified API behavior, while keeping the recovered `.pyc` modules un
   Deletion is blocked unless scan groups are configured, and the media library's
   right-click delete entry resolves only an already scanned hardlink group before it
   presents the same confirmation dialog.
+- `POST /api/webhooks/emby` accepts Emby JSON or text notifications and records a
+  concise event in the system log using the actual request address (or the first
+  `X-Forwarded-For` address). The settings page exposes the URL, copy action,
+  Emby JSON-content-type guidance, and the recent audit log.
 - The surviving actor APIs support Emby actor browsing, mapped multilingual names,
   duplicate detection, movie lookup, and explicitly selected GFriends avatar writes.
   Actor merge, actor deletion, and arbitrary metadata writes have not been recreated
