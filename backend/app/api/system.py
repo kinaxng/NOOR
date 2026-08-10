@@ -8,7 +8,9 @@ import platform
 import threading
 from typing import Any
 
-from fastapi import APIRouter, Query
+import json
+
+from fastapi import APIRouter, HTTPException, Query, Request
 
 router = APIRouter(prefix='/api', tags=['system'])
 
@@ -56,6 +58,61 @@ class SystemLogManager:
 @router.get('/logs')
 async def get_logs(tail: int = Query(200, ge=1, le=1000), cursor: int | None = None):
     return SystemLogManager.get_instance().get_logs(tail=tail, cursor=cursor)
+
+
+def _webhook_source(request: Request) -> str:
+    forwarded = str(request.headers.get('x-forwarded-for') or '').strip()
+    if forwarded:
+        return forwarded.split(',', 1)[0].strip() or 'unknown'
+    return request.client.host if request.client else 'unknown'
+
+
+def _webhook_summary(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return '收到测试或非 JSON 通知'
+    event = str(
+        payload.get('Event')
+        or payload.get('EventName')
+        or payload.get('NotificationType')
+        or payload.get('Type')
+        or '通知'
+    ).strip()
+    item = payload.get('Item') if isinstance(payload.get('Item'), dict) else {}
+    name = str(
+        payload.get('Name')
+        or payload.get('ItemName')
+        or item.get('Name')
+        or ''
+    ).strip()
+    return f'{event}{": " + name if name else ""}'
+
+
+@router.post('/webhooks/emby')
+async def receive_emby_webhook(request: Request):
+    """Accept Emby notification webhooks and retain a concise audit log.
+
+    The recovery media adapter reads Emby live, so a webhook does not need to
+    mutate a local media cache.  Recording the event gives the user a reliable
+    connection test and preserves the real sender address for diagnostics.
+    """
+    body = await request.body()
+    if len(body) > 1024 * 1024:
+        raise HTTPException(status_code=413, detail='Webhook 请求超过 1 MB')
+    payload: object = None
+    if body:
+        try:
+            payload = json.loads(body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            payload = None
+    source = _webhook_source(request)
+    summary = _webhook_summary(payload)
+    SystemLogManager.get_instance().add_log(
+        'info',
+        f'已接收 Emby Webhook：{summary}',
+        source=f'Emby · {source}',
+        event_type=(payload.get('Event') if isinstance(payload, dict) else None),
+    )
+    return {'ok': True, 'message': 'Webhook 已接收', 'source': source, 'summary': summary}
 
 
 @router.get('/system/info')

@@ -112,6 +112,13 @@ type NetworkSettings = {
   pip_mirror: string;
   hf_token: string;
 };
+type SystemLog = {
+  id: number;
+  timestamp: string;
+  level: string;
+  message: string;
+  source: string;
+};
 type MediaLibrary = { id: string; name: string; collection_type?: string };
 type MediaItem = {
   id: string;
@@ -245,6 +252,9 @@ const networkSettings = ref<NetworkSettings>({
 const coreSettingsLoading = ref(false);
 const embySettingsSaving = ref(false);
 const networkSettingsSaving = ref(false);
+const systemLogs = ref<SystemLog[]>([]);
+const systemLogsLoading = ref(false);
+const webhookInstructionsVisible = ref(false);
 const recommendations = ref<Recommendation[]>([]);
 const recommendationMode = ref<"latest" | "full">("latest");
 const javdbItems = ref<JavdbItem[]>([]);
@@ -372,6 +382,10 @@ const filteredActors = computed(() => {
       .toLowerCase()
       .includes(query),
   );
+});
+const embyWebhookUrl = computed(() => {
+  if (typeof window === "undefined") return "/api/webhooks/emby";
+  return `${window.location.origin}/api/webhooks/emby`;
 });
 
 const facefusionSettingLabels: Record<string, string> = {
@@ -603,6 +617,38 @@ async function saveNetworkSettings() {
   } finally {
     networkSettingsSaving.value = false;
   }
+}
+
+async function loadSystemLogs() {
+  systemLogsLoading.value = true;
+  try {
+    const result = await request<{ logs?: SystemLog[] }>("/api/logs?tail=12");
+    systemLogs.value = result.logs || [];
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "系统日志读取失败";
+  } finally {
+    systemLogsLoading.value = false;
+  }
+}
+
+async function copyEmbyWebhookUrl() {
+  try {
+    await navigator.clipboard.writeText(embyWebhookUrl.value);
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = embyWebhookUrl.value;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.append(input);
+    input.select();
+    const copied = document.execCommand("copy");
+    input.remove();
+    if (!copied) {
+      error.value = "复制失败，请手动复制 Webhook 地址";
+      return;
+    }
+  }
+  webhookInstructionsVisible.value = true;
 }
 
 async function pluginAction<T>(
@@ -1922,6 +1968,7 @@ onMounted(refresh);
           @click="
             page = 'settings';
             loadCoreSettings();
+            loadSystemLogs();
             loadMappingStatus();
             loadHardlinkConfig();
             loadFacefusionSettings();
@@ -3280,6 +3327,7 @@ onMounted(refresh);
               @click="
                 loadMappingStatus();
                 loadCoreSettings();
+                loadSystemLogs();
                 loadHardlinkConfig();
                 loadFacefusionSettings();
                 loadWhisperSettings();
@@ -3362,6 +3410,34 @@ onMounted(refresh);
               <button :disabled="networkSettingsSaving" @click="saveNetworkSettings">
                 {{ networkSettingsSaving ? "保存中" : "保存网络设置" }}
               </button>
+            </div>
+          </section>
+          <section class="settings-section">
+            <div class="panel-heading">
+              <div>
+                <h3>Emby Webhook</h3>
+                <small>接收 Emby 的媒体变更或测试通知</small>
+              </div>
+              <button :disabled="systemLogsLoading" @click="loadSystemLogs">
+                刷新日志
+              </button>
+            </div>
+            <div class="webhook-url-row">
+              <code>{{ embyWebhookUrl }}</code>
+              <button @click="copyEmbyWebhookUrl">复制</button>
+            </div>
+            <div v-if="webhookInstructionsVisible" class="webhook-instructions">
+              <p>在 Emby 管理后台的 Webhook 插件中新建通知，并填写上方地址。</p>
+              <p>请求内容类型选择 <code>application/json</code>；发送测试通知后，下方应出现接收日志。</p>
+            </div>
+            <p v-if="systemLogsLoading" class="empty">正在读取系统日志...</p>
+            <div v-else class="system-log-list">
+              <p v-if="!systemLogs.length" class="empty">暂无系统日志</p>
+              <div v-for="entry in systemLogs" :key="entry.id" class="system-log-row">
+                <time>{{ new Date(entry.timestamp).toLocaleString() }}</time>
+                <span>{{ entry.source }}</span>
+                <b>{{ entry.message }}</b>
+              </div>
             </div>
           </section>
           <section class="settings-section">
@@ -4976,6 +5052,66 @@ pre {
   background: #202833;
   color: #dce5ee;
 }
+.webhook-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 14px;
+}
+.webhook-url-row code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #303a47;
+  background: #171c24;
+  color: #c9d4df;
+  padding: 8px 10px;
+}
+.webhook-url-row button {
+  border: 1px solid #3a4655;
+  border-radius: 5px;
+  background: #202833;
+  color: #dce5ee;
+  padding: 7px 11px;
+}
+.webhook-instructions {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 2px solid #168bdf;
+  background: #172331;
+  color: #c7d4e2;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.webhook-instructions p {
+  margin: 2px 0;
+}
+.system-log-list {
+  display: grid;
+  gap: 0;
+  margin-top: 14px;
+  border-top: 1px solid #303a47;
+}
+.system-log-row {
+  display: grid;
+  grid-template-columns: 156px 140px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid #2b3440;
+  font-size: 12px;
+}
+.system-log-row time,
+.system-log-row span {
+  color: #98a6b7;
+}
+.system-log-row b {
+  color: #dce5ee;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .plugin-test-message {
   margin: 14px 0 0;
   color: #aabbd0;
@@ -5155,6 +5291,10 @@ pre {
   }
   .hardlink-settings-row label:first-child {
     grid-column: 1 / -1;
+  }
+  .system-log-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
 }
 </style>
