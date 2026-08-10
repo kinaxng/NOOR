@@ -152,6 +152,12 @@ type FaceFusionSourceImage = {
   path: string;
   size?: number;
 };
+type FaceFusionPreviewMetadata = {
+  frame_total?: number;
+  fps?: number | null;
+  duration?: number | null;
+  is_video?: boolean;
+};
 type LadaChoice = {
   id: string;
   name?: string;
@@ -354,6 +360,10 @@ const facefusionSources = ref<FaceFusionSourceImage[]>([]);
 const selectedFacefusionSourceIds = ref<string[]>([]);
 const facefusionLoading = ref(false);
 const facefusionSubmitting = ref(false);
+const facefusionPreviewLoading = ref(false);
+const facefusionPreviewUrl = ref("");
+const facefusionPreviewMetadata = ref<FaceFusionPreviewMetadata>({});
+const facefusionPreviewFrame = ref(0);
 const facefusionProcessors = ref<string[]>(["face_swapper"]);
 const facefusionProvider = ref("cuda");
 const facefusionSettings = ref<Record<string, string | number>>({});
@@ -519,6 +529,8 @@ const facefusionSettingLabels: Record<string, string> = {
   facefusion_output_image_quality: "图片质量",
   facefusion_output_image_scale: "图片缩放",
   facefusion_temp_frame_format: "临时帧格式",
+  facefusion_preview_mode: "预览模式",
+  facefusion_preview_resolution: "预览分辨率",
   facefusion_log_level: "日志级别",
 };
 const facefusionSettingsGroups = computed(() => {
@@ -590,6 +602,8 @@ const facefusionSettingsGroups = computed(() => {
         "facefusion_output_image_quality",
         "facefusion_output_image_scale",
         "facefusion_temp_frame_format",
+        "facefusion_preview_mode",
+        "facefusion_preview_resolution",
         "facefusion_log_level",
       ],
     },
@@ -1166,25 +1180,88 @@ async function openMediaDeleteMenu(item: MediaItem) {
 }
 
 async function openFacefusion() {
-  if (!selectedMediaItem.value?.path) {
+  const item = selectedMediaItem.value;
+  if (!item?.path) {
     error.value = "当前媒体项目没有可处理的本地文件路径";
     return;
   }
   facefusionOpen.value = true;
   facefusionLoading.value = true;
+  facefusionPreviewUrl.value = "";
+  facefusionPreviewMetadata.value = {};
+  facefusionPreviewFrame.value = 0;
   error.value = "";
   try {
-    const result = await request<{
-      items?: FaceFusionSourceImage[];
-      files?: FaceFusionSourceImage[];
-    }>(
-      "/api/facefusion/source-images",
-    );
+    const [result, metadata] = await Promise.all([
+      request<{
+        items?: FaceFusionSourceImage[];
+        files?: FaceFusionSourceImage[];
+      }>("/api/facefusion/source-images"),
+      fetch("/api/facefusion/preview/metadata", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input_path: item.path }),
+      }).then(async (response) => {
+        if (!response.ok)
+          throw new Error(
+            (await response.text()) || `${response.status} ${response.statusText}`,
+          );
+        return response.json() as Promise<FaceFusionPreviewMetadata>;
+      }),
+    ]);
     facefusionSources.value = result.items || result.files || [];
+    facefusionPreviewMetadata.value = metadata;
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "源脸图片库加载失败";
+    error.value =
+      cause instanceof Error ? cause.message : "换脸面板初始化失败";
   } finally {
     facefusionLoading.value = false;
+  }
+}
+
+function facefusionPreviewSettings() {
+  const sourcePaths = facefusionSources.value
+    .filter((source) => selectedFacefusionSourceIds.value.includes(source.id))
+    .map((source) => source.path);
+  return {
+    source_paths: sourcePaths,
+    processors: facefusionProcessors.value,
+    execution_provider: facefusionProvider.value,
+  };
+}
+
+async function generateFacefusionPreview() {
+  const item = selectedMediaItem.value;
+  if (!item?.path || !selectedFacefusionSourceIds.value.length) return;
+  facefusionPreviewLoading.value = true;
+  error.value = "";
+  try {
+    const response = await fetch("/api/facefusion/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        input_path: item.path,
+        settings: facefusionPreviewSettings(),
+        frame_number: facefusionPreviewFrame.value,
+        preview_mode:
+          String(facefusionSettings.value.facefusion_preview_mode || "default"),
+        preview_resolution: String(
+          facefusionSettings.value.facefusion_preview_resolution || "768x768",
+        ),
+      }),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `${response.status} ${response.statusText}`,
+      );
+    const result = (await response.json()) as { preview_url?: string };
+    facefusionPreviewUrl.value = result.preview_url
+      ? `${result.preview_url}?generated=${Date.now()}`
+      : "";
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "换脸预览生成失败";
+  } finally {
+    facefusionPreviewLoading.value = false;
   }
 }
 
@@ -2841,6 +2918,41 @@ onMounted(async () => {
                   </div></label
                 >
               </div>
+              <section class="facefusion-preview">
+                <div class="facefusion-preview-frame">
+                  <img
+                    v-if="facefusionPreviewUrl"
+                    :src="facefusionPreviewUrl"
+                    alt="换脸预览"
+                  />
+                  <img
+                    v-else-if="selectedMediaItem?.poster_path"
+                    :src="selectedMediaItem.poster_path"
+                    :alt="selectedMediaItem.name"
+                  />
+                  <span v-else>暂无预览画面</span>
+                  <div v-if="facefusionPreviewLoading" class="facefusion-preview-loading">
+                    正在生成预览...
+                  </div>
+                </div>
+                <label
+                  v-if="facefusionPreviewMetadata.frame_total"
+                  class="facefusion-preview-slider"
+                >
+                  <input
+                    v-model.number="facefusionPreviewFrame"
+                    type="range"
+                    min="0"
+                    :max="Math.max(0, (facefusionPreviewMetadata.frame_total || 1) - 1)"
+                    step="1"
+                    :disabled="facefusionPreviewLoading || !selectedFacefusionSourceIds.length"
+                    @change="generateFacefusionPreview"
+                  />
+                  <small
+                    >帧 {{ facefusionPreviewFrame.toLocaleString() }} / {{ Math.max(0, (facefusionPreviewMetadata.frame_total || 1) - 1).toLocaleString() }}</small
+                  >
+                </label>
+              </section>
               <div class="panel-heading facefusion-source-heading">
                 <div>
                   <h3>源脸图片</h3>
@@ -5247,6 +5359,50 @@ pre {
 }
 .facefusion-source-heading {
   margin: 18px 0 10px;
+}
+.facefusion-preview {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+.facefusion-preview-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(360px, 100%);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid #3a4655;
+  border-radius: 5px;
+  background: #121820;
+  color: #8f9bad;
+}
+.facefusion-preview-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.facefusion-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 16, 22, 0.7);
+  color: #e6f2fc;
+  font-size: 13px;
+}
+.facefusion-preview-slider {
+  display: grid;
+  gap: 4px;
+  width: min(360px, 100%);
+}
+.facefusion-preview-slider input {
+  width: 100%;
+  accent-color: #168bdf;
+}
+.facefusion-preview-slider small {
+  color: #98a6b7;
+  font-size: 11px;
 }
 .facefusion-source-heading h3 {
   margin: 0 0 4px;

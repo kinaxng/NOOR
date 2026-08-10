@@ -65,6 +65,8 @@ FACEFUSION_DEFAULTS: dict[str, Any] = {
     "facefusion_output_image_quality": 80,
     "facefusion_output_image_scale": "",
     "facefusion_temp_frame_format": "png",
+    "facefusion_preview_mode": "default",
+    "facefusion_preview_resolution": "768x768",
     "facefusion_log_level": "info",
 }
 
