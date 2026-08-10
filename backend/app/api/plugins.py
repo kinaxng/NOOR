@@ -23,6 +23,10 @@ class PluginActionPayload(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class PluginDownloadPayload(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class ResourceSearchPayload(BaseModel):
     query: dict[str, Any] = Field(default_factory=dict)
     limit_per_plugin: int = Field(24, ge=1, le=100)
@@ -50,6 +54,16 @@ async def get_background_tasks():
 async def search_resources(payload: ResourceSearchPayload):
     groups = await runtime.search_resources(payload.query, limit_per_plugin=payload.limit_per_plugin)
     return {'groups': groups}
+
+
+@router.post('/{plugin_id}/downloads')
+async def submit_plugin_download(plugin_id: str, payload: PluginDownloadPayload):
+    try:
+        return await runtime.submit_download(plugin_id, payload.payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get('/{plugin_id}')
