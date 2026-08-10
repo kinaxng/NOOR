@@ -580,13 +580,18 @@ def _resource_from_javdb_magnet(video: dict[str, Any], magnet: dict[str, Any], i
     title = str(video.get("display_title") or video.get("title") or code or magnet.get("name") or f"{code} #{index + 1}").strip()
     subtitle_parts = [str(x) for x in (magnet.get("size_mb") and f"{magnet.get('size_mb')} MB", magnet.get("date"), magnet.get("site") or "JavDB") if x]
     tags = [str(tag) for tag in (magnet.get("tags") or []) if str(tag or "").strip()]
+    url = str(magnet.get("magnet") or "").strip()
+    requirements = _resource_requirements_from_url(url)
+    compatible_downloaders = ["qbittorrent", "transmission"]
+    if requirements.get("accepts_public_magnet"):
+        compatible_downloaders.insert(0, "xunlei-remote")
     return {
         "id": f"javdb:{code or video.get('id') or 'video'}:{index}",
         "kind": "torrent",
         "query_key": code,
         "title": str(magnet.get("name") or title),
         "subtitle": " · ".join(subtitle_parts),
-        "url": str(magnet.get("magnet") or "").strip(),
+        "url": url,
         "size_bytes": int(magnet.get("size_bytes") or 0),
         "file_count": int(magnet.get("file_count") or 0),
         "tags": tags,
@@ -598,7 +603,9 @@ def _resource_from_javdb_magnet(video: dict[str, Any], magnet: dict[str, Any], i
             "is_cracked": any("破解" in tag for tag in tags),
             "is_private_tracker": False,
         },
-        "requirements": _resource_requirements_from_url(str(magnet.get("magnet") or "")),
+        "requirements": requirements,
+        "compatible_downloaders": compatible_downloaders,
+        "preferred_downloader": "xunlei-remote" if requirements.get("accepts_public_magnet") else "qbittorrent",
         "metadata": {
             "source_plugin": PLUGIN_ID,
             "video_code": code,
