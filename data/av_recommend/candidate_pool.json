@@ -1734,7 +1734,7 @@
       "duration": 130,
       "score": 4.25,
       "ranking": 0,
-      "magnets_count": 2,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -1806,7 +1806,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.806316+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226678+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -2897,7 +2897,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.278343+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227304+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -4413,7 +4413,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.278090+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227255+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -6094,7 +6094,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.308442+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227119+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -6306,7 +6306,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277946+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227058+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -7167,7 +7167,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.308523+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227154+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -7395,7 +7395,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.307702+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226954+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -9025,7 +9025,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598922+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316332+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -10034,7 +10034,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.307924+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226660+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -10097,7 +10097,7 @@
       "duration": 120,
       "score": 0,
       "ranking": 0,
-      "magnets_count": 1,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -10156,10 +10156,15 @@
           "id": "rankings:周榜",
           "label": "周榜",
           "date": "2026-08-09"
+        },
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-09T18:26:04.436883+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226610+00:00",
       "recommendation_source": "rankings:日榜",
       "recommendation_source_label": "日榜",
       "is_today_increment": false,
@@ -10284,7 +10289,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277167+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226695+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -10528,7 +10533,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:37.988321+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227288+00:00",
       "recommendation_source": "rankings:日榜",
       "recommendation_source_label": "日榜",
       "is_today_increment": false,
@@ -10962,7 +10967,7 @@
       "duration": 120,
       "score": 0,
       "ranking": 0,
-      "magnets_count": 2,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -11016,10 +11021,15 @@
           "id": "rankings:日榜",
           "label": "日榜",
           "date": "2026-08-09"
+        },
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-09T18:26:04.437489+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226935+00:00",
       "recommendation_source": "rankings:日榜",
       "recommendation_source_label": "日榜",
       "is_today_increment": false,
@@ -11549,7 +11559,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341466+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242041+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
       "is_today_increment": false,
@@ -11699,7 +11709,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341854+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242190+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
       "is_today_increment": false,
@@ -11803,7 +11813,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342169+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242330+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
       "is_today_increment": false,
@@ -12026,7 +12036,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.438301+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226854+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
       "is_today_increment": false,
@@ -12722,7 +12732,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.807025+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227104+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -13289,7 +13299,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276637+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226886+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -13690,7 +13700,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.807511+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227222+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -13914,7 +13924,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.426190+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226644+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
       "is_today_increment": false,
@@ -14305,7 +14315,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277055+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226988+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -15132,7 +15142,7 @@
       "duration": 116,
       "score": 4.76,
       "ranking": 0,
-      "magnets_count": 2,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -15204,7 +15214,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277245+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226476+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -15682,7 +15692,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.428697+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227088+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
       "is_today_increment": false,
@@ -16185,7 +16195,7 @@
       "duration": 120,
       "score": 4.1,
       "ranking": 0,
-      "magnets_count": 2,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -16252,7 +16262,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277089+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226766+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -16588,7 +16598,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.309830+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316144+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -16691,7 +16701,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597515+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315723+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -16788,7 +16798,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.310679+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242697+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -17232,7 +17242,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.805507+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.241952+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -17342,7 +17352,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341506+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242020+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
       "is_today_increment": false,
@@ -17468,7 +17478,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.310771+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242772+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -17571,7 +17581,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597738+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315824+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -17696,7 +17706,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597704+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315809+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -18176,7 +18186,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597669+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315794+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -18302,7 +18312,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597558+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315744+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -18542,7 +18552,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597772+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315838+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -20311,7 +20321,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598170+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316014+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -20426,7 +20436,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.278683+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242076+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -20940,7 +20950,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597940+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315913+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -21029,7 +21039,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598007+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315942+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -21263,7 +21273,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.805089+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242093+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -21378,7 +21388,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598303+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316072+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -21683,7 +21693,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597441+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315661+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -21781,7 +21791,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597596+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315761+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -21865,7 +21875,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597633+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315778+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -21974,7 +21984,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597806+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315853+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22072,7 +22082,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597839+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315868+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22156,7 +22166,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597873+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315883+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22260,7 +22270,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597906+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315898+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22369,7 +22379,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.597974+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315927+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22467,7 +22477,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598040+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315957+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22588,7 +22598,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598073+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315971+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22698,7 +22708,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598105+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315985+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22819,7 +22829,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598137+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.315999+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -22953,7 +22963,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598203+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316029+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23056,7 +23066,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598237+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316043+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23155,7 +23165,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598270+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316057+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23244,7 +23254,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760852+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584812+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -23419,7 +23429,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598369+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316101+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23529,7 +23539,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598401+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316115+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23628,7 +23638,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598434+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316129+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23732,7 +23742,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598512+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316158+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23830,7 +23840,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598549+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316172+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -23914,7 +23924,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598584+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316186+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24023,7 +24033,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598617+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316201+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24107,7 +24117,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598650+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316216+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24217,7 +24227,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598683+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316230+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24316,7 +24326,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598716+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316245+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24437,7 +24447,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598751+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316260+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24536,7 +24546,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598786+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316274+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24656,7 +24666,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598821+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316288+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24740,7 +24750,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598854+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316303+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24824,7 +24834,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598887+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316318+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -24934,7 +24944,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598957+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316346+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -25032,7 +25042,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.598992+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316361+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -25116,7 +25126,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.599026+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316375+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -25214,7 +25224,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.599061+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316389+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -25313,7 +25323,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.599095+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316404+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -25427,7 +25437,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:41.599127+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.316418+00:00",
       "recommendation_source": "rankings:月榜",
       "recommendation_source_label": "月榜",
       "is_today_increment": false,
@@ -26206,7 +26216,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.756429+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585250+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -26269,7 +26279,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.756507+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585261+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28370,7 +28380,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758079+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584174+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28447,7 +28457,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758148+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584230+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28524,7 +28534,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758215+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584247+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28602,7 +28612,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758282+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584261+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28690,7 +28700,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758351+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584274+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28767,7 +28777,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758419+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584287+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28856,7 +28866,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758508+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584299+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -28934,7 +28944,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758586+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584310+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29012,7 +29022,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758657+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584321+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29075,7 +29085,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758725+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584334+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29153,7 +29163,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758801+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584346+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29216,7 +29226,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758869+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584358+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29293,7 +29303,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.758939+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584370+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29370,7 +29380,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759005+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584381+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29433,7 +29443,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759071+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584407+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29521,7 +29531,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759205+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584418+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29599,7 +29609,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759139+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584430+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29687,7 +29697,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759269+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584441+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29764,7 +29774,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759333+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584451+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29841,7 +29851,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759385+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584462+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -29918,7 +29928,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759424+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584473+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30006,7 +30016,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759464+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584484+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30083,7 +30093,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759510+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584511+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30172,7 +30182,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759550+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584523+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30261,7 +30271,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759589+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584534+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30338,7 +30348,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759630+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584545+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30401,7 +30411,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759693+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584556+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30501,7 +30511,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759736+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584567+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30578,7 +30588,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759776+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584578+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30655,7 +30665,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759814+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584589+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30732,7 +30742,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759888+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584600+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30795,7 +30805,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759929+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584610+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30885,7 +30895,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.759995+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584621+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -30948,7 +30958,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760068+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584632+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31036,7 +31046,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760136+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584642+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31113,7 +31123,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760203+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584653+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31176,7 +31186,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760271+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584680+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31253,7 +31263,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760338+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584692+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31347,7 +31357,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760406+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584704+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31435,7 +31445,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760475+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584716+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31556,7 +31566,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760544+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584727+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31655,7 +31665,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760601+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584740+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31718,7 +31728,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760643+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584752+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31806,7 +31816,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760684+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584765+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31894,7 +31904,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760734+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584777+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -31972,7 +31982,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760775+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584788+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -32071,7 +32081,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760815+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584800+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -32148,7 +32158,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760892+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584824+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -32225,7 +32235,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760932+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584851+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -32288,7 +32298,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.761012+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584863+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -32365,7 +32375,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.760972+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584875+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -32442,7 +32452,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.761052+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584887+00:00",
       "recommendation_source": "videos:完整库 P1",
       "recommendation_source_label": "完整库 P1",
       "is_today_increment": false,
@@ -32516,10 +32526,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275571+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584901+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -32604,10 +32619,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275647+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584915+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -32694,10 +32714,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275700+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584930+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -32782,10 +32807,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275745+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584944+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -32845,10 +32875,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275786+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584958+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -32934,10 +32969,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275825+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584972+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33011,10 +33051,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275867+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584985+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33074,10 +33119,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275909+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.584999+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33151,10 +33201,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275951+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585013+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33214,10 +33269,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.275992+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585026+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33291,10 +33351,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276066+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585054+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33359,10 +33424,15 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276025+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585040+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33755,10 +33825,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276227+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585119+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33843,10 +33918,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276280+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585132+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33906,10 +33986,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276321+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585145+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -33969,10 +34054,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276362+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585159+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -34057,10 +34147,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276404+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585172+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -34134,10 +34229,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276445+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585201+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -34197,10 +34297,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276527+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585214+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -34260,10 +34365,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276487+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585226+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -34348,10 +34458,15 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-09"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276568+00:00",
+      "last_seen_at": "2026-08-10T18:24:49.585239+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -34597,7 +34712,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.278647+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242393+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -34767,7 +34882,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.805136+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242285+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -35392,7 +35507,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.805544+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226870+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -36765,7 +36880,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.806355+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242440+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -37040,7 +37155,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.806571+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226626+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -38037,7 +38152,7 @@
       "number": "SNOS-321",
       "code": "SNOS-321",
       "title": "弱みを握られた元グラドルの水泳部顧問は今日もギリギリ限界の水着で犯●れる 紫堂るい",
-      "origin_title": "",
+      "origin_title": "弱みを握られた元グラドルの水泳部顧問は今日もギリギリ限界の水着で犯●れる 紫堂るい",
       "display_title": "SNOS-321 弱みを握られた元グラドルの水泳部顧問は今日もギリギリ限界の水着で犯●れる 紫堂るい",
       "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F96%2F96QqMR.jpg",
       "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F96%2F96QqMR.jpg",
@@ -38045,10 +38160,10 @@
       "duration": 150,
       "score": 4.89,
       "ranking": 0,
-      "magnets_count": 1,
-      "has_cnsub": false,
-      "play_subtitle": 0,
-      "can_play": false,
+      "magnets_count": 4,
+      "has_cnsub": true,
+      "play_subtitle": 1,
+      "can_play": true,
       "is_cracked": false,
       "library": {
         "in_library": false
@@ -38083,10 +38198,15 @@
           "id": "videos:完整库 P3",
           "label": "完整库 P3",
           "date": "2026-08-09"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.807116+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226554+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -38762,7 +38882,7 @@
       "number": "UMAN-010",
       "code": "UMAN-010",
       "title": "禁断NTR 義父に浮気現場を目撃されて…背徳介護",
-      "origin_title": "",
+      "origin_title": "禁断NTR 義父に浮気現場を目撃されて…背徳介護",
       "display_title": "UMAN-010 禁断NTR 義父に浮気現場を目撃されて…背徳介護",
       "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fdr%2FDRXVdM.jpg",
       "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fdr%2FDRXVdM.jpg",
@@ -38770,7 +38890,7 @@
       "duration": 120,
       "score": 5,
       "ranking": 0,
-      "magnets_count": 1,
+      "magnets_count": 2,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -38803,10 +38923,15 @@
           "id": "videos:完整库 P3",
           "label": "完整库 P3",
           "date": "2026-08-09"
+        },
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.807557+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205629+00:00",
       "recommendation_source": "videos:完整库 P3",
       "recommendation_source_label": "完整库 P3",
       "is_today_increment": false,
@@ -40978,10 +41103,15 @@
           "id": "videos:完整库 P4",
           "label": "完整库 P4",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.308106+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227042+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -43029,7 +43159,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.309287+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242727+00:00",
       "recommendation_source": "videos:完整库 P4",
       "recommendation_source_label": "完整库 P4",
       "is_today_increment": false,
@@ -50328,7 +50458,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:44.857484+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242253+00:00",
       "recommendation_source": "videos:完整库 P5",
       "recommendation_source_label": "完整库 P5",
       "is_today_increment": false,
@@ -50650,7 +50780,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342823+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242561+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
       "is_today_increment": false,
@@ -50948,7 +51078,7 @@
       "number": "CRNX-349",
       "code": "CRNX-349",
       "title": "【4K】ヤリマンしおりの本気食い！！ 我慢できずに素人逆ナンSEX 依本しおり",
-      "origin_title": "",
+      "origin_title": "【4K】ヤリマンしおりの本気食い！！ 我慢できずに素人逆ナンSEX 依本しおり",
       "display_title": "CRNX-349 【4K】ヤリマンしおりの本気食い！！ 我慢できずに素人逆ナンSEX 依本しおり",
       "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fqa%2FqA7eKe.jpg",
       "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fqa%2FqA7eKe.jpg",
@@ -50956,7 +51086,7 @@
       "duration": 61,
       "score": 4.25,
       "ranking": 0,
-      "magnets_count": 1,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -50989,10 +51119,15 @@
           "id": "videos:完整库 P5",
           "label": "完整库 P5",
           "date": "2026-08-09"
+        },
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:27.932182+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205836+00:00",
       "recommendation_source": "videos:完整库 P5",
       "recommendation_source_label": "完整库 P5",
       "is_today_increment": false,
@@ -52999,7 +53134,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:23.757967+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242667+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
       "is_today_increment": false,
@@ -53494,7 +53629,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342549+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242455+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
       "is_today_increment": false,
@@ -53938,7 +54073,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277878+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242237+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -54287,7 +54422,7 @@
       "duration": 180,
       "score": 3.67,
       "ranking": 0,
-      "magnets_count": 2,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -54349,7 +54484,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277844+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205713+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -54578,7 +54713,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277764+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226593+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -54819,7 +54954,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277732+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226919+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -55046,7 +55181,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277700+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227189+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -55265,7 +55400,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277668+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227004+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -55738,7 +55873,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.277635+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226732+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -58028,7 +58163,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:37.987788+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227073+00:00",
       "recommendation_source": "rankings:日榜",
       "recommendation_source_label": "日榜",
       "is_today_increment": false,
@@ -58128,7 +58263,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:37.987845+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227355+00:00",
       "recommendation_source": "rankings:日榜",
       "recommendation_source_label": "日榜",
       "is_today_increment": false,
@@ -58520,7 +58655,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.427165+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226801+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
       "is_today_increment": false,
@@ -58912,7 +59047,7 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276988+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226575+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
       "is_today_increment": false,
@@ -60330,10 +60465,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341670+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242110+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "UMD-1015 パンスト淑女は麗しい パンスト淑女は麗しい UMD-1015",
@@ -60428,10 +60563,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341700+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242125+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "VENX-379 仲良しだと思っていた両親が実はセックスレスで…母は誰にも相談できずに息子の布団にもぐり込む性欲爆発中出し相姦 吉瀬葵 （BOD） 仲良しだと思っていた両親が実はセックスレスで…母は誰にも相談できずに息子の布団にもぐり込む性欲爆発中出し相姦 吉瀬葵 （BOD） VENX-379",
@@ -60538,10 +60673,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341731+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242142+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MURIKURI-013 【FANZA限定】2穴痴●ガチナマ路線 生ヤリしたバレエ女子のアナルも掘って連続W中出し乱交 パンティとチェキ付き 【FANZA限定】2穴痴●ガチナマ路線 生ヤリしたバレエ女子のアナルも掘って連続W中出し乱交 パンティとチェキ付き MURIKURI-013",
@@ -60655,13 +60790,18 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276797+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242157+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "SIRO-5681 揉みしだかれるHカップ！セックスでは持ち前の武器で必ずパイズリご奉仕！興奮しだすとパンツぐっちょり湿らせて、アナルヒクヒクさせてしまう！！ 【初撮り】ネットでAV応募→AV体験撮影 2599 揉みしだかれるHカップ！セックスでは持ち前の武器で必ずパイズリご奉仕！興奮しだすとパンツぐっちょり湿らせて、アナルヒクヒクさせてしまう！！ 【初撮り】ネットでAV応募→AV体験撮影 2599 SIRO-5681",
@@ -61043,10 +61183,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341792+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242174+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MIDV-999 死ぬほど嫌いなセクハラ上司に弱み握られ出張相部屋NTR 朝陽が二回昇ってもネチネチ続く絶倫粘着ピストンの中出し10発に屈服イキした私… 新ありな （ブルーレイディスク） 生写真3枚付き 死ぬほど嫌いなセクハラ上司に弱み握られ出張相部屋NTR 朝陽が二回昇ってもネチネチ続く絶倫粘着ピストンの中出し10発に屈服イキした私… 新ありな （ブルーレイディスク） 生写真3枚付き MIDV-999",
@@ -61186,10 +61326,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341885+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242205+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "PPPD-298 強迫人中出的巨乳逆癡漢 巡 強迫人中出的巨乳逆癡漢 巡 PPPD-298",
@@ -61295,10 +61435,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.341915+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242221+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "JJDA-026 隱瞞老公讓無職無收入巨根小叔搞上的美人大嫂 橘梅亞莉 隱瞞老公讓無職無收入巨根小叔搞上的美人大嫂 橘梅亞莉 JJDA-026",
@@ -61379,10 +61519,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342139+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242315+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "START-587 【種付け兄妹】 幼い頃に両親を亡くした俺は紹介された妹の婚約者に嫉妬し永遠に一緒になるために中出し寝取りセックスを繰り返した 一宮るい 【種付け兄妹】 幼い頃に両親を亡くした俺は紹介された妹の婚約者に嫉妬し永遠に一緒になるために中出し寝取りセックスを繰り返した 一宮るい START-587",
@@ -61502,10 +61642,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342199+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242345+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MAAN-1186 【この女、仕事の為なら何でもする。】マゾ気質なJDガルバ店員上納w学費のため太客棒に店でホテルでご奉仕ヌキヌキww「ダメっ！ダメれす！」とかいう割にデカパイ見せつけアヘイキ堕ちで説得力皆無www:Case.16_nagi（22） 葉月なぎさ 【この女、仕事の為なら何でもする。】マゾ気質なJDガルバ店員上納w学費のため太客棒に店でホテルでご奉仕ヌキヌキww「ダメっ！ダメれす！」とかいう割にデカパイ見せつけアヘイキ堕ちで説得力皆無www:Case.16_nagi（22） 葉月なぎさ MAAN-1186",
@@ -61611,10 +61751,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342259+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242360+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MIDV-671 義父の大好物は私のチクビでした… 10年間オッパイの成長を観察し続ける異常性欲オヤジに乳首イキするまで悪戯された私… 宮下玲奈 （ブルーレイディスク） 生写真3枚付き 義父の大好物は私のチクビでした… 10年間オッパイの成長を観察し続ける異常性欲オヤジに乳首イキするまで悪戯された私… 宮下玲奈 （ブルーレイディスク） 生写真3枚付き MIDV-671",
@@ -61720,10 +61860,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342289+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242377+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "JNT-123 【搾精する甘サドビッチ妻】【美巨乳×中出し×スレンダー】【大人の背徳ランジェリー性交】清楚に見えて経験人数100人越えのビッチ妻登場www イッてもイッてもまだまだ精子が欲しい…とチ◯ポに縋りつくド淫乱で甘サドな奥さんと背徳性交【結婚7年目 坂本さん 29歳】 #39 【搾精する甘サドビッチ妻】【美巨乳×中出し×スレンダー】【大人の背徳ランジェリー性交】清楚に見えて経験人数100人越えのビッチ妻登場www イッてもイッてもまだまだ精子が欲しい…とチ◯ポに縋りつくド淫乱で甘サドな奥さんと背徳性交【結婚7年目 坂本さん 29歳】 #39 JNT-123",
@@ -61852,10 +61992,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342438+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242408+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "START-611 スワッピング淫習村 嫁いだ先は、嫁を交換し合うNTRが娯楽の変態集落でした 柴崎はる スワッピング淫習村 嫁いだ先は、嫁を交換し合うNTRが娯楽の変態集落でした 柴崎はる START-611",
@@ -61950,10 +62090,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342610+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242470+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "START-613 「ここでえっちなことしちゃう..？」声だけでちんちんを元気にしてくれる小悪魔ボイスの松永あかりに耳元で甘々囁き誘惑されてこっそりいちゃいちゃ4シチュエ ーション【バイノーラル録音＆完全主観】 「ここでえっちなことしちゃう..？」声だけでちんちんを元気にしてくれる小悪魔ボイスの松永あかりに耳元で甘々囁き誘惑されてこっそりいちゃいちゃ4シチュエ ーション【バイノーラル録音＆完全主観】 START-613",
@@ -62048,10 +62188,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342670+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242510+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "JYMA-037 欲求不満の美乳尻妻が男達を喰いまくる 性欲モンスター肉感ボディ猥褻マゾ妻 痴女＆マゾの性癖を持つドスケベ奥様 森沢かな （ブルーレイディスク） （BOD） 欲求不満の美乳尻妻が男達を喰いまくる 性欲モンスター肉感ボディ猥褻マゾ妻 痴女＆マゾの性癖を持つドスケベ奥様 森沢かな （ブルーレイディスク） （BOD） JYMA-037",
@@ -62179,10 +62319,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342792+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242546+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "START-609 人生で初めてのノンストップ絶頂大乱交 合計19発ぶっかけ解禁SP 七瀬温 人生で初めてのノンストップ絶頂大乱交 合計19発ぶっかけ解禁SP 七瀬温 START-609",
@@ -62277,10 +62417,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342914+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242593+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "GVG-907 嶽母淫亂巨乳真欠幹 柏木舞子 嶽母淫亂巨乳真欠幹 柏木舞子 GVG-907",
@@ -62386,10 +62526,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:39.342946+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242607+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "NACT-163 「会社じゃあんなに真面目なのにな」尊敬する先輩と猛暑の新居に閉じ込められ、隠していた性玩具を開けられた清楚OLが、羞恥オナニーから中出し懇願するまで堕ちた汗だく密室SEX 逢沢みゆ 生写真とパンティ付き 「会社じゃあんなに真面目なのにな」尊敬する先輩と猛暑の新居に閉じ込められ、隠していた性玩具を開けられた清楚OLが、羞恥オナニーから中出し懇願するまで堕ちた汗だく密室SEX 逢沢みゆ 生写真とパンティ付き NACT-163",
@@ -62507,10 +62647,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:23.757859+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242622+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "RCTD-308 妄想道具究極進化系列 好色小鬼拿到超能力者腰帶盡情惡作劇 妄想道具究極進化系列 好色小鬼拿到超能力者腰帶盡情惡作劇 RCTD-308",
@@ -62591,10 +62731,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:23.757894+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242636+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "PPPD-646 爆奶砲榨精內射專用按摩店 藤咲愛倫 爆奶砲榨精內射專用按摩店 藤咲愛倫 PPPD-646",
@@ -62675,10 +62815,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:23.758004+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242681+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "NACT-166 自分の娘がどストライク！？単身赴任から帰り、久しぶりに会った娘が俺好みの女になっていた！ 糸井瑠花 生写真とパンティ付き 自分の娘がどストライク！？単身赴任から帰り、久しぶりに会った娘が俺好みの女になっていた！ 糸井瑠花 生写真とパンティ付き NACT-166",
@@ -62759,10 +62899,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:23.758077+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242712+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "NACT-164 ［ドSギャルに買われた僕］「ほら自分の精子の味はどう？」ドSギャルに首輪をハメられ、ローファー足舐めから快楽堕ちしていく完全飼育記録 希咲那奈 生写真とパンティ付き ［ドSギャルに買われた僕］「ほら自分の精子の味はどう？」ドSギャルに首輪をハメられ、ローファー足舐めから快楽堕ちしていく完全飼育記録 希咲那奈 生写真とパンティ付き NACT-164",
@@ -62857,10 +62997,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:23.758151+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242742+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "VRPRD-200 【VR】【8K】ガニマタ素股メイド風俗！ムレた長い脚でチ●ポをねっとり包み込んで何度も抜きまくり生脚よりもエロい！！小野坂ゆいか 【VR】【8K】ガニマタ素股メイド風俗！ムレた長い脚でチ●ポをねっとり包み込んで何度も抜きまくり生脚よりもエロい！！小野坂ゆいか VRPRD-200",
@@ -62951,10 +63091,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T00:26:23.758222+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242756+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MY-1070 横山恵奈2 横山恵奈2 MY-1070",
@@ -63035,10 +63175,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-09T18:26:06.526188+00:00",
+      "last_seen_at": "2026-08-10T18:24:47.242786+00:00",
       "recommendation_source": "rankings:周榜",
       "recommendation_source_label": "周榜",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "WAAA-672 【FANZA限定】義妹でモデルのりんちゃんがメモリアルヌードの代役になったボクのギン勃ちチ○ポに目をつけて愛液ダラダラ滴らせながら5分休憩の度に何度も誘惑してくる…！ チェキセット 【FANZA限定】義妹でモデルのりんちゃんがメモリアルヌードの代役になったボクのギン勃ちチ○ポに目をつけて愛液ダラダラ滴らせながら5分休憩の度に何度も誘惑してくる…！ チェキセット WAAA-672",
@@ -64316,13 +64456,18 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276674+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226751+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "JURA-208 初撮り人妻ドキュメント第二章 樋口沙良 初撮り人妻ドキュメント第二章 樋口沙良 JURA-208",
@@ -64646,13 +64791,18 @@
           "id": "videos:完整库 P2",
           "label": "完整库 P2",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:43.276601+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226972+00:00",
       "recommendation_source": "videos:完整库 P2",
       "recommendation_source_label": "完整库 P2",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "HEZ-913 福祉課職員の人妻は訪問先の住人と一度だけ中出しを受け入れて不倫をした話 最上一花 福祉課職員の人妻は訪問先の住人と一度だけ中出しを受け入れて不倫をした話 最上一花 HEZ-913",
@@ -64836,7 +64986,7 @@
       "duration": 62,
       "score": 0,
       "ranking": 0,
-      "magnets_count": 1,
+      "magnets_count": 2,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -64876,10 +65026,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.421711+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205679+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "081026_100 ネトラレ ~喉奥と膣奥同時に突き挿さる快感に溺れる人妻~ ネトラレ ~喉奥と膣奥同時に突き挿さる快感に溺れる人妻~ 081026_100",
@@ -65255,10 +65405,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.422564+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205935+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "IPVR-384 【VR】職場では偉そうに見下してくる大ッ嫌いな後輩が格安デリヘルで副業とか草 「他の客にも許したことないのに…許して」 脅して強引に無許可チ●ポねじ込み屈辱イキってどんな気持ちだい？ さくらわかな 【VR】職場では偉そうに見下してくる大ッ嫌いな後輩が格安デリヘルで副業とか草 「他の客にも許したことないのに…許して」 脅して強引に無許可チ●ポねじ込み屈辱イキってどんな気持ちだい？ さくらわかな IPVR-384",
@@ -65499,10 +65649,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.423714+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205950+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "CEMD-875 演技演出一切なし！照れて惚れるハメ撮り丸一日デート12 百崎きっか 演技演出一切なし！照れて惚れるハメ撮り丸一日デート12 百崎きっか CEMD-875",
@@ -65823,10 +65973,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.424370+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205965+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "AVSA-451 訪問介助、高額バイトの罠！J系ゴミ部屋で脅迫されて処女喪失 イケメン推し活で金欠美少女にホームレス寸前の加齢臭ジジィたちがわからせ肉棒調教 花守夏歩 訪問介助、高額バイトの罠！J系ゴミ部屋で脅迫されて処女喪失 イケメン推し活で金欠美少女にホームレス寸前の加齢臭ジジィたちがわからせ肉棒調教 花守夏歩 AVSA-451",
@@ -66230,10 +66380,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.425333+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.205981+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "GARA-025 絶叫凌●レ●プ 強●される人妻 同居する義父に犯●れ悶えた隙だらけの新婚妻。夫には言えない粘着質凌●姦 逢沢みゆ 絶叫凌●レ●プ 強●される人妻 同居する義父に犯●れ悶えた隙だらけの新婚妻。夫には言えない粘着質凌●姦 逢沢みゆ GARA-025",
@@ -66623,10 +66773,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.426231+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206013+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "EKDV-825 童貞は幼なじみに奪われました…初めて彼女のできた童貞のボクのためセックスの練習相手になってくれた美人でかわいい幼なじみ 青坂あおい 童貞は幼なじみに奪われました…初めて彼女のできた童貞のボクのためセックスの練習相手になってくれた美人でかわいい幼なじみ 青坂あおい EKDV-825",
@@ -67021,10 +67171,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.427203+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206045+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "GMA-100 緊縛調教妻 クズ夫の借金で肩代わりに差し出された妻。開発されていく身体と崩れていく理性 山口玲子 緊縛調教妻 クズ夫の借金で肩代わりに差し出された妻。開発されていく身体と崩れていく理性 山口玲子 GMA-100",
@@ -67377,10 +67527,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.427946+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206060+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "GMA-101 緊縛調教妻 死んだ義母の代わりに義父に縛られた妻。無理矢理の縄調教に開花していくマゾ性癖 紬りお 緊縛調教妻 死んだ義母の代わりに義父に縛られた妻。無理矢理の縄調教に開花していくマゾ性癖 紬りお GMA-101",
@@ -67714,10 +67864,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.428733+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206091+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "GVH-869 【FANZA限定】痴女られパイズリおっぱいOLハーレム 相部屋になったムッチリ爆乳W女上司と悶絶逆3PハーレムSEX 西村ニーナ/夕季ちとせ 西村ニーナさんのチェキセット 【FANZA限定】痴女られパイズリおっぱいOLハーレム 相部屋になったムッチリ爆乳W女上司と悶絶逆3PハーレムSEX 西村ニーナ/夕季ちとせ 西村ニーナさんのチェキセット GVH-869",
@@ -68120,10 +68270,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.429809+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206106+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "HSODA-129 「私のおっきく育った乳首を見てぇ！」クリトリス超えの感度で変態的にデカい育乳首されたチクニー狂い無口女 「私のおっきく育った乳首を見てぇ！」クリトリス超えの感度で変態的にデカい育乳首されたチクニー狂い無口女 HSODA-129",
@@ -68487,10 +68637,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.430610+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206121+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "HUNTC-445 男友達の際どいマッサージで徹底的に焦らされた結果、快楽に負けて寝取られてしまった若妻たち。マッサージ師をしている男友達に施術してもらったら、気持ち良すぎてクセになっちゃって…。でもこれ以上はダメなのに、夫には内緒で彼のサロンを訪ねてしまった！ 男友達の際どいマッサージで徹底的に焦らされた結果、快楽に負けて寝取られてしまった若妻たち。マッサージ師をしている男友達に施術してもらったら、気持ち良すぎてクセになっちゃって…。でもこれ以上はダメなのに、夫には内緒で彼のサロンを訪ねてしまった！ HUNTC-445",
@@ -68798,10 +68948,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.431788+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206136+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "HUNTC-551 朝起きたら部屋に浴衣がはだけた女上司！しかもいつも横柄で説教ばかりなのになぜか甘えてきて…。出張先の宿が女上司と相部屋に！この日も説教ばかりされたボクは酒を飲みまくって泥●！そして朝起きると…隣には浴衣から胸やお尻がポロリした女上司！？ 朝起きたら部屋に浴衣がはだけた女上司！しかもいつも横柄で説教ばかりなのになぜか甘えてきて…。出張先の宿が女上司と相部屋に！この日も説教ばかりされたボクは酒を飲みまくって泥●！そして朝起きると…隣には浴衣から胸やお尻がポロリした女上司！？ HUNTC-551",
@@ -69098,10 +69248,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.432906+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206151+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "HUNTC-600 「こうやって優しくシコシコしてあげるから！」「ヤバい？出るんじゃない？」「ちょっとダメだって！」真面目な勉強会がエッチなおちん○ん勉強会に！2 「こうやって優しくシコシコしてあげるから！」「ヤバい？出るんじゃない？」「ちょっとダメだって！」真面目な勉強会がエッチなおちん○ん勉強会に！2 HUNTC-600",
@@ -69390,13 +69540,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.433714+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227239+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MKMP-744 【FANZA限定】早漏撲滅！ヌキ打ち暴発ゲーム いか～にも早漏M男君を神ワザ女優 ’乙アリス’ が逆ナン！！巧みなテクに我慢できたら…さらに暴発確定な杭打ちピストンで連続射精Special 生写真付き 【FANZA限定】早漏撲滅！ヌキ打ち暴発ゲーム いか～にも早漏M男君を神ワザ女優 ’乙アリス’ が逆ナン！！巧みなテクに我慢できたら…さらに暴発確定な杭打ちピストンで連続射精Special 生写真付き MKMP-744",
@@ -69715,7 +69870,7 @@
       "duration": 175,
       "score": 0,
       "ranking": 0,
-      "magnets_count": 2,
+      "magnets_count": 3,
       "has_cnsub": false,
       "play_subtitle": 0,
       "can_play": false,
@@ -69769,13 +69924,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.434733+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227323+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MKMP-745 【FANZA限定】Wボーイッシュ巨乳女子ハメ撮りレズキャンプ 一泊二日の失恋キャンプで幼馴染の君とただひたすらに愛し抜いた二人きりのメモリー動画 弥生みづき 宍戸里帆 生写真付き 【FANZA限定】Wボーイッシュ巨乳女子ハメ撮りレズキャンプ 一泊二日の失恋キャンプで幼馴染の君とただひたすらに愛し抜いた二人きりのメモリー動画 弥生みづき 宍戸里帆 生写真付き MKMP-745",
@@ -70142,13 +70302,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.435647+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227206+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MMKZ-165 【FANZA限定】お姉さんの巨尻が猥褻過ぎて秒殺で悩殺！！ 吉澤友貴 チェキ付き 【FANZA限定】お姉さんの巨尻が猥褻過ぎて秒殺で悩殺！！ 吉澤友貴 チェキ付き MMKZ-165",
@@ -70494,10 +70659,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.436229+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206196+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MOND-307 憧れの女上司と 北村海智 憧れの女上司と 北村海智 MOND-307",
@@ -70872,10 +71037,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.436648+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206211+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "NGHJ-070 男子生徒が放課後シコりまくる憧れの大人の女性！学校一の美人女教師に性教育の授業と称し生パンスト素股に挑戦してもらいました！？一日中教壇に立ちムッレムレの生パンストにデカチンが擦れて赤面発情！パンストはエッチな汁まみれ！生で擦り合わせて連続中出しSEX！ 男子生徒が放課後シコりまくる憧れの大人の女性！学校一の美人女教師に性教育の授業と称し生パンスト素股に挑戦してもらいました！？一日中教壇に立ちムッレムレの生パンストにデカチンが擦れて赤面発情！パンストはエッチな汁まみれ！生で擦り合わせて連続中出しSEX！ NGHJ-070",
@@ -71176,10 +71341,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.437766+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206226+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "NSFS-501 新・償い24 罪の代償は夫への裏切りと背徳… 美丘さとみ （BOD） 新・償い24 罪の代償は夫への裏切りと背徳… 美丘さとみ （BOD） NSFS-501",
@@ -71550,10 +71715,10 @@
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.438404+00:00",
+      "last_seen_at": "2026-08-10T18:24:45.206288+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "TNOZ-049 2穴同時【アナル＆マ●コ】挿入SEX田舎在住の美少女レイヤーの素直を利用して初体験の肛門セックスから6P乱交で全穴ブチ込まれるまでドキュメント巨編2本立て 2穴同時【アナル＆マ●コ】挿入SEX田舎在住の美少女レイヤーの素直を利用して初体験の肛門セックスから6P乱交で全穴ブチ込まれるまでドキュメント巨編2本立て TNOZ-049",
@@ -73135,13 +73300,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.443338+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226838+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "ABF-120 完全主観×鬼イカせ イッても止めない激FUCK！！！追撃5.000ピストン 八掛うみ【MGSだけのおまけ映像付き+25分】 完全主観×鬼イカせ イッても止めない激FUCK！！！追撃5.000ピストン 八掛うみ【MGSだけのおまけ映像付き+25分】 ABF-120",
@@ -73662,13 +73832,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.444063+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227173+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "ABF-142 高嶺の花のパティシエ女子と、草食系スイーツ男子が出会って滅茶苦茶ヤリまくって… 憧れだったあの娘とワンルーム同棲生活。 八掛うみ【MGSだけのおまけ映像付き+30分】 高嶺の花のパティシエ女子と、草食系スイーツ男子が出会って滅茶苦茶ヤリまくって… 憧れだったあの娘とワンルーム同棲生活。 八掛うみ【MGSだけのおまけ映像付き+30分】 ABF-142",
@@ -74178,13 +74353,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.444912+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227273+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "ABF-183 甘サドちくびッ痴 八掛うみ【限定特典映像45分付き】 甘サドちくびッ痴 八掛うみ【限定特典映像45分付き】 ABF-183",
@@ -74758,13 +74938,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.445825+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226820+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "ABP-061 一泊二日、美少女完全予約制。 第二章 ～桜ここみの場合～ 一泊二日、美少女完全予約制。 第二章 ～桜ここみの場合～ ABP-061",
@@ -74842,13 +75027,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.446386+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227137+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "ADN-375 有著遠距離戀愛中的女友、卻還是與憧憬的女上司沉溺性愛。 希島愛理 有著遠距離戀愛中的女友、卻還是與憧憬的女上司沉溺性愛。 希島愛理 ADN-375",
@@ -74940,13 +75130,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.447020+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.226786+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "ADN-388 被性騷擾課長持續社內調教墮落的變態土味OL 三宮椿 被性騷擾課長持續社內調教墮落的變態土味OL 三宮椿 ADN-388",
@@ -75038,13 +75233,18 @@
           "id": "latest:最新更新",
           "label": "最新更新",
           "date": "2026-08-10"
+        },
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:36.447514+00:00",
+      "last_seen_at": "2026-08-10T18:24:46.227341+00:00",
       "recommendation_source": "latest:最新更新",
       "recommendation_source_label": "最新更新",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "ADN-485 人妻秘書と出張先のホテルで濃厚不倫セックスに溺れた。 希島あいり 人妻秘書と出張先のホテルで濃厚不倫セックスに溺れた。 希島あいり ADN-485",
@@ -75640,13 +75840,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.216690+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909177+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "DKDN-036 月刊 絲襪迷 Vol.30 OL×美腳×打腳槍 月刊 絲襪迷 Vol.30 OL×美腳×打腳槍 DKDN-036",
@@ -75715,13 +75920,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.217697+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909212+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "SNIS-496 美乳がチラリ 葵つかさ 美乳がチラリ 葵つかさ SNIS-496",
@@ -75790,13 +76000,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.218432+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909228+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "SDDE-575 性慾處理幹砲醫院 17 新設高潮科 超高感度護士特集！ 性慾處理幹砲醫院 17 新設高潮科 超高感度護士特集！ SDDE-575",
@@ -75865,13 +76080,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.219450+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909243+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "FOCS-043 某大手軟體熱門預約的出租女友登場！從自卑男子到超S男都能淫蕩濃厚服務實限願望的理想女友 花狩舞 某大手軟體熱門預約的出租女友登場！從自卑男子到超S男都能淫蕩濃厚服務實限願望的理想女友 花狩舞 FOCS-043",
@@ -75926,13 +76146,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.220534+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909257+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "IPX-900 胸部晃動家庭教師 以笑臉與巨乳提升幹勁與性愛成績 肉棒融化般超舒服中出課程性愛 櫻空桃 胸部晃動家庭教師 以笑臉與巨乳提升幹勁與性愛成績 肉棒融化般超舒服中出課程性愛 櫻空桃 IPX-900",
@@ -76035,13 +76260,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.221596+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909271+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "SOAN-095 肛門カウンセリング学校に馴染めない生意気生徒を浣腸折●無麻酔による2穴拡張挿入いたします 被験番号:011美雲そら 肛門カウンセリング学校に馴染めない生意気生徒を浣腸折●無麻酔による2穴拡張挿入いたします 被験番号:011美雲そら SOAN-095",
@@ -76110,13 +76340,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.222809+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909285+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "JUQ-636 電撃移籍 Madonna専属 庵ひめか 人工知能《AI》を越えた、天然最強LカップBODY―。 電撃移籍 Madonna専属 庵ひめか 人工知能《AI》を越えた、天然最強LカップBODY―。 JUQ-636",
@@ -76171,13 +76406,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.223810+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909300+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MDON-050 配信限定 マドンナ専属女優の『リアル』解禁。SEASON2 MADOOOON！！！！ 椎名ゆな ハメ撮り 配信限定 マドンナ専属女優の『リアル』解禁。SEASON2 MADOOOON！！！！ 椎名ゆな ハメ撮り MDON-050",
@@ -76232,13 +76472,18 @@
           "id": "recommend:JavDB推荐",
           "label": "JavDB推荐",
           "date": "2026-08-10"
+        },
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
         }
       ],
       "last_seen_date": "2026-08-10",
-      "last_seen_at": "2026-08-10T06:26:42.224818+00:00",
+      "last_seen_at": "2026-08-10T18:24:48.909314+00:00",
       "recommendation_source": "recommend:JavDB推荐",
       "recommendation_source_label": "JavDB推荐",
-      "is_today_increment": true,
+      "is_today_increment": false,
       "title_profile": {
         "version": 2,
         "raw": "MDBK-357 全身ぬるぬるの快楽で男を責め続ける！！性欲を最高潮に満たす超高級マットヘルス 全身ぬるぬるの快楽で男を責め続ける！！性欲を最高潮に満たす超高級マットヘルス MDBK-357",
@@ -76338,23 +76583,1256 @@
       "title_traits": [
         "家庭亲属"
       ]
+    },
+    "080926-01": {
+      "id": "kKr8rP",
+      "number": "080926_01",
+      "code": "080926_01",
+      "title": "お祭りへ出かける前に浴衣でエッチしちゃった vol.2",
+      "origin_title": "お祭りへ出かける前に浴衣でエッチしちゃった vol.2",
+      "display_title": "080926_01 お祭りへ出かける前に浴衣でエッチしちゃった vol.2",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fkk%2FkKr8rP.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fkk%2FkKr8rP.jpg",
+      "release_date": "2026-08-09",
+      "duration": 60,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fkk%2FkKr8rP.jpg",
+        "duration": 60,
+        "has_cnsub": false,
+        "has_preview_images": false,
+        "has_preview_video": false,
+        "id": "kKr8rP",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "080926_01",
+        "origin_title": "お祭りへ出かける前に浴衣でエッチしちゃった vol.2",
+        "play_subtitle": 0,
+        "preview_images": [],
+        "ranking": 0,
+        "release_date": "2026-08-09",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fkk%2FkKr8rP.jpg",
+        "title": "お祭りへ出かける前に浴衣でエッチしちゃった vol.2",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205467+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205527+00:00",
+      "is_today_increment": false
+    },
+    "YMDD-504": {
+      "id": "gy30x7",
+      "number": "YMDD-504",
+      "code": "YMDD-504",
+      "title": "【FANZA限定】マチアプ生ナカちゃん！スクールカースト最上位の格上女子を半中半外ハメ倒し攻略セックス タオルと生写真セット",
+      "origin_title": "【FANZA限定】マチアプ生ナカちゃん！スクールカースト最上位の格上女子を半中半外ハメ倒し攻略セックス タオルと生写真セット",
+      "display_title": "YMDD-504 【FANZA限定】マチアプ生ナカちゃん！スクールカースト最上位の格上女子を半中半外ハメ倒し攻略セックス タオルと生写真セット",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fgy%2Fgy30x7.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fgy%2Fgy30x7.jpg",
+      "release_date": "2026-08-05",
+      "duration": 170,
+      "score": 4.17,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fgy%2Fgy30x7.jpg",
+        "duration": 170,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "gy30x7",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "YMDD-504",
+        "origin_title": "【FANZA限定】マチアプ生ナカちゃん！スクールカースト最上位の格上女子を半中半外ハメ倒し攻略セックス タオルと生写真セット",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy30x7_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-05",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fgy%2Fgy30x7.jpg",
+        "title": "【FANZA限定】マチアプ生ナカちゃん！スクールカースト最上位の格上女子を半中半外ハメ倒し攻略セックス タオルと生写真セット",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205549+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        },
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:49.584499+00:00",
+      "is_today_increment": false
+    },
+    "HBAD-739": {
+      "id": "kKrRVY",
+      "number": "HBAD-739",
+      "code": "HBAD-739",
+      "title": "セフレの真面目でいいなり爆乳OLの部屋におしかけて皆でヤリまくってます 葛西すず",
+      "origin_title": "セフレの真面目でいいなり爆乳OLの部屋におしかけて皆でヤリまくってます 葛西すず",
+      "display_title": "HBAD-739 セフレの真面目でいいなり爆乳OLの部屋におしかけて皆でヤリまくってます 葛西すず",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fkk%2FkKrRVY.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fkk%2FkKrRVY.jpg",
+      "release_date": "2026-08-06",
+      "duration": 116,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 2,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fkk%2FkKrRVY.jpg",
+        "duration": 116,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "kKrRVY",
+        "magnets_count": 2,
+        "new_magnets": true,
+        "number": "HBAD-739",
+        "origin_title": "セフレの真面目でいいなり爆乳OLの部屋におしかけて皆でヤリまくってます 葛西すず",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fkk%2FkKrRVY_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-06",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fkk%2FkKrRVY.jpg",
+        "title": "セフレの真面目でいいなり爆乳OLの部屋におしかけて皆でヤリまくってます 葛西すず",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205572+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205579+00:00",
+      "is_today_increment": false
+    },
+    "URVRSP-597": {
+      "id": "gy3kKq",
+      "number": "URVRSP-597",
+      "code": "URVRSP-597",
+      "title": "【VR】【8K】アイドルを目指す幼顔J● 芦田希空",
+      "origin_title": "【VR】【8K】アイドルを目指す幼顔J● 芦田希空",
+      "display_title": "URVRSP-597 【VR】【8K】アイドルを目指す幼顔J● 芦田希空",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fgy%2Fgy3kKq.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fgy%2Fgy3kKq.jpg",
+      "release_date": "2026-08-07",
+      "duration": 95,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fgy%2Fgy3kKq.jpg",
+        "duration": 95,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "gy3kKq",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "URVRSP-597",
+        "origin_title": "【VR】【8K】アイドルを目指す幼顔J● 芦田希空",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fgy%2Fgy3kKq_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-07",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fgy%2Fgy3kKq.jpg",
+        "title": "【VR】【8K】アイドルを目指す幼顔J● 芦田希空",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205588+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205594+00:00",
+      "is_today_increment": false
+    },
+    "ROYD-345": {
+      "id": "4DEdQa",
+      "number": "ROYD-345",
+      "code": "ROYD-345",
+      "title": "毎日泊まりに来る彼氏持ちの女友達から無自覚に誘惑され、勇気を出せず生殺し状態になった僕。 宇流木さらら",
+      "origin_title": "毎日泊まりに来る彼氏持ちの女友達から無自覚に誘惑され、勇気を出せず生殺し状態になった僕。 宇流木さらら",
+      "display_title": "ROYD-345 毎日泊まりに来る彼氏持ちの女友達から無自覚に誘惑され、勇気を出せず生殺し状態になった僕。 宇流木さらら",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F4d%2F4DEdQa.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F4d%2F4DEdQa.jpg",
+      "release_date": "2026-08-11",
+      "duration": 150,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 3,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F4d%2F4DEdQa.jpg",
+        "duration": 150,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "4DEdQa",
+        "magnets_count": 3,
+        "new_magnets": true,
+        "number": "ROYD-345",
+        "origin_title": "毎日泊まりに来る彼氏持ちの女友達から無自覚に誘惑され、勇気を出せず生殺し状態になった僕。 宇流木さらら",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F4d%2F4DEdQa_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-11",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F4d%2F4DEdQa.jpg",
+        "title": "毎日泊まりに来る彼氏持ちの女友達から無自覚に誘惑され、勇気を出せず生殺し状態になった僕。 宇流木さらら",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205638+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205645+00:00",
+      "is_today_increment": false
+    },
+    "FWAY-099": {
+      "id": "BzXgG4",
+      "number": "FWAY-099",
+      "code": "FWAY-099",
+      "title": "【FANZA限定】それじゃあ、もういっかい 八木奈々 チェキセット",
+      "origin_title": "【FANZA限定】それじゃあ、もういっかい 八木奈々 チェキセット",
+      "display_title": "FWAY-099 【FANZA限定】それじゃあ、もういっかい 八木奈々 チェキセット",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fbz%2FBzXgG4.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fbz%2FBzXgG4.jpg",
+      "release_date": "2026-08-12",
+      "duration": 110,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 2,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fbz%2FBzXgG4.jpg",
+        "duration": 110,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "BzXgG4",
+        "magnets_count": 2,
+        "new_magnets": true,
+        "number": "FWAY-099",
+        "origin_title": "【FANZA限定】それじゃあ、もういっかい 八木奈々 チェキセット",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fbz%2FBzXgG4_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-12",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fbz%2FBzXgG4.jpg",
+        "title": "【FANZA限定】それじゃあ、もういっかい 八木奈々 チェキセット",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205652+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205658+00:00",
+      "is_today_increment": false
+    },
+    "GEBB-053": {
+      "id": "Wwz1PR",
+      "number": "GEBB-053",
+      "code": "GEBB-053",
+      "title": "マッサージで勃起したチ○ポにおま○こを擦り続けて布越し2センチ挿入で誘惑する癒やしのエステティシャン2",
+      "origin_title": "マッサージで勃起したチ○ポにおま○こを擦り続けて布越し2センチ挿入で誘惑する癒やしのエステティシャン2",
+      "display_title": "GEBB-053 マッサージで勃起したチ○ポにおま○こを擦り続けて布越し2センチ挿入で誘惑する癒やしのエステティシャン2",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fww%2FWwz1PR.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fww%2FWwz1PR.jpg",
+      "release_date": "2026-08-04",
+      "duration": 160,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fww%2FWwz1PR.jpg",
+        "duration": 160,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "Wwz1PR",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "GEBB-053",
+        "origin_title": "マッサージで勃起したチ○ポにおま○こを擦り続けて布越し2センチ挿入で誘惑する癒やしのエステティシャン2",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fww%2FWwz1PR_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-04",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fww%2FWwz1PR.jpg",
+        "title": "マッサージで勃起したチ○ポにおま○こを擦り続けて布越し2センチ挿入で誘惑する癒やしのエステティシャン2",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205689+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205695+00:00",
+      "is_today_increment": false
+    },
+    "APNS-418": {
+      "id": "DRXVxK",
+      "number": "APNS-418",
+      "code": "APNS-418",
+      "title": "「中出しシて…おじちゃん…」 帰省してきた姪っ子の美乳 めばえた秘所を悪戯され…中出し孕ませ懐妊 竹内咲奈",
+      "origin_title": "「中出しシて…おじちゃん…」 帰省してきた姪っ子の美乳 めばえた秘所を悪戯され…中出し孕ませ懐妊 竹内咲奈",
+      "display_title": "APNS-418 「中出しシて…おじちゃん…」 帰省してきた姪っ子の美乳 めばえた秘所を悪戯され…中出し孕ませ懐妊 竹内咲奈",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fdr%2FDRXVxK.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fdr%2FDRXVxK.jpg",
+      "release_date": "2026-08-11",
+      "duration": 110,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 3,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fdr%2FDRXVxK.jpg",
+        "duration": 110,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": true,
+        "id": "DRXVxK",
+        "magnets_count": 3,
+        "new_magnets": true,
+        "number": "APNS-418",
+        "origin_title": "「中出しシて…おじちゃん…」 帰省してきた姪っ子の美乳 めばえた秘所を悪戯され…中出し孕ませ懐妊 竹内咲奈",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRXVxK_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-11",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fdr%2FDRXVxK.jpg",
+        "title": "「中出しシて…おじちゃん…」 帰省してきた姪っ子の美乳 めばえた秘所を悪戯され…中出し孕ませ懐妊 竹内咲奈",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205721+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205728+00:00",
+      "is_today_increment": false
+    },
+    "TUSHY.2026.08.09": {
+      "id": "qA7BJP",
+      "number": "TUSHY.2026.08.09",
+      "code": "TUSHY.2026.08.09",
+      "title": "Petite Beauty Goes Anal",
+      "origin_title": "Petite Beauty Goes Anal",
+      "display_title": "TUSHY.2026.08.09 Petite Beauty Goes Anal",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fqa%2FqA7BJP.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fqa%2FqA7BJP.jpg",
+      "release_date": "2026-08-09",
+      "duration": 43,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fqa%2FqA7BJP.jpg",
+        "duration": 43,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "qA7BJP",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "Tushy.2026.08.09",
+        "origin_title": "Petite Beauty Goes Anal",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fqa%2FqA7BJP_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-09",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fqa%2FqA7BJP.jpg",
+        "title": "Petite Beauty Goes Anal",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205772+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205778+00:00",
+      "is_today_increment": false
+    },
+    "BLACKEDRAW.2026.08.09": {
+      "id": "P9mA29",
+      "number": "BLACKEDRAW.2026.08.09",
+      "code": "BLACKEDRAW.2026.08.09",
+      "title": "Tight Blondies First Time Raw",
+      "origin_title": "Tight Blondies First Time Raw",
+      "display_title": "BLACKEDRAW.2026.08.09 Tight Blondies First Time Raw",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fp9%2FP9mA29.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fp9%2FP9mA29.jpg",
+      "release_date": "2026-08-09",
+      "duration": 29,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 2,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fp9%2FP9mA29.jpg",
+        "duration": 29,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "P9mA29",
+        "magnets_count": 2,
+        "new_magnets": true,
+        "number": "Blackedraw.2026.08.09",
+        "origin_title": "Tight Blondies First Time Raw",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fp9%2FP9mA29_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-09",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fp9%2FP9mA29.jpg",
+        "title": "Tight Blondies First Time Raw",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205784+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205790+00:00",
+      "is_today_increment": false
+    },
+    "080626-100": {
+      "id": "z4Z0vz",
+      "number": "080626_100",
+      "code": "080626_100",
+      "title": "女性が喜ぶ舌使いを目指す大人のクンニ育成",
+      "origin_title": "女性が喜ぶ舌使いを目指す大人のクンニ育成",
+      "display_title": "080626_100 女性が喜ぶ舌使いを目指す大人のクンニ育成",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fz4%2Fz4Z0vz.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fz4%2Fz4Z0vz.jpg",
+      "release_date": "2026-08-06",
+      "duration": 79,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 2,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fz4%2Fz4Z0vz.jpg",
+        "duration": 79,
+        "has_cnsub": false,
+        "has_preview_images": false,
+        "has_preview_video": true,
+        "id": "z4Z0vz",
+        "magnets_count": 2,
+        "new_magnets": true,
+        "number": "080626_100",
+        "origin_title": "女性が喜ぶ舌使いを目指す大人のクンニ育成",
+        "play_subtitle": 0,
+        "preview_images": [],
+        "ranking": 0,
+        "release_date": "2026-08-06",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fz4%2Fz4Z0vz.jpg",
+        "title": "女性が喜ぶ舌使いを目指す大人のクンニ育成",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205796+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205802+00:00",
+      "is_today_increment": false
+    },
+    "SCPX-560": {
+      "id": "DRP3kJ",
+      "number": "SCPX-560",
+      "code": "SCPX-560",
+      "title": "母と息子の朝勃ち〇ポ",
+      "origin_title": "母と息子の朝勃ち〇ポ",
+      "display_title": "SCPX-560 母と息子の朝勃ち〇ポ",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fdr%2FDRP3kJ.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fdr%2FDRP3kJ.jpg",
+      "release_date": "2026-07-28",
+      "duration": 148,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fdr%2FDRP3kJ.jpg",
+        "duration": 148,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": true,
+        "id": "DRP3kJ",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "SCPX-560",
+        "origin_title": "母と息子の朝勃ち〇ポ",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fdr%2FDRP3kJ_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-07-28",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fdr%2FDRP3kJ.jpg",
+        "title": "母と息子の朝勃ち〇ポ",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205811+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205817+00:00",
+      "is_today_increment": false
+    },
+    "NHDTC-235": {
+      "id": "ZNzrw6",
+      "number": "NHDTC-235",
+      "code": "NHDTC-235",
+      "title": "彼氏チ○ポを座席の隙間手コキでこっそり発射させ声我慢SEXで中出しまでさせる寝取り好きお姉さん 夜行バス逆NTR 巴ひかりさんの紙パンティとチェキ付き",
+      "origin_title": "彼氏チ○ポを座席の隙間手コキでこっそり発射させ声我慢SEXで中出しまでさせる寝取り好きお姉さん 夜行バス逆NTR 巴ひかりさんの紙パンティとチェキ付き",
+      "display_title": "NHDTC-235 彼氏チ○ポを座席の隙間手コキでこっそり発射させ声我慢SEXで中出しまでさせる寝取り好きお姉さん 夜行バス逆NTR 巴ひかりさんの紙パンティとチェキ付き",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fzn%2FZNzrw6.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fzn%2FZNzrw6.jpg",
+      "release_date": "2026-08-06",
+      "duration": 180,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fzn%2FZNzrw6.jpg",
+        "duration": 180,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "ZNzrw6",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "NHDTC-235",
+        "origin_title": "彼氏チ○ポを座席の隙間手コキでこっそり発射させ声我慢SEXで中出しまでさせる寝取り好きお姉さん 夜行バス逆NTR 巴ひかりさんの紙パンティとチェキ付き",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Fzn%2FZNzrw6_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-06",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fzn%2FZNzrw6.jpg",
+        "title": "彼氏チ○ポを座席の隙間手コキでこっそり発射させ声我慢SEXで中出しまでさせる寝取り好きお姉さん 夜行バス逆NTR 巴ひかりさんの紙パンティとチェキ付き",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:45.205843+00:00",
+      "source_tags": [
+        {
+          "id": "latest:最新更新",
+          "label": "最新更新",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:45.205850+00:00",
+      "is_today_increment": false
+    },
+    "RBD-772": {
+      "id": "5Emz6",
+      "number": "RBD-772",
+      "code": "RBD-772",
+      "title": "自分よりも若くて誰もが憧れる女上司をダメ社員の俺が全部汚してやる！ 松下紗栄子",
+      "origin_title": "自分よりも若くて誰もが憧れる女上司をダメ社員の俺が全部汚してやる！ 松下紗栄子",
+      "display_title": "RBD-772 自分よりも若くて誰もが憧れる女上司をダメ社員の俺が全部汚してやる！ 松下紗栄子",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F5e%2F5Emz6.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F5e%2F5Emz6.jpg",
+      "release_date": "2016-05-07",
+      "duration": 120,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 26,
+      "has_cnsub": true,
+      "play_subtitle": 1,
+      "can_play": true,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": true,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F5e%2F5Emz6.jpg",
+        "duration": 120,
+        "has_cnsub": true,
+        "has_preview_images": true,
+        "has_preview_video": true,
+        "id": "5Emz6",
+        "magnets_count": 26,
+        "new_magnets": true,
+        "number": "RBD-772",
+        "origin_title": "自分よりも若くて誰もが憧れる女上司をダメ社員の俺が全部汚してやる！ 松下紗栄子",
+        "play_subtitle": 1,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2F5e%2F5Emz6_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2016-05-07",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F5e%2F5Emz6.jpg",
+        "title": "自分よりも若くて誰もが憧れる女上司をダメ社員の俺が全部汚してやる！ 松下紗栄子",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:46.226704+00:00",
+      "source_tags": [
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:46.226713+00:00",
+      "is_today_increment": false
+    },
+    "T38-069": {
+      "id": "EbOxZd",
+      "number": "T38-069",
+      "code": "T38-069",
+      "title": "大富豪に買われた美少女わいせつ社交界",
+      "origin_title": "大富豪に買われた美少女わいせつ社交界",
+      "display_title": "T38-069 大富豪に買われた美少女わいせつ社交界",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Feb%2FEbOxZd.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Feb%2FEbOxZd.jpg",
+      "release_date": "2026-08-27",
+      "duration": 158,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 1,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "can_play": false,
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Feb%2FEbOxZd.jpg",
+        "duration": 158,
+        "has_cnsub": false,
+        "has_preview_images": true,
+        "has_preview_video": false,
+        "id": "EbOxZd",
+        "magnets_count": 1,
+        "new_magnets": true,
+        "number": "T38-069",
+        "origin_title": "大富豪に買われた美少女わいせつ社交界",
+        "play_subtitle": 0,
+        "preview_images": [
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_l_1.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_s_1.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_l_2.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_s_2.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_l_3.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_s_3.jpg"
+          },
+          {
+            "large_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_l_4.jpg",
+            "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsamples%2Feb%2FEbOxZd_s_4.jpg"
+          }
+        ],
+        "ranking": 0,
+        "release_date": "2026-08-27",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Feb%2FEbOxZd.jpg",
+        "title": "大富豪に買われた美少女わいせつ社交界",
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:46.226894+00:00",
+      "source_tags": [
+        {
+          "id": "rankings:日榜",
+          "label": "日榜",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:46.226901+00:00",
+      "is_today_increment": false
+    },
+    "MD0338": {
+      "id": "Yw3rXp",
+      "number": "MD0338",
+      "code": "MD0338",
+      "title": "肉棒教训继母与阿姨 反被两女调教榨乾精液",
+      "origin_title": "肉棒教训继母与阿姨 反被两女调教榨乾精液",
+      "display_title": "MD0338 肉棒教训继母与阿姨 反被两女调教榨乾精液",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fyw%2FYw3rXp.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fyw%2FYw3rXp.jpg",
+      "release_date": "2025-01-27",
+      "duration": 44,
+      "score": "4.34",
+      "ranking": 0,
+      "magnets_count": 0,
+      "has_cnsub": false,
+      "play_subtitle": 0,
+      "can_play": true,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "number": "MD0338",
+        "score": "4.34",
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fyw%2FYw3rXp.jpg",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fyw%2FYw3rXp.jpg",
+        "id": "Yw3rXp",
+        "can_play": true,
+        "title": "肉棒教训继母与阿姨 反被两女调教榨乾精液",
+        "release_date": "2025-01-27",
+        "origin_title": "肉棒教训继母与阿姨 反被两女调教榨乾精液",
+        "duration": 44,
+        "watched_count": 101,
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:48.909322+00:00",
+      "source_tags": [
+        {
+          "id": "recommend:JavDB 推荐",
+          "label": "JavDB 推荐",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:48.909328+00:00",
+      "is_today_increment": false
+    },
+    "FC2-1844862": {
+      "id": "3OX50",
+      "number": "FC2-1844862",
+      "code": "FC2-1844862",
+      "title": "【無修正】桜〇こ     隣人のゴミ部屋で異臭中年おやじに抜かずの 連撃中出し46発で孕まされた制服女子の末路…",
+      "origin_title": "",
+      "display_title": "FC2-1844862 【無修正】桜〇こ     隣人のゴミ部屋で異臭中年おやじに抜かずの 連撃中出し46発で孕まされた制服女子の末路…",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F3o%2F3OX50.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F3o%2F3OX50.jpg",
+      "release_date": "2021-05-31",
+      "duration": 111,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 0,
+      "has_cnsub": true,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "code": "FC2-1844862",
+        "video_id": "3OX50",
+        "title": "【無修正】桜〇こ     隣人のゴミ部屋で異臭中年おやじに抜かずの 連撃中出し46発で孕まされた制服女子の末路…",
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F3o%2F3OX50.jpg",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F3o%2F3OX50.jpg",
+        "date": "2021-05-31",
+        "duration": 111,
+        "maker": "FC2USER242246UBI",
+        "score": 0,
+        "user_score": 0,
+        "magnet_count": 0,
+        "has_subtitle": true,
+        "has_magnet_subtitle": false,
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:49.585061+00:00",
+      "source_tags": [
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:49.585068+00:00",
+      "is_today_increment": false
+    },
+    "FC2-2201147": {
+      "id": "DgqK4",
+      "number": "FC2-2201147",
+      "code": "FC2-2201147",
+      "title": "[モザイク破壊] 松本ichika 隣人のゴミ部屋で異臭中年おやじに抜かずの連撃中出し32発で孕まされた制服女子の末路…",
+      "origin_title": "",
+      "display_title": "FC2-2201147 [モザイク破壊] 松本ichika 隣人のゴミ部屋で異臭中年おやじに抜かずの連撃中出し32発で孕まされた制服女子の末路…",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fdg%2FDgqK4.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fdg%2FDgqK4.jpg",
+      "release_date": "2021-09-14",
+      "duration": 155,
+      "score": 5,
+      "ranking": 0,
+      "magnets_count": 0,
+      "has_cnsub": true,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "code": "FC2-2201147",
+        "video_id": "DgqK4",
+        "title": "[モザイク破壊] 松本ichika 隣人のゴミ部屋で異臭中年おやじに抜かずの連撃中出し32発で孕まされた制服女子の末路…",
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2Fdg%2FDgqK4.jpg",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2Fdg%2FDgqK4.jpg",
+        "date": "2021-09-14",
+        "duration": 155,
+        "maker": "FC2USER359321JLB",
+        "score": 5,
+        "user_score": 0,
+        "magnet_count": 0,
+        "has_subtitle": true,
+        "has_magnet_subtitle": false,
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:49.585075+00:00",
+      "source_tags": [
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:49.585095+00:00",
+      "is_today_increment": false
+    },
+    "FC2-1810990": {
+      "id": "0awM7",
+      "number": "FC2-1810990",
+      "code": "FC2-1810990",
+      "title": "【無×流出】〇moこ　隣人のゴミ部屋で異臭中年おやじに抜かずの連撃中出し46発で孕まされた制服女子の末路… 。　※数量限定",
+      "origin_title": "",
+      "display_title": "FC2-1810990 【無×流出】〇moこ　隣人のゴミ部屋で異臭中年おやじに抜かずの連撃中出し46発で孕まされた制服女子の末路… 。　※数量限定",
+      "cover_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F0a%2F0awM7.jpg",
+      "thumb_url": "http://192.168.31.10:9090/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F0a%2F0awM7.jpg",
+      "release_date": "2021-05-10",
+      "duration": 113,
+      "score": 0,
+      "ranking": 0,
+      "magnets_count": 0,
+      "has_cnsub": true,
+      "play_subtitle": 0,
+      "can_play": false,
+      "is_cracked": false,
+      "library": {
+        "in_library": false
+      },
+      "raw": {
+        "code": "FC2-1810990",
+        "video_id": "0awM7",
+        "title": "【無×流出】〇moこ　隣人のゴミ部屋で異臭中年おやじに抜かずの連撃中出し46発で孕まされた制服女子の末路… 。　※数量限定",
+        "cover_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fcovers%2F0a%2F0awM7.jpg",
+        "thumb_url": "/api/image?url=https%3A%2F%2Ftp.spfcas.com%2Frhe951l4q%2Fsmall_covers%2F0a%2F0awM7.jpg",
+        "date": "2021-05-10",
+        "duration": 113,
+        "maker": "FC2USER815037MNB",
+        "score": 0,
+        "user_score": 0,
+        "magnet_count": 0,
+        "has_subtitle": true,
+        "has_magnet_subtitle": false,
+        "library": {
+          "in_library": false
+        }
+      },
+      "first_seen_at": "2026-08-10T18:24:49.585100+00:00",
+      "source_tags": [
+        {
+          "id": "videos:完整库 P1",
+          "label": "完整库 P1",
+          "date": "2026-08-11"
+        }
+      ],
+      "last_seen_at": "2026-08-10T18:24:49.585104+00:00",
+      "is_today_increment": false
     }
   },
-  "updated_at": "2026-08-10T06:27:03.130079+00:00",
+  "updated_at": "2026-08-10T18:24:49.648924+00:00",
   "last_full_scan": {
-    "pages": 5,
-    "at": "2026-08-10T06:27:03.129892+00:00",
-    "scanned": 589,
-    "added": 48,
-    "updated": 541,
-    "detail_updated": 33,
+    "at": "2026-08-10T18:24:49.648792+00:00",
+    "pages": 1,
+    "scanned": 285,
+    "added": 19,
+    "updated": 266,
     "warnings": []
   },
   "background": {
     "running": false,
-    "started_at": "2026-08-10T06:26:34.301054+00:00",
+    "started_at": "2026-08-10T18:24:43.448201+00:00",
     "last_error": "",
-    "finished_at": "2026-08-10T06:27:03.129931+00:00",
+    "finished_at": "2026-08-10T18:24:49.648817+00:00",
     "last_added": 48,
     "last_scanned": 589,
     "last_detail_updated": 33

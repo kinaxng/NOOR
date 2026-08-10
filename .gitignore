@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
 backend/noor.db
+data/plugins_config.json
 frontend/node_modules/
 frontend/dist/
