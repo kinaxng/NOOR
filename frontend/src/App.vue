@@ -929,6 +929,19 @@ async function loadRecommendations() {
   recommendationPool.value = data.pool || {};
 }
 
+async function openRecommendations() {
+  page.value = "recommendations";
+  loading.value = true;
+  error.value = "";
+  try {
+    await loadRecommendations();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "推荐加载失败";
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function setRecommendationMode(mode: "latest" | "full") {
   recommendationMode.value = mode;
   loading.value = true;
@@ -2192,7 +2205,12 @@ async function refresh() {
         request<{ jobs: Job[] }>("/api/jobs"),
         request<{ items: Plugin[] }>("/api/plugins"),
         request<Record<string, unknown>>("/api/settings"),
-        pluginAction<{ items: Recommendation[] }>(
+        pluginAction<{
+          items: Recommendation[];
+          total?: number;
+          stats?: RecommendationStats;
+          pool?: { total?: number; today_increment?: number };
+        }>(
           "av-recommend",
           "recommendations",
           { limit: 48, source_mode: recommendationMode.value },
@@ -2203,6 +2221,9 @@ async function refresh() {
     plugins.value = pluginData.items || [];
     applyCoreSettings(settingsData);
     recommendations.value = recommendationData.items || [];
+    recommendationTotal.value = Number(recommendationData.total || 0);
+    recommendationStats.value = recommendationData.stats || {};
+    recommendationPool.value = recommendationData.pool || {};
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "无法连接 NOOR 后端";
     healthy.value = false;
@@ -2213,6 +2234,7 @@ async function refresh() {
 
 async function loadPageData(target: Page) {
   if (target === "library") await loadMediaLibrary();
+  else if (target === "recommendations") await openRecommendations();
   else if (target === "javdb") await loadJavdb();
   else if (target === "actors") await loadActors();
   else if (target === "subscriptions") await openSubscriptions();
@@ -2304,7 +2326,7 @@ onMounted(async () => {
         </button>
         <button
           :class="{ active: page === 'recommendations' }"
-          @click="page = 'recommendations'"
+          @click="openRecommendations"
         >
           推荐
         </button>
