@@ -20,9 +20,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import PROJECT_ROOT, get_settings
+from app.core.models import JobCreate, JobResponse
+from app.core.facefusion_defaults import facefusion_settings
 from app.core.facefusion_paths import build_facefusion_python_env, resolve_facefusion_model_dir, resolve_facefusion_python, resolve_facefusion_source
 from app.pipeline.facefusion.preview import generate_facefusion_preview
 from app.pipeline.facefusion.runner import _build_env, _execution_providers, _split_words
+from app.tasks.manager import job_manager
 
 
 router = APIRouter(prefix="/api/facefusion", tags=["facefusion"])
@@ -60,9 +63,20 @@ class FaceFusionDeepSwapperDownloadRequest(BaseModel):
     model_id: str
 
 
+class FaceFusionJobRequest(JobCreate):
+    """A normal NOOR job with an explicit FaceFusion queue destination."""
+
+    model_config = ConfigDict(extra="allow")
+
+
 def _facefusion_setting(name: str, default: Any = "") -> Any:
     """Keep FaceFusion endpoints usable with pre-FaceFusion Settings bytecode."""
-    return getattr(get_settings(), name, default)
+    return getattr(facefusion_settings(get_settings()), name, default)
+
+
+@router.post("/jobs", response_model=JobResponse)
+async def create_facefusion_job(job_data: FaceFusionJobRequest):
+    return await job_manager.enqueue_facefusion(job_data)
 
 
 def _preview_root() -> Path:
@@ -124,7 +138,7 @@ def _known_deep_swapper_model_ids() -> list[str]:
 
 def _deep_swapper_builtin_paths(model_id: str) -> tuple[Path, Path]:
     scope, name = _split_builtin_model_id(model_id)
-    source = resolve_facefusion_source(get_settings().facefusion_dir)
+    source = resolve_facefusion_source(facefusion_settings(get_settings()).facefusion_dir)
     model_root = source.source_dir / ".assets" / "models" / scope
     return model_root / f"{name}.dfm", model_root / f"{name}.hash"
 
@@ -288,7 +302,7 @@ def _stable_reference_faces_key(payload: dict[str, Any]) -> str:
 
 
 def _build_reference_face_cli_args(input_path: str, job_settings: dict[str, Any], frame_number: int) -> tuple[list[str], str, dict[str, str]]:
-    settings = get_settings()
+    settings = facefusion_settings(get_settings())
     configured_dir = job_settings.get("facefusion_dir")
     if configured_dir is None:
         configured_dir = settings.facefusion_dir

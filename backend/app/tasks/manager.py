@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.core.database import async_session_maker
 from app.core.models import Job, JobCreate, JobResponse
+from app.pipeline.facefusion.runner import run_facefusion_restoration
 from app.pipeline.lada.runner import run_lada_restoration
 from app.tasks.manager_helpers import append_log_line, build_lada_output_path, log_file_path, read_log_lines, utcnow_naive
 
@@ -85,6 +86,9 @@ class JobManager:
     async def enqueue_translate_srt(self, job_data: JobCreate) -> JobResponse:
         return await self.create_job(job_data, job_type='translate-srt')
 
+    async def enqueue_facefusion(self, job_data: JobCreate) -> JobResponse:
+        return await self.create_job(job_data, job_type='facefusion_restore')
+
     async def get_job(self, job_id: str) -> JobResponse | None:
         async with async_session_maker() as session:
             job = await session.get(Job, job_id)
@@ -98,6 +102,9 @@ class JobManager:
             result = await session.execute(statement.order_by(Job.created_at.desc()).limit(max(1, min(limit, 1000))))
             return [self._response(job) for job in result.scalars().all()]
 
+    async def get_logs(self, job_id: str) -> list[str]:
+        return read_log_lines(job_id)
+
     async def delete_job(self, job_id: str) -> bool:
         async with async_session_maker() as session:
             job = await session.get(Job, job_id)
@@ -108,7 +115,7 @@ class JobManager:
             await session.delete(job)
             await session.commit()
         try:
-            log_file_path(job_id).unlink(missing_ok=True)
+            Path(log_file_path(job_id)).unlink(missing_ok=True)
         except OSError:
             pass
         return True
@@ -223,6 +230,8 @@ class JobManager:
                 await self._run_whisper(job_id, input_path, settings, cancel_event)
             elif job_type == 'translate-srt':
                 await self._run_translation(job_id, settings)
+            elif job_type == 'facefusion_restore':
+                await self._run_facefusion(job_id, input_path, settings, cancel_event)
             else:
                 raise RuntimeError(f'不支持的任务类型: {job_type}')
         except asyncio.CancelledError:
@@ -260,6 +269,51 @@ class JobManager:
         target = source.with_name(f'{source.stem}.{settings.get("target_lang", "zh")}.srt')
         target.write_text('\n'.join(lines) + '\n', encoding='utf-8')
         await self._complete(job_id, str(target))
+
+    async def _run_facefusion(self, job_id: str, input_path: str, settings: dict, cancel_event: asyncio.Event) -> None:
+        source = Path(input_path)
+        if not source.is_file():
+            raise RuntimeError(f'输入文件不存在: {input_path}')
+        configured_output_dir = str(settings.get('output_dir') or '').strip()
+        output_dir = Path(configured_output_dir) if configured_output_dir else source.parent
+        output_path = output_dir / f'{source.stem}.facefusion{source.suffix}'
+        progress_queue: asyncio.Queue = asyncio.Queue()
+        runner = asyncio.create_task(
+            run_facefusion_restoration(
+                job_id,
+                input_path,
+                str(output_path),
+                settings,
+                progress_queue,
+                cancel_event,
+            )
+        )
+        while not runner.done():
+            try:
+                update = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+            except asyncio.TimeoutError:
+                continue
+            await self._consume_facefusion_update(job_id, update)
+        while not progress_queue.empty():
+            await self._consume_facefusion_update(job_id, progress_queue.get_nowait())
+        success = await runner
+        if cancel_event.is_set():
+            await self.cancel_job(job_id)
+            return
+        if not success:
+            raise RuntimeError('FaceFusion 处理失败')
+        if not output_path.is_file():
+            raise RuntimeError(f'FaceFusion 未产生输出文件: {output_path}')
+        await self._complete(job_id, str(output_path), {'processor': 'facefusion'})
+
+    async def _consume_facefusion_update(self, job_id: str, update: Any) -> None:
+        if not isinstance(update, dict):
+            return
+        if update.get('type') == 'log':
+            await self._log(job_id, str(update.get('line') or ''))
+            return
+        if update.get('type') == 'progress':
+            await self._progress(job_id, int(update.get('progress', 0)), update.get('detail') or update.get('message'))
 
     async def _complete(self, job_id: str, output_path: str, metadata: dict | None = None) -> None:
         job = await self._set_state(job_id, status='completed', progress=100, detail='任务完成', output_path=output_path, result_metadata=metadata)

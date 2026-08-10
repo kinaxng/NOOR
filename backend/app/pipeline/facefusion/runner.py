@@ -16,6 +16,7 @@ from app.core.facefusion_paths import (
     resolve_facefusion_source,
 )
 from app.core.config import get_settings
+from app.core.facefusion_defaults import facefusion_settings
 from app.core.runtime_paths import ensure_directory
 from app.tasks.job_phases import get_phase_label
 
@@ -115,17 +116,17 @@ def _overall_for_phase(stage: str, pct: int) -> tuple[int, str, int]:
 
 
 def _execution_providers(job_settings: dict) -> list[str]:
-    settings = get_settings()
+    settings = facefusion_settings(get_settings())
     return _split_words(job_settings.get("execution_provider", settings.facefusion_execution_provider), [])
 
 
 def _system_memory_limit(job_settings: dict) -> int:
-    settings = get_settings()
+    settings = facefusion_settings(get_settings())
     return int(job_settings.get("system_memory_limit", settings.facefusion_system_memory_limit) or 0)
 
 
 def _build_command(input_path: str, output_path: str, job_settings: dict) -> tuple[list[str], str, dict[str, str], str, str, str, str]:
-    settings = get_settings()
+    settings = facefusion_settings(get_settings())
     configured_dir = job_settings.get("facefusion_dir")
     if configured_dir is None:
         configured_dir = settings.facefusion_dir
