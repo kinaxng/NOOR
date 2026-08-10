@@ -86,6 +86,17 @@ type HardlinkGroup = {
   status?: string;
   entries?: Array<{ source_path?: string; hardlink_paths?: string[] }>;
 };
+type HardlinkDeletePreview = {
+  message?: string;
+  detail?: string;
+  deleted_files?: string[];
+  deleted_dirs?: string[];
+  removed_files?: string[];
+  removed_dirs?: string[];
+  skipped_files?: string[];
+  errors?: string[];
+  [key: string]: unknown;
+};
 type MediaLibrary = { id: string; name: string; collection_type?: string };
 type MediaItem = {
   id: string;
@@ -216,6 +227,10 @@ const actorMovies = ref<JavdbItem[]>([]);
 const fileTab = ref<"hardlinks" | "actor-management">("hardlinks");
 const hardlinkGroups = ref<HardlinkGroup[]>([]);
 const hardlinksLoading = ref(false);
+const hardlinkDeleteGroup = ref<HardlinkGroup | null>(null);
+const hardlinkDeletePreview = ref<HardlinkDeletePreview | null>(null);
+const hardlinkDeleteLoading = ref(false);
+const hardlinkDeleting = ref(false);
 const embyActors = ref<EmbyActor[]>([]);
 const embyActorsTotal = ref(0);
 const embyActorsLoading = ref(false);
@@ -1337,6 +1352,72 @@ async function loadHardlinks() {
     error.value = cause instanceof Error ? cause.message : "硬链接列表加载失败";
   } finally {
     hardlinksLoading.value = false;
+  }
+}
+
+async function hardlinkDeleteRequest(
+  group: HardlinkGroup,
+  dryRun: boolean,
+): Promise<HardlinkDeletePreview> {
+  const response = await fetch("/api/media-library/hardlinks/delete-group", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      code: group.code,
+      entries: group.entries || [],
+      dry_run: dryRun,
+    }),
+  });
+  if (!response.ok)
+    throw new Error(
+      (await response.text()) || `${response.status} ${response.statusText}`,
+    );
+  return (await response.json()) as HardlinkDeletePreview;
+}
+
+function previewPaths(preview: HardlinkDeletePreview | null, keys: string[]) {
+  if (!preview) return [];
+  return keys.flatMap((key) => {
+    const value = preview[key];
+    return Array.isArray(value)
+      ? value.filter((path): path is string => typeof path === "string")
+      : [];
+  });
+}
+
+async function openHardlinkDelete(group: HardlinkGroup) {
+  hardlinkDeleteGroup.value = group;
+  hardlinkDeletePreview.value = null;
+  hardlinkDeleteLoading.value = true;
+  error.value = "";
+  try {
+    hardlinkDeletePreview.value = await hardlinkDeleteRequest(group, true);
+  } catch (cause) {
+    hardlinkDeleteGroup.value = null;
+    error.value = cause instanceof Error ? cause.message : "删除预演失败";
+  } finally {
+    hardlinkDeleteLoading.value = false;
+  }
+}
+
+function closeHardlinkDelete() {
+  hardlinkDeleteGroup.value = null;
+  hardlinkDeletePreview.value = null;
+}
+
+async function confirmHardlinkDelete() {
+  const group = hardlinkDeleteGroup.value;
+  if (!group) return;
+  hardlinkDeleting.value = true;
+  error.value = "";
+  try {
+    await hardlinkDeleteRequest(group, false);
+    closeHardlinkDelete();
+    await loadHardlinks();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "删除硬链接组失败";
+  } finally {
+    hardlinkDeleting.value = false;
   }
 }
 
@@ -2587,6 +2668,13 @@ onMounted(refresh);
                   ]"
                   >{{ group.hardlink_count || 0 }} 个硬链接</span
                 >
+                <button
+                  class="danger-button"
+                  :disabled="!group.entries?.length"
+                  @click="openHardlinkDelete(group)"
+                >
+                  删除
+                </button>
               </article>
               <p v-if="!hardlinkGroups.length" class="empty">暂无硬链接记录</p>
             </div>
@@ -3136,6 +3224,73 @@ onMounted(refresh);
         </section>
       </template>
     </main>
+    <div
+      v-if="hardlinkDeleteGroup"
+      class="modal-backdrop"
+      role="presentation"
+      @click.self="closeHardlinkDelete"
+    >
+      <section
+        class="modal-dialog delete-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hardlink-delete-title"
+      >
+        <div class="modal-heading">
+          <div>
+            <h2 id="hardlink-delete-title">
+              删除 {{ hardlinkDeleteGroup.code }}
+            </h2>
+            <small>将删除媒体库硬链接、源文件及其关联 NFO</small>
+          </div>
+          <button
+            class="icon-button"
+            aria-label="关闭"
+            :disabled="hardlinkDeleting"
+            @click="closeHardlinkDelete"
+          >
+            x
+          </button>
+        </div>
+        <p v-if="hardlinkDeleteLoading" class="empty">正在检查将删除的文件...</p>
+        <template v-else>
+          <p class="delete-warning">
+            此操作不可恢复。空的作品目录会一并清理；共享目录中其他作品的文件不会删除。
+          </p>
+          <div class="delete-preview">
+            <div>
+              <b>{{ previewPaths(hardlinkDeletePreview, ['deleted_files', 'removed_files']).length || hardlinkDeleteGroup.hardlink_count || 0 }}</b>
+              <small>文件将被删除</small>
+            </div>
+            <div>
+              <b>{{ previewPaths(hardlinkDeletePreview, ['deleted_dirs', 'removed_dirs']).length }}</b>
+              <small>空目录将被清理</small>
+            </div>
+            <div>
+              <b>{{ hardlinkDeleteGroup.orphan_count || 0 }}</b>
+              <small>异常链接</small>
+            </div>
+          </div>
+          <div class="delete-paths">
+            <small>源文件与硬链接</small>
+            <code
+              v-for="(entry, index) in hardlinkDeleteGroup.entries"
+              :key="`${entry.source_path}-${index}`"
+              >{{ entry.source_path || '源文件缺失' }}</code
+            >
+          </div>
+          <p v-if="hardlinkDeletePreview?.detail || hardlinkDeletePreview?.message" class="muted">
+            {{ hardlinkDeletePreview?.detail || hardlinkDeletePreview?.message }}
+          </p>
+          <div class="modal-actions">
+            <button :disabled="hardlinkDeleting" @click="closeHardlinkDelete">取消</button>
+            <button class="danger-button" :disabled="hardlinkDeleting" @click="confirmHardlinkDelete">
+              {{ hardlinkDeleting ? '正在删除...' : '确认删除' }}
+            </button>
+          </div>
+        </template>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -3758,6 +3913,7 @@ pre {
 }
 .hardlink-row {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 13px 0;
@@ -3775,6 +3931,116 @@ pre {
 }
 .hardlink-row small {
   margin-top: 5px;
+}
+.danger-button {
+  border: 1px solid #994952;
+  border-radius: 5px;
+  background: #392229;
+  color: #ffc0c8;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.danger-button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 9, 13, 0.72);
+}
+.modal-dialog {
+  width: min(600px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  border: 1px solid #3a4655;
+  border-radius: 6px;
+  background: #1a212b;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+  padding: 20px;
+}
+.modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.modal-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.modal-heading small {
+  display: block;
+  margin-top: 6px;
+}
+.icon-button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #3a4655;
+  border-radius: 5px;
+  background: #202833;
+  color: #dce5ee;
+}
+.delete-warning {
+  margin: 20px 0 14px;
+  color: #ffc8ce;
+  line-height: 1.55;
+}
+.delete-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #303a47;
+  background: #171c24;
+}
+.delete-preview > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-left: 1px solid #303a47;
+}
+.delete-preview > div:first-child {
+  border-left: 0;
+}
+.delete-preview b {
+  color: #f3f6fa;
+  font-size: 18px;
+}
+.delete-preview small,
+.delete-paths > small {
+  color: #98a6b7;
+  font-size: 12px;
+}
+.delete-paths {
+  display: grid;
+  gap: 7px;
+  margin-top: 16px;
+}
+.delete-paths code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #303a47;
+  background: #121820;
+  color: #c9d4df;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+.modal-actions > button:not(.danger-button) {
+  border: 1px solid #3a4655;
+  border-radius: 5px;
+  background: #202833;
+  color: #dce5ee;
+  padding: 6px 10px;
 }
 .actor-management-tools {
   display: flex;
