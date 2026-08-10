@@ -1,0 +1,25 @@
+{
+  "id": "gfriends",
+  "name": "Gfriends",
+  "version": "0.1.0-recovered",
+  "type": "tool",
+  "description": "基于 Gfriends 头像库提供演员头像候选与缓存。",
+  "capabilities": ["network_outbound", "avatar_provider"],
+  "enabled_by_default": false,
+  "default_config": {
+    "filetree_url": "https://cdn.jsdelivr.net/gh/xinxin8816/gfriends/Filetree.json",
+    "asset_base_url": "https://cdn.jsdelivr.net/gh/xinxin8816/gfriends/Content/",
+    "cache_images": true,
+    "cache_days": 30,
+    "index_ttl_hours": 24,
+    "timeout": 20
+  },
+  "config_schema": {
+    "filetree_url": {"type": "string", "label": "Filetree.json 地址"},
+    "asset_base_url": {"type": "string", "label": "头像资源根地址"},
+    "cache_images": {"type": "boolean", "label": "本地缓存命中头像"},
+    "cache_days": {"type": "number", "label": "头像缓存天数", "min": 1, "max": 365},
+    "index_ttl_hours": {"type": "number", "label": "索引刷新间隔小时", "min": 1, "max": 168},
+    "timeout": {"type": "number", "label": "请求超时秒数", "min": 3, "max": 120}
+  }
+}
