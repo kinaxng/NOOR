@@ -122,8 +122,6 @@ async function refresh() {
     plugins.value = pluginData.items || []
     settings.value = settingsData
     recommendations.value = recommendationData.items || []
-    await loadJavdb()
-    await loadActors()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '无法连接 NOOR 后端'
     healthy.value = false
