@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 from typing import Any
+
+from app.core.runtime_paths import data_path
 
 
 # The recovered core configuration bytecode predates FaceFusion. This keeps
@@ -67,15 +71,44 @@ FACEFUSION_DEFAULTS: dict[str, Any] = {
 }
 
 
+def _settings_path() -> Path:
+    return data_path("facefusion_settings.json")
+
+
+def load_facefusion_overrides() -> dict[str, Any]:
+    try:
+        payload = json.loads(_settings_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    return {key: value for key, value in payload.items() if key in FACEFUSION_DEFAULTS} if isinstance(payload, dict) else {}
+
+
+def save_facefusion_overrides(updates: dict[str, Any]) -> dict[str, Any]:
+    current = load_facefusion_overrides()
+    current.update({key: value for key, value in updates.items() if key in FACEFUSION_DEFAULTS})
+    path = _settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+    return current
+
+
 @dataclass(frozen=True)
 class FaceFusionSettings:
     base: Any
+    overrides: dict[str, Any]
 
     def __getattr__(self, name: str) -> Any:
         if name in FACEFUSION_DEFAULTS:
-            return getattr(self.base, name, FACEFUSION_DEFAULTS[name])
+            return self.overrides.get(name, getattr(self.base, name, FACEFUSION_DEFAULTS[name]))
         return getattr(self.base, name)
 
 
 def facefusion_settings(settings: Any) -> FaceFusionSettings:
-    return FaceFusionSettings(settings)
+    return FaceFusionSettings(settings, load_facefusion_overrides())
+
+
+def facefusion_settings_payload(settings: Any) -> dict[str, Any]:
+    resolved = facefusion_settings(settings)
+    return {key: getattr(resolved, key) for key in FACEFUSION_DEFAULTS}

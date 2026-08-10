@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import PROJECT_ROOT, get_settings
 from app.core.models import JobCreate, JobResponse
-from app.core.facefusion_defaults import facefusion_settings
+from app.core.facefusion_defaults import FACEFUSION_DEFAULTS, facefusion_settings, facefusion_settings_payload, save_facefusion_overrides
 from app.core.facefusion_paths import build_facefusion_python_env, resolve_facefusion_model_dir, resolve_facefusion_python, resolve_facefusion_source
 from app.pipeline.facefusion.preview import generate_facefusion_preview
 from app.pipeline.facefusion.runner import _build_env, _execution_providers, _split_words
@@ -69,6 +69,12 @@ class FaceFusionJobRequest(JobCreate):
     model_config = ConfigDict(extra="allow")
 
 
+class FaceFusionSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    settings: dict[str, Any]
+
+
 def _facefusion_setting(name: str, default: Any = "") -> Any:
     """Keep FaceFusion endpoints usable with pre-FaceFusion Settings bytecode."""
     return getattr(facefusion_settings(get_settings()), name, default)
@@ -77,6 +83,30 @@ def _facefusion_setting(name: str, default: Any = "") -> Any:
 @router.post("/jobs", response_model=JobResponse)
 async def create_facefusion_job(job_data: FaceFusionJobRequest):
     return await job_manager.enqueue_facefusion(job_data)
+
+
+@router.get("/settings")
+async def get_facefusion_settings():
+    return {"settings": facefusion_settings_payload(get_settings())}
+
+
+@router.put("/settings")
+async def update_facefusion_settings(payload: FaceFusionSettingsUpdate):
+    unknown = sorted(set(payload.settings) - set(FACEFUSION_DEFAULTS))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"不支持的 FaceFusion 设置项: {', '.join(unknown)}")
+    for key, value in payload.settings.items():
+        default = FACEFUSION_DEFAULTS[key]
+        if isinstance(default, bool) and not isinstance(value, bool):
+            raise HTTPException(status_code=422, detail=f"{key} 必须为布尔值")
+        if isinstance(default, int) and not isinstance(default, bool) and not isinstance(value, int):
+            raise HTTPException(status_code=422, detail=f"{key} 必须为整数")
+        if isinstance(default, float) and not isinstance(value, (int, float)):
+            raise HTTPException(status_code=422, detail=f"{key} 必须为数字")
+        if isinstance(default, str) and not isinstance(value, str):
+            raise HTTPException(status_code=422, detail=f"{key} 必须为文本")
+    save_facefusion_overrides(payload.settings)
+    return {"success": True, "settings": facefusion_settings_payload(get_settings())}
 
 
 def _preview_root() -> Path:
