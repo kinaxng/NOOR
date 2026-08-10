@@ -7,6 +7,9 @@ before the legacy router so hardlink and mutation endpoints remain untouched.
 """
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -66,6 +69,49 @@ def _matches_query(item: dict[str, Any], query: str | None) -> bool:
     return needle in haystack
 
 
+def _path_mappings() -> list[tuple[str, str]]:
+    """Return container-to-host mappings without requiring Emby to know the host.
+
+    A JSON object in ``NOOR_MEDIA_PATH_MAPPINGS`` takes precedence, for example
+    ``{\"/data\": \"/mnt/media\"}``.  The recovery host has its NAS data mount at
+    ``~/Videos``; use that conventional mapping only when the mount exists.
+    """
+    mappings: list[tuple[str, str]] = []
+    raw = os.environ.get("NOOR_MEDIA_PATH_MAPPINGS", "").strip()
+    if raw:
+        try:
+            configured = json.loads(raw)
+            if isinstance(configured, dict):
+                mappings.extend((str(source), str(target)) for source, target in configured.items())
+        except json.JSONDecodeError:
+            pass
+    videos_root = Path.home() / "Videos"
+    if videos_root.is_dir():
+        mappings.append(("/data", str(videos_root)))
+        mappings.append(("/volume1/data", str(videos_root)))
+    return sorted(((source.rstrip("/"), target.rstrip("/")) for source, target in mappings if source and target), key=lambda item: len(item[0]), reverse=True)
+
+
+def _host_path(path: Any) -> str:
+    original = str(path or "").strip()
+    if not original or Path(original).exists():
+        return original
+    for source, target in _path_mappings():
+        if original == source or original.startswith(source + "/"):
+            return target + original[len(source):]
+    return original
+
+
+def _parse_item(raw: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    item = media._parse_item(raw, config)
+    original_path = str(item.get("path") or "")
+    translated_path = _host_path(original_path)
+    if translated_path != original_path:
+        item["emby_path"] = original_path
+        item["path"] = translated_path
+    return item
+
+
 async def _fetch_items(config: dict[str, Any], *, library_id: str | None, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
     params: dict[str, Any] = {
         "IncludeItemTypes": "Movie",
@@ -83,7 +129,7 @@ async def _fetch_items(config: dict[str, Any], *, library_id: str | None, limit:
         response.raise_for_status()
     payload = response.json()
     raw_items = payload.get("Items") or []
-    items = [media._parse_item(raw, config) for raw in raw_items if isinstance(raw, dict)]
+    items = [_parse_item(raw, config) for raw in raw_items if isinstance(raw, dict)]
     return items, int(payload.get("TotalRecordCount") or len(items))
 
 
@@ -149,4 +195,4 @@ async def get_item(item_id: str):
             response.raise_for_status()
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail=f"获取媒体项目失败: {exc}") from exc
-    return media._parse_item(response.json(), config)
+    return _parse_item(response.json(), config)

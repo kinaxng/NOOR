@@ -13,6 +13,8 @@ type HardlinkGroup = { code: string; hardlink_count?: number; orphan_count?: num
 type MediaLibrary = { id: string; name: string; collection_type?: string }
 type MediaItem = { id: string; name: string; type?: string; poster_path?: string; date_created?: string; path?: string; tags?: { is_cracked?: boolean; has_chinese?: boolean; is_uncensored?: boolean; is_leaked?: boolean } }
 type FaceFusionSourceImage = { id: string; name: string; preview_url: string; path: string; size?: number }
+type SubtitleFile = { filename: string; path: string; size: number; ext: string }
+type OnlineSubtitle = { name: string; url: string; ext: string; language: string; source: string; source_key?: string; source_type?: string }
 type Subscription = { id: string; code?: string; title?: string; type?: 'subscribe' | 'upgrade'; status?: string; mode?: string; require_cracked?: boolean; require_subtitle?: boolean; push_status?: string; last_submit_error?: string; retry_after_at?: string }
 type BackgroundTask = { plugin_id: string; plugin_name?: string; id: string; title?: string; status?: string; summary?: string; detail?: string; last_run_at?: string; last_finished_at?: string; metrics?: Record<string, unknown> }
 type Resource = { id: string; title?: string; subtitle?: string; url?: string; size_bytes?: number; cover_url?: string; compatible_downloaders?: string[]; preferred_downloader?: string; metadata?: { video_code?: string } }
@@ -92,6 +94,12 @@ const whisperSubmitting = ref(false)
 const whisperSettings = ref<Record<string, unknown>>({})
 const whisperSettingsLoading = ref(false)
 const whisperSettingsSaving = ref(false)
+const subtitlesOpen = ref(false)
+const subtitlesLoading = ref(false)
+const subtitleSearchLoading = ref(false)
+const subtitleDownloading = ref('')
+const localSubtitles = ref<SubtitleFile[]>([])
+const onlineSubtitles = ref<OnlineSubtitle[]>([])
 
 const title = computed(() => ({ overview: '概览', library: '媒体库', recommendations: '推荐中心', javdb: 'JavDB', actors: '演员', subscriptions: '订阅中心', files: '文件', tasks: '任务', plugins: '插件', settings: '设置' }[page.value]))
 const runningJobs = computed(() => jobs.value.filter((job) => ['queued', 'running', 'blocked'].includes(job.status)))
@@ -358,6 +366,72 @@ async function submitWhisper() {
     error.value = cause instanceof Error ? cause.message : 'Whisper 任务提交失败'
   } finally {
     whisperSubmitting.value = false
+  }
+}
+
+function subtitleSize(size: number) {
+  return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`
+}
+
+async function openSubtitles() {
+  const item = selectedMediaItem.value
+  if (!item?.path) {
+    error.value = '当前媒体项目没有可读取的本地文件路径'
+    return
+  }
+  subtitlesOpen.value = true
+  subtitlesLoading.value = true
+  onlineSubtitles.value = []
+  error.value = ''
+  try {
+    const params = new URLSearchParams({ video_path: item.path })
+    const result = await request<{ subtitles?: SubtitleFile[] }>(`/api/subtitles?${params.toString()}`)
+    localSubtitles.value = result.subtitles || []
+  } catch (cause) {
+    localSubtitles.value = []
+    error.value = cause instanceof Error ? cause.message : '本地字幕读取失败'
+  } finally {
+    subtitlesLoading.value = false
+  }
+}
+
+async function searchOnlineSubtitles() {
+  const item = selectedMediaItem.value
+  if (!item?.path) return
+  subtitleSearchLoading.value = true
+  error.value = ''
+  try {
+    const params = new URLSearchParams({ video_path: item.path, local_only: 'false' })
+    const result = await request<{ results?: OnlineSubtitle[] }>(`/api/subtitles/search?${params.toString()}`)
+    onlineSubtitles.value = result.results || []
+  } catch (cause) {
+    onlineSubtitles.value = []
+    error.value = cause instanceof Error ? cause.message : '在线字幕搜索失败'
+  } finally {
+    subtitleSearchLoading.value = false
+  }
+}
+
+async function downloadOnlineSubtitle(subtitle: OnlineSubtitle) {
+  const item = selectedMediaItem.value
+  if (!item?.path || !subtitle.url) return
+  subtitleDownloading.value = subtitle.url
+  error.value = ''
+  try {
+    const params = new URLSearchParams({
+      url: subtitle.url,
+      video_path: item.path,
+      source: subtitle.source || '',
+      source_key: subtitle.source_key || '',
+      source_type: subtitle.source_type || '',
+    })
+    const response = await fetch(`/api/subtitles/download?${params.toString()}`)
+    if (!response.ok) throw new Error(await response.text() || `${response.status} ${response.statusText}`)
+    await openSubtitles()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '字幕下载失败'
+  } finally {
+    subtitleDownloading.value = ''
   }
 }
 
@@ -708,7 +782,7 @@ onMounted(refresh)
           <div class="panel-heading media-library__controls"><div class="library-picker"><button :class="{ active: !mediaLibraryId }" @click="mediaLibraryId = ''; loadMediaLibrary(true)">全部</button><button v-for="library in mediaLibraries" :key="library.id" :class="{ active: mediaLibraryId === library.id }" @click="mediaLibraryId = library.id; loadMediaLibrary(true)">{{ library.name }}</button></div><button @click="loadMediaLibrary()">刷新</button></div>
           <p v-if="mediaLoading" class="empty">正在读取媒体库...</p>
           <template v-else><p v-if="!mediaItems.length" class="empty">当前媒体库没有影片</p><div class="media-grid"><article v-for="item in mediaItems" :key="item.id" class="media-card" @click="openMediaItem(item)"><div class="media-poster"><img v-if="item.poster_path" :src="item.poster_path" :alt="item.name" loading="lazy" /><span v-if="item.tags?.is_cracked">换脸</span></div><div><b>{{ item.name }}</b><small>{{ item.date_created ? new Date(item.date_created).toLocaleDateString() : '日期未知' }}</small></div></article></div><div v-if="mediaTotal > mediaPageSize" class="media-pagination"><button :disabled="mediaPage <= 1" @click="changeMediaPage(-1)">上一页</button><span>{{ mediaPage }} / {{ mediaPageCount }} · {{ mediaTotal }} 部</span><button :disabled="mediaPage >= mediaPageCount" @click="changeMediaPage(1)">下一页</button></div></template>
-          <section v-if="selectedMediaItem" class="detail-panel"><div class="panel-heading"><div><h2>{{ selectedMediaItem.name }}</h2><small>{{ selectedMediaItem.type || '媒体项目' }}</small></div><div class="detail-actions"><button v-if="selectedMediaItem.path" :disabled="whisperSubmitting" title="生成字幕" aria-label="生成字幕" @click="submitWhisper">{{ whisperSubmitting ? '提交中' : '字幕' }}</button><button v-if="selectedMediaItem.path" title="换脸" aria-label="换脸" @click="openFacefusion">换脸</button><button title="关闭详情" aria-label="关闭详情" @click="selectedMediaItem = null; facefusionOpen = false">x</button></div></div><img v-if="selectedMediaItem.poster_path" class="detail-cover" :src="selectedMediaItem.poster_path" :alt="selectedMediaItem.name" /><p v-if="selectedMediaItem.path" class="media-path">{{ selectedMediaItem.path }}</p><section v-if="facefusionOpen" class="facefusion-panel"><div class="panel-heading"><div><h2>换脸</h2><small>任务将由 NOOR 队列执行</small></div><button title="关闭换脸面板" aria-label="关闭换脸面板" @click="facefusionOpen = false">x</button></div><div class="facefusion-controls"><label>执行后端<select v-model="facefusionProvider"><option value="cuda">CUDA</option><option value="tensorrt">TensorRT</option><option value="cpu">CPU</option></select></label><label>处理器<div class="processor-options"><label><input v-model="facefusionProcessors" value="face_swapper" type="checkbox" />换脸</label><label><input v-model="facefusionProcessors" value="face_enhancer" type="checkbox" />人脸增强</label></div></label></div><div class="panel-heading facefusion-source-heading"><div><h3>源脸图片</h3><small>可多选；上传后会保留在图片库</small></div><label class="upload-button">上传图片<input type="file" accept="image/*" multiple @change="uploadFacefusionSources" /></label></div><p v-if="facefusionLoading" class="empty">正在读取图片库...</p><div v-else class="facefusion-source-grid"><button v-for="source in facefusionSources" :key="source.id" :class="['facefusion-source', { selected: selectedFacefusionSourceIds.includes(source.id) }]" :title="source.name" @click="toggleFacefusionSource(source.id)"><img :src="source.preview_url" :alt="source.name" loading="lazy" /><span>{{ source.name }}</span></button><p v-if="!facefusionSources.length" class="empty">尚未上传源脸图片</p></div><div class="facefusion-submit"><button :disabled="facefusionSubmitting || !selectedFacefusionSourceIds.length || !facefusionProcessors.length" @click="submitFacefusion">{{ facefusionSubmitting ? '提交中' : '提交换脸任务' }}</button></div></section></section>
+          <section v-if="selectedMediaItem" class="detail-panel"><div class="panel-heading"><div><h2>{{ selectedMediaItem.name }}</h2><small>{{ selectedMediaItem.type || '媒体项目' }}</small></div><div class="detail-actions"><button v-if="selectedMediaItem.path" title="字幕库" aria-label="字幕库" @click="openSubtitles">字幕库</button><button v-if="selectedMediaItem.path" :disabled="whisperSubmitting" title="生成字幕" aria-label="生成字幕" @click="submitWhisper">{{ whisperSubmitting ? '提交中' : '生成字幕' }}</button><button v-if="selectedMediaItem.path" title="换脸" aria-label="换脸" @click="openFacefusion">换脸</button><button title="关闭详情" aria-label="关闭详情" @click="selectedMediaItem = null; facefusionOpen = false; subtitlesOpen = false">x</button></div></div><img v-if="selectedMediaItem.poster_path" class="detail-cover" :src="selectedMediaItem.poster_path" :alt="selectedMediaItem.name" /><p v-if="selectedMediaItem.path" class="media-path">{{ selectedMediaItem.path }}</p><section v-if="subtitlesOpen" class="subtitle-panel"><div class="panel-heading"><div><h3>字幕库</h3><small>本地字幕与在线搜索</small></div><div class="detail-actions"><button :disabled="subtitleSearchLoading" @click="searchOnlineSubtitles">{{ subtitleSearchLoading ? '搜索中' : '搜索在线字幕' }}</button><button title="关闭字幕库" aria-label="关闭字幕库" @click="subtitlesOpen = false">x</button></div></div><p v-if="subtitlesLoading" class="empty">正在读取本地字幕...</p><template v-else><div class="subtitle-list"><div v-for="subtitle in localSubtitles" :key="subtitle.path" class="subtitle-row"><div><b>{{ subtitle.filename }}</b><small>{{ subtitle.ext.toUpperCase() }} · {{ subtitleSize(subtitle.size) }}</small></div><a :href="`/api/subtitles/file?path=${encodeURIComponent(subtitle.path)}`" target="_blank" rel="noopener">打开</a></div><p v-if="!localSubtitles.length" class="empty">当前作品目录没有字幕文件</p></div><div v-if="onlineSubtitles.length" class="subtitle-online"><h3>在线结果</h3><div class="subtitle-list"><div v-for="subtitle in onlineSubtitles" :key="subtitle.url" class="subtitle-row"><div><b>{{ subtitle.name }}</b><small>{{ subtitle.source }} · {{ subtitle.language || subtitle.ext }}</small></div><button :disabled="subtitleDownloading === subtitle.url" @click="downloadOnlineSubtitle(subtitle)">{{ subtitleDownloading === subtitle.url ? '下载中' : '下载' }}</button></div></div></div></template></section><section v-if="facefusionOpen" class="facefusion-panel"><div class="panel-heading"><div><h2>换脸</h2><small>任务将由 NOOR 队列执行</small></div><button title="关闭换脸面板" aria-label="关闭换脸面板" @click="facefusionOpen = false">x</button></div><div class="facefusion-controls"><label>执行后端<select v-model="facefusionProvider"><option value="cuda">CUDA</option><option value="tensorrt">TensorRT</option><option value="cpu">CPU</option></select></label><label>处理器<div class="processor-options"><label><input v-model="facefusionProcessors" value="face_swapper" type="checkbox" />换脸</label><label><input v-model="facefusionProcessors" value="face_enhancer" type="checkbox" />人脸增强</label></div></label></div><div class="panel-heading facefusion-source-heading"><div><h3>源脸图片</h3><small>可多选；上传后会保留在图片库</small></div><label class="upload-button">上传图片<input type="file" accept="image/*" multiple @change="uploadFacefusionSources" /></label></div><p v-if="facefusionLoading" class="empty">正在读取图片库...</p><div v-else class="facefusion-source-grid"><button v-for="source in facefusionSources" :key="source.id" :class="['facefusion-source', { selected: selectedFacefusionSourceIds.includes(source.id) }]" :title="source.name" @click="toggleFacefusionSource(source.id)"><img :src="source.preview_url" :alt="source.name" loading="lazy" /><span>{{ source.name }}</span></button><p v-if="!facefusionSources.length" class="empty">尚未上传源脸图片</p></div><div class="facefusion-submit"><button :disabled="facefusionSubmitting || !selectedFacefusionSourceIds.length || !facefusionProcessors.length" @click="submitFacefusion">{{ facefusionSubmitting ? '提交中' : '提交换脸任务' }}</button></div></section></section>
         </section>
         <section v-else-if="page === 'recommendations'"><div class="panel-heading recommendation-controls"><div class="segmented" aria-label="推荐范围"><button :class="{ active: recommendationMode === 'latest' }" @click="setRecommendationMode('latest')">最新推荐</button><button :class="{ active: recommendationMode === 'full' }" @click="setRecommendationMode('full')">完整推荐</button></div><span class="muted">{{ recommendations.length }} 部作品</span></div><div class="recommendations"><p v-if="!recommendations.length" class="empty">候选池暂无作品</p><article v-for="item in recommendations" :key="item.code" class="work-card"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /><span v-if="item.is_today_increment">今日</span></div><div><div class="card-title"><b>{{ item.code }}</b><strong>{{ item.recommendation_score ?? item.score ?? 0 }}</strong></div><p>{{ item.title }}</p><small>{{ item.release_date || '日期未知' }}<template v-if="item.actors.length"> · {{ item.actors.slice(0, 2).join('、') }}</template></small><div class="card-actions"><button title="喜欢" aria-label="喜欢" @click="feedback(item, 'like')">+</button><button title="不喜欢" aria-label="不喜欢" @click="feedback(item, 'dislike')">-</button><button title="忽略" aria-label="忽略" @click="feedback(item, 'ignore')">x</button></div></div></article></div></section>
         <section v-else-if="page === 'javdb'"><form class="javdb-search" @submit.prevent="loadJavdb"><input v-model="javdbQuery" aria-label="搜索作品" placeholder="番号或标题" /><button type="submit">搜索</button><button type="button" title="恢复最近更新" @click="javdbQuery = ''; loadJavdb()">最新</button></form><p v-if="javdbLoading" class="empty">正在读取 JavDB...</p><div v-else class="recommendations"><p v-if="!javdbItems.length" class="empty">没有找到作品</p><article v-for="item in javdbItems" :key="item.code" class="work-card clickable" @click="openJavdbDetail(item)"><div class="poster"><img v-if="item.cover_url" :src="item.cover_url" :alt="item.title" loading="lazy" /></div><div><div class="card-title"><b>{{ item.code }}</b><strong v-if="item.magnets_count">{{ item.magnets_count }} 磁链</strong></div><p>{{ item.title }}</p><small>{{ item.release_date || '日期未知' }}<template v-if="item.actors?.length"> · {{ item.actors.slice(0, 2).join('、') }}</template></small></div></article></div><section v-if="javdbDetail" class="detail-panel"><div class="panel-heading"><div><h2>{{ javdbDetail.code }}</h2><small>{{ javdbDetail.title }}</small></div><button title="关闭详情" aria-label="关闭详情" @click="javdbDetail = null">x</button></div><img v-if="javdbDetail.cover_url" class="detail-cover" :src="javdbDetail.cover_url" :alt="javdbDetail.title" /><p v-if="javdbDetail.origin_title">{{ javdbDetail.origin_title }}</p><p><b>演员：</b>{{ javdbDetail.actors?.join('、') || '未知' }}</p><p><b>类型：</b>{{ javdbDetail.categories?.join('、') || '未知' }}</p><p><b>磁链：</b>{{ javdbDetail.magnets?.length || 0 }}</p></section></section>
@@ -767,6 +841,7 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .settings-section { border-top: 1px solid #2b3440; border-bottom: 1px solid #2b3440; padding: 16px 0; margin: 16px 0; }.settings-section h3 { margin: 0 0 6px; font-size: 14px; }.settings-section p { color: #98a6b7; font-size: 13px; }.settings-inline { display: flex; gap: 8px; }.settings-inline input { flex: 1; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.settings-inline button { border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; }
 .gfriends-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin: 16px 0; }.gfriends-candidate { min-width: 0; padding: 5px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; display: grid; gap: 5px; text-align: left; }.gfriends-candidate img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #171c24; }.gfriends-candidate span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .facefusion-panel { margin-top: 18px; padding-top: 16px; border-top: 1px solid #303a47; }.facefusion-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }.facefusion-controls > label { display: grid; gap: 6px; color: #cdd9e6; font-size: 13px; }.facefusion-controls select { min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.processor-options { display: flex; flex-wrap: wrap; gap: 10px; min-height: 36px; align-items: center; }.processor-options label { display: inline-flex; align-items: center; gap: 5px; color: #bfcbd7; }.facefusion-source-heading { margin: 18px 0 10px; }.facefusion-source-heading h3 { margin: 0 0 4px; font-size: 14px; }.upload-button { display: inline-flex; align-items: center; border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 7px 11px; cursor: pointer; }.upload-button input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }.facefusion-source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; }.facefusion-source { min-width: 0; padding: 4px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; display: grid; gap: 5px; text-align: left; }.facefusion-source.selected { border-color: #33a3ed; box-shadow: inset 0 0 0 1px #33a3ed; }.facefusion-source img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #171c24; }.facefusion-source span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }.facefusion-submit { display: flex; justify-content: flex-end; margin-top: 16px; }.facefusion-submit button { border: 1px solid #177bc2; border-radius: 5px; background: #168bdf; color: #fff; padding: 8px 12px; }.facefusion-submit button:disabled { opacity: .5; cursor: default; }
+.subtitle-panel { margin-top: 18px; padding-top: 16px; border-top: 1px solid #303a47; }.subtitle-panel h3 { margin: 0 0 4px; font-size: 14px; }.subtitle-list { border-top: 1px solid #2b3440; margin-top: 14px; }.subtitle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #2b3440; }.subtitle-row div { min-width: 0; }.subtitle-row b, .subtitle-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.subtitle-row small { margin-top: 4px; }.subtitle-row a, .subtitle-row button { flex: none; border: 1px solid #3a4655; border-radius: 5px; background: #202833; color: #dce5ee; padding: 6px 9px; text-decoration: none; }.subtitle-row button:disabled { opacity: .55; cursor: default; }.subtitle-online { margin-top: 20px; }
 .plugin-actions { display: inline-flex; align-items: center; gap: 9px; }.plugin-toggle { width: 32px; height: 18px; border: 0; border-radius: 9px; padding: 2px; background: #485463; }.plugin-toggle i { display: block; width: 14px; height: 14px; border-radius: 50%; background: #d7dee7; transition: transform .16s ease; }.plugin-toggle.enabled { background: #168bdf; }.plugin-toggle.enabled i { transform: translateX(14px); }
 .plugin-config-button { width: 28px; height: 28px; border: 1px solid #3a4655; border-radius: 5px; color: #cdd9e6; background: #202833; }.config-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }.config-fields label { display: grid; align-content: start; gap: 6px; color: #cdd9e6; font-size: 13px; }.config-fields input[type='text'], .config-fields input[type='password'], .config-fields input[type='number'], .config-fields select { width: 100%; min-width: 0; border: 1px solid #3a4655; border-radius: 5px; background: #171c24; color: #e9edf2; padding: 8px 10px; }.config-fields input[type='checkbox'] { width: 16px; height: 16px; margin: 2px 0; accent-color: #168bdf; }.config-fields small { color: #98a6b7; line-height: 1.4; }.config-save { display: flex; justify-content: flex-end; margin-top: 18px; }.config-save button { border: 1px solid #177bc2; border-radius: 5px; background: #168bdf; color: white; padding: 8px 12px; }
 .plugin-test-message { margin: 14px 0 0; color: #aabbd0; font-size: 13px; line-height: 1.5; }
