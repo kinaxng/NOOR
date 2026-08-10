@@ -54,6 +54,9 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `core/models.py` as maintainable source and verified its SQLite
   entities, Pydantic request/response fields, default values, and task timestamp
   serialization against the preserved bytecode.
+- Reconstructed `core/database.py` as maintainable source and verified its async
+  and sync engine configuration, session factories, and legacy Jobs schema update
+  behavior against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
