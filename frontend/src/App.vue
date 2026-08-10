@@ -139,7 +139,7 @@ async function openPluginConfig(plugin: Plugin) {
 }
 
 function canTestPlugin(plugin: Plugin | null) {
-  return ['qbittorrent', 'xunlei-remote', 'transmission', 'mteam-plugin'].includes(plugin?.id || '')
+  return ['qbittorrent', 'xunlei-remote', 'transmission', 'mteam-plugin', 'avdb'].includes(plugin?.id || '')
 }
 
 async function testPlugin() {

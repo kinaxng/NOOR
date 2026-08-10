@@ -1,0 +1,21 @@
+{
+  "id": "avdb",
+  "name": "AVDB",
+  "version": "0.1.0-recovered",
+  "type": "source",
+  "description": "通过独立 AVDB article/torrent API 搜索影片资源。",
+  "capabilities": ["resource_search", "network_outbound"],
+  "enabled_by_default": false,
+  "default_config": {
+    "base_url": "",
+    "torrents_path": "/api/v1/articles/torrents",
+    "api_key": "",
+    "timeout": 15
+  },
+  "config_schema": {
+    "base_url": {"type": "string", "label": "AVDB API 地址", "description": "填写实际 AVDB 服务根地址，不使用 DBOnline 地址。"},
+    "torrents_path": {"type": "string", "label": "种子搜索路径"},
+    "api_key": {"type": "password", "label": "API Key（可选）"},
+    "timeout": {"type": "number", "label": "请求超时（秒）", "min": 3, "max": 60}
+  }
+}
