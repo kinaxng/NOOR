@@ -616,6 +616,7 @@ async def _resource_search(config: dict[str, Any], payload: dict[str, Any]) -> l
     title = str(payload.get("title") or "").strip()
     limit = max(1, min(int(payload.get("limit") or 6), 12))
     expected_magnets_count = max(0, int(payload.get("expected_magnets_count") or 0))
+    candidates: list[dict[str, Any]] = []
 
     if code:
         try:
@@ -658,6 +659,11 @@ async def _resource_search(config: dict[str, Any], payload: dict[str, Any]) -> l
             if len(out) >= limit:
                 return out
     return out
+
+
+async def search_resources(query: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """PluginRuntime resource-search contract used by search and subscriptions."""
+    return {"items": await _resource_search(config or {}, query or {})}
 
 
 async def _resource_search_paged(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
