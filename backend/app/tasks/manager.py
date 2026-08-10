@@ -90,9 +90,12 @@ class JobManager:
             job = await session.get(Job, job_id)
             return self._response(job) if job else None
 
-    async def get_all_jobs(self, limit: int = 100) -> list[JobResponse]:
+    async def get_all_jobs(self, status: str | None = None, limit: int = 100) -> list[JobResponse]:
         async with async_session_maker() as session:
-            result = await session.execute(select(Job).order_by(Job.created_at.desc()).limit(max(1, min(limit, 1000))))
+            statement = select(Job)
+            if status:
+                statement = statement.where(Job.status == status)
+            result = await session.execute(statement.order_by(Job.created_at.desc()).limit(max(1, min(limit, 1000))))
             return [self._response(job) for job in result.scalars().all()]
 
     async def delete_job(self, job_id: str) -> bool:
