@@ -40,6 +40,17 @@ type Recommendation = {
   actors: string[];
   categories: string[];
   is_today_increment: boolean;
+  in_library?: boolean;
+  subscribed?: boolean;
+  has_cnsub?: boolean;
+  is_cracked?: boolean;
+  source_tags?: Array<{ id?: string; label?: string; date?: string }>;
+};
+type RecommendationStats = {
+  candidates?: number;
+  today_increment?: number;
+  in_library?: number;
+  subscribed?: number;
 };
 type JavdbItem = {
   code: string;
@@ -270,6 +281,10 @@ const systemLogsLoading = ref(false);
 const webhookInstructionsVisible = ref(false);
 const recommendations = ref<Recommendation[]>([]);
 const recommendationMode = ref<"latest" | "full">("latest");
+const recommendationTotal = ref(0);
+const recommendationStats = ref<RecommendationStats>({});
+const recommendationPool = ref<{ total?: number; today_increment?: number }>({});
+const recommendationSubscribing = ref("");
 const javdbItems = ref<JavdbItem[]>([]);
 const javdbQuery = ref("");
 const javdbLoading = ref(false);
@@ -884,12 +899,20 @@ async function savePluginConfig() {
 }
 
 async function loadRecommendations() {
-  const data = await pluginAction<{ items: Recommendation[] }>(
+  const data = await pluginAction<{
+    items: Recommendation[];
+    total?: number;
+    stats?: RecommendationStats;
+    pool?: { total?: number; today_increment?: number };
+  }>(
     "av-recommend",
     "recommendations",
     { limit: 48, source_mode: recommendationMode.value },
   );
   recommendations.value = data.items || [];
+  recommendationTotal.value = Number(data.total || 0);
+  recommendationStats.value = data.stats || {};
+  recommendationPool.value = data.pool || {};
 }
 
 async function setRecommendationMode(mode: "latest" | "full") {
@@ -919,6 +942,26 @@ async function feedback(
     await loadRecommendations();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "保存反馈失败";
+  }
+}
+
+async function subscribeRecommendation(item: Recommendation) {
+  if (!item.code || item.subscribed) return;
+  recommendationSubscribing.value = item.code;
+  error.value = "";
+  try {
+    await pluginAction("subscription-core", "create", {
+      code: item.code,
+      title: item.title,
+      cover_url: item.cover_url || "",
+      source_plugin_id: "av-recommend",
+      source_label: "推荐中心",
+    });
+    await loadRecommendations();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "创建订阅失败";
+  } finally {
+    recommendationSubscribing.value = "";
   }
 }
 
@@ -964,6 +1007,11 @@ async function openJavdbDetail(item: JavdbItem, pushRoute = true) {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "作品详情加载失败";
   }
+}
+
+async function viewJavdbDetail(item: JavdbItem) {
+  page.value = "javdb";
+  await openJavdbDetail(item);
 }
 
 function closeJavdbDetail() {
@@ -2830,14 +2878,22 @@ onMounted(async () => {
                 完整推荐
               </button>
             </div>
-            <span class="muted">{{ recommendations.length }} 部作品</span>
+            <span class="muted"
+              >{{ recommendations.length }}/{{ recommendationTotal }} 部</span
+            >
+          </div>
+          <div class="recommendation-summary">
+            <span>候选池 {{ recommendationPool.total || 0 }}</span>
+            <span>今日增量 {{ recommendationPool.today_increment || 0 }}</span>
+            <span>当前推荐 {{ recommendationStats.candidates || 0 }}</span>
           </div>
           <div class="recommendations">
             <p v-if="!recommendations.length" class="empty">候选池暂无作品</p>
             <article
               v-for="item in recommendations"
               :key="item.code"
-              class="work-card"
+              class="work-card clickable"
+              @click="viewJavdbDetail(item)"
             >
               <div class="poster">
                 <img
@@ -2861,25 +2917,40 @@ onMounted(async () => {
                     · {{ item.actors.slice(0, 2).join("、") }}</template
                   ></small
                 >
+                <div v-if="item.source_tags?.length" class="recommendation-sources">
+                  <span
+                    v-for="tag in item.source_tags.slice(0, 3)"
+                    :key="`${item.code}:${tag.id}:${tag.date}`"
+                    >{{ tag.label || tag.id }}</span
+                  >
+                </div>
                 <div class="card-actions">
                   <button
                     title="喜欢"
                     aria-label="喜欢"
-                    @click="feedback(item, 'like')"
+                    @click.stop="feedback(item, 'like')"
                   >
                     +</button
                   ><button
                     title="不喜欢"
                     aria-label="不喜欢"
-                    @click="feedback(item, 'dislike')"
+                    @click.stop="feedback(item, 'dislike')"
                   >
                     -</button
                   ><button
                     title="忽略"
                     aria-label="忽略"
-                    @click="feedback(item, 'ignore')"
+                    @click.stop="feedback(item, 'ignore')"
                   >
                     x
+                  </button>
+                  <button
+                    :disabled="item.subscribed || recommendationSubscribing === item.code"
+                    :title="item.subscribed ? '已订阅' : '订阅作品'"
+                    :aria-label="item.subscribed ? '已订阅' : '订阅作品'"
+                    @click.stop="subscribeRecommendation(item)"
+                  >
+                    {{ recommendationSubscribing === item.code ? "..." : item.subscribed ? "✓" : "+" }}
                   </button>
                 </div>
               </div>
@@ -3026,7 +3097,7 @@ onMounted(async () => {
                 v-for="item in actorMovies"
                 :key="item.code"
                 class="work-card clickable"
-                @click="openJavdbDetail(item)"
+                @click="viewJavdbDetail(item)"
               >
                 <div class="poster">
                   <img
@@ -3441,7 +3512,7 @@ onMounted(async () => {
                   v-for="item in selectedEmbyActorMovies"
                   :key="item.code"
                   class="work-card clickable"
-                  @click="openJavdbDetail(item)"
+                @click="viewJavdbDetail(item)"
                 >
                   <div class="poster">
                     <img
@@ -4353,6 +4424,26 @@ pre {
 .recommendation-controls {
   margin-bottom: 14px;
 }
+.recommendation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.recommendation-summary span,
+.recommendation-sources span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #354454;
+  border-radius: 4px;
+  background: #17202a;
+  color: #aab9c9;
+  font-size: 11px;
+  line-height: 1;
+}
+.recommendation-summary span {
+  padding: 7px 9px;
+}
 .segmented {
   display: inline-flex;
   border: 1px solid #3a4655;
@@ -4463,6 +4554,16 @@ pre {
   gap: 5px;
   margin-top: 10px;
 }
+.recommendation-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 21px;
+  margin-top: 8px;
+}
+.recommendation-sources span {
+  padding: 4px 5px;
+}
 .card-actions button {
   width: 25px;
   height: 25px;
@@ -4470,6 +4571,10 @@ pre {
   background: #202833;
   color: #c9d3dd;
   border-radius: 4px;
+}
+.card-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 .actor-grid {
   display: grid;
