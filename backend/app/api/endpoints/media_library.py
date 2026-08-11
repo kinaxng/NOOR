@@ -3,7 +3,7 @@
 Reconstructed from preserved Python 3.13 bytecode and split recovery helpers.
 """
 from __future__ import annotations
-import mimetypes, time
+import mimetypes, secrets, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -17,10 +17,30 @@ from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl
 from app.api.endpoints.media_library_listing import deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, apply_filter_and_paginate as _apply_filter_and_paginate
 from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, execute_delete_targets as _execute_delete_targets, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
 from app.api.endpoints.media_library_streaming import parse_range_header as _parse_range_header, iter_file_range as _iter_file_range
+from app.api.system import SystemLogManager, _webhook_source, _webhook_summary
 
 router=APIRouter(prefix='/api/media-library',tags=['media-library'])
 _CACHE_TTL=86400
 _items_cache:dict[str,tuple[list[dict],float]]={}
+_sync_version=0
+_last_invalidated_at:float|None=None
+_last_webhook_at:float|None=None
+
+def _iso_from_ts(value:float|None)->str|None:
+ return datetime.fromtimestamp(value,timezone.utc).isoformat() if value is not None else None
+
+def _sync_state_payload()->dict:
+ return {'version':_sync_version,'last_invalidated_at':_iso_from_ts(_last_invalidated_at),'last_webhook_at':_iso_from_ts(_last_webhook_at),'cache_keys':sorted(_items_cache.keys())}
+
+def _bump_sync_state(*,webhook:bool=False)->dict:
+ global _sync_version,_last_invalidated_at,_last_webhook_at
+ _items_cache.clear();now=time.time();_sync_version+=1;_last_invalidated_at=now
+ if webhook:_last_webhook_at=now
+ return _sync_state_payload()
+
+def _ensure_webhook_token(config:dict)->dict:
+ if str(config.get('webhook_token') or '').strip():return config
+ next_config=dict(config);next_config['webhook_token']=secrets.token_urlsafe(24);_save_config(next_config);return _load_config()
 
 class HardlinkDeleteRequest(BaseModel):
  file_path:str; remove_nfo:bool=True; dry_run:bool=False
@@ -85,10 +105,30 @@ async def get_status():
  if not config.get('server_url') or not config.get('api_key'):return MediaLibraryStatus(available=False,current=None,message=_ADAPTER_NOT_ACTIVATED)
  return MediaLibraryStatus(available=True,current=MediaAdapterMeta(id='emby',name='Emby / Jellyfin',version='1.0.0',description='连接 Emby 或 Jellyfin 媒体服务器',author='NOOR'),message=None)
 @router.get('/config')
-async def get_config():return {'config':_load_config()}
+async def get_config():return {'config':_ensure_webhook_token(_load_config())}
 @router.post('/config')
 async def save_config(config:dict):
- existing=_load_config();existing.update(config);_save_config(existing);_items_cache.clear();return {'ok':True}
+ existing=_load_config();existing.update(config);_save_config(existing);return {'ok':True,'sync_state':_bump_sync_state()}
+@router.get('/sync-state')
+async def get_sync_state():return _sync_state_payload()
+@router.post('/cache/invalidate')
+async def invalidate_cache():
+ state=_bump_sync_state();SystemLogManager.get_instance().add_log('info','[MediaLibrary] 媒体库缓存已手动刷新',source='media_library');return {'ok':True,'sync_state':state}
+@router.post('/webhook/emby')
+async def emby_webhook(request:Request,token:str|None=None):
+ config=_ensure_webhook_token(_load_config());expected=str(config.get('webhook_token') or '').strip();provided=str(token or request.headers.get('X-NOOR-Webhook-Token') or '').strip()
+ if not expected or not secrets.compare_digest(provided,expected):raise HTTPException(403,'Invalid webhook token')
+ body=await request.body()
+ if len(body)>1024*1024:raise HTTPException(413,'Webhook 请求超过 1 MB')
+ payload=None
+ if body:
+  try:
+   import json
+   payload=json.loads(body)
+  except Exception:payload=None
+ state=_bump_sync_state(webhook=True);source=_webhook_source(request);summary=_webhook_summary(payload)
+ SystemLogManager.get_instance().add_log('info',f'[MediaLibrary] 收到 Emby Webhook，已刷新媒体库缓存 · {summary}',source=f'Emby · {source}',event_type=(payload.get('Event') if isinstance(payload,dict) else None))
+ return {'ok':True,'source':source,'summary':summary,'sync_state':state}
 @router.post('/test')
 async def test_connection(config:dict|None=None):
  cfg=config if config is not None else _load_config()
