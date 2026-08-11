@@ -136,8 +136,13 @@ the recovered bytecode modules remain unchanged.
   log, queued, blocked, terminal, and keepalive event formats.
 - Reconstructed the Whisper package entrypoint, core task/type dataclasses, progress
   reporter, decoupled alignment types, and framer selector. The remaining Whisper
-  engine, orchestration, translation, post-processing, and merge implementations
+  engine, orchestration, post-processing, and merge implementations
   remain preserved bytecode until they can be fully verified.
+- Reconstructed `pipeline/whisper/translator.py` as maintainable source. Numbered
+  batch parsing, reasoning-field extraction, local-service timeout selection,
+  refusal detection, and health-check behavior were verified against preserved
+  bytecode and mocked OpenAI-compatible responses. Explicit `/v1/chat` and
+  `/v1/chat/completions` endpoints are retained exactly as entered.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
