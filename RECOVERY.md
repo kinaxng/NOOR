@@ -160,6 +160,10 @@ the recovered bytecode modules remain unchanged.
   the later ChickenRice consolidation diff, and function-level bytecode. Source
   and bytecode produced identical translation queue events and SRT output under
   the same mocked translator, in addition to matching parsing and batching tests.
+- Recovered `pipeline/whisper/decoupled/qwen3.py` from its source capture and
+  preserved bytecode. Model-cache resolution, language normalization, timestamp
+  merging, and all segmentation/merge rules matched across 300 randomized word
+  timelines.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
