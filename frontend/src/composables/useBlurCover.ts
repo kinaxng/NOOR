@@ -1,42 +1,51 @@
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 
-const STORAGE_KEY = 'lada-blur-cover'
+const GLOBAL_STORAGE_KEY = 'noor-cover-blur-global'
+const BROWSER_STORAGE_KEY = 'noor-cover-blur-browser'
+const LEGACY_STORAGE_KEY = 'lada-blur-cover'
 
-// Persisted master setting
-const masterEnabled = ref<boolean>(
-  localStorage.getItem(STORAGE_KEY) === null
-    ? true
-    : localStorage.getItem(STORAGE_KEY) === 'true'
-)
+function readBooleanStorage(key: string, fallback: boolean) {
+  const value = localStorage.getItem(key)
+  return value === null ? fallback : value === 'true'
+}
 
-// Runtime override from toolbar (not persisted)
-const toolbarOverride = ref<boolean | null>(null)
+const legacyValue = localStorage.getItem(LEGACY_STORAGE_KEY)
+const initialGlobalEnabled = localStorage.getItem(GLOBAL_STORAGE_KEY) === null && legacyValue !== null
+  ? legacyValue === 'true'
+  : readBooleanStorage(GLOBAL_STORAGE_KEY, true)
+
+const globalBlurEnabled = ref<boolean>(initialGlobalEnabled)
+const browserBlurEnabled = ref<boolean>(readBooleanStorage(BROWSER_STORAGE_KEY, true))
 
 export function useBlurCover() {
-  // Effective value: toolbar override > master setting
-  const blurEnabled = computed(() =>
-    toolbarOverride.value !== null ? toolbarOverride.value : masterEnabled.value
-  )
+  const blurEnabled = computed(() => globalBlurEnabled.value && browserBlurEnabled.value)
 
-  // Toolbar: temporary toggle, does NOT persist
-  function toggleBlur() {
-    if (toolbarOverride.value === null) {
-      toolbarOverride.value = !masterEnabled.value
-    } else {
-      toolbarOverride.value = !toolbarOverride.value
-    }
+  function setGlobalBlur(value: boolean) {
+    globalBlurEnabled.value = value
+    localStorage.setItem(GLOBAL_STORAGE_KEY, String(value))
   }
 
-  // Settings: persist to localStorage
-  function setBlur(value: boolean) {
-    masterEnabled.value = value
-    toolbarOverride.value = null
-    localStorage.setItem(STORAGE_KEY, String(value))
+  function syncGlobalBlur(value: boolean) {
+    globalBlurEnabled.value = value
+    localStorage.setItem(GLOBAL_STORAGE_KEY, String(value))
+  }
+
+  function setBrowserBlur(value: boolean) {
+    browserBlurEnabled.value = value
+    localStorage.setItem(BROWSER_STORAGE_KEY, String(value))
+  }
+
+  function toggleBrowserBlur() {
+    setBrowserBlur(!browserBlurEnabled.value)
   }
 
   return {
     blurEnabled,
-    toggleBlur,
-    setBlur,
+    globalBlurEnabled,
+    browserBlurEnabled,
+    setGlobalBlur,
+    syncGlobalBlur,
+    setBrowserBlur,
+    toggleBrowserBlur,
   }
 }
