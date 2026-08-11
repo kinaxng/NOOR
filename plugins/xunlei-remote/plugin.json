@@ -1,10 +1,11 @@
 {
   "id": "xunlei-remote",
   "name": "迅雷远程",
-  "version": "0.1.0-recovered",
+  "version": "0.1.0",
   "type": "downloader",
   "description": "通过群晖迅雷 NAS Web API 管理远程下载任务。",
-  "capabilities": ["downloader", "remote_tasks", "network_outbound"],
+  "tags": ["xunlei", "thunder", "downloader", "remote"],
+  "capabilities": ["downloader", "remote_tasks", "network_outbound", "download_submit", "sidebar_page"],
   "enabled_by_default": false,
   "default_config": {
     "base_url": "",
@@ -13,6 +14,7 @@
     "pan_auth": "",
     "verify_tls": false,
     "savepath": "",
+    "restore_scan_roots": "",
     "mobile_parent_folder_id": "",
     "timeout": 20
   },
@@ -23,7 +25,16 @@
     "pan_auth": {"type": "password", "label": "pan_auth（可选）", "description": "留空时从迅雷页面自动提取。"},
     "verify_tls": {"type": "boolean", "label": "校验证书"},
     "savepath": {"type": "string", "label": "默认保存路径", "description": "必须能被迅雷 NAS 解析为实际目录；解析失败时不会回退到默认目录。"},
+    "restore_scan_roots": {"type": "textarea", "label": "残留文件扫描目录", "description": "每行一个本地目录，用于扫描 .xltd/.xtld 未完成文件。"},
     "mobile_parent_folder_id": {"type": "string", "label": "默认目录 ID（可选）", "description": "仅在提交时未指定保存路径时使用。"},
     "timeout": {"type": "number", "label": "请求超时（秒）", "min": 5, "max": 120}
+  },
+  "contributions": {
+    "sidebar": {"label": "迅雷远程", "route": "/plugins/xunlei-remote", "icon": "plugin"}
+  },
+  "frontend": {
+    "type": "module",
+    "entry": "frontend/page.js",
+    "style": "frontend/style.css"
   }
 }

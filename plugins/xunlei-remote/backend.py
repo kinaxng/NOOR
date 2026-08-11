@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
@@ -11,6 +12,7 @@ from app.plugins.contracts import PluginTestResult
 
 
 PLUGIN_ID = "xunlei-remote"
+_VIDEO_CODE_RE = re.compile(r"(?i)(?:FC2[-_ ]?PPV[-_ ]?\d+|[A-Z]{2,10}[-_ ]?\d{2,8})")
 DEFAULT_ENTRY_PATH = "/webman/3rdparty/pan-xunlei-com/index.cgi/"
 
 
@@ -167,6 +169,60 @@ def _quota_message(value: Any) -> bool:
     return any(token in text for token in ("task_create_count_limit", "daily_limit", "今日免费", "次数已用完", "quota"))
 
 
+def _restore_roots(config: dict[str, Any]) -> list[Path]:
+    raw = config.get("restore_scan_roots") or ""
+    values = raw if isinstance(raw, list) else re.split(r"[\r\n,]+", str(raw))
+    roots: list[Path] = []
+    for value in values:
+        text = str(value).strip()
+        if not text:
+            continue
+        path = Path(text).expanduser()
+        if path.is_dir():
+            resolved = path.resolve()
+            if resolved not in roots:
+                roots.append(resolved)
+    return roots
+
+
+def _residual_code(path: Path) -> str:
+    match = _VIDEO_CODE_RE.search(path.stem.replace("_", "-"))
+    return match.group(0).upper().replace("_", "-").replace(" ", "-") if match else ""
+
+
+def _restore_candidates(config: dict[str, Any], limit: int = 200) -> dict[str, Any]:
+    roots = _restore_roots(config)
+    items: list[dict[str, Any]] = []
+    for root in roots:
+        for path in root.rglob("*"):
+            if len(items) >= max(1, min(limit, 1000)):
+                break
+            if not path.is_file() or path.suffix.lower() not in {".xltd", ".xtld"}:
+                continue
+            stat = path.stat()
+            items.append({
+                "path": str(path),
+                "name": path.name,
+                "size": stat.st_size,
+                "code": _residual_code(path),
+            })
+    return {"ok": True, "items": items, "total": len(items), "roots": [str(root) for root in roots]}
+
+
+def _delete_residual(config: dict[str, Any], raw_path: Any) -> dict[str, Any]:
+    path = Path(str(raw_path or "")).expanduser().resolve()
+    roots = _restore_roots(config)
+    if path.suffix.lower() not in {".xltd", ".xtld"}:
+        raise ValueError("只允许删除 .xltd/.xtld 残留文件")
+    if not any(path.is_relative_to(root) for root in roots):
+        raise ValueError("残留文件不在已配置扫描目录中")
+    if not path.is_file():
+        raise ValueError("残留文件不存在")
+    code = _residual_code(path)
+    path.unlink()
+    return {"ok": True, "path": str(path), "code": code}
+
+
 async def _tasks(config: dict[str, Any], client: httpx.AsyncClient, pan_auth: str, device_id: str, *, phase: str = "all", limit: int = 100, page_token: str = "") -> dict[str, Any]:
     body = {"space": _space(device_id), "type": f"user#{phase or 'all'}", "limit": max(1, min(limit, 500))}
     if page_token:
@@ -295,9 +351,56 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
     if action == "test":
         result = await test(config)
         return {"ok": result.ok, "message": result.message, "details": result.details or {}}
+    if action == "account_static_info":
+        return {
+            "ok": True,
+            "client_id": str(config.get("mobile_client_id") or ""),
+            "device_id": str(config.get("account_device_id") or config.get("mobile_device_id") or ""),
+            "algorithms_count": 0,
+            "account_token_configured": bool(config.get("account_access_token")),
+        }
+    if action in {"account_user_me", "account_clients"}:
+        raise ValueError("账号远程 API 尚未在恢复版中接回；NAS 远程下载不受影响")
+    if action == "try_speed_apply":
+        return {"ok": True, "applied": False, "try_speed": None}
+    if action == "restore_candidates":
+        return _restore_candidates(config, int(payload.get("limit") or 200))
+    if action == "delete_residual":
+        return _delete_residual(config, payload.get("path"))
     client = await _client(config)
     try:
         pan_auth, device_id, info = await _context(config, client)
+        if action == "device_info":
+            limited = _quota_message(info)
+            return {
+                "ok": True,
+                "info": info,
+                "device_id": device_id,
+                "task_daily_limit": {"title": "迅雷今日免费任务额度可能受限"} if limited else None,
+                "try_speed": info.get("try_speed") if isinstance(info, dict) else None,
+                "mobile_status": None,
+            }
+        if action == "about":
+            return {"ok": True, "about": info.get("about") if isinstance(info.get("about"), dict) else {}}
+        if action == "device_config":
+            return {"ok": True, "config": {**config, "default_savepath": str(config.get("savepath") or "")}}
+        if action == "browse_folders":
+            parent_id = str(payload.get("parent_id") or "")
+            resources = await _resource_list(config, client, pan_auth, device_id, parent_id)
+            folders = []
+            for item in resources:
+                is_folder = item.get("kind") in (None, "drive#folder", "folder") or bool(item.get("is_folder"))
+                if not is_folder:
+                    continue
+                name = str(item.get("name") or "")
+                folders.append({
+                    "id": str(item.get("id") or ""),
+                    "name": name,
+                    "path": str(item.get("path") or name),
+                })
+            return {"ok": True, "folders": folders}
+        if action == "create_download_path":
+            raise ValueError("迅雷历史路径写入接口尚未恢复，请在插件设置中保存默认路径")
         if action in {"overview", "tasks"}:
             out = await _tasks(config, client, pan_auth, device_id, phase=str(payload.get("phase") or "all"), limit=int(payload.get("limit") or 100), page_token=str(payload.get("page_token") or ""))
             out.update({"device_id": device_id, "task_daily_limit": _quota_message(info)})

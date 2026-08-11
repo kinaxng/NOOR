@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 
 const route = useRoute()
+const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
 const host = ref<HTMLElement | null>(null)
@@ -839,6 +840,7 @@ function sdkFor(id: string) {
   const downloads = createDownloaderDialogContext(id)
   return {
     pluginId: id,
+    navigate: (to: any) => router.push(to),
     api: {
       plugin: pluginFetch,
       wsUrl: (path: string) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`,
