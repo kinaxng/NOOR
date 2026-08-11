@@ -102,6 +102,10 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `api/subtitles.py` as maintainable source and verified its local
   subtitle, online-source, file-content, unique-name, and deletion contracts against
   bytecode. The isolated backend exercised local reads and invalid-download handling.
+- Reconstructed the internal `api/local_library.py` subtitle-index module as
+  maintainable source and verified its environment configuration, paths, index
+  matching, result shape, and router contract against bytecode. The application does
+  not register this router; it is imported directly by the subtitle search route.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
