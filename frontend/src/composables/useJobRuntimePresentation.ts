@@ -1,6 +1,6 @@
 
 import { computed, type ComputedRef, type Ref } from 'vue'
-import type { Job, RecommendedDiagnostics } from '../api/types'
+import type { Job } from '../api/types'
 import type { JobCardViewModel } from '../components/noor/JobCard.vue'
 import type { JobChainMemberViewModel } from '../components/noor/JobChainPanel.vue'
 import { useI18n } from './useI18n'
@@ -187,16 +187,7 @@ export function useJobRuntimePresentation(options: UseJobRuntimePresentationOpti
   }
 
   function getDiagnosticSummary(job: Job) {
-    const diagnostics = job.result_metadata?.recommended_diagnostics as RecommendedDiagnostics | undefined
-    if (!diagnostics || (job.job_type !== 'whisper' && job.job_type !== 'whisper_transcribe')) return [] as string[]
-
-    const summary = [
-      diagnostics.qwen_retry_segments > 0 ? `${t('jobs.diagnosticsFallback')} ${diagnostics.qwen_retry_segments}` : '',
-      diagnostics.stepdown_segments > 0 ? `${t('jobs.diagnosticsStepdown')} ${diagnostics.stepdown_segments}` : '',
-      diagnostics.cleanup?.noise_only_segments ? `${t('jobs.diagnosticsNoise')} ${diagnostics.cleanup.noise_only_segments}` : '',
-    ].filter(Boolean)
-
-    return summary
+    return [] as string[]
   }
 
   function getJobCardModel(job: Job): JobCardViewModel {
@@ -290,4 +281,3 @@ export function useJobRuntimePresentation(options: UseJobRuntimePresentationOpti
     selectedJobChainModels,
   }
 }
-

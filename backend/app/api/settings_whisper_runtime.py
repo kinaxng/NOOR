@@ -4,17 +4,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from app.core.config import DEFAULT_REAZON_NEMO_MODEL_PATH, get_settings
-
-
 FASTER_WHISPER_MODELS = [
     ("chickenrice-zh", "chickenrice0721--whisper-large-v2-translate-zh-v0.2-st-ct2"),
-    ("tiny", "Systran--faster-whisper-tiny"), ("base", "Systran--faster-whisper-base"),
-    ("small", "Systran--faster-whisper-small"), ("medium", "Systran--faster-whisper-medium"),
-    ("large-v3", "Systran--faster-whisper-large-v3"), ("large-v3-turbo", "Systran--faster-whisper-large-v3-turbo"),
+    ("large-v3", "Systran--faster-whisper-large-v3"),
 ]
-TRANSFORMERS_MODELS = [("anime_whisper", "litagin/anime-whisper", "~3GB"), ("kotoba-whisper-v2.2", "kotoba-tech/kotoba-whisper-v2.2", "~3GB")]
-OPTIONAL_MODULES = [("soundfile", "soundfile"), ("stable_whisper", "stable_whisper"), ("qwen_asr", "qwen_asr"), ("audio_separator", "audio_separator"), ("pydub", "pydub"), ("onnx", "onnx")]
+TRANSFORMERS_MODELS = [("anime_whisper", "litagin/anime-whisper", "~3GB")]
+OPTIONAL_MODULES = [("soundfile", "soundfile"), ("onnxruntime", "onnxruntime")]
 
 
 def inspect_whisper_python_dependencies() -> tuple[dict[str, dict[str, Any]], bool, dict[str, Any]]:
@@ -79,8 +74,11 @@ def inspect_whisper_model_cache(*, whisper_model_dir: str, whisper_models: dict[
         if not downloaded and not cache_paths["is_default_hf"]:
             downloaded = _faster_exists(model_id, cache_paths["default_hf_base"])
         models_info[f"faster_{model_name}"] = {"type": "faster-whisper", "downloaded": downloaded, "size": whisper_models.get(model_name, {}).get("size", "Unknown")}
-    reazon_nemo_path = Path(getattr(get_settings(), "reazon_nemo_model_path", DEFAULT_REAZON_NEMO_MODEL_PATH) or DEFAULT_REAZON_NEMO_MODEL_PATH)
-    models_info["reazon_nemo"] = {"type": "reazon-nemo", "downloaded": reazon_nemo_path.exists(), "size": whisper_models.get("reazonspeech-nemo-v2", {}).get("size", "Unknown"), "path": str(reazon_nemo_path)}
+    vad_repo = "TransWithAI/Whisper-Vad-EncDec-ASMR-onnx"
+    downloaded = _transformers_exists(vad_repo, cache_paths["hf_base"], cache_paths["default_hf_cache"])
+    if not downloaded and not cache_paths["is_default_hf"]:
+        downloaded = _transformers_exists(vad_repo, cache_paths["default_hf_base"], cache_paths["default_hf_cache"])
+    models_info["whisper-vad-onnx"] = {"type": "onnx", "repo_id": vad_repo, "downloaded": downloaded, "size": whisper_models.get("whisper-vad-onnx", {}).get("size", "Unknown")}
     return models_info
 
 

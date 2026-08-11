@@ -9,16 +9,14 @@ from typing import Any
 
 
 BEST_WHISPER_PRESET = {
-    "model": "anime-whisper",
-    "pipeline_mode": "anime",
-    "merge_strategy": "smart_merge",
+    "strategy": "chickenrice",
+    "model_backend": "chickenrice-zh",
+    "model": "chickenrice-zh",
+    "pipeline_mode": "faster",
+    "whisper_task": "translate",
     "language": "ja",
     "sensitivity": "balanced",
-    "vad_method": "semantic",
-    "speech_enhancer": "none",
-    "pass1_pipeline": "anime",
-    "pass2_pipeline": "",
-    "custom_config": None,
+    "vad_backend": "energy",
 }
 
 

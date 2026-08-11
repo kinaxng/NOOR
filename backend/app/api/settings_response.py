@@ -43,14 +43,8 @@ def build_settings_payload(
         "timing_refiner": env_data.get("WHISPER_TIMING_REFINER", "none"),
         "model": env_data.get("WHISPER_MODEL", default_model_backend),
         "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "faster"),
-        "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
         "language": env_data.get("WHISPER_LANGUAGE", "ja"),
         "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
-        "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
-        "audio_preprocess_mode": env_data.get("WHISPER_AUDIO_PREPROCESS_MODE", "none"),
-        "audio_preprocess_model": env_data.get(
-            "WHISPER_AUDIO_PREPROCESS_MODEL", "vocal_balanced"
-        ),
         "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
         "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
         "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),
@@ -58,22 +52,8 @@ def build_settings_payload(
             "WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1"
         ),
         "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
-        "pass1_pipeline": env_data.get("WHISPER_PASS1_PIPELINE", "anime"),
-        "pass2_pipeline": env_data.get("WHISPER_PASS2_PIPELINE", ""),
-        "timestamp_mode": custom_whisper_config.get(
-            "timestamp_mode", "aligner_interpolation"
-        ),
-        "aligner_backend": custom_whisper_config.get("aligner_backend", "qwen3"),
-        "framer_backend": custom_whisper_config.get("framer_backend", "vad-grouped"),
-        "custom_config": custom_whisper_config,
     }
     whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
-    whisper_payload["custom_config"] = {
-        **custom_whisper_config,
-        "timestamp_mode": whisper_payload.get("timestamp_mode", "aligner_interpolation"),
-        "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
-        "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
-    }
 
     return {
         "emby": {

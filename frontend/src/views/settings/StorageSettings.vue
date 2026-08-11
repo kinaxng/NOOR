@@ -23,7 +23,6 @@ const databasePath = ref('')
 const whisperModelDir = ref('')
 const whisperCacheDir = ref('')
 const whisperTempDir = ref('')
-const audioSeparatorModelDir = ref('')
 const ladaModelDir = ref('')
 const ladaCacheDir = ref('')
 const ladaTempDir = ref('')
@@ -53,7 +52,6 @@ type DirPickerTarget =
   | 'whisperModelDir'
   | 'whisperCacheDir'
   | 'whisperTempDir'
-  | 'audioSeparatorModelDir'
   | 'ladaModelDir'
   | 'ladaCacheDir'
   | 'ladaTempDir'
@@ -102,7 +100,6 @@ async function loadSettings() {
     whisperModelDir.value = data.storage?.whisper_model_dir || ''
     whisperCacheDir.value = data.storage?.whisper_cache_dir || ''
     whisperTempDir.value = data.storage?.whisper_temp_dir || ''
-    audioSeparatorModelDir.value = data.storage?.audio_separator_model_dir || ''
     ladaModelDir.value = data.storage?.lada_model_weights_dir || data.storage?.lada_model_dir || ''
     ladaCacheDir.value = data.storage?.lada_cache_dir || ''
     ladaTempDir.value = data.storage?.lada_temp_dir || ''
@@ -170,7 +167,6 @@ function currentDirPickerPath(target: DirPickerTarget): string {
     whisperModelDir: whisperModelDir.value,
     whisperCacheDir: whisperCacheDir.value,
     whisperTempDir: whisperTempDir.value,
-    audioSeparatorModelDir: audioSeparatorModelDir.value,
     ladaModelDir: ladaModelDir.value,
     ladaCacheDir: ladaCacheDir.value,
     ladaTempDir: ladaTempDir.value,
@@ -247,8 +243,6 @@ function confirmDirPicker() {
     whisperCacheDir.value = path
   } else if (dirPickerTarget.value === 'whisperTempDir') {
     whisperTempDir.value = path
-  } else if (dirPickerTarget.value === 'audioSeparatorModelDir') {
-    audioSeparatorModelDir.value = path
   } else if (dirPickerTarget.value === 'ladaModelDir') {
     ladaModelDir.value = path
   } else if (dirPickerTarget.value === 'ladaCacheDir') {
@@ -316,14 +310,6 @@ function closeDirPicker() {
             <div class="dir-input-row">
               <input v-model="whisperModelDir" type="text" :placeholder="t('settings.storage.whisperPlaceholder')" class="settings-input" />
               <button @click="openDirPicker('whisperModelDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.audioSeparatorModelDir')" :description="t('settings.storage.audioSeparatorModelDirHint')">
-            <div class="dir-input-row">
-              <input v-model="audioSeparatorModelDir" type="text" :placeholder="t('settings.storage.audioSeparatorModelPlaceholder')" class="settings-input" />
-              <button @click="openDirPicker('audioSeparatorModelDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
                 <BaseIcon name="folderOpen" class="w-4 h-4" />
               </button>
             </div>

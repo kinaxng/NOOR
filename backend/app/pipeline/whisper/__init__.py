@@ -1,19 +1,33 @@
-"""Whisper 字幕生成模块"""
-from .types import WhisperConfig, WhisperCancellationRequested, WhisperModel, PipelineMode, MergeStrategy, Sensitivity, SubtitleSegment, TranscriptionResult, WhisperTask
-from .translator import OpenAILikeTranslator
-from .merge import MergeEngine
+from .engine import AnimeWhisperProcessor, AudioExtractor, FasterWhisperProcessor, generate_srt
 from .japanese_post import JapanesePostProcessor
-from .progress import AsyncProgressReporter
-def __getattr__(name):
- if name=='WhisperPipeline':
-  from .orchestrator import WhisperPipeline;return WhisperPipeline
- if name=='create_task':
-  from .orchestrator import create_task;return create_task
- if name=='get_task':
-  from .orchestrator import get_task;return get_task
- if name=='run_whisper_task':
-  from .orchestrator import run_whisper_task;return run_whisper_task
- if name=='AudioSceneDetector':
-  from .scene_detector import AudioSceneDetector;return AudioSceneDetector
- raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
-__all__=['WhisperConfig','WhisperCancellationRequested','WhisperModel','PipelineMode','MergeStrategy','Sensitivity','SubtitleSegment','TranscriptionResult','WhisperTask','OpenAILikeTranslator','WhisperPipeline','create_task','get_task','run_whisper_task','MergeEngine','JapanesePostProcessor','AudioSceneDetector','AsyncProgressReporter']
+from .orchestrator import WhisperPipeline, create_task, get_task, run_whisper_task
+from .types import (
+    PipelineMode,
+    Sensitivity,
+    SubtitleSegment,
+    TranscriptionResult,
+    WhisperCancellationRequested,
+    WhisperConfig,
+    WhisperModel,
+    WhisperTask,
+)
+
+__all__ = [
+    "AnimeWhisperProcessor",
+    "AudioExtractor",
+    "FasterWhisperProcessor",
+    "JapanesePostProcessor",
+    "PipelineMode",
+    "Sensitivity",
+    "SubtitleSegment",
+    "TranscriptionResult",
+    "WhisperCancellationRequested",
+    "WhisperConfig",
+    "WhisperModel",
+    "WhisperPipeline",
+    "WhisperTask",
+    "create_task",
+    "generate_srt",
+    "get_task",
+    "run_whisper_task",
+]

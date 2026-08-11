@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.settings_directories import build_directory_browse_payload, is_allowed_directory_path, resolve_browse_path
-from app.api.settings_helpers import (LADA_MODEL_WEIGHTS_ENV, WHISPER_MODELS, format_size as _format_size, get_httpx as _get_httpx, get_lada_installation_info as _get_lada_installation_info, get_lada_model_weights_dir_from_env as _get_lada_model_weights_dir_from_env, get_lada_version_info as _get_lada_version_info, get_whisper_feature_flags as _get_whisper_feature_flags, lada_cli_base_cmd as _lada_cli_base_cmd, parse_custom_config as _parse_custom_config, python_executable as _python_executable, read_env_file, set_env_values, update_env_value)
+from app.api.settings_helpers import (LADA_MODEL_WEIGHTS_ENV, WHISPER_MODELS, format_size as _format_size, get_httpx as _get_httpx, get_lada_installation_info as _get_lada_installation_info, get_lada_model_weights_dir_from_env as _get_lada_model_weights_dir_from_env, get_lada_version_info as _get_lada_version_info, get_whisper_feature_flags as _get_whisper_feature_flags, lada_cli_base_cmd as _lada_cli_base_cmd, python_executable as _python_executable, read_env_file, set_env_values, update_env_value)
 from app.api.settings_lada import get_lada_info_impl
 from app.api.settings_lada_defaults import apply_lada_defaults_updates
 from app.api.settings_lada_upgrade import build_lada_upgrade_env, raise_for_git_pull_failure, resolve_git_branch, should_add_break_system_packages
@@ -24,7 +24,7 @@ from app.api.settings_whisper import apply_whisper_config_updates, build_whisper
 from app.api.settings_whisper_models import delete_whisper_model_files, resolve_whisper_model_dir
 from app.api.settings_whisper_runtime import detect_install_requirements, inspect_whisper_model_cache, inspect_whisper_python_dependencies, log_whisper_dependency_summary
 from app.api.system import SystemLogManager
-from app.core.config import DEFAULT_REAZON_MODEL_DIR, DEFAULT_REAZON_NEMO_MODEL_PATH, PROJECT_ROOT, WHISPER_MODEL_DIR, clear_settings_cache, get_settings
+from app.core.config import PROJECT_ROOT, WHISPER_MODEL_DIR, clear_settings_cache, get_settings
 
 
 logger = logging.getLogger(__name__)
@@ -62,17 +62,6 @@ class LadaDefaultsConfig(BaseModel):
     detect_face_mosaics: bool = False
 
 
-class CustomPipelineConfig(BaseModel):
-    model: str = "large-v3"
-    vad_method: str = "semantic"
-    scene_detector: str = "semantic"
-    enhancers: list[str] = []
-    segmenter: str = "silero-v6.2"
-    timestamp_mode: str = "aligner_interpolation"
-    aligner_backend: str = "qwen3"
-    framer_backend: str = "vad-grouped"
-
-
 class WhisperConfig(BaseModel):
     strategy: str = "chickenrice"
     subtitle_profile: str = "standard"
@@ -88,20 +77,13 @@ class WhisperConfig(BaseModel):
     timing_refiner: str = "none"
     model: str = "chickenrice-zh"
     pipeline_mode: str = "faster"
-    merge_strategy: str = "smart_merge"
     language: str = "ja"
     sensitivity: str = "balanced"
-    vad_method: str = "semantic"
-    audio_preprocess_mode: str = "none"
-    audio_preprocess_model: str = "vocal_balanced"
     translate_to: str = ""
     translate_model: str = "gpt-4o-mini"
     translate_style: str = "adult_explicit"
     translate_base_url: str = "https://api.openai.com/v1"
     translate_api_key: str = ""
-    pass1_pipeline: str = "anime"
-    pass2_pipeline: str = ""
-    custom_config: CustomPipelineConfig = CustomPipelineConfig()
 
 
 class NetworkConfig(BaseModel):
@@ -134,13 +116,6 @@ class InstallDepsRequest(BaseModel):
     torch_current_cuda: bool = False
 
 
-def _assert_custom_pipeline_supported(*pipeline_values: Optional[str]) -> None:
-    if any(value == "custom" for value in pipeline_values if value):
-        feature = _get_whisper_feature_flags()["custom_pipeline"]
-        if not feature["available"]:
-            raise HTTPException(status_code=400, detail=f"Custom Whisper pipeline 当前不可用：{feature['reason']}")
-
-
 def _save_config(action: str, success_log: str, success_message: str, operation) -> dict:
     log_mgr = SystemLogManager.get_instance()
     log_mgr.add_log("info", action)
@@ -159,7 +134,7 @@ def _save_config(action: str, success_log: str, success_message: str, operation)
 @router.get("")
 async def get_settings_all():
     env_data = read_env_file()
-    return build_settings_payload(env_data=env_data, version_info=_get_lada_version_info(), lada_model_weights_dir=_get_lada_model_weights_dir_from_env(env_data), whisper_features=_get_whisper_feature_flags(), custom_whisper_config=_parse_custom_config(env_data))
+    return build_settings_payload(env_data=env_data, version_info=_get_lada_version_info(), lada_model_weights_dir=_get_lada_model_weights_dir_from_env(env_data), whisper_features=_get_whisper_feature_flags(), custom_whisper_config={})
 
 
 @router.put("/emby")
@@ -312,7 +287,6 @@ async def update_whisper_config(config: WhisperConfig):
     log_mgr.add_log("info", "[Settings] 正在保存 Whisper 配置...")
     try:
         normalized_payload = normalize_whisper_config_payload(config)
-        _assert_custom_pipeline_supported(normalized_payload.get("pipeline_mode"), normalized_payload.get("pass1_pipeline"), normalized_payload.get("pass2_pipeline"))
         apply_whisper_config_updates(normalized_payload, update_env_value)
         clear_settings_cache()
         log_mgr.add_log("success", "[Settings] Whisper 配置已保存")
@@ -343,8 +317,6 @@ async def download_whisper_model(req: ModelDownloadRequest):
     model_info = WHISPER_MODELS.get(model_name)
     if not model_info:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
-    if model_info.get("type") == "reazon-nemo":
-        raise HTTPException(status_code=400, detail="Reazon / NeMo model is managed externally for now")
     log_mgr = SystemLogManager.get_instance()
     log_mgr.add_log("info", f"[Whisper] 正在下载模型 {model_info['name']}...")
     write_status_file(model_download_status_path(), build_status_payload(status="running", progress=0, message=f"Downloading {model_info['name']}...", model=model_name, output=None))
@@ -366,7 +338,7 @@ async def download_whisper_model(req: ModelDownloadRequest):
         if hf_endpoint:
             os.environ["HF_ENDPOINT"] = hf_endpoint
         try:
-            if model_info["type"] == "transformers":
+            if model_info["type"] in {"transformers", "onnx"}:
                 update_status("running", 10, f"Downloading {model_info['name']}...")
                 bg_log_mgr.add_log("info", f"[Whisper] 正在下载 {model_info['name']} (transformers)...")
                 from huggingface_hub import snapshot_download

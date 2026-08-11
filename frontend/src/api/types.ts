@@ -143,12 +143,8 @@ export interface JobSettings {
   strategy?: string
   model?: string
   pipeline_mode?: string
-  merge_strategy?: string
   language?: string
   sensitivity?: string
-  vad_method?: string
-  pass1_pipeline?: string
-  pass2_pipeline?: string
   translate_to?: string | null
   source_path?: string
   source_paths?: string[]
@@ -270,47 +266,7 @@ export interface WhisperExecutionMetadata {
   detail_lines?: string[]
   model?: string
   pipeline_mode?: string
-  merge_strategy?: string
   language?: string
-  pass1_pipeline?: string | null
-  pass2_pipeline?: string | null
-}
-
-export interface RecommendedDiagnosticsSegment {
-  index: number
-  source?: string
-  subtitle_count?: number
-  chain_state?: string
-  large_v3_retry?: boolean
-  large_v3_retry_reason?: string
-  qwen_retry?: boolean
-  qwen_retry_reason?: string
-  stepdown?: boolean
-  stepdown_reason?: string
-  stepdown_window_count?: number
-  aligner_empty?: boolean
-  hardened?: boolean
-}
-
-export interface RecommendedDiagnostics {
-  segment_count: number
-  aligned_segments: number
-  large_v3_retry_segments: number
-  qwen_retry_segments: number
-  stepdown_segments: number
-  aligner_empty_segments: number
-  hardened_segments: number
-  stepdown_window_total: number
-  segments: RecommendedDiagnosticsSegment[]
-  cleanup?: {
-    before_segments: number
-    after_segments: number
-    deduped_segments: number
-    noise_only_segments: number
-    trimmed_noise_chars: number
-    particle_merged_segments: number
-    window_echo_segments: number
-  }
 }
 
 export interface JobCreate {

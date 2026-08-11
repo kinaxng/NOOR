@@ -33,9 +33,6 @@ _BASELINE_ALIASES = {
     "baseline", "compare", "compat", "compatibility", "contrast",
     "experiment", "experimental", "fast", "faster", "large-v3",
 }
-_REAZON_ALIASES = {
-    "reazon", "reazon_nemo", "reazonspeech", "reazonspeech-nemo-v2", "nemo",
-}
 _ANIME_ALIASES = {"anime", "anime-whisper"}
 
 
@@ -47,8 +44,6 @@ def _apply_model_backend(merged: dict[str, Any]) -> dict[str, Any]:
             "model": "anime-whisper",
             "whisper_task": "transcribe",
             "pipeline_mode": "anime",
-            "pass1_pipeline": "anime",
-            "pass2_pipeline": "",
         })
     elif backend in {"qwen", "qwen-whisper", "large-v3"}:
         merged.update({
@@ -56,8 +51,6 @@ def _apply_model_backend(merged: dict[str, Any]) -> dict[str, Any]:
             "model": "large-v3",
             "whisper_task": "transcribe",
             "pipeline_mode": "faster",
-            "pass1_pipeline": "faster",
-            "pass2_pipeline": "",
         })
     else:
         merged.update({
@@ -65,15 +58,13 @@ def _apply_model_backend(merged: dict[str, Any]) -> dict[str, Any]:
             "model": "chickenrice-zh",
             "whisper_task": "translate",
             "pipeline_mode": "faster",
-            "pass1_pipeline": "faster",
-            "pass2_pipeline": "",
         })
     return merged
 
 
 def normalize_whisper_strategy(value: str | None) -> str:
     normalized = str(value or "").strip().lower()
-    if normalized in _BASELINE_ALIASES | _REAZON_ALIASES | _ANIME_ALIASES:
+    if normalized in _BASELINE_ALIASES | _ANIME_ALIASES:
         return "chickenrice"
     return "chickenrice"
 

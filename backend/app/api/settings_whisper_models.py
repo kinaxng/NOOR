@@ -5,9 +5,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from app.core.config import DEFAULT_REAZON_NEMO_MODEL_PATH
-
-
 def resolve_whisper_model_dir(settings: Any, default_model_dir: str) -> str:
     return settings.whisper_model_dir or default_model_dir
 
@@ -63,17 +60,7 @@ def delete_whisper_model_files(
             return True
         return False
 
-    if model_info["type"] == "reazon-nemo":
-        nemo_path = Path(model_info.get("path") or DEFAULT_REAZON_NEMO_MODEL_PATH)
-        if nemo_path.exists():
-            nemo_path.unlink()
-            deleted.append(str(nemo_path))
-        compat_link = nemo_path.parent.parent / nemo_path.name
-        if compat_link.is_symlink():
-            compat_link.unlink()
-            deleted.append(str(compat_link))
-        return deleted
-    if model_info["type"] == "transformers":
+    if model_info["type"] in {"transformers", "onnx"}:
         found = transformers_delete(model_info["repo"], layout["hf_base"])
         if not found and not layout["is_default_hf"]:
             transformers_delete(model_info["repo"], layout["default_hf_base"])

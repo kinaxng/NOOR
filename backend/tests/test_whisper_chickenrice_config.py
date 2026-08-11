@@ -13,6 +13,9 @@ def test_whisper_runtime_defaults_use_chickenrice_chain():
     assert config.pipeline_mode == PipelineMode.FASTER
     assert config.whisper_task == "translate"
     assert config.runtime_tier == "gpu_standard"
+    assert not hasattr(config, "pass1_pipeline")
+    assert not hasattr(config, "pass2_pipeline")
+    assert not hasattr(config, "audio_preprocess_mode")
 
 
 def test_settings_payload_defaults_match_frontend_chickenrice_profile():

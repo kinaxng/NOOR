@@ -4,8 +4,6 @@ Reconstructed from preserved Python 3.13 bytecode.
 """
 from __future__ import annotations
 
-import importlib
-import json
 import logging
 import os
 import shlex
@@ -35,14 +33,14 @@ WHISPER_MODELS = {
         "description": "Japanese audio to Chinese subtitle CTranslate2 model",
     },
     "anime-whisper": {"name": "Anime-Whisper", "size": "~3GB", "type": "transformers", "repo": "litagin/anime-whisper", "description": "Optimized for anime vocals, Japanese"},
-    "kotoba-whisper-v2.2": {"name": "Kotoba Whisper v2.2", "size": "~3GB", "type": "transformers", "repo": "kotoba-tech/kotoba-whisper-v2.2", "description": "Japanese-specific, high accuracy, word-level timestamps, public (no gated)"},
-    "reazonspeech-nemo-v2": {"name": "ReazonSpeech NeMo v2", "size": "~2.4GB", "type": "reazon-nemo", "description": "Reazon / NeMo archive, reserved for upcoming runtime integration"},
-    "tiny": {"name": "Tiny", "size": "~75MB", "type": "faster-whisper"},
-    "base": {"name": "Base", "size": "~140MB", "type": "faster-whisper"},
-    "small": {"name": "Small", "size": "~465MB", "type": "faster-whisper"},
-    "medium": {"name": "Medium", "size": "~1.5GB", "type": "faster-whisper"},
     "large-v3": {"name": "Large V3", "size": "~3GB", "type": "faster-whisper"},
-    "large-v3-turbo": {"name": "Large V3 Turbo", "size": "~1.8GB", "type": "faster-whisper"},
+    "whisper-vad-onnx": {
+        "name": "Whisper VAD ONNX",
+        "size": "~600MB",
+        "type": "onnx",
+        "repo": "TransWithAI/Whisper-Vad-EncDec-ASMR-onnx",
+        "description": "Optional Whisper-based VAD backend",
+    },
 }
 
 
@@ -55,25 +53,6 @@ def get_httpx():
     import httpx
 
     return httpx
-
-
-def parse_custom_config(env_data: dict[str, str]) -> dict:
-    raw = env_data.get("WHISPER_CUSTOM_CONFIG", "")
-    if raw:
-        try:
-            return json.loads(raw)
-        except Exception:
-            pass
-    return {
-        "model": "large-v3",
-        "vad_method": "semantic",
-        "scene_detector": "semantic",
-        "enhancers": [],
-        "segmenter": "silero-v6.2",
-        "timestamp_mode": "aligner_interpolation",
-        "aligner_backend": "qwen3",
-        "framer_backend": "vad-grouped",
-    }
 
 
 def read_env_file() -> dict[str, str]:
@@ -130,36 +109,8 @@ def resolve_lada_repo_path() -> Optional[Path]:
     return None
 
 
-def module_installed(module_name: str) -> bool:
-    try:
-        return importlib.util.find_spec(module_name) is not None
-    except Exception:
-        return False
-
-
 def get_whisper_feature_flags() -> dict:
-    qwen_asr_installed = module_installed("qwen_asr")
-    stable_whisper_installed = module_installed("stable_whisper")
-    soundfile_installed = module_installed("soundfile")
-    experimental_enabled = os.environ.get("NOOR_ENABLE_EXPERIMENTAL_WHISPER_CUSTOM", "").lower() == "true"
-    missing = []
-    if not qwen_asr_installed:
-        missing.append("qwen_asr")
-    if not stable_whisper_installed:
-        missing.append("stable_whisper")
-    if not soundfile_installed:
-        missing.append("soundfile")
-    custom_available = experimental_enabled and not missing
-    if custom_available:
-        custom_reason = ""
-    else:
-        reasons = []
-        if not experimental_enabled:
-            reasons.append("当前构建默认关闭该实验功能")
-        if missing:
-            reasons.append(f"缺少依赖: {', '.join(missing)}")
-        custom_reason = "；".join(reasons) or "当前不可用"
-    return {"custom_pipeline": {"available": custom_available, "reason": custom_reason, "experimental_enabled": experimental_enabled, "dependencies": {"qwen_asr": qwen_asr_installed, "stable_whisper": stable_whisper_installed, "soundfile": soundfile_installed}}}
+    return {}
 
 
 def get_lada_installation_info() -> dict:

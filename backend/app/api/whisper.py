@@ -36,19 +36,8 @@ class WhisperRequest(BaseModel):
     timing_refiner: Optional[str] = "none"
     model: str = "chickenrice-zh"
     pipeline_mode: str = "faster"
-    merge_strategy: str = "smart_merge"
     language: str = "ja"
     sensitivity: str = "balanced"
-    vad_method: Optional[str] = "semantic"
-    audio_preprocess_mode: Optional[str] = "none"
-    audio_preprocess_model: Optional[str] = "vocal_balanced"
-    speech_enhancer: Optional[str] = "none"
-    pass1_pipeline: Optional[str] = None
-    pass2_pipeline: Optional[str] = None
-    custom_config: Optional[dict] = None
-    timestamp_mode: Optional[str] = "aligner_interpolation"
-    aligner_backend: Optional[str] = "qwen3"
-    framer_backend: Optional[str] = "vad-grouped"
     translate_to: Optional[str] = None
     translate_base_url: Optional[str] = "https://api.openai.com/v1"
     translate_api_key: Optional[str] = ""
@@ -101,7 +90,6 @@ def resolve_whisper_strategy(request: WhisperRequest) -> str:
 
 @router.post("/tasks", response_model=WhisperResponse)
 async def create_whisper_task(request: WhisperRequest):
-    from app.api.settings import _assert_custom_pipeline_supported
     from app.core.models import JobCreate, JobSettings
 
     local_video_path = map_emby_path_to_local(request.video_path)
@@ -122,19 +110,16 @@ async def create_whisper_task(request: WhisperRequest):
         "segment_merge_max_gap_ms": request.segment_merge_max_gap_ms,
         "segment_merge_max_duration_ms": request.segment_merge_max_duration_ms,
         "timing_refiner": request.timing_refiner,
-        "model": request.model, "pipeline_mode": request.pipeline_mode,
-        "merge_strategy": request.merge_strategy, "language": request.language, "sensitivity": request.sensitivity,
-        "vad_method": request.vad_method, "audio_preprocess_mode": request.audio_preprocess_mode,
-        "audio_preprocess_model": request.audio_preprocess_model, "speech_enhancer": request.speech_enhancer,
-        "pass1_pipeline": request.pass1_pipeline, "pass2_pipeline": request.pass2_pipeline,
-        "custom_config": request.custom_config, "translate_to": None,
+        "model": request.model,
+        "pipeline_mode": request.pipeline_mode,
+        "language": request.language,
+        "sensitivity": request.sensitivity,
+        "translate_to": None,
         "translate_base_url": request.translate_base_url, "translate_api_key": request.translate_api_key,
-        "translate_model": request.translate_model, "translate_style": request.translate_style,
-        "timestamp_mode": request.timestamp_mode, "aligner_backend": request.aligner_backend,
-        "framer_backend": request.framer_backend,
+        "translate_model": request.translate_model,
+        "translate_style": request.translate_style,
     }
     whisper_config = apply_whisper_strategy(whisper_config, resolved_strategy)
-    _assert_custom_pipeline_supported(whisper_config.get("pipeline_mode"), whisper_config.get("pass1_pipeline"), whisper_config.get("pass2_pipeline"))
     video_name = os.path.splitext(os.path.basename(local_video_path))[0]
     chain_id = str(os.urandom(16).hex())
     job_data = JobCreate(emby_item_id=f"whisper_{os.path.basename(local_video_path)}", emby_item_name=f"[Whisper] {video_name}", input_path=local_video_path, settings=JobSettings(**whisper_config), chain_id=chain_id)
@@ -159,7 +144,7 @@ async def get_whisper_task(task_id: str):
     if job.job_type not in frozenset({"whisper", "whisper_transcribe"}):
         raise HTTPException(status_code=400, detail="Task is not a Whisper job")
     log_lines = await job_manager.get_logs(task_id)
-    return {"task_id": job.id, "status": job.status, "progress": job.progress, "log_lines": log_lines[-50:], "error": job.error_message, "result_metadata": job.result_metadata, "recommended_diagnostics": (job.result_metadata or {}).get("recommended_diagnostics")}
+    return {"task_id": job.id, "status": job.status, "progress": job.progress, "log_lines": log_lines[-50:], "error": job.error_message, "result_metadata": job.result_metadata}
 
 
 @router.post("/tasks/{task_id}/run")

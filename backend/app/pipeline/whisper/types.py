@@ -12,64 +12,18 @@ class WhisperCancellationRequested(Exception):
 class WhisperModel(str, Enum):
     CHICKENRICE_ZH = "chickenrice-zh"
     ANIME = "anime-whisper"
-    KOTOBA_V2 = "kotoba-whisper-v2.0-faster"
-    REAZON_NEMO_V2 = "reazonspeech-nemo-v2"
-    TINY = "tiny"
-    BASE = "base"
-    SMALL = "small"
-    MEDIUM = "medium"
     LARGE_V3 = "large-v3"
-    LARGE_V3_TURBO = "large-v3-turbo"
 
 
 class PipelineMode(str, Enum):
-    SINGLE = "single"
-    ENSEMBLE = "ensemble"
     FASTER = "faster"
-    BALANCED = "balanced"
     ANIME = "anime"
-    TRANSFORMERS = "transformers"
-    QWEN = "qwen"
-    CUSTOM = "custom"
-    COLI = "coli"
-    REAZON = "reazon"
-
-
-class VADMethod(str, Enum):
-    NONE = "none"
-    SILERO = "silero"
-    AUDITOK = "auditok"
-    SEMANTIC = "semantic"
-    TEN = "ten"
-
-
-class SpeechEnhancer(str, Enum):
-    NONE = "none"
-    CLEARVOICE = "clearvoice"
-    FFMPEG_DSP = "ffmpeg-dsp"
-    SILERO_VAD = "silero-vad"
-    DEMUCS = "demucs"
-
-
-class MergeStrategy(str, Enum):
-    SMART = "smart_merge"
-    FULL_MERGE = "full_merge"
-    PASS1_PRIMARY = "pass1_primary"
-    PASS2_PRIMARY = "pass2_primary"
-    LONGEST = "longest"
-    PASS1_OVERLAP = "pass1_overlap"
-    PASS2_OVERLAP = "pass2_overlap"
 
 
 class Sensitivity(str, Enum):
     CONSERVATIVE = "conservative"
     BALANCED = "balanced"
     AGGRESSIVE = "aggressive"
-
-
-class TranslateProvider(str, Enum):
-    OLLAMA = "ollama"
-    OPENAI = "openai"
 
 
 @dataclass
@@ -91,21 +45,9 @@ class WhisperConfig:
     device: str = "cuda"
     compute_type: str = "float16"
     pipeline_mode: PipelineMode = PipelineMode.FASTER
-    merge_strategy: MergeStrategy = MergeStrategy.SMART
-    vad_method: VADMethod = VADMethod.SEMANTIC
     vad_filter: bool = True
     vad_min_silence_ms: int = 1500
     vad_min_speech_ms: int = 100
-    enhancers: list[str] = field(default_factory=list)
-    audio_preprocess_mode: str = "none"
-    audio_preprocess_model: str = "vocal_balanced"
-    timestamp_mode: str = "aligner_interpolation"
-    aligner_backend: str = "qwen3"
-    framer_backend: str = "vad-grouped"
-    pass1_model: WhisperModel = WhisperModel.ANIME
-    pass1_pipeline: Optional[PipelineMode] = None
-    pass2_model: WhisperModel = WhisperModel.LARGE_V3
-    pass2_pipeline: Optional[PipelineMode] = None
     language: str = "ja"
     sensitivity: Sensitivity = Sensitivity.BALANCED
     beam_size: int = 2
@@ -116,6 +58,14 @@ class WhisperConfig:
     translate_model: str = "llama3.2"
     translate_style: str = "adult_explicit"
     output_dir: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model, WhisperModel):
+            self.model = WhisperModel(str(self.model))
+        if not isinstance(self.pipeline_mode, PipelineMode):
+            self.pipeline_mode = PipelineMode(str(self.pipeline_mode))
+        if not isinstance(self.sensitivity, Sensitivity):
+            self.sensitivity = Sensitivity(str(self.sensitivity))
 
 
 @dataclass
