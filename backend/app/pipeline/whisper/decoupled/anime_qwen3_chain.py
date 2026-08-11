@@ -1,0 +1,460 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Callable, Optional
+
+from .cleaners import AnimeWhisperCleaner, Qwen3TextCleaner
+from .framers import apply_framer_backend
+from .hardening import harden_transcription_result
+from .qwen3 import (
+    Qwen3ForcedAligner,
+    Qwen3TextGenerator,
+    qwen3_aligner_available,
+    split_aligned_words_into_segments,
+)
+from app.pipeline.whisper.engine import _iter_hf_repo_paths
+from app.pipeline.whisper.types import SubtitleSegment, TranscriptionResult, WhisperConfig
+
+
+class LargeV3TextGenerator:
+    def __init__(self, *, device: str = "auto", compute_type: str = "float16") -> None:
+        self.device = device
+        self.compute_type = compute_type
+        self._model = None
+
+    @staticmethod
+    def _resolve_model_source(base_dir: str) -> str:
+        model_id = "Systran/faster-whisper-large-v3"
+        for repo_path in _iter_hf_repo_paths(base_dir, model_id):
+            if not repo_path.exists():
+                continue
+            ref_file = repo_path / "refs" / "main"
+            if ref_file.exists():
+                revision = ref_file.read_text().strip()
+                snapshot_path = repo_path / "snapshots" / revision
+                if snapshot_path.exists() and (snapshot_path / "model.bin").exists():
+                    return str(snapshot_path)
+            if (repo_path / "model.bin").exists():
+                return str(repo_path)
+        return "large-v3"
+
+    def load(self) -> None:
+        if self._model is not None:
+            return
+
+        from faster_whisper import WhisperModel
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        source = self._resolve_model_source(whisper_model_dir)
+        device = "cuda" if self.device == "auto" else self.device
+        self._model = WhisperModel(
+            source,
+            device=device,
+            compute_type=self.compute_type,
+            download_root=whisper_model_dir,
+        )
+
+    def unload(self) -> None:
+        self._model = None
+
+    def transcribe_one(self, audio_path: Path, *, language: str = "ja") -> str:
+        self.load()
+        segments, _info = self._model.transcribe(
+            str(audio_path),
+            language=language,
+            beam_size=2,
+            best_of=2,
+            vad_filter=True,
+            vad_parameters={
+                "min_silence_duration_ms": 1500,
+                "min_speech_duration_ms": 100,
+            },
+            word_timestamps=False,
+        )
+        return " ".join(seg.text.strip() for seg in segments).strip()
+
+
+class AnimeQwen3ChainProcessor:
+    def __init__(
+        self,
+        config: WhisperConfig,
+        *,
+        progress_logger: Optional[Callable[[str, int | None], None]] = None,
+    ) -> None:
+        self.config = config
+        self.progress_logger = progress_logger
+        self._aligner: Qwen3ForcedAligner | None = None
+        self._text_generator: Qwen3TextGenerator | None = None
+        self._large_v3_generator: LargeV3TextGenerator | None = None
+        self._anime_cleaner = AnimeWhisperCleaner()
+        self._qwen_cleaner = Qwen3TextCleaner()
+
+    def frame_segments(self, segments: list[tuple[str, float, float]]) -> list[tuple[str, float, float]]:
+        framed = apply_framer_backend(segments, backend=self.config.framer_backend)
+        if framed != segments:
+            self._log(f"[Anime+Qwen3] Framer: {self.config.framer_backend}，段落 {len(segments)} -> {len(framed)}")
+        else:
+            self._log(f"[Anime+Qwen3] Framer: {self.config.framer_backend}，段落数 {len(framed)}")
+        return framed
+
+    @staticmethod
+    def build_chain_metadata(*, stage: str, framer_backend: str, extra: dict | None = None) -> dict:
+        metadata = {
+            "chain_name": "anime_qwen3_chain",
+            "chain_stage": stage,
+            "framer_backend": framer_backend,
+        }
+        if extra:
+            metadata.update(extra)
+        return metadata
+
+    @staticmethod
+    def is_available() -> bool:
+        return qwen3_aligner_available()
+
+    _KANJI_RE = re.compile(r"[一-龯々]")
+    _VOICE_ONLY_RE = re.compile(r"^[ぁ-んァ-ヶーっッ゛゜ゃゅょゎゐゑをん]+$")
+    _LONG_REPEAT_RE = re.compile(r"る{8,}|じゅる{3,}|(?:んむ){3,}|(?:んぐ){3,}|(?:ごく){3,}")
+    _ELLIPSIS_RESTART_RE = re.compile(r"(?:^|[。！？!?…])\s*[あえおうんアエオウン][、…]")
+    _SHORT_PREFIX_BEFORE_ANCHOR_RE_TEMPLATE = r"(^|[。！？!?]\s*)([ぁ-んァ-ヶー]{{1,4}}[、,]?)(?={anchor})"
+    _NOISE_TOKENS = tuple(
+        sorted(
+            ("じゅる", "ちゅる", "ごく", "んむ", "んぐ", "んっ", "はぁ", "あっ", "うっ", "ちゅ", "る", "ん", "っ"),
+            key=len,
+            reverse=True,
+        )
+    )
+
+    def _log(self, message: str, progress: int | None = None) -> None:
+        if self.progress_logger is not None:
+            self.progress_logger(message, progress)
+
+    def _ensure_aligner(self) -> Qwen3ForcedAligner:
+        if self._aligner is None:
+            self._aligner = Qwen3ForcedAligner(device=self.config.device)
+            self._aligner.load()
+        return self._aligner
+
+    def _ensure_text_generator(self) -> Qwen3TextGenerator:
+        if self._text_generator is None:
+            self._text_generator = Qwen3TextGenerator(device=self.config.device)
+            self._text_generator.load()
+        return self._text_generator
+
+    def _ensure_large_v3_generator(self) -> LargeV3TextGenerator:
+        if self._large_v3_generator is None:
+            compute_type = self.config.compute_type if self.config.compute_type != "default" else "float16"
+            self._large_v3_generator = LargeV3TextGenerator(device=self.config.device, compute_type=compute_type)
+            self._large_v3_generator.load()
+        return self._large_v3_generator
+
+    @classmethod
+    def _noise_ratio(cls, text: str) -> float:
+        remaining = text
+        matched = 0
+        while remaining:
+            found = False
+            for token in cls._NOISE_TOKENS:
+                if remaining.startswith(token):
+                    matched += len(token)
+                    remaining = remaining[len(token) :]
+                    found = True
+                    break
+            if not found:
+                remaining = remaining[1:]
+        return matched / max(len(text), 1)
+
+    @classmethod
+    def _evaluate_retry_with_qwen(cls, text: str, duration: float) -> tuple[bool, str]:
+        compact = re.sub(r"[\s。、「」『』、,，.!！?？…~〜・\-]", "", text or "")
+        ellipsis_count = (text or "").count("…")
+        restart_count = len(cls._ELLIPSIS_RESTART_RE.findall(text or ""))
+        elongated_count = (text or "").count("ー")
+        text_without_terminal_punct = re.sub(r"[。！？!?]+$", "", (text or "").strip())
+        if len(compact) < 6:
+            return False, "too-short"
+        has_kanji = bool(cls._KANJI_RE.search(compact))
+        unique_ratio = len(set(compact)) / max(len(compact), 1)
+        noise_ratio = cls._noise_ratio(compact)
+        voice_like = bool(cls._VOICE_ONLY_RE.fullmatch(compact))
+        kana_like_chars = sum(
+            1 for ch in compact if ("ぁ" <= ch <= "ん") or ("ァ" <= ch <= "ヶ") or ch in "ーっッ゛゜"
+        )
+        kana_ratio = kana_like_chars / max(len(compact), 1)
+        repeated_pairs = sum(
+            1
+            for i in range(len(compact) - 1)
+            if compact[i : i + 2] == compact[max(i - 2, 0) : max(i, 0)]
+        )
+        if cls._LONG_REPEAT_RE.search(compact):
+            return True, "long-repeat"
+        if duration <= 12.0 and (text or "").startswith("…") and has_kanji:
+            return True, "leading-ellipsis-short"
+        if duration <= 12.0 and ellipsis_count >= 2 and restart_count >= 2:
+            return True, "ellipsis-restart-short"
+        if (
+            duration <= 10.0
+            and elongated_count >= 2
+            and "。" not in text_without_terminal_punct
+            and "？" not in text_without_terminal_punct
+            and "?" not in text_without_terminal_punct
+        ):
+            return True, "elongated-short"
+        if not has_kanji and noise_ratio >= 0.45 and duration <= 20.0:
+            return True, "noise-heavy-no-kanji"
+        if voice_like and len(compact) >= 8 and unique_ratio <= 0.45 and duration <= 12.0:
+            return True, "voice-like-short"
+        if not has_kanji and kana_ratio >= 0.9 and unique_ratio <= 0.52 and len(compact) >= 10 and duration <= 12.0:
+            return True, "kana-heavy-short"
+        if not has_kanji and repeated_pairs >= 3 and duration <= 12.0:
+            return True, "repeated-pairs-short"
+        return False, "pass1-accepted"
+
+    @classmethod
+    def _should_retry_with_qwen(cls, text: str, duration: float) -> bool:
+        return cls._evaluate_retry_with_qwen(text, duration)[0]
+
+    def _sanitize_pass1(self, pass1_result: TranscriptionResult) -> TranscriptionResult:
+        cleaned_segments: list[SubtitleSegment] = []
+        changed = False
+        for seg in pass1_result.segments:
+            cleaned = self._anime_cleaner.clean(seg.text)
+            if not cleaned:
+                changed = True
+                continue
+            if cleaned != seg.text:
+                changed = True
+            cleaned_segments.append(
+                SubtitleSegment(
+                    index=seg.index,
+                    start_time=seg.start_time,
+                    end_time=seg.end_time,
+                    text=cleaned,
+                    words=list(seg.words),
+                )
+            )
+        if not changed:
+            return pass1_result
+        metadata = dict(pass1_result.metadata)
+        metadata.update(
+            self.build_chain_metadata(
+                stage="anime_cleaned",
+                framer_backend=self.config.framer_backend,
+                extra={"anime_cleaned": True},
+            )
+        )
+        self._log("[Anime+Qwen3] 补救识别完成: 使用 Qwen3-ASR fallback 结果")
+        return TranscriptionResult(
+            segments=cleaned_segments or pass1_result.segments,
+            language=pass1_result.language,
+            duration=pass1_result.duration,
+            source=pass1_result.source,
+            metadata=metadata,
+        )
+
+    def _build_retry_result(
+        self,
+        *,
+        text: str,
+        duration: float,
+        language: str,
+        metadata: dict,
+        source: str,
+    ) -> TranscriptionResult:
+        return TranscriptionResult(
+            segments=[SubtitleSegment(index=1, start_time=0.0, end_time=duration, text=text)],
+            language=language,
+            duration=duration,
+            source=source,
+            metadata=metadata,
+        )
+
+    @staticmethod
+    def _extract_anchor_phrases(text: str) -> list[str]:
+        chunks = re.split(r"[。！？!?…、,\s]+", text or "")
+        anchors: list[str] = []
+        for chunk in chunks:
+            normalized = (chunk or "").strip("・ー-")
+            if len(normalized) >= 5:
+                anchors.append(normalized)
+        return anchors
+
+    @classmethod
+    def _stabilize_qwen_retry_text(cls, retry_text: str, original_text: str) -> str:
+        cleaned = retry_text or ""
+        anchors = cls._extract_anchor_phrases(original_text)
+        for anchor in anchors:
+            pattern = re.compile(cls._SHORT_PREFIX_BEFORE_ANCHOR_RE_TEMPLATE.format(anchor=re.escape(anchor)))
+            cleaned = pattern.sub(r"\1", cleaned)
+        return cleaned.strip()
+
+    def _maybe_retry_with_qwen(self, audio_path: str, pass1_result: TranscriptionResult) -> TranscriptionResult:
+        sanitized = self._sanitize_pass1(pass1_result)
+        text = "".join(seg.text for seg in sanitized.segments).strip()
+        should_retry, reason = self._evaluate_retry_with_qwen(text, sanitized.duration)
+        if not should_retry:
+            metadata = dict(pass1_result.metadata)
+            metadata["recommended_qwen_retry_reason"] = reason
+            if metadata == pass1_result.metadata:
+                return pass1_result
+            return TranscriptionResult(
+                segments=pass1_result.segments,
+                language=pass1_result.language,
+                duration=pass1_result.duration,
+                source=pass1_result.source,
+                metadata=metadata,
+            )
+
+        self._log("[Anime+Qwen3] 补救识别: 命中污染段，先切 large-v3 fallback...")
+        if self._aligner is not None:
+            self._aligner.unload()
+            self._aligner = None
+        if self._text_generator is not None:
+            self._text_generator.unload()
+            self._text_generator = None
+        if self._large_v3_generator is not None:
+            self._large_v3_generator.unload()
+            self._large_v3_generator = None
+
+        common_metadata = {
+            **sanitized.metadata,
+            "anime_qwen3_retry": True,
+            "anime_qwen3_retry_original_text": text,
+            "recommended_qwen_retry": True,
+            "recommended_qwen_retry_original_text": text,
+            "recommended_qwen_retry_reason": reason,
+        }
+
+        large_v3_generator = self._ensure_large_v3_generator()
+        large_v3_text = self._qwen_cleaner.clean(
+            large_v3_generator.transcribe_one(
+                Path(audio_path), language=sanitized.language or self.config.language
+            )
+        )
+        large_v3_generator.unload()
+        self._large_v3_generator = None
+
+        if large_v3_text and len(re.sub(r"\s+", "", large_v3_text)) >= 4:
+            large_v3_should_retry, large_v3_reason = self._evaluate_retry_with_qwen(
+                large_v3_text, sanitized.duration
+            )
+            if not large_v3_should_retry:
+                self._log("[Anime+Qwen3] 补救识别完成: large-v3 fallback 已修正污染段")
+                return self._build_retry_result(
+                    text=large_v3_text,
+                    duration=sanitized.duration,
+                    language=sanitized.language,
+                    source="large-v3-fallback",
+                    metadata={
+                        **common_metadata,
+                        **self.build_chain_metadata(
+                            stage="large_v3_retry", framer_backend=self.config.framer_backend
+                        ),
+                        "recommended_large_v3_retry": True,
+                        "recommended_large_v3_retry_text": large_v3_text,
+                        "recommended_large_v3_retry_reason": large_v3_reason,
+                    },
+                )
+
+        self._log("[Anime+Qwen3] large-v3 fallback 仍不稳定，继续切 Qwen3-ASR...")
+        generator = self._ensure_text_generator()
+        retry_text = generator.transcribe_one(
+            Path(audio_path), language=sanitized.language or self.config.language
+        )
+        generator.unload()
+        self._text_generator = None
+        retry_text = self._qwen_cleaner.clean(retry_text)
+        retry_text = self._stabilize_qwen_retry_text(retry_text, text)
+        if not retry_text:
+            self._log("[Anime+Qwen3] 补救识别结束: 结果为空，保留 Anime 结果")
+            return pass1_result
+        if len(re.sub(r"\s+", "", retry_text)) < 4:
+            self._log("[Anime+Qwen3] 补救识别结束: 结果过短，保留 Anime 结果")
+            return pass1_result
+
+        return self._build_retry_result(
+            text=retry_text,
+            duration=sanitized.duration,
+            language=sanitized.language,
+            source="qwen3-asr-fallback",
+            metadata={
+                **common_metadata,
+                **self.build_chain_metadata(stage="qwen_retry", framer_backend=self.config.framer_backend),
+            },
+        )
+
+    def cleanup(self) -> None:
+        if self._aligner is not None:
+            self._aligner.unload()
+            self._aligner = None
+        if self._large_v3_generator is not None:
+            self._large_v3_generator.unload()
+            self._large_v3_generator = None
+        if self._text_generator is not None:
+            self._text_generator.unload()
+            self._text_generator = None
+
+    def align_pass1_result(self, audio_path: str, pass1_result: TranscriptionResult) -> TranscriptionResult:
+        pass1_result = self._maybe_retry_with_qwen(audio_path, pass1_result)
+        if pass1_result.source != "qwen3-asr-fallback":
+            pass1_result = self._sanitize_pass1(pass1_result)
+        text = "".join(seg.text for seg in pass1_result.segments).strip()
+        if not text:
+            return pass1_result
+
+        aligner = self._ensure_aligner()
+        self._log("[Anime+Qwen3] Qwen3 ForcedAligner 对齐中...")
+        alignment = aligner.align_batch(
+            audio_paths=[Path(audio_path)],
+            texts=[text],
+            language=pass1_result.language or self.config.language,
+            audio_durations=[pass1_result.duration],
+        )[0]
+        if not alignment.words:
+            fallback = harden_transcription_result(
+                TranscriptionResult(
+                    segments=pass1_result.segments,
+                    language=pass1_result.language,
+                    duration=pass1_result.duration,
+                    source=pass1_result.source,
+                    metadata={
+                        **pass1_result.metadata,
+                        **self.build_chain_metadata(
+                            stage="aligner_empty",
+                            framer_backend=self.config.framer_backend,
+                            extra={"anime_qwen3_chain": "aligner_empty"},
+                        ),
+                    },
+                )
+            )
+            return fallback
+
+        regrouped = split_aligned_words_into_segments(alignment.words)
+        segments = [
+            SubtitleSegment(index=i + 1, start_time=start, end_time=end, text=seg_text)
+            for i, (start, end, seg_text) in enumerate(regrouped)
+        ]
+        hardened = harden_transcription_result(
+            TranscriptionResult(
+                segments=segments or pass1_result.segments,
+                language=pass1_result.language,
+                duration=pass1_result.duration,
+                source="anime-qwen3-aligned",
+                metadata={
+                    **pass1_result.metadata,
+                    **self.build_chain_metadata(
+                        stage="aligned",
+                        framer_backend=self.config.framer_backend,
+                        extra={
+                            "anime_qwen3_chain": "qwen3_forced_aligner",
+                            "aligned_word_count": len(alignment.words),
+                            "aligned_segment_count": len(segments),
+                        },
+                    ),
+                },
+            )
+        )
+        return hardened

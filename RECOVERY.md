@@ -164,6 +164,11 @@ the recovered bytecode modules remain unchanged.
   preserved bytecode. Model-cache resolution, language normalization, timestamp
   merging, and all segmentation/merge rules matched across 300 randomized word
   timelines.
+- Recovered `pipeline/whisper/decoupled/anime_qwen3_chain.py` from the final
+  historical source capture and preserved bytecode. Retry classification matched
+  across 2,000 randomized Japanese strings, while accepted Anime, large-v3 retry,
+  Qwen3 retry, empty-alignment, and successful-alignment branches produced
+  identical result text, source labels, and metadata.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
