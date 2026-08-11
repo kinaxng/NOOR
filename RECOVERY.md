@@ -156,6 +156,10 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `pipeline/whisper/decoupled/recommended.py` from preserved
   bytecode. Noise scoring, Qwen retry gating, lazy model lifecycle, fallback
   metadata, and forced-alignment result construction retain the original contract.
+- Recovered `pipeline/whisper/runtime.py` from the complete June source capture,
+  the later ChickenRice consolidation diff, and function-level bytecode. Source
+  and bytecode produced identical translation queue events and SRT output under
+  the same mocked translator, in addition to matching parsing and batching tests.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
