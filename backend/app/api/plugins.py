@@ -32,6 +32,10 @@ class ResourceSearchPayload(BaseModel):
     limit_per_plugin: int = Field(24, ge=1, le=100)
 
 
+class FeedPushPayload(BaseModel):
+    item: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get('')
 async def list_plugins():
     if not runtime._manifests:
@@ -54,6 +58,35 @@ async def get_background_tasks():
 async def search_resources(payload: ResourceSearchPayload):
     groups = await runtime.search_resources(payload.query, limit_per_plugin=payload.limit_per_plugin)
     return {'groups': groups}
+
+
+@router.get('/{plugin_id}/rss/items')
+async def get_plugin_rss_items(plugin_id: str, limit: int = 30, refresh: bool = False):
+    try:
+        return await runtime.get_rss_items(plugin_id, limit=limit, force_refresh=refresh)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post('/{plugin_id}/rss/push')
+async def push_plugin_rss_item(plugin_id: str, payload: FeedPushPayload):
+    try:
+        return await runtime.push_rss_download(plugin_id, payload.item)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete('/{plugin_id}/images/cache')
+async def clear_plugin_image_cache(plugin_id: str):
+    handler = runtime._handlers.get(plugin_id)
+    callback = getattr(handler, 'clear_image_cache', None) if handler is not None else None
+    if not callable(callback):
+        raise HTTPException(status_code=404, detail='Plugin image cache not supported')
+    return callback()
 
 
 @router.post('/{plugin_id}/downloads')
@@ -104,6 +137,10 @@ async def plugin_action(plugin_id: str, action: str, payload: PluginActionPayloa
         return await runtime.handle_action(plugin_id, action, payload.payload)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get('/{plugin_id}/assets/{asset_path:path}')

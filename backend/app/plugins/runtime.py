@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import inspect
 import json
 from pathlib import Path
 from typing import Any
 
 from app.core.config import PROJECT_ROOT
 from app.core.runtime_paths import data_path
+from app.plugins.contracts import PluginManifest
 
 
 class PluginRuntime:
@@ -110,7 +112,10 @@ class PluginRuntime:
         return next((item for item in self.list_plugins() if item['id'] == plugin_id), None)
 
     def get_config(self, plugin_id: str) -> dict[str, Any]:
-        return self._configs().get(plugin_id, {})
+        manifest = self._manifests.get(plugin_id) or {}
+        defaults = manifest.get('default_config') if isinstance(manifest.get('default_config'), dict) else {}
+        saved = self._configs().get(plugin_id, {})
+        return {**defaults, **(saved if isinstance(saved, dict) else {})}
 
     async def update_config(self, plugin_id: str, config: dict[str, Any]) -> dict[str, Any]:
         if plugin_id not in self._manifests:
@@ -151,8 +156,13 @@ class PluginRuntime:
             raise LookupError(plugin_id)
         config = self.get_config(plugin_id)
         payload = payload or {}
+        callback = getattr(handler, 'handle_action', None)
+        if callable(callback):
+            parameters = list(inspect.signature(callback).parameters)
+            args = (action, config, payload) if len(parameters) >= 2 and parameters[1] == 'config' else (action, payload, config)
+            result = callback(*args)
+            return await result if asyncio.iscoroutine(result) else result
         for name, args in (
-            ('handle_action', (action, payload, config)),
             (action, (payload, config)),
             (action, (payload,)),
         ):
@@ -163,6 +173,35 @@ class PluginRuntime:
             except TypeError:
                 continue
         raise LookupError(f'Plugin action not found: {plugin_id}/{action}')
+
+    async def get_rss_items(self, plugin_id: str, *, limit: int = 30, force_refresh: bool = False) -> Any:
+        handler = self._handlers.get(plugin_id)
+        manifest_data = self._manifests.get(plugin_id)
+        if handler is None or manifest_data is None:
+            raise LookupError(plugin_id)
+        callback = getattr(handler, 'fetch_rss_items', None)
+        if not callable(callback):
+            raise LookupError(f'Plugin RSS provider not found: {plugin_id}')
+        fields = PluginManifest.__dataclass_fields__
+        manifest = PluginManifest(**{key: value for key, value in manifest_data.items() if key in fields})
+        result = callback(manifest, self.get_config(plugin_id), limit=limit, force_refresh=force_refresh)
+        return await result if asyncio.iscoroutine(result) else result
+
+    async def push_rss_download(self, plugin_id: str, item: dict[str, Any]) -> dict[str, Any]:
+        config = self.get_config(plugin_id)
+        downloader_id = str(config.get('downloader_binding') or 'none')
+        if downloader_id == 'none':
+            raise ValueError('M-Team 尚未绑定下载器')
+        url = str(item.get('download_url') or item.get('enclosure_url') or item.get('url') or '')
+        if not url:
+            raise ValueError('RSS 条目没有可用下载地址')
+        result = await self.submit_download(downloader_id, {
+            'url': url,
+            'urls': url,
+            'name': item.get('title') or '',
+            'source_plugin': plugin_id,
+        })
+        return {'ok': True, 'downloader': downloader_id, 'result': result}
 
     async def search_resources(self, query: dict[str, Any], *, limit_per_plugin: int = 24) -> list[dict[str, Any]]:
         groups: list[dict[str, Any]] = []

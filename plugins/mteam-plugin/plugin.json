@@ -1,23 +1,58 @@
 {
   "id": "mteam-plugin",
   "name": "M-Team",
-  "version": "0.1.0-recovered",
-  "type": "source",
-  "description": "通过 M-Team 官方 API 搜索 PT 种子资源。",
-  "capabilities": ["resource_search", "private_tracker", "network_outbound"],
-  "enabled_by_default": false,
-  "default_config": {
-    "api_base": "https://api.m-team.cc",
-    "api_key": "",
-    "passkey": "",
-    "timeout": 20,
-    "page_size": 30
-  },
+  "version": "0.2.0",
+  "type": "rss_source",
+  "description": "M-Team PT integration: RSS feed, API cover lookup, download push and subtitle search",
+  "tags": ["pt", "rss", "m-team"],
+  "capabilities": [
+    "network_outbound",
+    "rss_fetch",
+    "sidebar_page",
+    "resource_search",
+    "subtitle_search",
+    "knowledge_provider"
+  ],
   "config_schema": {
-    "api_base": {"type": "string", "label": "M-Team API 地址"},
-    "api_key": {"type": "password", "label": "API Key"},
-    "passkey": {"type": "password", "label": "Passkey（可选）", "description": "仅当 API 未直接返回下载地址时用于拼接种子下载链接。"},
-    "timeout": {"type": "number", "label": "请求超时（秒）", "min": 5, "max": 120},
-    "page_size": {"type": "number", "label": "每次搜索数量", "min": 5, "max": 100}
-  }
+    "base_url": {"type": "string", "label": "BASE URL（官方 API 站点）", "placeholder": "https://api.m-team.cc"},
+    "rss_url": {"type": "string", "label": "RSS 地址"},
+    "cache_days": {"type": "number", "label": "DMM 图片缓存天数", "default": 7, "min": 1, "max": 60, "step": 1},
+    "downloader_binding": {
+      "type": "string",
+      "label": "下载器绑定",
+      "options": [
+        {"label": "不绑定", "value": "none"},
+        {"label": "qBittorrent", "value": "qbittorrent"},
+        {"label": "Transmission", "value": "transmission"}
+      ],
+      "default": "none"
+    },
+    "api_key": {"type": "password", "label": "令牌（API KEY）"},
+    "subtitle_search_enabled": {"type": "boolean", "label": "开启字幕下载", "default": false},
+    "use_default_acceleration": {"type": "boolean", "label": "复用默认加速", "default": true},
+    "subtitle_search_limit": {"type": "number", "label": "字幕搜索条数", "default": 20, "min": 1, "max": 100}
+  },
+  "default_config": {
+    "base_url": "https://api.m-team.cc",
+    "api_key": "",
+    "rss_url": "",
+    "timeout": 15,
+    "subtitle_search_enabled": false,
+    "subtitle_search_limit": 20,
+    "downloader_binding": "none",
+    "use_default_acceleration": true,
+    "cache_days": 7,
+    "filter_dmm_images": true,
+    "resolve_dmm_cover_via_api": true,
+    "max_api_cover_resolve": 40,
+    "max_image_cache_per_fetch": 40,
+    "knowledge_active_search": true,
+    "knowledge_search_code_limit": 20,
+    "knowledge_search_concurrency": 4,
+    "knowledge_search_per_code": 3
+  },
+  "contributions": {
+    "sidebar": {"label": "M-Team", "route": "/plugins/mteam-plugin", "icon": "plugin"}
+  },
+  "frontend": {"type": "module", "entry": "frontend/page.js", "style": "frontend/style.css"}
 }
