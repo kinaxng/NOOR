@@ -127,6 +127,10 @@ the recovered bytecode modules remain unchanged.
   `api/endpoints/media_library_streaming.py`. HTTP Range parsing, invalid-range
   response semantics, suffix-range support, and chunked local-file streaming were
   verified against the preserved router bytecode.
+- Reconstructed `api/endpoints/media_library.py` as source, retaining all 13 media
+  library routes and the compatibility helpers used by actor and recovery adapters.
+  The isolated backend was restarted with the source module active; status and live
+  item-list responses were verified successfully.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
