@@ -1,0 +1,166 @@
+import { ref } from 'vue'
+import api from '../api'
+import type { WhisperTaskCreateResponse } from '../api/types'
+import { useJobsStore } from '../stores/jobs'
+import { useToast } from './useToast'
+import { useI18n } from './useI18n'
+import { useJobNavigation } from './useJobNavigation'
+
+export function useWhisper() {
+  const jobsStore = useJobsStore()
+  const toast = useToast()
+  const { t } = useI18n()
+  const { openJobsFocus } = useJobNavigation()
+
+  const whisperTaskId = ref('')
+  const whisperStatus = ref('')
+  const whisperProgress = ref(0)
+  const whisperRunning = ref(false)
+  const whisperFeedbackVisible = ref(false)
+  const whisperFeedbackKind = ref<'submitting' | 'queued' | 'error'>('submitting')
+  const whisperQueuedHint = ref('')
+  const whisperChainId = ref('')
+  const whisperFollowupTaskId = ref('')
+  const whisperFollowupJobType = ref('')
+
+  let feedbackTimer: ReturnType<typeof setTimeout> | null = null
+
+
+  function resetQueuedTargets() {
+    whisperTaskId.value = ''
+    whisperChainId.value = ''
+    whisperFollowupTaskId.value = ''
+    whisperFollowupJobType.value = ''
+  }
+
+  function clearFeedbackTimer() {
+    if (feedbackTimer) {
+      clearTimeout(feedbackTimer)
+      feedbackTimer = null
+    }
+  }
+
+  function hideWhisperFeedback() {
+    clearFeedbackTimer()
+    whisperFeedbackVisible.value = false
+    whisperQueuedHint.value = ''
+    if (whisperFeedbackKind.value !== 'error') {
+      whisperStatus.value = ''
+      whisperProgress.value = 0
+      resetQueuedTargets()
+    }
+  }
+
+  function showQueuedFeedback(hasTranslateFollowup?: boolean) {
+    whisperFeedbackVisible.value = true
+    whisperFeedbackKind.value = 'queued'
+    whisperStatus.value = t('whisper.status.queued')
+    whisperQueuedHint.value = hasTranslateFollowup ? t('whisper.status.queuedHintTranslate') : t('whisper.status.queuedHint')
+    whisperProgress.value = 100
+    whisperRunning.value = false
+    clearFeedbackTimer()
+  }
+
+  async function startWhisperTask(params: {
+    video_path: string
+    strategy?: string
+    subtitle_profile?: string
+    model_backend?: string
+    runtime_tier?: string
+    whisper_task?: string
+    chunker?: string
+    target_chunk_duration_s?: number
+    max_chunk_duration_s?: number
+    segment_merge_max_gap_ms?: number
+    segment_merge_max_duration_ms?: number
+    model: string
+    pipeline_mode?: string
+    merge_strategy: string
+    language: string
+    sensitivity: string
+    vad_method?: string
+    audio_preprocess_mode?: string
+    audio_preprocess_model?: string
+    speech_enhancer?: string
+    translate_to?: string
+    translate_base_url?: string
+    translate_api_key?: string
+    translate_model?: string
+    translate_style?: string
+  }) {
+    if (!params.video_path) {
+      toast.warning(t('whisper.selectVideoFirst'))
+      return
+    }
+
+    clearFeedbackTimer()
+    resetQueuedTargets()
+    whisperRunning.value = true
+    whisperFeedbackVisible.value = true
+    whisperFeedbackKind.value = 'submitting'
+    whisperStatus.value = t('whisper.status.submitting')
+    whisperProgress.value = 24
+
+    try {
+      const createResp = await api.post<WhisperTaskCreateResponse>('/whisper/tasks', params)
+      whisperTaskId.value = createResp.data.task_id
+      whisperChainId.value = createResp.data.chain_id || ''
+      whisperFollowupTaskId.value = createResp.data.followup_task_id || ''
+      whisperFollowupJobType.value = createResp.data.followup_job_type || ''
+      whisperProgress.value = 68
+
+      await api.post(`/whisper/tasks/${whisperTaskId.value}/run`)
+      const createdJob = await jobsStore.getJob(whisperTaskId.value)
+      if (createdJob) {
+        jobsStore.upsertJob(createdJob)
+        whisperChainId.value = whisperChainId.value || createdJob.chain_id || ''
+      }
+      await jobsStore.fetchJobs()
+      showQueuedFeedback(whisperFollowupTaskId.value !== '' && whisperFollowupJobType.value === 'translate-srt')
+    } catch (e: any) {
+      console.error('Whisper task failed:', e)
+      whisperFeedbackVisible.value = true
+      whisperFeedbackKind.value = 'error'
+      whisperStatus.value = t('whisper.status.createFailed', { detail: e?.response?.data?.detail || e.message })
+      whisperQueuedHint.value = ''
+      whisperProgress.value = 0
+      whisperRunning.value = false
+      resetQueuedTargets()
+    }
+  }
+
+  function stopWhisper() {
+    clearFeedbackTimer()
+    whisperRunning.value = false
+    whisperFeedbackVisible.value = false
+    whisperStatus.value = ''
+    whisperQueuedHint.value = ''
+    whisperProgress.value = 0
+    resetQueuedTargets()
+  }
+
+  async function openQueuedJob() {
+    if (whisperChainId.value && whisperFollowupTaskId.value) {
+      await openJobsFocus({ chainId: whisperChainId.value })
+      return
+    }
+    await openJobsFocus({ jobId: whisperTaskId.value || undefined, chainId: whisperChainId.value || undefined })
+  }
+
+  return {
+    whisperTaskId,
+    whisperStatus,
+    whisperQueuedHint,
+    whisperChainId,
+    whisperFollowupTaskId,
+    whisperFollowupJobType,
+    whisperProgress,
+    whisperRunning,
+    whisperFeedbackVisible,
+    whisperFeedbackKind,
+    startWhisperTask,
+    stopWhisper,
+    hideWhisperFeedback,
+    openQueuedJob,
+  }
+}
