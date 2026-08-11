@@ -77,6 +77,8 @@ def build_settings_payload(
                 env_data.get("EMBY_ENABLED_LIBRARY_IDS", "")
                 or media_library_config.get("enabled_library_ids", "")
             ),
+            "mdc_ng_actor_mapping_path": env_data.get("MDC_NG_ACTOR_MAPPING_PATH", "")
+            or media_library_config.get("mdc_ng_actor_mapping_path", ""),
         },
         "storage": {
             "source_dir": env_data.get("SOURCE_DIR", ""),

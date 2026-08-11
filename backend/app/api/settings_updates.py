@@ -17,6 +17,7 @@ def apply_emby_config_updates(
         "EMBY_ENABLED_LIBRARY_IDS",
         ",".join(config.enabled_library_ids) if config.enabled_library_ids else "",
     )
+    update_env_value_fn("MDC_NG_ACTOR_MAPPING_PATH", config.mdc_ng_actor_mapping_path)
 
 
 def build_storage_env_updates(config: Any, lada_model_weights_env: str) -> dict[str, str]:

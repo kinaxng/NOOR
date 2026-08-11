@@ -35,6 +35,7 @@ class EmbyConfig(BaseModel):
     api_key: str
     user_id: str = ""
     enabled_library_ids: list[str] = []
+    mdc_ng_actor_mapping_path: str = ""
 
 
 class StorageConfig(BaseModel):
