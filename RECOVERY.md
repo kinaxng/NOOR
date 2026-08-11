@@ -169,6 +169,10 @@ the recovered bytecode modules remain unchanged.
   across 2,000 randomized Japanese strings, while accepted Anime, large-v3 retry,
   Qwen3 retry, empty-alignment, and successful-alignment branches produced
   identical result text, source labels, and metadata.
+- Recovered `pipeline/whisper/japanese_post.py` from overlapping historical source
+  snapshots plus the preserved bytecode's later short-dialogue protection and
+  moan-edge trimming behavior. All cleanup helpers matched across 3,000 randomized
+  texts, and 400 randomized multi-segment results matched the bytecode end to end.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
