@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import utcnow
@@ -13,6 +13,7 @@ from app.knowledge.models import (
     KnowledgeEntity,
     KnowledgeIndexRun,
     KnowledgeScore,
+    KnowledgeSource,
     stable_id,
 )
 
@@ -23,6 +24,22 @@ class KnowledgeRepository:
 
     async def get_entity(self, entity_id: str) -> KnowledgeEntity | None:
         return await self.db.get(KnowledgeEntity, entity_id)
+
+    async def clear(self) -> None:
+        for model in (KnowledgeActionState, KnowledgeAnomaly, KnowledgeScore, KnowledgeEdge, KnowledgeEntity, KnowledgeSource):
+            await self.db.execute(delete(model))
+        await self.db.commit()
+
+    async def upsert_source(self, source_id: str, name: str, source_type: str, *, data: dict[str, Any] | None = None) -> KnowledgeSource:
+        source = await self.db.get(KnowledgeSource, source_id)
+        if source is None:
+            source = KnowledgeSource(id=source_id, name=name, source_type=source_type, data=data or {})
+            self.db.add(source)
+        else:
+            source.name = name
+            source.source_type = source_type
+            source.data = data or {}
+        return source
 
     async def upsert_entity(self, entity_type: str, key: str, label: str, **values: Any) -> KnowledgeEntity:
         entity_id = stable_id('entity', entity_type, key)
@@ -36,7 +53,7 @@ class KnowledgeRepository:
                 setattr(entity, name, value)
         return entity
 
-    async def upsert_edge(self, source_entity_id: str, target_entity_id: str, relation_type: str, source: str = 'knowledge-core', **values: Any) -> KnowledgeEdge:
+    async def upsert_edge(self, source_entity_id: str, relation_type: str, target_entity_id: str, source: str = 'knowledge-core', **values: Any) -> KnowledgeEdge:
         edge_id = stable_id('edge', source_entity_id, target_entity_id, relation_type, source)
         edge = await self.db.get(KnowledgeEdge, edge_id)
         if edge is None:
@@ -46,6 +63,30 @@ class KnowledgeRepository:
             for name, value in values.items():
                 setattr(edge, name, value)
         return edge
+
+    async def upsert_score(self, entity_id: str, score_type: str, value: int, *, reason: str | None = None, data: dict[str, Any] | None = None) -> KnowledgeScore:
+        score_id = stable_id('score', entity_id, score_type)
+        score = await self.db.get(KnowledgeScore, score_id)
+        if score is None:
+            score = KnowledgeScore(id=score_id, entity_id=entity_id, score_type=score_type, value=value, reason=reason, data=data or {})
+            self.db.add(score)
+        else:
+            score.value = value
+            score.reason = reason
+            score.data = data or {}
+        return score
+
+    async def upsert_anomaly(self, entity_id: str, anomaly_type: str, message: str, *, severity: str = 'info', source: str = 'knowledge-core', data: dict[str, Any] | None = None) -> KnowledgeAnomaly:
+        anomaly_id = stable_id('anomaly', entity_id, anomaly_type, source)
+        anomaly = await self.db.get(KnowledgeAnomaly, anomaly_id)
+        if anomaly is None:
+            anomaly = KnowledgeAnomaly(id=anomaly_id, entity_id=entity_id, anomaly_type=anomaly_type, severity=severity, message=message, source=source, data=data or {})
+            self.db.add(anomaly)
+        else:
+            anomaly.severity = severity
+            anomaly.message = message
+            anomaly.data = data or {}
+        return anomaly
 
     async def search(self, q: str, *, entity_type: str | None = None, filter_kind: str | None = None, limit: int = 30) -> list[KnowledgeEntity]:
         stmt = select(KnowledgeEntity)
@@ -102,6 +143,13 @@ class KnowledgeRepository:
         return action
 
     async def stats(self) -> dict[str, Any]:
-        async def count(model: Any) -> int:
-            return int((await self.db.execute(select(func.count()).select_from(model))).scalar_one())
-        return {'entities': await count(KnowledgeEntity), 'edges': await count(KnowledgeEdge), 'scores': await count(KnowledgeScore), 'anomalies': await count(KnowledgeAnomaly)}
+        entity_rows = await self.db.execute(select(KnowledgeEntity.entity_type, func.count(KnowledgeEntity.id)).group_by(KnowledgeEntity.entity_type))
+        edge_rows = await self.db.execute(select(KnowledgeEdge.relation_type, func.count(KnowledgeEdge.id)).group_by(KnowledgeEdge.relation_type))
+        score_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeScore))).scalar_one())
+        anomaly_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeAnomaly))).scalar_one())
+        return {
+            'entities': {key: int(value) for key, value in entity_rows.all()},
+            'edges': {key: int(value) for key, value in edge_rows.all()},
+            'scores': score_count,
+            'anomalies': anomaly_count,
+        }

@@ -109,6 +109,30 @@ def _parse_item(raw: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     if translated_path != original_path:
         item["emby_path"] = original_path
         item["path"] = translated_path
+    people = raw.get("People") if isinstance(raw.get("People"), list) else []
+    item.update({
+        "file_path": item.get("path"),
+        "original_title": raw.get("OriginalTitle"),
+        "overview": raw.get("Overview"),
+        "premiered": raw.get("PremiereDate"),
+        "genres": raw.get("Genres") if isinstance(raw.get("Genres"), list) else [],
+        "studios": [
+            value.get("Name")
+            for value in (raw.get("Studios") or [])
+            if isinstance(value, dict) and value.get("Name")
+        ],
+        "actors": [
+            {"name": value.get("Name"), "role": value.get("Role")}
+            for value in people
+            if isinstance(value, dict) and value.get("Name") and value.get("Type") == "Actor"
+        ],
+        "directors": [
+            value.get("Name")
+            for value in people
+            if isinstance(value, dict) and value.get("Name") and value.get("Type") == "Director"
+        ],
+        "provider_ids": raw.get("ProviderIds") if isinstance(raw.get("ProviderIds"), dict) else {},
+    })
     return item
 
 
@@ -116,7 +140,7 @@ async def _fetch_items(config: dict[str, Any], *, library_id: str | None, limit:
     params: dict[str, Any] = {
         "IncludeItemTypes": "Movie",
         "Recursive": "true",
-        "Fields": "Path,ProviderIds,People,ImageTags,Overview,PremiereDate,DateCreated,Genres,Tags,MediaSources",
+        "Fields": "Path,ProviderIds,People,ImageTags,Overview,OriginalTitle,PremiereDate,DateCreated,Genres,Studios,Tags,MediaSources",
         "StartIndex": max(0, offset),
         "Limit": max(1, min(limit, 500)),
         "SortBy": "DateCreated",
@@ -187,7 +211,7 @@ async def get_item(item_id: str):
         response = await client.get(
             f"{_user_items_url(config)}/{quote(item_id)}",
             headers=_headers(config),
-            params={"Fields": "Path,ProviderIds,People,ImageTags,Overview,PremiereDate,DateCreated,Genres,Tags,MediaSources"},
+            params={"Fields": "Path,ProviderIds,People,ImageTags,Overview,OriginalTitle,PremiereDate,DateCreated,Genres,Studios,Tags,MediaSources"},
         )
         if response.status_code == 404:
             raise HTTPException(status_code=404, detail="未找到媒体项目")

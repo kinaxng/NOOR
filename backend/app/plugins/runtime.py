@@ -248,6 +248,33 @@ class PluginRuntime:
                     widgets.append(item)
         return widgets
 
+    async def get_knowledge_contributions(self, *, limit: int = 100, context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for plugin_id, manifest in self._manifests.items():
+            if not self._is_enabled(plugin_id):
+                continue
+            capabilities = manifest.get('capabilities') or [] if isinstance(manifest, dict) else []
+            if not ({'knowledge_provider', 'knowledge_contributions'} & set(capabilities)):
+                continue
+            handler = self._handlers.get(plugin_id)
+            if handler is None:
+                continue
+            try:
+                callback = getattr(handler, 'build_knowledge_contributions', None)
+                if callable(callback):
+                    data = callback(self.get_config(plugin_id), limit=limit, context=context or {})
+                    data = await data if asyncio.iscoroutine(data) else data
+                else:
+                    data = await self.handle_action(plugin_id, 'knowledge_contributions', {'limit': limit, 'context': context or {}})
+                items = data.get('items') if isinstance(data, dict) and isinstance(data.get('items'), list) else data
+                values = items if isinstance(items, list) else [items]
+                for item in values[:limit]:
+                    if isinstance(item, dict):
+                        out.append({'source_plugin': plugin_id, **item})
+            except Exception:
+                continue
+        return out
+
     async def resolve_resource_download(self, plugin_id: str, resource: dict[str, Any]) -> dict[str, Any]:
         """Ask a recovered provider to resolve a download URL when supported."""
         handler = self._handlers.get(plugin_id)
