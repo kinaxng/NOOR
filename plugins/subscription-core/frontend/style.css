@@ -1,0 +1,44 @@
+.sub-page { display: grid; gap: 1rem; }
+.sub-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem); gap: 1rem; align-items: start; }
+.sub-list { display: grid; gap: .75rem; }
+.sub-panel, .sub-card, .sub-events { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.025); border-radius: .95rem; }
+.sub-panel { padding: 1rem; }
+.sub-panel__head { display: grid; gap: .25rem; margin-bottom: .85rem; }
+.sub-panel__head strong { color: #fff; font-size: .95rem; }
+.sub-panel__head span { color: rgba(255,255,255,.48); font-size: .76rem; }
+.sub-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.sub-form-grid label { display: grid; gap: .35rem; color: rgba(255,255,255,.56); font-size: .72rem; font-weight: 750; }
+.sub-form-grid input, .sub-form-grid select { height: 36px; border: 1px solid rgba(255,255,255,.1); border-radius: .55rem; background: rgba(255,255,255,.045); color: #fff; padding: 0 .65rem; }
+.sub-checks { display: flex; align-items: center; gap: .8rem; color: rgba(255,255,255,.72); }
+.sub-checks label { display: flex; align-items: center; gap: .35rem; }
+.sub-form-actions { display: flex; justify-content: flex-end; margin-top: .85rem; }
+.sub-form-actions button, .sub-card__actions button { min-height: 32px; padding: 0 .8rem; border-radius: .6rem; border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.045); color: rgba(255,255,255,.78); font-weight: 750; }
+.sub-form-actions button { border-color: rgba(0,117,255,.34); background: rgba(0,117,255,.16); color: #fff; }
+.sub-empty { min-height: 10rem; display: grid; place-items: center; padding: 1rem; color: rgba(255,255,255,.46); border: 1px dashed rgba(255,255,255,.1); border-radius: .95rem; }
+.sub-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; padding: .9rem; }
+.sub-card__main { min-width: 0; display: grid; gap: .48rem; }
+.sub-card__title { display: flex; align-items: baseline; gap: .55rem; min-width: 0; }
+.sub-card__title strong { color: #fff; font-size: .98rem; }
+.sub-card__title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255,255,255,.52); font-size: .78rem; }
+.sub-card__badges { display: flex; flex-wrap: wrap; gap: .3rem; }
+.sub-badge { display: inline-flex; align-items: center; min-height: 20px; padding: .16rem .46rem; border-radius: 999px; background: rgba(255,255,255,.065); color: rgba(255,255,255,.64); font-size: .68rem; font-weight: 750; }
+.sub-badge--primary { background: rgba(0,117,255,.16); color: #bfdbfe; }
+.sub-badge--success { background: rgba(34,197,94,.15); color: #86efac; }
+.sub-badge--warning { background: rgba(245,158,11,.16); color: #fcd34d; }
+.sub-badge--danger { background: rgba(239,68,68,.15); color: #fca5a5; }
+.sub-card__meta { color: rgba(255,255,255,.38); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-best { display: grid; gap: .15rem; padding: .55rem .65rem; border-radius: .65rem; background: rgba(0,117,255,.08); color: rgba(255,255,255,.72); }
+.sub-best strong { color: #bfdbfe; font-size: .72rem; }
+.sub-best span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .74rem; }
+.sub-best.is-empty { color: rgba(255,255,255,.34); background: rgba(255,255,255,.035); }
+.sub-card__actions { display: flex; align-items: start; gap: .45rem; }
+.sub-events { padding: .8rem; display: grid; gap: .5rem; }
+.sub-events__head { color: #fff; font-weight: 800; font-size: .86rem; }
+.sub-events__empty { color: rgba(255,255,255,.38); font-size: .76rem; }
+.sub-event { display: grid; gap: .12rem; padding: .5rem .55rem; border-radius: .6rem; background: rgba(255,255,255,.035); }
+.sub-event span { color: rgba(255,255,255,.34); font-size: .66rem; }
+.sub-event strong { color: rgba(255,255,255,.72); font-size: .73rem; font-weight: 700; }
+.sub-event.is-success strong { color: #86efac; }
+.sub-event.is-warning strong { color: #fcd34d; }
+.sub-event.is-error strong { color: #fca5a5; }
+@media (max-width: 980px) { .sub-layout { grid-template-columns: 1fr; } .sub-form-grid { grid-template-columns: 1fr; } .sub-card { grid-template-columns: 1fr; } }

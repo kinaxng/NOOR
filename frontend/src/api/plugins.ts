@@ -15,7 +15,7 @@ export interface PluginListItem {
 
 export async function fetchPlugins(): Promise<PluginListItem[]> {
   const res = await api.get('/plugins')
-  return res.data || []
+  return Array.isArray(res.data?.items) ? res.data.items : (Array.isArray(res.data) ? res.data : [])
 }
 
 export function pluginPageRoute(plugin: PluginListItem): string | null {

@@ -76,9 +76,10 @@ async def get_plugin(plugin_id: str):
 
 @router.get('/{plugin_id}/config')
 async def get_plugin_config(plugin_id: str):
-    if not runtime.get_plugin(plugin_id):
+    plugin = runtime.get_plugin(plugin_id)
+    if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
-    return {'config': runtime.get_config(plugin_id)}
+    return {'plugin': plugin, 'config': runtime.get_config(plugin_id)}
 
 
 @router.put('/{plugin_id}/config')
@@ -103,6 +104,22 @@ async def plugin_action(plugin_id: str, action: str, payload: PluginActionPayloa
         return await runtime.handle_action(plugin_id, action, payload.payload)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get('/{plugin_id}/assets/{asset_path:path}')
+async def get_plugin_asset(plugin_id: str, asset_path: str):
+    manifest = runtime._manifests.get(plugin_id)
+    if not manifest:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    frontend_dir = runtime.plugin_root.joinpath(plugin_id, 'frontend').resolve()
+    asset = frontend_dir.joinpath(asset_path).resolve()
+    try:
+        asset.relative_to(frontend_dir)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail='Plugin asset not found') from exc
+    if not asset.is_file():
+        raise HTTPException(status_code=404, detail='Plugin asset not found')
+    return FileResponse(asset)
 
 
 @router.get('/{plugin_id}/images/{image_id}')

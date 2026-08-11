@@ -1,0 +1,36 @@
+.javdb-page { display: flex; flex-direction: column; gap: 1rem; }
+.javdb-tabs-wrap { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.javdb-filters-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 0; border-top: 1px solid rgba(255,255,255,0.03); }
+.javdb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+
+/* Detail Gallery: The Unified Slider */
+.javdb-detail-gallery { 
+  display: flex; 
+  overflow-x: auto; 
+  gap: 0.6rem; 
+  margin: -1rem -1rem 1rem -1rem; 
+  padding: 1rem;
+  scrollbar-width: none;
+  background: rgba(0,0,0,0.2);
+}
+.javdb-detail-gallery::-webkit-scrollbar { display: none; }
+.javdb-gallery-img { 
+  flex: none; 
+  height: 200px;
+  aspect-ratio: 2184 / 1468; 
+  object-fit: cover; 
+  border-radius: var(--radius-md); 
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.javdb-detail-meta { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+.javdb-meta-row { display: flex; align-items: baseline; gap: 0.8rem; }
+.javdb-meta-label { font-size: 0.75rem; color: var(--color-text-muted); min-width: 3.5rem; flex-shrink: 0; }
+.javdb-meta-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.javdb-magnet-row { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--color-bg-elevated); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); margin-bottom: 0.5rem; }
+.javdb-magnet-name { font-size: 0.85rem; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.javdb-magnet-meta { font-size: 0.72rem; color: var(--color-text-muted); }
+.javdb-section-title { font-size: 0.85rem; font-weight: 800; color: var(--color-text-muted); text-transform: uppercase; margin: 1rem 0 0.5rem 0; border-left: 3px solid var(--color-brand); padding-left: 0.6rem; }
+.javdb-skeleton { aspect-ratio: 2/3; border-radius: var(--radius-lg); background: rgba(255,255,255,0.05); }
