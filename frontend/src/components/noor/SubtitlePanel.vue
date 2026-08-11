@@ -700,10 +700,6 @@ async function handleStartWhisper(modelBackend: WhisperModelBackend = whisperDef
   box-shadow: 0 4px 6px -1px rgba(34, 197, 94, 0.18), 0 2px 4px -1px rgba(34, 197, 94, 0.1);
 }
 
-.whisper-submit-button--error {
-  border-color: rgba(239, 68, 68, 0.3);
-
-
 .whisper-submit-button--queued {
   border-color: rgba(34, 197, 94, 0.28);
   background: rgba(34, 197, 94, 0.16);

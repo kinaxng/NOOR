@@ -1,0 +1,763 @@
+/* =============================================
+   NOOR - Vision UI Design System
+   Based on Vision UI Dashboard by Creative Tim
+   MIT License
+   ============================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Display:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================
+   CSS Variables — Vision UI Design Tokens
+   Single source of truth for all visual properties
+   ============================================= */
+:root {
+  /* ── Backgrounds ── */
+  --color-bg-void:    #030C1D;   /* Root page background */
+  --color-bg-base:    rgb(3, 12, 29);  /* App container */
+  --color-bg-surface:  #1A1F3A;   /* Cards / panels */
+  --color-bg-elevated: #1E2544;  /* Elevated elements */
+  --color-bg-hover:    #252A40;   /* Hover state */
+
+  /* Glass / Card */
+  --color-glass-bg:    rgba(17, 25, 54, 0.65);
+  --color-glass-border: rgba(255, 255, 255, 0.06);
+
+  /* ── Borders ── */
+  --color-border-subtle:  rgba(255, 255, 255, 0.04);
+  --color-border-default:  rgba(255, 255, 255, 0.08);
+  --color-border-strong:   rgba(255, 255, 255, 0.14);
+  --color-border-focus:   #0075FF;
+
+  /* ── Text ── */
+  --color-text-primary:   #FFFFFF;
+  --color-text-secondary: #A0AEC0;
+  --color-text-muted:    #718096;
+
+  /* ── Brand ── */
+  --color-brand:       #0075FF;
+  --color-brand-hover:  #3993FE;
+  --color-brand-active: #005FCC;
+
+  /* ── Status Colors ── */
+  /* info = running = blue */
+  --color-info:        #0075FF;
+  --color-info-hover:  #3993FE;
+  /* success = completed = green */
+  --color-success:     #01B574;
+  --color-success-hover: #35D28A;
+  /* warning = queued = orange (NOT red) */
+  --color-warning:     #FFB547;
+  --color-warning-hover: #FFCD75;
+  /* error = failed = red */
+  --color-error:       #E31A1A;
+  --color-error-hover: #EE5D50;
+  /* secondary = default/uncategorized = gray */
+  --color-secondary:   #627594;
+
+  /* ── Accents ── */
+  --color-accent-cyan:    #21D4FD;
+  --color-accent-magenta: #FF2D95;
+  --color-accent-amber:  #FFB800;
+
+  /* ── Fonts ── */
+  --font-display: 'Plus Jakarta Display', 'Inter', 'Noto Sans SC', sans-serif;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  /* ── Typography Scale ── */
+  --font-size-xxs:  0.625rem;
+  --font-size-xs:   0.75rem;
+  --font-size-sm:   0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg:   1.125rem;
+  --font-size-xl:   1.25rem;
+  --font-size-2xl:  1.5rem;
+  --font-size-3xl:  1.875rem;
+  --font-size-4xl:  2.25rem;
+
+  /* ── Font Weights ── */
+  --font-weight-light:   300;
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* ── Border Radius ── */
+  --radius-xs:     2px;
+  --radius-sm:     4px;
+  --radius-md:     8px;
+  --radius-button: 12px;
+  --radius-lg:     15px;
+  --radius-xl:     20px;
+  --radius-2xl:    24px;
+  --radius-pill:   9999px;
+
+  /* ── Shadows ── */
+  --shadow-sm:       0 2px 6px rgba(0, 0, 0, 0.18);
+  --shadow-md:       0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-lg:       0 16px 40px rgba(0, 0, 0, 0.35);
+  --shadow-xl:       0 24px 48px rgba(0, 0, 0, 0.4);
+  --shadow-glow:     0 0 0 3px rgba(0, 117, 255, 0.28);
+  --shadow-glow-blue: 0 4px 15px rgba(0, 117, 255, 0.35);
+
+  /* ── Transitions ── */
+  --transition-fast:   150ms ease-out;
+  --transition-normal: 200ms ease-in-out;
+  --transition-slow:   300ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Z-Index ── */
+  --z-sidebar:  40;
+  --z-navbar:   50;
+  --z-dropdown: 50;
+  --z-modal:    100;
+  --z-toast:     200;
+
+  /* ── Nuxt UI bridge tokens ──
+     Nuxt UI components read --ui-* variables. Keep them mapped to NOOR tokens
+     so the Vue components and plugin DOM SDK can converge on one design system. */
+  --ui-primary: var(--color-brand);
+  --ui-success: var(--color-success);
+  --ui-info: var(--color-info);
+  --ui-warning: var(--color-warning);
+  --ui-error: var(--color-error);
+  --ui-radius: 0.75rem;
+  --ui-bg: var(--color-bg-surface);
+  --ui-bg-muted: rgba(255, 255, 255, 0.04);
+  --ui-bg-elevated: var(--color-bg-elevated);
+  --ui-bg-accented: var(--color-bg-hover);
+  --ui-bg-inverted: #ffffff;
+  --ui-border: var(--color-border-default);
+  --ui-border-muted: var(--color-border-subtle);
+  --ui-border-accented: var(--color-border-strong);
+  --ui-border-inverted: #ffffff;
+  --ui-text-dimmed: var(--color-text-muted);
+  --ui-text-muted: var(--color-text-muted);
+  --ui-text-toned: var(--color-text-secondary);
+  --ui-text: var(--color-text-secondary);
+  --ui-text-highlighted: var(--color-text-primary);
+  --ui-text-inverted: #ffffff;
+}
+
+/* =============================================
+   Base Styles
+   ============================================= */
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg-base);
+  background-image: url('/img/body-background.png');
+  background-size: cover;
+  background-position: 0% 0%;
+  color: var(--color-text-secondary);
+  line-height: 1.625;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background: var(--color-bg-elevated);
+  color: #fff;
+}
+
+/* =============================================
+   Unified Vision UI Card
+   All card backgrounds must use this class
+   ============================================= */
+@layer components {
+  .ui-card {
+    background: rgb(26, 31, 55);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 1.5rem;
+  }
+
+  /* Settings form input */
+  .settings-input {
+    padding: 0.625rem 0.875rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    font-family: var(--font-display);
+    font-size: var(--font-size-sm);
+    color: #FFFFFF;
+    outline: none;
+    transition: all var(--transition-fast);
+    width: 100%;
+  }
+  .settings-input:focus {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.1);
+  }
+  .settings-input::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+  }
+  select.settings-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(255,255,255,0.3)' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: calc(100% - 0.875rem) center;
+    padding-right: 2.5rem;
+  }
+  select.settings-input option {
+    background: var(--color-bg-elevated);
+    color: #FFFFFF;
+  }
+
+  .settings-input:is(select),
+  .plugins-input:is(select) {
+    color-scheme: dark;
+  }
+
+  /* Settings card */
+  .settings-card {
+    background: rgb(26, 31, 55);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 1.5rem;
+    overflow-x: hidden;
+  }
+
+  /* Settings form layout */
+  .settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .settings-form__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    .settings-form__row {
+      grid-template-columns: 1fr;
+    }
+  }
+  .settings-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+  .settings-form__label {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .settings-form__hint {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.3);
+  }
+  .model-row__name {
+    font-family: var(--font-display);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #FFFFFF;
+  }
+  .model-row__desc {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Settings note */
+  .settings-note {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    color: rgba(255, 181, 71, 0.6);
+    margin-top: 0;
+  }
+
+  /* Quick action card */
+  .quick-action-card {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    background: rgb(26, 31, 55);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 1rem 1.25rem;
+    text-decoration: none;
+    transition: all var(--transition-normal);
+    cursor: pointer;
+  }
+  .quick-action-card:hover {
+    border-color: rgba(0, 117, 255, 0.3);
+    background: rgb(30, 37, 68);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 26px -4px rgba(0, 117, 255, 0.15);
+  }
+  .quick-action-card__icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .quick-action-card__icon--primary { background: rgba(0, 117, 255, 0.15); color: #0075FF; }
+  .quick-action-card__icon--info { background: rgba(0, 117, 255, 0.15); color: #0075FF; }
+  .quick-action-card__icon--success { background: rgba(1, 181, 116, 0.15); color: #01B574; }
+  .quick-action-card__icon--secondary { background: rgba(98, 117, 148, 0.15); color: #627594; }
+  .quick-action-card__label {
+    font-family: var(--font-display);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #FFFFFF;
+    line-height: 1.2;
+  }
+  .quick-action-card__desc {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 0.125rem;
+  }
+  .quick-action-card__arrow {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  /* Activity item */
+  .activity-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .activity-item__icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .activity-item__icon--success { background: rgba(1, 181, 116, 0.15); color: #01B574; }
+  .activity-item__icon--error { background: rgba(227, 26, 26, 0.15); color: #E31A1A; }
+  .activity-item__icon--primary { background: rgba(0, 117, 255, 0.15); color: #0075FF; }
+  .activity-item__icon--warning { background: rgba(255, 181, 71, 0.15); color: #FFB547; }
+  .activity-item__icon--secondary { background: rgba(98, 117, 148, 0.15); color: #627594; }
+  .activity-item__content {
+    flex: 1;
+    min-width: 0;
+  }
+  .activity-item__name {
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #FFFFFF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .activity-item__meta {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 0.125rem;
+  }
+
+  /* Filter button (Home.vue, History.vue filter tabs) */
+  .filter-btn {
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-button);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: var(--font-display);
+    transition: all var(--transition-fast);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.5);
+    cursor: pointer;
+  }
+  .filter-btn:hover {
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.7);
+  }
+  .filter-btn--active {
+    background: var(--color-brand);
+    color: white;
+    box-shadow: 0 4px 12px rgba(0, 117, 255, 0.3);
+    border-color: transparent;
+  }
+
+  /* Section label for Jobs/Jobs pages */
+  .section-label {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 0.75rem;
+  }
+
+  /* Pagination button */
+  .pagination-btn {
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-lg);
+    font-family: var(--font-display);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+  }
+  .empty-state-icon {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* Log card header */
+  .log-card__header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .log-card__title {
+    font-family: var(--font-display);
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  /* ── Media card tag badges ── */
+  /* Consistent tag colors matching design system status tokens */
+  .tag-subtitle {
+    background: rgba(227, 26, 26, 0.15);
+    color: #E31A1A;
+    border: 1px solid rgba(227, 26, 26, 0.2);
+  }
+  .tag-subtitle:hover {
+    background: rgba(227, 26, 26, 0.25);
+  }
+  .tag-subtitle--none {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .tag-subtitle--none:hover {
+    background: rgba(227, 26, 26, 0.25);
+    color: #E31A1A;
+    border-color: rgba(227, 26, 26, 0.2);
+  }
+  .tag-cracked {
+    background: rgba(1, 181, 116, 0.15);
+    color: #01B574;
+    border: 1px solid rgba(1, 181, 116, 0.2);
+  }
+  .tag-cracked--none {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .tag-cracked--none:hover {
+    background: rgba(1, 181, 116, 0.25);
+    color: #01B574;
+    border-color: rgba(1, 181, 116, 0.2);
+  }
+.noor-blur-images img,
+body.noor-blur-images img {
+  filter: blur(24px);
+  transition: filter var(--transition-normal);
+}
+.noor-blur-images img:hover,
+body.noor-blur-images img:hover {
+  filter: blur(18px);
+}
+
+/* Shared tab-sub control panel: main app + plugin SDK */
+.noor-control-panel {
+  position: relative;
+  display: grid;
+  gap: 0.68rem;
+  padding: 0.72rem 0.84rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,.026);
+  background: rgba(17, 25, 54, 0.18);
+  backdrop-filter: blur(6px);
+  box-shadow: none;
+}
+.noor-control-panel.is-collapsible {
+  padding-top: 0.82rem;
+}
+.noor-control-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+.noor-control-panel__header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__title {
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.noor-control-panel__summary {
+  color: rgba(255,255,255,.34);
+  font-size: 0.7rem;
+}
+.noor-control-panel__header-actions,
+.noor-control-panel__left,
+.noor-control-panel__right,
+.noor-control-panel__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__collapse-btn {
+  position: absolute;
+  top: -0.18rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2rem;
+  height: 0.9rem;
+  min-width: 2rem;
+  min-height: 0.9rem;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.06);
+  border-top: 0;
+  border-radius: 0 0 999px 999px;
+  background: rgba(17, 25, 54, 0.72);
+  color: rgba(255,255,255,.28);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), border-color var(--transition-fast);
+  z-index: 2;
+}
+.noor-control-panel__collapse-btn:hover {
+  background: rgba(17, 25, 54, 0.9);
+  color: rgba(255,255,255,.58);
+  border-color: rgba(255,255,255,.1);
+  transform: translateX(-50%) translateY(1px);
+}
+.noor-control-panel__collapse-icon {
+  font-size: 0.66rem;
+  line-height: 1;
+  pointer-events: none;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+  transform: rotate(0deg);
+  opacity: 0.9;
+}
+.noor-control-panel.is-collapsed .noor-control-panel__collapse-icon {
+  transform: rotate(180deg);
+}
+.noor-control-panel__body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.64rem 0.82rem;
+  flex-wrap: wrap;
+}
+.noor-control-panel__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.58rem 0.82rem;
+  flex-wrap: wrap;
+}
+.noor-control-panel__row + .noor-control-panel__row {
+  padding-top: 0.64rem;
+  border-top: 1px solid rgba(255,255,255,.045);
+}
+.noor-control-panel__left {
+  flex: 1 1 16rem;
+}
+.noor-control-panel__right {
+  flex: 999 1 34rem;
+  justify-content: flex-end;
+}
+.noor-control-panel__group {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem 0.52rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__section {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.48rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__section-label {
+  color: rgba(113, 128, 150, 0.58);
+  font-size: 0.66rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  padding-top: 0.34rem;
+}
+.noor-control-panel__section-body {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem 0.48rem;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.noor-control-panel .noor-plugin-chip {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel .noor-plugin-chip:hover:not(:disabled),
+.noor-control-panel .noor-control-panel__picker-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.8);
+  border-color: transparent;
+}
+.noor-control-panel .noor-plugin-chip.is-active,
+.noor-control-panel .noor-plugin-chip--soft.is-active,
+.noor-control-panel .noor-control-panel__picker-btn:not(.is-empty) {
+  background: rgba(0,117,255,.15);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+.noor-control-panel .noor-plugin-chip--accent.is-active {
+  background: rgba(0,117,255,.15);
+  border-color: transparent;
+  color: #fff;
+}
+.noor-control-panel__picker-btn {
+  min-width: 8.5rem;
+  justify-content: flex-start;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-btn.is-empty {
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: min(60vh, 36rem);
+}
+.noor-control-panel__picker-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(26,31,55,.92);
+  padding-bottom: 0.28rem;
+}
+.noor-control-panel__picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  align-content: flex-start;
+}
+.noor-control-panel__picker-options .noor-plugin-chip {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-options .noor-plugin-chip:hover:not(:disabled) {
+  background: rgba(255,255,255,.04);
+  border-color: transparent;
+  color: rgba(255,255,255,.8);
+}
+.noor-control-panel__picker-options .noor-plugin-chip.is-active,
+.noor-control-panel__picker-options .noor-plugin-chip--soft.is-active {
+  background: rgba(0,117,255,.15);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+.noor-control-panel__group-label {
+  color: rgba(113, 128, 150, 0.58);
+  font-size: 0.66rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.noor-control-panel__group-items {
+  display: flex;
+  align-items: center;
+  gap: 0.34rem 0.42rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__divider {
+  width: 1px;
+  min-height: 28px;
+  background: rgba(255,255,255,.06);
+  align-self: stretch;
+}
+.noor-control-panel__search-wrap {
+  position: relative;
+  min-width: min(18rem, 100%);
+  flex: 1 1 15rem;
+}
+.noor-control-panel__search-icon {
+  pointer-events: none;
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.25);
+}
+.noor-control-panel__search-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: 0.56rem 0.8rem 0.56rem 2.2rem;
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+.noor-control-panel__search-input:focus {
+  outline: none;
+  border-color: rgba(0,117,255,0.42);
+  background: rgba(255,255,255,0.055);
+}
+.noor-control-panel.is-collapsed .noor-control-panel__row--secondary,
+.noor-control-panel.is-collapsed .noor-control-panel__row--tertiary,
+.noor-control-panel.is-collapsed .noor-control-panel__body,
+.noor-control-panel.is-collapsed .noor-control-panel__footer {
+  display: none;
+}
+@media (max-width: 900px) {
+  .noor-control-panel__body {
+    flex-direction: column;
+  }
+  .noor-control-panel__left,
+  .noor-control-panel__right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+}

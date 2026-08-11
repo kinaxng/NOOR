@@ -1178,17 +1178,6 @@ async function saveDefaults() {
 }
 
 .settings-card__desc {
-.settings-card__title {
-  font-family: var(--font-display);
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.7);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
-}
-
-.settings-card__desc {
   font-family: var(--font-display);
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.3);

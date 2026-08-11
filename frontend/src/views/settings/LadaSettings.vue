@@ -380,3 +380,128 @@ function installModeLabel(mode: string) {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.3);
   margin-bottom: 0;
+}
+
+.info-label {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.info-value {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0075FF;
+}
+
+.info-value--mono {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.settings-info-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  align-items: center;
+}
+
+.settings-info-row:last-child {
+  border-bottom: none;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.settings-actions--stack {
+  gap: 0.625rem;
+}
+
+.settings-primary-btn {
+  min-width: 5.5rem;
+}
+
+.settings-secondary-btn {
+  box-shadow: none !important;
+}
+
+.model-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+}
+
+.model-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.model-row__name {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.model-row__desc {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.settings-note {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 181, 71, 0.6);
+  margin-top: 0;
+}
+
+/* Collapsible card */
+.collapsible-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapsible-card__chevron {
+  color: rgba(255, 255, 255, 0.35);
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+}
+
+.collapsible-card__chevron--open {
+  transform: rotate(90deg);
+}
+
+.collapsible-card__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+  overflow: hidden;
+}
+
+.collapsible-card__body--open {
+  grid-template-rows: 1fr;
+}
+
+.collapsible-card__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+</style>

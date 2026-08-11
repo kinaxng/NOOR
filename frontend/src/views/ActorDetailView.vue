@@ -760,7 +760,6 @@ onMounted(() => {
   gap: 0.85rem;
   width: 300px;
 }
-}
 
 .actor-profile__avatar {
   overflow: hidden;
@@ -1161,7 +1160,6 @@ onMounted(() => {
   color: var(--color-text-muted);
   font-size: 0.8rem;
 }
-}
 
 .tmdb-preview__options {
   display: flex;
@@ -1263,4 +1261,3 @@ onMounted(() => {
   }
 }
 </style>
-

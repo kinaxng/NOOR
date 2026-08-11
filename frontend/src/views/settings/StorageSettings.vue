@@ -497,3 +497,37 @@ function closeDirPicker() {
       </div>
 
       <!-- Content -->
+      <div class="dir-modal__content">
+        <div v-if="dirPickerLoading" class="flex items-center justify-center py-8 text-white/30">
+          {{ t('settings.dirPicker.loading') }}
+        </div>
+        <div v-else-if="dirPickerError" class="dir-error">
+          {{ dirPickerError }}
+        </div>
+        <div v-else>
+          <div
+            v-for="entry in dirPickerEntries"
+            :key="entry.path"
+            @click="onDirEntryClick(entry)"
+            class="dir-entry"
+          >
+            <BaseIcon :name="entry.is_dir ? 'folderOpen' : 'file'" :class="`w-4 h-4 dir-entry__icon${entry.is_dir ? ' dir-entry__icon--folder' : ''}`" />
+            <span class="dir-entry__name">{{ entry.name }}</span>
+          </div>
+          <div v-if="dirPickerEntries.length === 0 && !dirPickerLoading" class="dir-empty">
+            {{ t('settings.dirPicker.emptyDir') }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="dir-modal__footer">
+        <span class="dir-modal__hint">{{ t('settings.dirPicker.hint') }}</span>
+        <div class="flex gap-2">
+          <VuiButton variant="outlined" color="secondary" size="small" @click="closeDirPicker">{{ t('common.cancel') }}</VuiButton>
+          <VuiButton variant="gradient" color="info" size="small" @click="confirmDirPicker">{{ t('settings.dirPicker.selectFolder') }}</VuiButton>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

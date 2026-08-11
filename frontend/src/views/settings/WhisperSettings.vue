@@ -520,8 +520,7 @@ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBack
 
               <!-- torch GPU/CPU variant selector -->
               <div class="dep-row">
-
-
+                <div class="flex items-center justify-between">
                   <span class="dep-row__name">{{ t('settings.whisper.torchVariant') }}</span>
                   <div class="flex gap-1">
                     <button
