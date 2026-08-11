@@ -106,6 +106,10 @@ the recovered bytecode modules remain unchanged.
   maintainable source and verified its environment configuration, paths, index
   matching, result shape, and router contract against bytecode. The application does
   not register this router; it is imported directly by the subtitle search route.
+- Reconstructed `api/endpoints/media_library_helpers.py` as maintainable source and
+  verified its environment-backed configuration, media-path mapping, release-tag
+  classification, Emby poster URL generation, and local subtitle counting against
+  the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
