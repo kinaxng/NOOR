@@ -146,8 +146,7 @@ def _result(filename: str, ext: str, full_path: str) -> dict:
     return {"id": f"local:{filename}:{full_path}", "filename": filename, "ext": ext, "language": _detect_language(full_path), "source": "本地字幕库", "source_key": "local_library", "source_type": "local_library", "url": full_path, "score": 1.0}
 
 
-def search_local_library(video_code: str, video_path: str = "") -> list[dict]:
-    config = _load_config()
+def search_local_library_with_config(video_code: str, config: dict, video_path: str = "") -> list[dict]:
     fuzzy, index_enabled = config.get("match_fuzzy", False), config.get("index_enabled", False)
     video_name_lower = video_code.lower()
     results: list[dict] = []
@@ -175,6 +174,10 @@ def search_local_library(video_code: str, video_path: str = "") -> list[dict]:
                     if _match(base, video_name_lower, fuzzy):
                         results.append(_result(filename, ext, os.path.join(root, filename)))
     return list({result["id"]: result for result in results}.values())
+
+
+def search_local_library(video_code: str, video_path: str = "") -> list[dict]:
+    return search_local_library_with_config(video_code, _load_config(), video_path=video_path)
 
 
 @router.get("/config")

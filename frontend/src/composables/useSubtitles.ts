@@ -95,14 +95,14 @@ export function useSubtitles() {
     }
   }
 
-  async function previewOnlineSubtitle(url: string, filename: string) {
+  async function previewOnlineSubtitle(url: string, filename: string, sourceKey?: string) {
     loadingSubtitlePreview.value = true
     subtitlePreviewContent.value = ''
     subtitlePreviewFilename.value = filename
 
     try {
       const resp = await api.get('/subtitles/fetch', {
-        params: { url }
+        params: { url, source_key: sourceKey || null }
       })
       subtitlePreviewContent.value = resp.data.content
     } catch (e: any) {

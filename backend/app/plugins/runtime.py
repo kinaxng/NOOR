@@ -116,7 +116,14 @@ class PluginRuntime:
         manifest = self._manifests.get(plugin_id) or {}
         defaults = manifest.get('default_config') if isinstance(manifest.get('default_config'), dict) else {}
         saved = self._configs().get(plugin_id, {})
-        return {**defaults, **(saved if isinstance(saved, dict) else {})}
+        config = {**defaults, **(saved if isinstance(saved, dict) else {})}
+        handler = self._handlers.get(plugin_id)
+        resolver = getattr(handler, 'resolve_config', None)
+        if callable(resolver):
+            resolved = resolver(config)
+            if isinstance(resolved, dict):
+                return resolved
+        return config
 
     async def update_config(self, plugin_id: str, config: dict[str, Any]) -> dict[str, Any]:
         if plugin_id not in self._manifests:
@@ -247,6 +254,37 @@ class PluginRuntime:
                 if isinstance(item, dict):
                     widgets.append(item)
         return widgets
+
+    async def search_subtitles(self, video_code: str, *, local_only: bool = False) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for plugin_id, handler in self._handlers.items():
+            manifest = self._manifests.get(plugin_id) or {}
+            if not self._is_enabled(plugin_id) or 'subtitle_search' not in (manifest.get('capabilities') or []):
+                continue
+            if local_only and 'subtitle_search_local' not in (manifest.get('capabilities') or []):
+                continue
+            callback = getattr(handler, 'search_subtitles', None)
+            if not callable(callback):
+                continue
+            try:
+                value = callback(self.get_config(plugin_id), video_code)
+                value = await value if asyncio.iscoroutine(value) else value
+                if isinstance(value, list):
+                    results.extend(item for item in value if isinstance(item, dict))
+            except Exception:
+                continue
+        return results
+
+    async def fetch_subtitle_content(self, plugin_id: str, subtitle_id: str) -> dict[str, Any]:
+        handler = self._handlers.get(plugin_id)
+        callback = getattr(handler, 'fetch_subtitle_content', None)
+        if handler is None or not callable(callback) or not self._is_enabled(plugin_id):
+            raise LookupError(plugin_id)
+        value = callback(self.get_config(plugin_id), subtitle_id)
+        value = await value if asyncio.iscoroutine(value) else value
+        if not isinstance(value, dict):
+            raise ValueError('invalid subtitle provider response')
+        return value
 
     async def get_knowledge_contributions(self, *, limit: int = 100, context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []

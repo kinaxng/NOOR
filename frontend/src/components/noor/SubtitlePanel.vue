@@ -307,7 +307,8 @@ async function handleDownloadSubtitle(url: string, _filename: string, source?: s
 }
 
 async function handlePreviewOnline(url: string, filename: string) {
-  await previewOnlineSubtitle(url, filename)
+  const matchedSubtitle = onlineSubtitles.value.find(sub => sub.url === url && sub.name === filename)
+  await previewOnlineSubtitle(url, filename, matchedSubtitle?.source_key)
 }
 
 async function handlePreviewLocal(path: string, filename: string) {

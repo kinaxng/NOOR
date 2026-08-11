@@ -12,8 +12,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.api.local_library import search_local_library
 from app.core.config import get_settings
+from app.plugins.runtime import runtime
 
 
 logger = logging.getLogger(__name__)
@@ -116,31 +116,13 @@ async def search_subtitles(video_path: str, local_only: bool = False):
     video_code = extract_video_code(video_path)
     if not video_code:
         raise HTTPException(status_code=400, detail="Cannot extract video code from path")
-    all_results = list(search_local_library(video_code, video_path))
-    if not local_only:
-        all_results.extend(await _search_xunlei(video_code))
+    all_results = await runtime.search_subtitles(video_code, local_only=local_only)
     seen = {}
     for result in sorted(all_results, key=lambda item: item.get("score", 0), reverse=True):
         result_id = result.get("id", "")
         if result_id and result_id not in seen:
             seen[result_id] = result
     return OnlineSubtitleResponse(results=[OnlineSubtitle(name=item.get("filename", ""), url=item.get("url", ""), ext=item.get("ext", ".srt"), language=item.get("language", "unknown"), source=item.get("source", ""), source_key=item.get("source_key", "remote"), source_type=item.get("source_type", "remote")) for item in seen.values()], video_name=video_code)
-
-
-async def _search_xunlei(video_code: str) -> list[dict]:
-    try:
-        async with httpx.AsyncClient(timeout=float(30)) as client:
-            response = await client.get("https://api-shoulei-ssl.xunlei.com/oracle/subtitle", params={"name": video_code})
-            response.raise_for_status()
-            data = response.json()
-        results = []
-        if data.get("code") == 0 and data.get("data"):
-            for item in data["data"]:
-                results.append({"id": f"xunlei:{item.get('name', '')}:{item.get('url', '')}", "filename": item.get("name", "unknown"), "ext": item.get("ext", ".srt"), "language": (item.get("languages", ["未知"])[0] if item.get("languages") else "未知"), "source": "迅雷", "source_key": "xunlei", "source_type": "remote_search", "url": item.get("url", ""), "score": 0.7})
-        return results
-    except Exception as exc:
-        logger.warning("[subtitle:xunlei] Search failed for %s: %s", video_code, exc)
-        return []
 
 
 def read_subtitle_file(path: str) -> tuple[str, str]:
@@ -185,10 +167,14 @@ async def get_subtitle_content(path: str):
 
 
 @router.get("/fetch", response_model=SubtitleContentResponse)
-async def fetch_online_subtitle(url: str):
+async def fetch_online_subtitle(url: str, source_key: str | None = None):
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")
     try:
+        if source_key and '://' in url and not url.startswith(('http://', 'https://')):
+            subtitle_id = url.split('://', 1)[1].rsplit('/', 1)[-1]
+            result = await runtime.fetch_subtitle_content(source_key, subtitle_id)
+            return SubtitleContentResponse(content=str(result.get('content') or ''), filename=str(result.get('filename') or 'subtitle.srt'))
         async with _get_httpx().AsyncClient(timeout=30.0, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -246,6 +232,21 @@ async def download_online_subtitle(url: str, video_path: str, source: str | None
         except IOError as exc:
             raise HTTPException(status_code=500, detail=f"Failed to copy subtitle: {exc}")
         return {"success": True, "filename": os.path.basename(save_path), "path": save_path, "size": os.path.getsize(save_path)}
+    if source_key and '://' in url and not url.startswith(('http://', 'https://')):
+        try:
+            subtitle_id = url.split('://', 1)[1].rsplit('/', 1)[-1]
+            result = await runtime.fetch_subtitle_content(source_key, subtitle_id)
+            content = result.get('bytes')
+            if not isinstance(content, bytes):
+                content = str(result.get('content') or '').encode('utf-8')
+            ext = os.path.splitext(str(result.get('filename') or ''))[1].lower()
+            ext = ext if ext in SUBTITLE_EXTS else '.srt'
+            save_path = get_unique_subtitle_path(video_dir, clean_video_name, ext)
+            with open(save_path, 'wb') as file:
+                file.write(content)
+            return {"success": True, "filename": os.path.basename(save_path), "path": save_path, "size": len(content)}
+        except (LookupError, ValueError, OSError) as exc:
+            raise HTTPException(status_code=502, detail=f"Download failed: {exc}")
     if not os.path.exists(video_dir):
         raise HTTPException(status_code=404, detail="Video directory not found")
     try:
