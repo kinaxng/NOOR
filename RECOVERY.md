@@ -92,6 +92,9 @@ the recovered bytecode modules remain unchanged.
   routes and all request-model schemas match the bytecode router; the settings,
   Whisper runtime/model/status, and dependency-check endpoints were exercised
   against the isolated running backend.
+- Reconstructed the shared `api/jobs.py` router as maintainable source and verified
+  its create/list/detail/delete/log/cancel/download/cleanup route contract against
+  bytecode; the running task-list endpoint was exercised successfully.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
