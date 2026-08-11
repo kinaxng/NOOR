@@ -75,7 +75,7 @@ export function useWhisper() {
     segment_merge_max_duration_ms?: number
     model: string
     pipeline_mode?: string
-    merge_strategy: string
+    merge_strategy?: string
     language: string
     sensitivity: string
     vad_method?: string

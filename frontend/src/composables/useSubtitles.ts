@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import api from '../api'
 import { useToast } from './useToast'
+import { useConfirm } from './useConfirm'
+import { useI18n } from './useI18n'
 
 export interface Subtitle {
   filename: string
@@ -15,10 +17,14 @@ export interface OnlineSubtitle {
   ext: string
   language: string
   source: string
+  source_key?: string
+  source_type?: string
 }
 
 export function useSubtitles() {
   const toast = useToast()
+  const { confirm } = useConfirm()
+  const { t } = useI18n()
 
   const subtitles = ref<Subtitle[]>([])
   const onlineSubtitles = ref<OnlineSubtitle[]>([])
@@ -68,10 +74,16 @@ export function useSubtitles() {
     }
   }
 
-  async function downloadOnlineSubtitle(url: string, videoPath: string) {
+  async function downloadOnlineSubtitle(url: string, videoPath: string, source?: string, sourceType?: string, sourceKey?: string) {
     try {
       const resp = await api.get('/subtitles/download', {
-        params: { url, video_path: videoPath }
+        params: {
+          url,
+          video_path: videoPath,
+          source: source || null,
+          source_type: sourceType || null,
+          source_key: sourceKey || null,
+        }
       })
       toast.success(`字幕 "${resp.data.filename}" 已下载到: ${resp.data.path}`)
       await fetchSubtitles(videoPath)
@@ -95,7 +107,7 @@ export function useSubtitles() {
       subtitlePreviewContent.value = resp.data.content
     } catch (e: any) {
       console.error('Failed to preview subtitle:', e)
-      subtitlePreviewContent.value = '加载字幕失败，请检查网络或尝试下载后查看'
+      subtitlePreviewContent.value = e?.response?.data?.detail || t('subtitle.previewLoadFailed')
     } finally {
       loadingSubtitlePreview.value = false
     }
@@ -120,7 +132,7 @@ export function useSubtitles() {
   }
 
   async function deleteSubtitle(path: string, filename: string) {
-    if (!confirm(`确定删除字幕文件 "${filename}" 吗？`)) return false
+    if (!await confirm({ message: t('subtitle.deleteConfirm', { filename }), danger: true })) return false
 
     try {
       await api.delete('/subtitles', {
