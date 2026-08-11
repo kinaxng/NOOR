@@ -1,0 +1,146 @@
+<script setup lang="ts">
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+
+const props = withDefaults(defineProps<{
+  tabs: { key: string; label: string }[]
+  modelValue: string
+  compact?: boolean
+}>(), {
+  compact: false,
+})
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+}>()
+
+const tabRefs = ref<HTMLElement[]>([])
+const containerRef = ref<HTMLElement | null>(null)
+const indicator = ref({ left: 0, width: 0 })
+
+function updateIndicator() {
+  nextTick(() => {
+    const activeIdx = props.tabs.findIndex(t => t.key === props.modelValue)
+    if (activeIdx < 0 || !containerRef.value) return
+    const tabEl = tabRefs.value[activeIdx]
+    if (!tabEl) return
+    tabEl.scrollIntoView({ block: 'nearest', inline: 'center' })
+    requestAnimationFrame(() => {
+      indicator.value = {
+        left: tabEl.offsetLeft,
+        width: tabEl.offsetWidth,
+      }
+    })
+  })
+}
+
+watch(() => props.modelValue, updateIndicator)
+watch(() => props.tabs, () => nextTick(updateIndicator), { deep: true })
+
+onMounted(() => {
+  updateIndicator()
+  const ro = new ResizeObserver(() => updateIndicator())
+  if (containerRef.value) ro.observe(containerRef.value)
+  onUnmounted(() => ro.disconnect())
+})
+
+function selectTab(key: string) {
+  emit('update:modelValue', key)
+}
+</script>
+
+<template>
+  <div class="vision-tabs" :class="{ 'vision-tabs--compact': props.compact }" ref="containerRef" style="max-width: 100%; overflow-x: auto;">
+    <!-- Sliding indicator -->
+    <div
+      class="vision-tabs__indicator"
+      :style="{
+        left: indicator.left + 'px',
+        width: indicator.width + 'px',
+      }"
+    />
+    <!-- Tab buttons -->
+    <button
+      v-for="(tab, idx) in tabs"
+      :key="tab.key"
+      :ref="el => { if (el) tabRefs[idx] = el as HTMLElement }"
+      class="vision-tabs__tab"
+      :class="{ 'vision-tabs__tab--active': modelValue === tab.key }"
+      @click="selectTab(tab.key)"
+    >
+      {{ tab.label }}
+    </button>
+  </div>
+</template>
+
+<style scoped>
+.vision-tabs {
+  position: relative;
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.375rem;
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.vision-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.vision-tabs__indicator {
+  position: absolute;
+  top: 0.375rem;
+  bottom: 0.375rem;
+  border-radius: var(--radius-lg);
+  background: #0075FF;
+  box-shadow: 0 4px 12px rgba(0, 117, 255, 0.3);
+  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.vision-tabs__tab {
+  position: relative;
+  z-index: 1;
+  padding: 0.5rem 1.5rem;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+}
+
+.vision-tabs__tab:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.vision-tabs__tab--active {
+  color: #FFFFFF;
+}
+
+.vision-tabs--compact {
+  gap: 0.1875rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-lg);
+}
+
+.vision-tabs--compact .vision-tabs__indicator {
+  top: 0.25rem;
+  bottom: 0.25rem;
+  border-radius: var(--radius-md);
+}
+
+.vision-tabs--compact .vision-tabs__tab {
+  padding: 0.4375rem 0.875rem;
+  font-size: 0.8125rem;
+}
+</style>
+

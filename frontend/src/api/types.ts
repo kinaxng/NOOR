@@ -34,6 +34,7 @@ export interface FileTags {
   has_chinese: boolean    // -c 中文
   is_cracked: boolean     // 破解
   is_leaked: boolean      // 流出
+  has_facefusion?: boolean
   release_type: string | null  // 流出 / 无码
   release_type_key?: 'leaked' | 'uncensored' | null
 }
