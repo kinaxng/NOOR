@@ -54,6 +54,7 @@ def _resolve_hf_model_source(base_dir: str, model_id: str) -> tuple[str, dict]:
 
 
 _FASTER_WHISPER_REPO_IDS = {
+    "chickenrice-zh": "chickenrice0721/whisper-large-v2-translate-zh-v0.2-st-ct2",
     "large-v3": "Systran/faster-whisper-large-v3",
     "large-v3-turbo": "Systran/faster-whisper-large-v3-turbo",
 }
@@ -420,7 +421,7 @@ class FasterWhisperProcessor:
             self.log("[Pass2] 错误: 需要安装 faster-whisper")
             raise RuntimeError("faster-whisper 库未安装")
 
-        model_size = self.config.pass2_model.value
+        model_size = self.config.model.value if self.config.model == WhisperModel.CHICKENRICE_ZH else self.config.pass2_model.value
 
         from app.core.config import get_settings
         settings = get_settings()
@@ -470,6 +471,7 @@ class FasterWhisperProcessor:
         raise_if_cancelled(self.cancel_callback)
         segments, info = model.transcribe(
             audio_path,
+            task=self.config.whisper_task,
             language=self.config.language if self.config.language != "auto" else None,
             beam_size=params.get("beam_size", self.config.beam_size),
             best_of=params.get("best_of", self.config.best_of),

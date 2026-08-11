@@ -23,8 +23,19 @@ class WhisperRequest(BaseModel):
     video_path: str
     strategy: Optional[str] = None
     preset: Optional[str] = None
-    model: str = "anime-whisper"
-    pipeline_mode: str = "ensemble"
+    subtitle_profile: Optional[str] = "standard"
+    model_backend: Optional[str] = "chickenrice-zh"
+    runtime_tier: Optional[str] = "gpu_standard"
+    whisper_task: Optional[str] = "translate"
+    vad_backend: Optional[str] = "energy"
+    chunker: Optional[str] = "smart_vad_chunk"
+    target_chunk_duration_s: Optional[float] = 30.0
+    max_chunk_duration_s: Optional[float] = 30.0
+    segment_merge_max_gap_ms: Optional[int] = 2000
+    segment_merge_max_duration_ms: Optional[int] = 20000
+    timing_refiner: Optional[str] = "none"
+    model: str = "chickenrice-zh"
+    pipeline_mode: str = "faster"
     merge_strategy: str = "smart_merge"
     language: str = "ja"
     sensitivity: str = "balanced"
@@ -85,25 +96,7 @@ def build_expected_ja_srt_path(local_video_path: str) -> str:
 
 
 def resolve_whisper_strategy(request: WhisperRequest) -> str:
-    explicit_strategy = request.strategy or request.preset
-    if explicit_strategy:
-        return normalize_whisper_strategy(explicit_strategy)
-    common = (
-        request.merge_strategy == "smart_merge" and request.language == "ja"
-        and request.sensitivity == "balanced" and (request.vad_method or "semantic") == "semantic"
-        and (request.audio_preprocess_mode or "none") == "none"
-        and (request.speech_enhancer or "none") == "none" and not request.custom_config
-    )
-    recommended_shape = common and request.model == "anime-whisper" and request.pipeline_mode == "ensemble" and (request.pass1_pipeline or "anime") == "anime" and (request.pass2_pipeline or "qwen") == "qwen"
-    baseline_shape = common and request.model == "large-v3" and request.pipeline_mode == "qwen" and (request.pass1_pipeline or "qwen") == "qwen" and not (request.pass2_pipeline or "")
-    reazon_shape = common and request.model == "reazonspeech-nemo-v2" and request.pipeline_mode == "reazon" and (request.pass1_pipeline or "reazon") == "reazon" and not (request.pass2_pipeline or "")
-    if recommended_shape:
-        return "recommended"
-    if baseline_shape:
-        return "baseline"
-    if reazon_shape:
-        return "reazon_nemo"
-    return "advanced"
+    return normalize_whisper_strategy(request.strategy or request.preset or "chickenrice")
 
 
 @router.post("/tasks", response_model=WhisperResponse)
@@ -117,7 +110,19 @@ async def create_whisper_task(request: WhisperRequest):
     resolved_strategy = resolve_whisper_strategy(request)
     requested_translate_to = (request.translate_to or "").strip() or None
     whisper_config = {
-        "strategy": resolved_strategy, "model": request.model, "pipeline_mode": request.pipeline_mode,
+        "strategy": resolved_strategy,
+        "subtitle_profile": request.subtitle_profile,
+        "model_backend": request.model_backend or request.model,
+        "runtime_tier": request.runtime_tier,
+        "whisper_task": request.whisper_task,
+        "vad_backend": request.vad_backend,
+        "chunker": request.chunker,
+        "target_chunk_duration_s": request.target_chunk_duration_s,
+        "max_chunk_duration_s": request.max_chunk_duration_s,
+        "segment_merge_max_gap_ms": request.segment_merge_max_gap_ms,
+        "segment_merge_max_duration_ms": request.segment_merge_max_duration_ms,
+        "timing_refiner": request.timing_refiner,
+        "model": request.model, "pipeline_mode": request.pipeline_mode,
         "merge_strategy": request.merge_strategy, "language": request.language, "sensitivity": request.sensitivity,
         "vad_method": request.vad_method, "audio_preprocess_mode": request.audio_preprocess_mode,
         "audio_preprocess_model": request.audio_preprocess_model, "speech_enhancer": request.speech_enhancer,

@@ -8,6 +8,7 @@ from app.core.config import DEFAULT_REAZON_NEMO_MODEL_PATH, get_settings
 
 
 FASTER_WHISPER_MODELS = [
+    ("chickenrice-zh", "chickenrice0721--whisper-large-v2-translate-zh-v0.2-st-ct2"),
     ("tiny", "Systran--faster-whisper-tiny"), ("base", "Systran--faster-whisper-base"),
     ("small", "Systran--faster-whisper-small"), ("medium", "Systran--faster-whisper-medium"),
     ("large-v3", "Systran--faster-whisper-large-v3"), ("large-v3-turbo", "Systran--faster-whisper-large-v3-turbo"),

@@ -1,101 +1,81 @@
-"""Stable Whisper strategy presets and their execution summaries.
-
-This source is reconstructed from the preserved Python 3.13 bytecode.  Keep
-the preset payloads compatible with queued jobs: the orchestration module
-still consumes these keys when it builds a :class:`WhisperConfig`.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
+from .runtime_tier import apply_whisper_runtime_tier
 
-RECOMMENDED_WHISPER_STRATEGY = {
-    "strategy": "recommended",
-    "model": "anime-whisper",
-    "pipeline_mode": "ensemble",
-    "merge_strategy": "smart_merge",
+
+CHICKENRICE_WHISPER_STRATEGY = {
+    "strategy": "chickenrice",
+    "subtitle_profile": "standard",
+    "model_backend": "chickenrice-zh",
+    "runtime_tier": "gpu_standard",
+    "device": "cuda",
+    "compute_type": "float16",
+    "model": "chickenrice-zh",
+    "whisper_task": "translate",
+    "vad_backend": "energy",
+    "chunker": "smart_vad_chunk",
+    "target_chunk_duration_s": 30.0,
+    "max_chunk_duration_s": 30.0,
+    "segment_merge_max_gap_ms": 2000,
+    "segment_merge_max_duration_ms": 20000,
+    "timing_refiner": "none",
+    "pipeline_mode": "faster",
     "language": "ja",
     "sensitivity": "balanced",
-    "vad_method": "semantic",
-    "speech_enhancer": "none",
-    "audio_preprocess_mode": "none",
-    "audio_preprocess_model": "vocal_balanced",
-    "pass1_pipeline": "anime",
-    "pass2_pipeline": "qwen",
-    "custom_config": None,
-    "timestamp_mode": "aligner_interpolation",
-    "aligner_backend": "qwen3",
-    "framer_backend": "vad-grouped",
 }
 
-BASELINE_WHISPER_STRATEGY = {
-    "strategy": "baseline",
-    "model": "large-v3",
-    "pipeline_mode": "qwen",
-    "merge_strategy": "smart_merge",
-    "language": "ja",
-    "sensitivity": "balanced",
-    "vad_method": "semantic",
-    "speech_enhancer": "none",
-    "audio_preprocess_mode": "none",
-    "audio_preprocess_model": "vocal_balanced",
-    "pass1_pipeline": "qwen",
-    "pass2_pipeline": "",
-    "custom_config": None,
-    "timestamp_mode": "aligner_interpolation",
-    "aligner_backend": "none",
-    "framer_backend": "vad-grouped",
-}
-
-REAZON_NEMO_WHISPER_STRATEGY = {
-    "strategy": "reazon_nemo",
-    "model": "reazonspeech-nemo-v2",
-    "pipeline_mode": "reazon",
-    "merge_strategy": "smart_merge",
-    "language": "ja",
-    "sensitivity": "balanced",
-    "vad_method": "semantic",
-    "speech_enhancer": "none",
-    "audio_preprocess_mode": "none",
-    "audio_preprocess_model": "vocal_balanced",
-    "pass1_pipeline": "reazon",
-    "pass2_pipeline": "",
-    "custom_config": None,
-    "timestamp_mode": "aligner_interpolation",
-    "aligner_backend": "none",
-    "framer_backend": "vad-grouped",
-}
+RECOMMENDED_WHISPER_STRATEGY = CHICKENRICE_WHISPER_STRATEGY
 
 _BASELINE_ALIASES = {
-    "baseline",
-    "compare",
-    "compat",
-    "compatibility",
-    "contrast",
-    "experiment",
-    "experimental",
-    "fast",
-    "faster",
+    "baseline", "compare", "compat", "compatibility", "contrast",
+    "experiment", "experimental", "fast", "faster", "large-v3",
 }
 _REAZON_ALIASES = {
-    "reazon",
-    "reazon_nemo",
-    "reazonspeech",
-    "reazonspeech-nemo-v2",
-    "nemo",
+    "reazon", "reazon_nemo", "reazonspeech", "reazonspeech-nemo-v2", "nemo",
 }
+_ANIME_ALIASES = {"anime", "anime-whisper"}
+
+
+def _apply_model_backend(merged: dict[str, Any]) -> dict[str, Any]:
+    backend = str(merged.get("model_backend") or merged.get("model") or "chickenrice-zh").strip()
+    if backend == "anime-whisper":
+        merged.update({
+            "model_backend": "anime-whisper",
+            "model": "anime-whisper",
+            "whisper_task": "transcribe",
+            "pipeline_mode": "anime",
+            "pass1_pipeline": "anime",
+            "pass2_pipeline": "",
+        })
+    elif backend in {"qwen", "qwen-whisper", "large-v3"}:
+        merged.update({
+            "model_backend": "large-v3",
+            "model": "large-v3",
+            "whisper_task": "transcribe",
+            "pipeline_mode": "faster",
+            "pass1_pipeline": "faster",
+            "pass2_pipeline": "",
+        })
+    else:
+        merged.update({
+            "model_backend": "chickenrice-zh",
+            "model": "chickenrice-zh",
+            "whisper_task": "translate",
+            "pipeline_mode": "faster",
+            "pass1_pipeline": "faster",
+            "pass2_pipeline": "",
+        })
+    return merged
 
 
 def normalize_whisper_strategy(value: str | None) -> str:
-    normalized = (value or "").strip().lower()
-    if normalized == "best":
-        return "recommended"
-    if normalized in _BASELINE_ALIASES:
-        return "baseline"
-    if normalized in _REAZON_ALIASES:
-        return "reazon_nemo"
-    return normalized or "advanced"
+    normalized = str(value or "").strip().lower()
+    if normalized in _BASELINE_ALIASES | _REAZON_ALIASES | _ANIME_ALIASES:
+        return "chickenrice"
+    return "chickenrice"
 
 
 @dataclass
@@ -108,85 +88,54 @@ class WhisperExecutionPlan:
 
 
 def apply_whisper_strategy(payload: dict[str, Any], strategy: str | None) -> dict[str, Any]:
-    normalized = normalize_whisper_strategy(strategy)
+    raw_strategy = str(strategy or payload.get("strategy") or "").strip().lower()
     merged = dict(payload)
-    if normalized == "recommended":
-        merged.update(RECOMMENDED_WHISPER_STRATEGY)
-        return merged
-    if normalized == "baseline":
-        merged.update(BASELINE_WHISPER_STRATEGY)
-        return merged
-    if normalized == "reazon_nemo":
-        merged.update(REAZON_NEMO_WHISPER_STRATEGY)
-        return merged
-    merged["strategy"] = normalized
+    editable_runtime_fields = {
+        key: merged[key]
+        for key in (
+            "vad_backend",
+            "chunker",
+            "target_chunk_duration_s",
+            "max_chunk_duration_s",
+            "segment_merge_max_gap_ms",
+            "segment_merge_max_duration_ms",
+            "timing_refiner",
+            "runtime_tier",
+        )
+        if key in merged and merged[key] not in (None, "")
+    }
+    selected_backend = merged.get("model_backend") or merged.get("model")
+    if not selected_backend and raw_strategy in _BASELINE_ALIASES:
+        selected_backend = "large-v3"
+    elif not selected_backend and raw_strategy in _ANIME_ALIASES:
+        selected_backend = "anime-whisper"
+
+    merged.update(CHICKENRICE_WHISPER_STRATEGY)
+    merged.update(editable_runtime_fields)
+    if selected_backend:
+        merged["model_backend"] = selected_backend
+    _apply_model_backend(merged)
+    apply_whisper_runtime_tier(merged)
     return merged
 
 
 def is_recommended_whisper_strategy(strategy: str | None) -> bool:
-    return normalize_whisper_strategy(strategy) == "recommended"
+    return normalize_whisper_strategy(strategy) == "chickenrice"
 
 
 def build_whisper_execution_plan(
     payload: dict[str, Any], strategy: str | None = None
 ) -> WhisperExecutionPlan:
-    normalized = normalize_whisper_strategy(strategy or payload.get("strategy"))
-    runtime_settings = apply_whisper_strategy(payload, normalized)
-    preprocess_mode = str(runtime_settings.get("audio_preprocess_mode") or "none").strip().lower()
-    preprocess_model = str(runtime_settings.get("audio_preprocess_model") or "vocal_balanced").strip().lower()
-    preprocess_detail_lines: tuple[str, ...] = ()
-    if preprocess_mode != "none":
-        preprocess_detail_lines = (
-            f"实验前处理: {preprocess_mode} / {preprocess_model}",
-            "注意: 音频前处理当前仅建议手动实验，不进入默认推荐链路",
-        )
-
-    if normalized == "recommended":
-        return WhisperExecutionPlan(
-            strategy="recommended",
-            executor_key="recommended",
-            runtime_settings=runtime_settings,
-            summary="推荐字幕策略",
-            detail_lines=(
-                "执行分支: recommended",
-                "主链路: Anime-Whisper + Qwen3-ASR fallback + Qwen3 ForcedAligner",
-                "固定参数: ensemble / anime+qwen3-align / ja / balanced / smart_merge",
-                *preprocess_detail_lines,
-            ),
-        )
-    if normalized == "baseline":
-        return WhisperExecutionPlan(
-            strategy="baseline",
-            executor_key="baseline",
-            runtime_settings=runtime_settings,
-            summary="large-v3 对照策略",
-            detail_lines=(
-                "执行分支: baseline",
-                "主链路: faster-whisper large-v3",
-                "固定参数: qwen(legacy key) / large-v3 / ja / balanced / semantic",
-            ),
-        )
-    if normalized == "reazon_nemo":
-        return WhisperExecutionPlan(
-            strategy="reazon_nemo",
-            executor_key="reazon_nemo",
-            runtime_settings=runtime_settings,
-            summary="Reazon / NeMo 实验策略",
-            detail_lines=(
-                "执行分支: reazon_nemo",
-                "主链路: ReazonSpeech NeMo v2 单链路",
-                "固定参数: reazon / ja / balanced / smart_merge",
-                "注意: 当前运行时仍属实验接入，需本地准备 .nemo 包与 nemo_toolkit",
-            ),
-        )
+    runtime_settings = apply_whisper_strategy(payload, strategy or payload.get("strategy"))
     return WhisperExecutionPlan(
-        strategy=normalized,
-        executor_key="advanced",
+        strategy="chickenrice",
+        executor_key="chickenrice",
         runtime_settings=runtime_settings,
-        summary="高级参数策略",
+        summary="NOOR ChickenRice 主字幕链路",
         detail_lines=(
-            "执行分支: advanced",
-            "运行参数: 以任务保存的 pipeline / merge / custom_config 为准",
-            *preprocess_detail_lines,
+            "执行分支: chickenrice",
+            "主链路: Faster-Whisper + ChickenRice 日中直出模型",
+            f"运行档位: {runtime_settings.get('runtime_tier')} ({runtime_settings.get('device')} / {runtime_settings.get('compute_type')})",
+            "固定参数: ja -> zh / faster-whisper backend / smart VAD chunk",
         ),
     )

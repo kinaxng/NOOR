@@ -64,9 +64,20 @@ class Settings(BaseSettings):
     pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
     hf_token: str = ""
 
-    whisper_strategy: str = "recommended"
-    whisper_model: str = "anime-whisper"
-    whisper_pipeline_mode: str = "ensemble"
+    whisper_strategy: str = "chickenrice"
+    whisper_subtitle_profile: str = "standard"
+    whisper_model_backend: str = "chickenrice-zh"
+    whisper_runtime_tier: str = "gpu_standard"
+    whisper_task: str = "translate"
+    whisper_vad_backend: str = "energy"
+    whisper_chunker: str = "smart_vad_chunk"
+    whisper_target_chunk_duration_s: float = 30.0
+    whisper_max_chunk_duration_s: float = 30.0
+    whisper_segment_merge_max_gap_ms: int = 2000
+    whisper_segment_merge_max_duration_ms: int = 20000
+    whisper_timing_refiner: str = "none"
+    whisper_model: str = "chickenrice-zh"
+    whisper_pipeline_mode: str = "faster"
     whisper_merge_strategy: str = "smart_merge"
     whisper_language: str = "ja"
     whisper_sensitivity: str = "balanced"

@@ -27,6 +27,13 @@ LADA_MODEL_WEIGHTS_ENV = "LADA_MODEL_WEIGHTS_DIR"
 ENV_FILE = PROJECT_ROOT / ".env"
 
 WHISPER_MODELS = {
+    "chickenrice-zh": {
+        "name": "ChickenRice JA->ZH",
+        "size": "~3GB",
+        "type": "faster-whisper",
+        "repo": "chickenrice0721/whisper-large-v2-translate-zh-v0.2-st-ct2",
+        "description": "Japanese audio to Chinese subtitle CTranslate2 model",
+    },
     "anime-whisper": {"name": "Anime-Whisper", "size": "~3GB", "type": "transformers", "repo": "litagin/anime-whisper", "description": "Optimized for anime vocals, Japanese"},
     "kotoba-whisper-v2.2": {"name": "Kotoba Whisper v2.2", "size": "~3GB", "type": "transformers", "repo": "kotoba-tech/kotoba-whisper-v2.2", "description": "Japanese-specific, high accuracy, word-level timestamps, public (no gated)"},
     "reazonspeech-nemo-v2": {"name": "ReazonSpeech NeMo v2", "size": "~2.4GB", "type": "reazon-nemo", "description": "Reazon / NeMo archive, reserved for upcoming runtime integration"},

@@ -59,6 +59,17 @@ def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
     payload["audio_preprocess_model"] = payload.get(
         "audio_preprocess_model", DEFAULT_AUDIO_PREPROCESS_MODEL
     )
+    payload["subtitle_profile"] = payload.get("subtitle_profile", "standard")
+    payload["model_backend"] = payload.get("model_backend") or payload.get("model") or "chickenrice-zh"
+    payload["runtime_tier"] = payload.get("runtime_tier") or "gpu_standard"
+    payload["whisper_task"] = payload.get("whisper_task") or ("translate" if payload["model_backend"] == "chickenrice-zh" else "transcribe")
+    payload["vad_backend"] = payload.get("vad_backend", "energy")
+    payload["chunker"] = payload.get("chunker", "smart_vad_chunk")
+    payload["target_chunk_duration_s"] = payload.get("target_chunk_duration_s", 30.0)
+    payload["max_chunk_duration_s"] = payload.get("max_chunk_duration_s", 30.0)
+    payload["segment_merge_max_gap_ms"] = payload.get("segment_merge_max_gap_ms", 2000)
+    payload["segment_merge_max_duration_ms"] = payload.get("segment_merge_max_duration_ms", 20000)
+    payload["timing_refiner"] = payload.get("timing_refiner", "none")
     return payload
 
 
@@ -66,8 +77,36 @@ def apply_whisper_config_updates(
     config: Any, update_env_value_fn: Callable[[str, str], None]
 ) -> None:
     payload = normalize_whisper_config_payload(config)
+    legacy_defaults = {
+        "merge_strategy": "smart_merge",
+        "language": "ja",
+        "sensitivity": "balanced",
+        "vad_method": "semantic",
+        "audio_preprocess_mode": "none",
+        "audio_preprocess_model": "vocal_balanced",
+        "translate_to": "",
+        "translate_model": "gpt-4o-mini",
+        "translate_style": "adult_explicit",
+        "translate_base_url": "https://api.openai.com/v1",
+        "translate_api_key": "",
+        "pass1_pipeline": payload.get("pipeline_mode", "faster"),
+        "pass2_pipeline": "",
+    }
     for env_key, payload_key in (
         ("WHISPER_STRATEGY", "strategy"),
+        ("WHISPER_SUBTITLE_PROFILE", "subtitle_profile"),
+        ("WHISPER_MODEL_BACKEND", "model_backend"),
+        ("WHISPER_RUNTIME_TIER", "runtime_tier"),
+        ("WHISPER_DEVICE", "device"),
+        ("WHISPER_COMPUTE_TYPE", "compute_type"),
+        ("WHISPER_TASK", "whisper_task"),
+        ("WHISPER_VAD_BACKEND", "vad_backend"),
+        ("WHISPER_CHUNKER", "chunker"),
+        ("WHISPER_TARGET_CHUNK_DURATION_S", "target_chunk_duration_s"),
+        ("WHISPER_MAX_CHUNK_DURATION_S", "max_chunk_duration_s"),
+        ("WHISPER_SEGMENT_MERGE_MAX_GAP_MS", "segment_merge_max_gap_ms"),
+        ("WHISPER_SEGMENT_MERGE_MAX_DURATION_MS", "segment_merge_max_duration_ms"),
+        ("WHISPER_TIMING_REFINER", "timing_refiner"),
         ("WHISPER_MODEL", "model"),
         ("WHISPER_PIPELINE_MODE", "pipeline_mode"),
         ("WHISPER_MERGE_STRATEGY", "merge_strategy"),
@@ -84,7 +123,7 @@ def apply_whisper_config_updates(
         ("WHISPER_PASS1_PIPELINE", "pass1_pipeline"),
         ("WHISPER_PASS2_PIPELINE", "pass2_pipeline"),
     ):
-        update_env_value_fn(env_key, payload[payload_key])
+        update_env_value_fn(env_key, str(payload.get(payload_key, legacy_defaults.get(payload_key, ""))))
     update_env_value_fn("WHISPER_CUSTOM_CONFIG", json.dumps(payload["custom_config"]))
 
 

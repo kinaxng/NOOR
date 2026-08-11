@@ -74,9 +74,20 @@ class CustomPipelineConfig(BaseModel):
 
 
 class WhisperConfig(BaseModel):
-    strategy: str = "recommended"
-    model: str = "anime-whisper"
-    pipeline_mode: str = "ensemble"
+    strategy: str = "chickenrice"
+    subtitle_profile: str = "standard"
+    model_backend: str = "chickenrice-zh"
+    runtime_tier: str = "gpu_standard"
+    whisper_task: str = "translate"
+    vad_backend: str = "energy"
+    chunker: str = "smart_vad_chunk"
+    target_chunk_duration_s: float = 30.0
+    max_chunk_duration_s: float = 30.0
+    segment_merge_max_gap_ms: int = 2000
+    segment_merge_max_duration_ms: int = 20000
+    timing_refiner: str = "none"
+    model: str = "chickenrice-zh"
+    pipeline_mode: str = "faster"
     merge_strategy: str = "smart_merge"
     language: str = "ja"
     sensitivity: str = "balanced"

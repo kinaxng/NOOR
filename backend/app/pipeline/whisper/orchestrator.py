@@ -418,7 +418,11 @@ class WhisperPipeline:
             elif mode == PipelineMode.TRANSFORMERS:
                 repo_id = "kotoba-tech/kotoba-whisper-v2.2"
             elif mode == PipelineMode.FASTER:
-                repo_id = "Systran/faster-whisper-tiny"
+                repo_id = {
+                    "chickenrice-zh": "chickenrice0721/whisper-large-v2-translate-zh-v0.2-st-ct2",
+                    "large-v3": "Systran/faster-whisper-large-v3",
+                    "large-v3-turbo": "Systran/faster-whisper-large-v3-turbo",
+                }.get(self.config.model.value)
             elif mode == PipelineMode.BALANCED:
                 repo_id = "Systran/faster-whisper-large-v3"
             elif mode == PipelineMode.QWEN:

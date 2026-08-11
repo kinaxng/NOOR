@@ -26,13 +26,23 @@ def build_settings_payload(
 ) -> dict[str, Any]:
     media_library_config = load_media_library_config()
     facefusion_info = get_facefusion_installation_info(get_settings())
-    whisper_strategy = normalize_whisper_strategy(
-        env_data.get("WHISPER_STRATEGY", "recommended")
-    )
+    whisper_strategy = normalize_whisper_strategy(env_data.get("WHISPER_STRATEGY", "chickenrice"))
+    default_model_backend = env_data.get("WHISPER_MODEL_BACKEND", env_data.get("WHISPER_MODEL", "chickenrice-zh"))
     whisper_payload: dict[str, Any] = {
         "strategy": whisper_strategy,
-        "model": env_data.get("WHISPER_MODEL", "anime-whisper"),
-        "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "ensemble"),
+        "subtitle_profile": env_data.get("WHISPER_SUBTITLE_PROFILE", "standard"),
+        "model_backend": default_model_backend,
+        "runtime_tier": env_data.get("WHISPER_RUNTIME_TIER", "gpu_standard"),
+        "whisper_task": env_data.get("WHISPER_TASK", "translate"),
+        "vad_backend": env_data.get("WHISPER_VAD_BACKEND", "energy"),
+        "chunker": env_data.get("WHISPER_CHUNKER", "smart_vad_chunk"),
+        "target_chunk_duration_s": float(env_data.get("WHISPER_TARGET_CHUNK_DURATION_S", "30") or 30),
+        "max_chunk_duration_s": float(env_data.get("WHISPER_MAX_CHUNK_DURATION_S", "30") or 30),
+        "segment_merge_max_gap_ms": int(env_data.get("WHISPER_SEGMENT_MERGE_MAX_GAP_MS", "2000") or 2000),
+        "segment_merge_max_duration_ms": int(env_data.get("WHISPER_SEGMENT_MERGE_MAX_DURATION_MS", "20000") or 20000),
+        "timing_refiner": env_data.get("WHISPER_TIMING_REFINER", "none"),
+        "model": env_data.get("WHISPER_MODEL", default_model_backend),
+        "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "faster"),
         "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
         "language": env_data.get("WHISPER_LANGUAGE", "ja"),
         "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
@@ -57,16 +67,13 @@ def build_settings_payload(
         "framer_backend": custom_whisper_config.get("framer_backend", "vad-grouped"),
         "custom_config": custom_whisper_config,
     }
-    if whisper_strategy in frozenset({"recommended", "baseline", "reazon_nemo"}):
-        whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
-        whisper_payload["custom_config"] = {
-            **custom_whisper_config,
-            "timestamp_mode": whisper_payload.get(
-                "timestamp_mode", "aligner_interpolation"
-            ),
-            "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
-            "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
-        }
+    whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
+    whisper_payload["custom_config"] = {
+        **custom_whisper_config,
+        "timestamp_mode": whisper_payload.get("timestamp_mode", "aligner_interpolation"),
+        "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
+        "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
+    }
 
     return {
         "emby": {
