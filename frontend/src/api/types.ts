@@ -1,0 +1,294 @@
+export interface MediaNFO {
+  title?: string
+  originaltitle?: string
+  sorttitle?: string
+  year?: string
+  premiered?: string
+  studio?: string
+  plot?: string
+  outline?: string
+  genres?: string[]
+  actors?: { name: string; role?: string }[]
+  director?: string
+  rating?: string
+  set?: string
+  id?: string
+  tagline?: string
+  votes?: string
+  tag?: string
+  maker?: string
+  publisher?: string
+  label?: string
+  num?: string
+}
+
+export interface MediaLibrary {
+  id: string
+  name: string
+  type: string
+  poster_path?: string
+}
+
+export interface FileTags {
+  is_uncensored: boolean  // -u 流出
+  has_chinese: boolean    // -c 中文
+  is_cracked: boolean     // 破解
+  is_leaked: boolean      // 流出
+  release_type: string | null  // 流出 / 无码
+  release_type_key?: 'leaked' | 'uncensored' | null
+}
+
+export interface MediaItem {
+  id: string
+  name: string
+  type: string
+  media_type?: string
+  poster_path?: string
+  fanart_path?: string
+  date_created?: string
+  path?: string
+  nfo?: MediaNFO
+  tags?: FileTags
+  subtitle_count?: number
+  variant_count?: number
+}
+
+export interface SiblingItem {
+  label?: string
+  file_path?: string
+  id?: string
+  name?: string
+  stream_url?: string
+  poster_path?: string
+  tags?: FileTags
+}
+
+export interface MediaItemDetail {
+  id: string
+  name: string
+  media_type: string
+  file_path?: string
+  stream_url?: string
+  date_created?: string
+  premiered?: string
+  studios?: string[]
+  genres?: string[]
+  poster_path?: string
+  backdrop_path?: string
+  tags?: FileTags
+  actors?: { name: string; role?: string }[]
+  nfo?: MediaNFO
+  siblings?: SiblingItem[]
+  main_nfo?: string
+  variant_count?: number
+}
+
+export interface JobSettings {
+  detection_model?: string
+  restoration_model?: string
+  encoding_preset?: string
+  strategy?: string
+  model?: string
+  pipeline_mode?: string
+  merge_strategy?: string
+  language?: string
+  sensitivity?: string
+  vad_method?: string
+  pass1_pipeline?: string
+  pass2_pipeline?: string
+  translate_to?: string | null
+  source_path?: string
+  source_paths?: string[]
+  preview_mode?: string
+  preview_resolution?: string
+  execution_provider?: string
+  device_ids?: string
+  processors?: string
+  face_swapper_model?: string
+  face_swapper_pixel_boost?: string
+  face_swapper_weight?: number
+  face_enhancer_model?: string
+  face_enhancer_blend?: number
+  face_enhancer_weight?: number
+  frame_enhancer_model?: string
+  frame_enhancer_blend?: number
+  face_detector_model?: string
+  face_detector_score?: number
+  face_detector_angles?: string
+  face_mask_types?: string
+  face_mask_regions?: string
+  face_mask_blur?: number
+  face_occluder_model?: string
+  face_selector_mode?: string
+  reference_frame_number?: number
+  reference_face_position?: number
+  reference_face_distance?: number
+  output_video_encoder?: string
+  output_video_preset?: string
+  output_video_quality?: number
+}
+
+export interface Job {
+  id: string
+  job_type?: 'lada' | 'whisper' | 'translate-srt' | 'whisper_transcribe' | 'subtitle_translate' | 'lada_restore' | 'facefusion_restore' | 'external_task'
+  emby_item_id: string
+  emby_item_name: string
+  input_path: string
+  output_path?: string
+  status: 'pending' | 'blocked' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped'
+  progress: number
+  phase_key?: string
+  phase_group?: string
+  phase_label?: string
+  phase_progress?: number
+  detail?: string
+  chain_id?: string
+  depends_on_task_id?: string
+  parent_task_id?: string
+  error_message?: string
+  settings: JobSettings
+  result_metadata?: Record<string, any> | null
+  created_at: string
+  completed_at?: string
+}
+
+export interface BackgroundTaskRunAction {
+  plugin_id: string
+  action: string
+  payload?: Record<string, any>
+}
+
+export interface BackgroundTask {
+  id: string
+  plugin_id: string
+  plugin_name: string
+  title: string
+  status: 'running' | 'idle' | 'failed' | 'disabled' | string
+  enabled?: boolean
+  interval_minutes?: number
+  last_run_at?: string
+  last_started_at?: string
+  last_finished_at?: string
+  next_run_at?: string
+  progress?: number | null
+  summary?: string
+  detail?: string
+  metrics?: Record<string, number | string>
+  can_run?: boolean
+  run_action?: BackgroundTaskRunAction
+}
+
+export interface WhisperExecutionMetadata {
+  strategy?: string
+  executor_key?: string
+  summary?: string
+  detail_lines?: string[]
+  model?: string
+  pipeline_mode?: string
+  merge_strategy?: string
+  language?: string
+  pass1_pipeline?: string | null
+  pass2_pipeline?: string | null
+}
+
+export interface RecommendedDiagnosticsSegment {
+  index: number
+  source?: string
+  subtitle_count?: number
+  chain_state?: string
+  large_v3_retry?: boolean
+  large_v3_retry_reason?: string
+  qwen_retry?: boolean
+  qwen_retry_reason?: string
+  stepdown?: boolean
+  stepdown_reason?: string
+  stepdown_window_count?: number
+  aligner_empty?: boolean
+  hardened?: boolean
+}
+
+export interface RecommendedDiagnostics {
+  segment_count: number
+  aligned_segments: number
+  large_v3_retry_segments: number
+  qwen_retry_segments: number
+  stepdown_segments: number
+  aligner_empty_segments: number
+  hardened_segments: number
+  stepdown_window_total: number
+  segments: RecommendedDiagnosticsSegment[]
+  cleanup?: {
+    before_segments: number
+    after_segments: number
+    deduped_segments: number
+    noise_only_segments: number
+    trimmed_noise_chars: number
+    particle_merged_segments: number
+    window_echo_segments: number
+  }
+}
+
+export interface JobCreate {
+  emby_item_id: string
+  emby_item_name: string
+  input_path: string
+  job_type?: 'lada' | 'lada_restore' | 'facefusion_restore'
+  settings: JobSettings
+}
+
+export interface SSEEvent {
+  type: 'progress' | 'log' | 'completed' | 'failed' | 'cancelled' | 'queued' | 'blocked' | 'skipped'
+  job_id?: string
+  progress?: number
+  phase_key?: string
+  phase_group?: string
+  phase_label?: string
+  phase_progress?: number
+  detail?: string
+  line?: string
+  success?: boolean
+}
+
+export interface WhisperTaskCreateResponse {
+  task_id: string
+  status: string
+  message: string
+  chain_id?: string
+  followup_task_id?: string
+  followup_job_type?: 'translate-srt' | 'subtitle_translate' | string
+}
+
+export interface TranslateSrtTaskCreateResponse {
+  task_id: string
+  status: string
+  message: string
+}
+
+export interface HardlinkEntry {
+  source_path: string | null
+  hardlink_paths: string[]
+  hardlink_count?: number
+  source_size?: number | null
+  issues?: string[]
+  status?: 'healthy' | 'issue'
+}
+
+export interface HardlinkGroup {
+  code: string
+  entries: HardlinkEntry[]
+  entry_count?: number
+  hardlink_count?: number
+  source_size?: number | null
+  orphan_count?: number
+  issue_count?: number
+  status?: 'healthy' | 'issue'
+  issues?: string[]
+}
+
+export interface HardlinkSummary {
+  total_groups: number
+  total_entries: number
+  total_hardlinks: number
+  issue_groups: number
+  orphan_entries: number
+}
