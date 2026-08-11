@@ -177,6 +177,11 @@ the recovered bytecode modules remain unchanged.
   preserved bytecode's overlap-collapse and timeline-sanitization additions. All
   merge strategies matched over 1,200 randomized dual-pass inputs, with a further
   1,000 randomized malformed timelines matching the bytecode sanitizer.
+- Recovered `pipeline/whisper/engine.py` from four contiguous historical source
+  captures and reconciled the later storage edits against preserved bytecode. Every
+  function and processor method retains the bytecode constant contract; cache-path
+  helpers, sensitivity presets, a mocked Faster-Whisper stream, and generated SRT
+  bytes were behaviorally compared.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
