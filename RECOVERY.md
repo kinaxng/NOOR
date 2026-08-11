@@ -173,6 +173,10 @@ the recovered bytecode modules remain unchanged.
   snapshots plus the preserved bytecode's later short-dialogue protection and
   moan-edge trimming behavior. All cleanup helpers matched across 3,000 randomized
   texts, and 400 randomized multi-segment results matched the bytecode end to end.
+- Recovered `pipeline/whisper/merge.py` from overlapping source snapshots and the
+  preserved bytecode's overlap-collapse and timeline-sanitization additions. All
+  merge strategies matched over 1,200 randomized dual-pass inputs, with a further
+  1,000 randomized malformed timelines matching the bytecode sanitizer.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
