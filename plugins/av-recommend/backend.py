@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime as dt
+import hashlib
 import json
 import math
 import re
@@ -21,6 +22,8 @@ from app.plugins.contracts import PluginManifest, PluginTestResult
 
 PLUGIN_ID = "av-recommend"
 DATA_FILE = PROJECT_ROOT / "data" / "av_recommend" / "feedback.json"
+TITLE_PROFILE_FILE = PROJECT_ROOT / "data" / "av_recommend" / "title_profile.json"
+TITLE_PROFILE_VERSION = 2
 CACHE_TTL = 300
 _CACHE: dict[str, Any] = {"ts": 0, "key": "", "value": None}
 _pool_lock = asyncio.Lock()
@@ -39,6 +42,65 @@ GENERIC_CATEGORY_KEYWORDS = (
     "热门",
     "有码",
     "无码",
+    "4K",
+    "8K",
+    "FHD",
+    "HD",
+    "VR",
+    "HDR",
+    "60FPS",
+)
+TITLE_NOISE_PATTERNS = (
+    r"\b(?:4k|8k|fhd|hd|uhd|vr|hdr|60fps|1080p|2160p)\b",
+    r"(?:高画質|高画质|高清|超清|完全版|完整版|ノーカット|無修正|无码|有码|中文字幕|中字|字幕|破解|流出)",
+    r"(?:独占|独家|先行配信|配信限定|限定配信|最新作|新作|人気|話題|おすすめ|推荐)",
+)
+TITLE_TERM_STOPWORDS = {
+    "作品", "動画", "映画", "完全", "高清", "高画質", "高画质", "中文字幕", "字幕", "无码", "有码",
+    "水卜", "さくら", "水ト", "ちゃん", "さん", "彼女", "女優", "セックス", "SEX", "AV",
+    "する", "され", "した", "ない", "よう", "この", "その", "から", "まで", "ため", "こと",
+    "に住", "住む", "住む地", "助け", "助ける", "女子", "秘密", "女囚",
+    "雷系", "系女", "雷系女", "系女子", "地雷系女", "雷系女子", "的女", "ング", "アへ", "我的",
+}
+TITLE_TRAIT_PATTERNS: tuple[dict[str, Any], ...] = (
+    {"name": "人妻", "group": "relationship", "weight": 1.0, "patterns": ("人妻", "既婚", "若妻", "奥さん", "奥様", "married")},
+    {"name": "熟女", "group": "actor_type", "weight": 0.9, "patterns": ("熟女", "美熟女", "淑女", "アラサー", "アラフォー", "おばさん")},
+    {"name": "素人", "group": "style", "weight": 0.9, "patterns": ("素人", "しろうと", "一般人", "amateur", "初撮り")},
+    {"name": "新人", "group": "style", "weight": 0.8, "patterns": ("新人", "デビュー", "初登場", "初出演")},
+    {"name": "制服", "group": "costume", "weight": 0.85, "patterns": ("制服", "セーラー", "ブレザー", "コスプレ", "cosplay")},
+    {"name": "学生", "group": "role", "weight": 0.8, "patterns": ("女子校生", "jk", "学生", "女子大生", "校生")},
+    {"name": "教师", "group": "role", "weight": 0.85, "patterns": ("教師", "先生", "女教師", "家庭教師", "講師")},
+    {"name": "护士", "group": "role", "weight": 0.85, "patterns": ("看護師", "ナース", "护士", "nurse")},
+    {"name": "OL", "group": "role", "weight": 0.8, "patterns": ("OL", "オフィス", "会社員", "職場", "職員", "受付嬢", "秘書")},
+    {"name": "偶像", "group": "role", "weight": 0.75, "patterns": ("アイドル", "地下アイドル", "idol", "グラドル")},
+    {"name": "出差旅行", "group": "scene", "weight": 0.75, "patterns": ("出張", "旅行", "温泉", "旅館", "ホテル", "宿泊")},
+    {"name": "剧情", "group": "style", "weight": 0.75, "patterns": ("ドラマ", "剧情", "物語", "ストーリー", "演技", "台本")},
+    {"name": "纪录实录", "group": "style", "weight": 0.65, "patterns": ("ドキュメント", "密着", "記録", "実録", "纪录")},
+    {"name": "企划", "group": "style", "weight": 0.55, "patterns": ("企画", "企划", "検証", "チャレンジ", "実験")},
+    {"name": "系列企划", "group": "style", "weight": 0.6, "patterns": ("総集編", "ベスト", "BEST", "合集", "傑作選", "精选")},
+    {"name": "NTR", "group": "theme", "weight": 0.95, "patterns": ("NTR", "寝取", "ねとられ", "寝取られ", "寝取り")},
+    {"name": "痴女", "group": "theme", "weight": 0.9, "patterns": ("痴女", "逆ナン", "誘惑", "挑発", "攻め")},
+    {"name": "职场", "group": "scene", "weight": 0.75, "patterns": ("職場", "会社", "オフィス", "上司", "部下", "同僚", "社長")},
+    {"name": "邻居", "group": "scene", "weight": 0.85, "patterns": ("隣人", "邻居", "鄰居", "近所", "邻家", "隣の", "隔壁")},
+    {"name": "家庭亲属", "group": "scene", "weight": 0.75, "patterns": ("義母", "義姉", "義妹", "母", "姉", "妹", "家庭", "继母", "義父", "義兄")},
+    {"name": "巨乳", "group": "body", "weight": 0.8, "patterns": ("巨乳", "爆乳", "美乳", "Gカップ", "Hカップ", "Iカップ", "Jカップ", "big tits", "big breast")},
+    {"name": "苗条", "group": "body", "weight": 0.65, "patterns": ("スレンダー", "美脚", "細身", "モデル体型")},
+    {"name": "运动", "group": "scene", "weight": 0.65, "patterns": ("スポーツ", "ジム", "ヨガ", "水泳", "競泳", "体操")},
+    {"name": "脏乱房间", "group": "scene", "weight": 0.88, "patterns": ("汚部屋", "污部屋", "ゴミ部屋", "ゴミ屋敷", "脏房间", "髒房間")},
+    {"name": "地雷系", "group": "style", "weight": 0.84, "patterns": ("地雷系", "量産型", "病みかわ", "メンヘラ", "病娇", "病嬌")},
+    {"name": "逃脱囚禁", "group": "theme", "weight": 0.78, "patterns": ("脱獄", "逃獄", "逃狱", "監禁", "囚禁", "拘束", "監禁部屋")},
+    {"name": "怀孕", "group": "theme", "weight": 0.85, "patterns": ("妊娠", "孕ませ", "怀孕", "懷孕", "受胎", "中出し妊娠", "孕婦", "孕妇")},
+    {"name": "强制", "group": "theme", "weight": 0.82, "patterns": ("強姦", "强奸", "強制", "レイプ", "レ×プ", "無理やり", "無理矢理", "脅して", "脅迫", "轮奸", "輪姦")},
+    {"name": "药物", "group": "theme", "weight": 0.72, "patterns": ("媚薬", "春薬", "薬漬け", "ザーメン", "大量注入", "药物", "媚药", "催眠薬", "睡眠薬")},
+    {"name": "催眠", "group": "theme", "weight": 0.78, "patterns": ("催眠", "洗脳", "洗脑", "マインドコントロール")},
+    {"name": "女佣", "group": "role", "weight": 0.78, "patterns": ("メイド", "女佣", "女僕", "女仆", "家政婦", "家事代行")},
+    {"name": "中出", "group": "theme", "weight": 0.82, "patterns": ("中出し", "中出", "内射", "膣内射精", "種付け", "种付")},
+    {"name": "肛交", "group": "theme", "weight": 0.72, "patterns": ("アナル", "ケツ穴", "肛交", "肛門", "后庭")},
+    {"name": "性处理", "group": "theme", "weight": 0.74, "patterns": ("性処理", "便女", "肉便器", "処理係", "泄欲")},
+    {"name": "万引少女", "group": "scene", "weight": 0.68, "patterns": ("万引き", "偷窃", "偷竊", "店長", "コンビニ")},
+    {"name": "羞辱惩罚", "group": "theme", "weight": 0.7, "patterns": ("お仕置き", "懲罰", "惩罚", "羞辱", "分からせ")},
+    {"name": "高潮绝顶", "group": "theme", "weight": 0.66, "patterns": ("絶頂", "イキ", "イキ狂", "高潮", "痙攣", "快感")},
+    {"name": "美体肉感", "group": "body", "weight": 0.62, "patterns": ("肉感", "恵体", "極上ボディ", "美ボディ", "ドエロボディ")},
 )
 
 
@@ -93,6 +155,7 @@ def _merge_candidate(existing: dict[str, Any] | None, item: dict[str, Any], sour
     current["source_tags"] = tags[:16]
     current["last_seen_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
     current["is_today_increment"] = bool(current.get("first_seen_at", "").startswith(dt.date.today().isoformat()))
+    _ensure_title_profile(current)
     return current
 
 
@@ -104,6 +167,23 @@ def _candidate_pool_stats(pool: dict[str, Any]) -> dict[str, Any]:
         "last_full_scan": pool.get("last_full_scan") or {},
         "background": pool.get("background") or {},
     }
+
+
+def _backfill_candidate_pool_title_profiles(pool: dict[str, Any]) -> int:
+    items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+    changed = 0
+    for code, item in list(items.items()):
+        if not isinstance(item, dict):
+            continue
+        profile = item.get("title_profile")
+        if isinstance(profile, dict) and int(profile.get("version") or 0) == TITLE_PROFILE_VERSION:
+            continue
+        _ensure_title_profile(item)
+        items[code] = item
+        changed += 1
+    if changed:
+        pool["items"] = items
+    return changed
 
 
 def _subscription_codes() -> set[str]:
@@ -192,24 +272,215 @@ def _save_store(data: dict[str, Any]) -> None:
 
 
 def _text_has_subtitle(value: Any) -> bool:
-    text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value or "")
+    text = _feature_value_text(value)
     return bool(re.search(r"中字|中文字幕|中文|字幕|sub", text, re.I))
 
 
 def _text_has_cracked(value: Any) -> bool:
-    text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value or "")
+    text = _feature_value_text(value)
     return bool(re.search(r"破解|无码破解|uncensored|crack|leak|流出", text, re.I))
+
+
+def _feature_value_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, nested in value.items():
+            if key in {"has_subtitle", "has_cnsub", "play_subtitle", "has_magnet_subtitle"} and bool(nested):
+                parts.append("中文字幕")
+            elif key in {"is_cracked", "new_model_uncensored_crack"} and bool(nested):
+                parts.append("破解")
+            else:
+                parts.append(_feature_value_text(nested))
+        return " ".join(part for part in parts if part)
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(_feature_value_text(item) for item in value)
+    if isinstance(value, bool):
+        return ""
+    return str(value or "")
 
 
 def _generic_category_factor(name: Any) -> float:
     text = str(name or "").strip()
     if not text:
         return 0.0
-    if any(keyword in text for keyword in GENERIC_CATEGORY_KEYWORDS):
+    upper_text = text.upper()
+    if any(keyword in text or keyword.upper() in upper_text for keyword in GENERIC_CATEGORY_KEYWORDS):
         return 0.28
     if len(text) <= 1:
         return 0.35
     return 1.0
+
+
+def _title_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return str(value or "").strip()
+    parts: list[str] = []
+    for key in ("display_title", "title", "originaltitle", "name", "label", "summary", "number", "code"):
+        text = str(value.get(key) or "").strip()
+        if text:
+            parts.append(text)
+    for container_name in ("data", "detail", "nfo"):
+        container = value.get(container_name)
+        if not isinstance(container, dict):
+            continue
+        for key in ("display_title", "title", "originaltitle", "sorttitle", "name", "plot", "outline"):
+            text = str(container.get(key) or "").strip()
+            if text:
+                parts.append(text)
+    return " ".join(dict.fromkeys(parts))
+
+
+def _clean_title_text(value: Any) -> str:
+    text = _title_text(value)
+    if not text:
+        return ""
+    text = CODE_RE.sub(" ", text)
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"[\[\]【】『』「」()（）＜＞<>]", " ", text)
+    for pattern in TITLE_NOISE_PATTERNS:
+        text = re.sub(pattern, " ", text, flags=re.I)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _pattern_in_title(text: str, pattern: str) -> bool:
+    if not pattern:
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_ -]+", pattern):
+        return bool(re.search(rf"(?<![A-Za-z0-9]){re.escape(pattern)}(?![A-Za-z0-9])", text, re.I))
+    return pattern.lower() in text.lower()
+
+
+def _analyze_title(value: Any) -> dict[str, Any]:
+    raw = _title_text(value)
+    clean = _clean_title_text(value)
+    if not clean:
+        return {"version": TITLE_PROFILE_VERSION, "raw": raw, "clean": "", "tags": [], "labels": [], "confidence": 0}
+    tags: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for trait in TITLE_TRAIT_PATTERNS:
+        name = str(trait["name"])
+        if name in seen:
+            continue
+        matched = [pattern for pattern in trait.get("patterns") or () if _pattern_in_title(clean, str(pattern))]
+        if not matched:
+            continue
+        seen.add(name)
+        tags.append({
+            "name": name,
+            "key": _norm_key(name),
+            "group": trait.get("group") or "title",
+            "weight": float(trait.get("weight") or 1.0),
+            "matched": matched[:3],
+        })
+    confidence = min(100, round(sum(float(tag.get("weight") or 0) for tag in tags) * 28))
+    return {
+        "version": TITLE_PROFILE_VERSION,
+        "raw": raw,
+        "clean": clean,
+        "tags": tags[:12],
+        "labels": [str(tag["name"]) for tag in tags[:12]],
+        "confidence": confidence,
+    }
+
+
+def _title_trait_labels(analysis: Any, limit: int = 12, min_weight: float = 0.0) -> list[str]:
+    if not isinstance(analysis, dict):
+        return []
+    labels: list[str] = []
+    seen: set[str] = set()
+    for tag in analysis.get("tags") or []:
+        if not isinstance(tag, dict) or float(tag.get("weight") or 0) < min_weight:
+            continue
+        name = str(tag.get("name") or "").strip()
+        key = _norm_key(name)
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        labels.append(name)
+        if len(labels) >= limit:
+            break
+    return labels
+
+
+def _title_mined_terms(value: Any, limit: int = 36) -> list[str]:
+    text = _clean_title_text(value)
+    if not text:
+        return []
+    text = re.sub(r"(?:した|して|する|される|され|れる|られ|ない|に|を|が|と|の|で|へ|から|まで|より|そして|また|その|この)", " ", text)
+    chunks = re.findall(r"[\u3040-\u30ff\u3400-\u9fffA-Za-z]{2,12}", text)
+    terms: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        candidates: list[str] = [chunk]
+        if len(chunk) > 4:
+            for size in (2, 3, 4):
+                candidates.extend(chunk[index:index + size] for index in range(0, len(chunk) - size + 1))
+        for term in candidates:
+            if len(term) < 2 or len(term) > 4:
+                continue
+            if term in TITLE_TERM_STOPWORDS or any(stop in term for stop in TITLE_TERM_STOPWORDS if len(stop) >= 3):
+                continue
+            if re.fullmatch(r"[\u3040-\u309f]+", term) or re.search(r"^[ぁ-ん]+|[ぁ-ん]+$", term):
+                continue
+            if re.fullmatch(r"[A-Za-z]+", term) and len(term) < 3:
+                continue
+            if re.search(r"(?:カップ|タイトル|サンプル|プレビュー)$", term):
+                continue
+            key = _norm_key(term)
+            if key in seen:
+                continue
+            seen.add(key)
+            terms.append(term)
+            if len(terms) >= limit:
+                return terms
+    return terms
+
+
+def _profile_title_term_matches(item: Any, profile_terms: Counter, limit: int = 8) -> list[dict[str, Any]]:
+    matches = [
+        {"name": term, "count": float(profile_terms.get(term) or 0)}
+        for term in _title_mined_terms(item, 80)
+        if float(profile_terms.get(term) or 0) > 0
+    ]
+    matches.sort(key=lambda row: (float(row["count"]), len(str(row["name"]))), reverse=True)
+    return matches[:limit]
+
+
+def _is_actor_name_term(term: str, actor_names: set[str]) -> bool:
+    normalized = _norm_key(term)
+    return any(
+        normalized and actor_key and (normalized == actor_key or normalized in actor_key or actor_key in normalized)
+        for actor_key in (_norm_key(actor) for actor in actor_names)
+    )
+
+
+def _prune_title_term_counter(counter: Counter) -> Counter:
+    trait_labels = {str(trait.get("name") or "") for trait in TITLE_TRAIT_PATTERNS}
+    items = [(str(term), float(count)) for term, count in counter.items() if str(term).strip() and float(count or 0) > 0]
+    kept: Counter = Counter()
+    for term, count in sorted(items, key=lambda row: (len(row[0]), -row[1])):
+        if term in trait_labels:
+            continue
+        if len(term) <= 2 and any(term != longer and term in longer and len(longer) > len(term) and longer_count >= count * 0.5 for longer, longer_count in items):
+            continue
+        kept[term] = count
+    return kept
+
+
+def _ensure_title_profile(item: dict[str, Any]) -> dict[str, Any]:
+    profile = item.get("title_profile")
+    if isinstance(profile, dict) and int(profile.get("version") or 0) == TITLE_PROFILE_VERSION:
+        return profile
+    profile = _analyze_title(item)
+    item["title_profile"] = profile
+    item["title_traits"] = _title_trait_labels(profile)
+    return profile
+
+
+def _merge_title_traits(categories: list[str], title_traits: list[str], limit: int = 16) -> list[str]:
+    return _unique_names([*(categories or []), *(title_traits or [])], limit)
 
 
 def _entity_payload(entity: KnowledgeEntity) -> dict[str, Any]:
@@ -225,6 +496,92 @@ def _entity_payload(entity: KnowledgeEntity) -> dict[str, Any]:
     }
 
 
+def _media_preference_weight(entity: KnowledgeEntity) -> float:
+    observed_at = entity.updated_at or entity.created_at
+    if not observed_at:
+        return 1.0
+    try:
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=dt.timezone.utc)
+        age_days = max(0.0, (dt.datetime.now(dt.timezone.utc) - observed_at.astimezone(dt.timezone.utc)).total_seconds() / 86400)
+    except Exception:
+        return 1.0
+    if age_days <= 90:
+        return 1.0
+    return max(0.35, math.pow(0.5, (age_days - 90) / 540))
+
+
+def _title_profile_media_payload(item: KnowledgeEntity) -> dict[str, Any]:
+    data = item.data or {}
+    return {
+        "label": item.label,
+        "summary": item.summary,
+        "data": data,
+        "nfo": data.get("nfo") if isinstance(data, dict) else {},
+        "title": data.get("title") if isinstance(data, dict) else "",
+        "originaltitle": data.get("originaltitle") if isinstance(data, dict) else "",
+        "name": data.get("name") if isinstance(data, dict) else "",
+    }
+
+
+def _title_profile_signature(media: list[KnowledgeEntity], media_weights: dict[str, float]) -> str:
+    rows = []
+    for item in media:
+        observed = item.updated_at or item.created_at
+        rows.append({
+            "id": item.id,
+            "updated_at": observed.isoformat() if observed else "",
+            "weight": round(float(media_weights.get(item.id, 1.0)), 4),
+            "title": _clean_title_text(_title_profile_media_payload(item)),
+        })
+    raw = json.dumps({"version": TITLE_PROFILE_VERSION, "rows": rows}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_title_profile_cache(signature: str) -> dict[str, Counter] | None:
+    try:
+        data = json.loads(TITLE_PROFILE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict) or data.get("signature") != signature or int(data.get("version") or 0) != TITLE_PROFILE_VERSION:
+        return None
+    return {
+        "title_traits": Counter({str(key): float(value) for key, value in (data.get("title_traits") or {}).items()}),
+        "title_terms": Counter({str(key): float(value) for key, value in (data.get("title_terms") or {}).items()}),
+    }
+
+
+def _save_title_profile_cache(signature: str, title_traits: Counter, title_terms: Counter, media_count: int) -> None:
+    TITLE_PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": TITLE_PROFILE_VERSION,
+        "signature": signature,
+        "media_count": media_count,
+        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "title_traits": {str(key): round(float(value), 4) for key, value in title_traits.items()},
+        "title_terms": {str(key): round(float(value), 4) for key, value in title_terms.items()},
+    }
+    temporary = TITLE_PROFILE_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(TITLE_PROFILE_FILE)
+
+
+def _build_title_profile(media: list[KnowledgeEntity], media_weights: dict[str, float], actor_names: set[str]) -> dict[str, Counter]:
+    title_traits: Counter = Counter()
+    title_terms: Counter = Counter()
+    for item in media:
+        payload = _title_profile_media_payload(item)
+        weight = media_weights.get(item.id, 1.0)
+        for tag in _analyze_title(payload).get("tags") or []:
+            name = str(tag.get("name") or "").strip()
+            if name:
+                title_traits[name] += weight * float(tag.get("weight") or 1.0)
+        for term in _title_mined_terms(payload, 80):
+            if not _is_actor_name_term(term, actor_names):
+                title_terms[term] += weight
+    return {"title_traits": title_traits, "title_terms": _prune_title_term_counter(title_terms)}
+
+
 async def _library_profile() -> dict[str, Any]:
     empty_profile = {
         "media_count": 0,
@@ -234,6 +591,10 @@ async def _library_profile() -> dict[str, Any]:
         "genres": Counter(),
         "tags": Counter(),
         "studios": Counter(),
+        "series": Counter(),
+        "directors": Counter(),
+        "title_traits": Counter(),
+        "title_terms": Counter(),
         "actor_category": Counter(),
         "local_features": {},
         "top_media": [],
@@ -245,6 +606,7 @@ async def _library_profile() -> dict[str, Any]:
             return empty_profile
         media = list(media_rows.scalars().all())
         media_ids = [item.id for item in media]
+        media_weights = {item.id: _media_preference_weight(item) for item in media}
         profile = {
             "media_count": len(media),
             "codes": set(),
@@ -253,6 +615,10 @@ async def _library_profile() -> dict[str, Any]:
             "genres": Counter(),
             "tags": Counter(),
             "studios": Counter(),
+            "series": Counter(),
+            "directors": Counter(),
+            "title_traits": Counter(),
+            "title_terms": Counter(),
             "actor_category": Counter(),
             "local_features": {},
             "top_media": [_entity_payload(item) for item in media[:8]],
@@ -281,21 +647,35 @@ async def _library_profile() -> dict[str, Any]:
                     profile["codes"].add(code)
                     profile["media_by_code"][code] = _entity_payload(media_by_id.get(edge.source_entity_id)) if media_by_id.get(edge.source_entity_id) else None
             elif rel == "HAS_ACTOR":
-                profile["actors"][target.label] += 1
+                profile["actors"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
                 relations_by_media[edge.source_entity_id]["actors"].add(target.label)
             elif rel == "HAS_GENRE":
-                profile["genres"][target.label] += 1
+                profile["genres"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
                 relations_by_media[edge.source_entity_id]["categories"].add(target.label)
             elif rel == "HAS_TAG":
-                profile["tags"][target.label] += 1
+                profile["tags"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
                 relations_by_media[edge.source_entity_id]["categories"].add(target.label)
             elif rel in {"HAS_STUDIO", "HAS_LABEL"}:
-                profile["studios"][target.label] += 1
+                profile["studios"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
                 relations_by_media[edge.source_entity_id]["studios"].add(target.label)
-        for rels in relations_by_media.values():
+            elif rel == "IN_SERIES":
+                profile["series"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+            elif rel == "HAS_DIRECTOR":
+                profile["directors"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+        for media_id, rels in relations_by_media.items():
+            weight = media_weights.get(media_id, 1.0)
             for actor in rels["actors"]:
                 for category in rels["categories"]:
-                    profile["actor_category"][(actor, category)] += 1
+                    profile["actor_category"][(actor, category)] += weight
+        actor_names = {str(name) for name in profile["actors"] if str(name or "").strip()}
+        signature = _title_profile_signature(media, media_weights)
+        title_profile = _load_title_profile_cache(signature)
+        if title_profile is None:
+            title_profile = _build_title_profile(media, media_weights, actor_names)
+            with contextlib.suppress(Exception):
+                _save_title_profile_cache(signature, title_profile["title_traits"], title_profile["title_terms"], len(media))
+        profile["title_traits"] = title_profile["title_traits"]
+        profile["title_terms"] = title_profile["title_terms"]
         for item in media:
             data = item.data or {}
             code = _norm_code(json.dumps(data, ensure_ascii=False) + " " + item.label)
@@ -308,7 +688,7 @@ async def _library_profile() -> dict[str, Any]:
 
 
 def _top(counter: Counter, limit: int = 12) -> list[dict[str, Any]]:
-    return [{"name": str(name), "count": int(count)} for name, count in counter.most_common(limit)]
+    return [{"name": str(name), "count": round(float(count), 1)} for name, count in counter.most_common(limit)]
 
 
 def _names(items: Any) -> list[str]:
@@ -323,6 +703,15 @@ def _names(items: Any) -> list[str]:
         if name:
             out.append(name)
     return out
+
+
+def _name_one(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("name") or value.get("label") or value.get("title") or "").strip()
+    if isinstance(value, list):
+        names = _names(value)
+        return names[0] if names else ""
+    return str(value or "").strip()
 
 
 def _unique_names(items: Any, limit: int = 20) -> list[str]:
@@ -424,6 +813,8 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
                         item["actors"] = _names(data.get("actors"))
                         item["categories"] = _names(data.get("categories"))
                         item["maker"] = data.get("maker") or data.get("publisher") or ""
+                        item["series"] = _name_one(data.get("series"))
+                        item["director"] = _name_one(data.get("director"))
                         item["cover_url"] = data.get("cover_url") or item.get("cover_url")
                         item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
                         item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
@@ -432,6 +823,7 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
                         if magnets:
                             item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
                             item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
+                        _ensure_title_profile(item)
                 except Exception:
                     pass
             return item
@@ -554,11 +946,20 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         return None
     in_library = code in profile.get("codes", set()) or bool((item.get("library") or {}).get("in_library") if isinstance(item.get("library"), dict) else False)
     actors = _unique_names(item.get("actors") or [], 12)
-    categories = _unique_names(item.get("categories") or [], 16)
+    base_categories = _unique_names(item.get("categories") or [], 16)
+    title_profile = _ensure_title_profile(item)
+    title_traits = _title_trait_labels(title_profile, limit=10, min_weight=0.55)
+    categories = _merge_title_traits(base_categories, title_traits, 18)
     maker = str(item.get("maker") or "").strip()
+    series = _name_one(item.get("series"))
+    director = _name_one(item.get("director"))
     score = 0.0
     reasons: list[str] = []
     personalized_score = 0.0
+    actor_preference_score = 0.0
+    category_preference_score = 0.0
+    relationship_preference_score = 0.0
+    feedback_score = 0.0
     actionability_score = 0.0
     quality_score = 0.0
     penalty_score = 0.0
@@ -567,6 +968,10 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
     genre_counter: Counter = profile.get("genres") or Counter()
     tag_counter: Counter = profile.get("tags") or Counter()
     studio_counter: Counter = profile.get("studios") or Counter()
+    series_counter: Counter = profile.get("series") or Counter()
+    director_counter: Counter = profile.get("directors") or Counter()
+    title_trait_counter: Counter = profile.get("title_traits") or Counter()
+    title_term_counter: Counter = profile.get("title_terms") or Counter()
     actor_category_counter: Counter = profile.get("actor_category") or Counter()
     media_count = max(int(profile.get("media_count") or 0), 1)
 
@@ -577,10 +982,13 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         boost = min(32, (3 if best_count <= 1 else 7) + math.log2(best_count + 1) * 7.2 + confidence * 6)
         score += boost
         personalized_score += boost
+        actor_preference_score += boost
         reasons.append(f"{'演员偏好' if best_count > 1 else '演员线索'}：{best_name} 已有 {best_count} 部")
         if len(actor_hits) >= 2:
-            score += min(8, len(actor_hits) * 2.5)
-            personalized_score += min(8, len(actor_hits) * 2.5)
+            boost = min(8, len(actor_hits) * 2.5)
+            score += boost
+            personalized_score += boost
+            actor_preference_score += boost
             reasons.append(f"多演员命中：{len(actor_hits)} 位")
 
     feedback_actor_boost = 0.0
@@ -596,6 +1004,8 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
     if feedback_actor_boost:
         score += feedback_actor_boost
         personalized_score += feedback_actor_boost
+        actor_preference_score += feedback_actor_boost
+        feedback_score += feedback_actor_boost
         reasons.append("正反馈演员")
     if feedback_actor_penalty:
         score -= feedback_actor_penalty
@@ -613,8 +1023,27 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         boost = min(24, sum(min(6.5, math.sqrt(count) * 2.9 + _preference_confidence(count, media_count) * 2) * factor for _, count, factor in sorted_hits[:6]))
         score += boost
         personalized_score += boost
+        category_preference_score += boost
         if names:
             reasons.append(f"类型匹配：{names}")
+
+    title_trait_hits = [(name, float(title_trait_counter.get(name) or 0)) for name in title_traits if float(title_trait_counter.get(name) or 0) > 0]
+    if title_trait_hits:
+        sorted_traits = sorted(title_trait_hits, key=lambda row: row[1], reverse=True)
+        boost = min(16, sum(min(4.8, math.sqrt(count) * 2.1 + _preference_confidence(int(round(count)), media_count) * 1.6) for _, count in sorted_traits[:5]))
+        score += boost
+        personalized_score += boost
+        category_preference_score += boost
+        reasons.append("标题题材：" + "/".join(name for name, _ in sorted_traits[:3]))
+
+    mined_term_hits = _profile_title_term_matches(item, title_term_counter, 8)
+    if mined_term_hits:
+        boost = min(14, sum(min(4.0, math.log2(float(hit.get("count") or 0) + 1) * 0.95) for hit in mined_term_hits[:5]))
+        if boost > 0:
+            score += boost
+            personalized_score += boost
+            category_preference_score += boost
+            reasons.append("媒体库标题词：" + "/".join(str(hit.get("name") or "") for hit in mined_term_hits[:3] if hit.get("name")))
 
     feedback_category_boost = 0.0
     feedback_category_penalty = 0.0
@@ -627,6 +1056,8 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
     if feedback_category_boost:
         score += feedback_category_boost
         personalized_score += feedback_category_boost
+        category_preference_score += feedback_category_boost
+        feedback_score += feedback_category_boost
         reasons.append("正反馈类型")
     if feedback_category_penalty:
         score -= feedback_category_penalty
@@ -648,6 +1079,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         boost = min(24, (5 if count <= 1 else 9) + math.log2(count + 1) * 5 * factor + min(5, lift * 7))
         score += boost
         personalized_score += boost
+        relationship_preference_score += boost
         reasons.append(f"组合偏好：{actor} + {category} 出现 {count} 次")
 
     # If the candidate has no familiar actor but several strong preferred tags,
@@ -658,6 +1090,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
             discovery_boost = min(8, strong_category_count * 2.5)
             score += discovery_boost
             personalized_score += discovery_boost
+            category_preference_score += discovery_boost
             reasons.append("类型探索")
 
     if maker and studio_counter.get(maker, 0):
@@ -665,7 +1098,24 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         boost = min(9, 3 + math.log2(count + 1) * 3)
         score += boost
         personalized_score += boost
+        relationship_preference_score += boost
         reasons.append(f"厂牌匹配：{maker}")
+
+    if series and series_counter.get(series, 0):
+        count = float(series_counter.get(series, 0))
+        boost = min(14, 5 + math.log2(count + 1) * 4)
+        score += boost
+        personalized_score += boost
+        relationship_preference_score += boost
+        reasons.append(f"系列偏好：{series}")
+
+    if director and director_counter.get(director, 0):
+        count = float(director_counter.get(director, 0))
+        boost = min(8, 2 + math.log2(count + 1) * 2.5)
+        score += boost
+        personalized_score += boost
+        relationship_preference_score += boost
+        reasons.append(f"导演匹配：{director}")
 
     magnets_count = int(item.get("magnets_count") or 0)
     if magnets_count > 0:
@@ -695,6 +1145,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
 
     if code in liked:
         score += 20
+        feedback_score += 20
         reasons.append("已标记喜欢")
     release = str(item.get("release_date") or item.get("date") or "")
     if release.startswith("2026"):
@@ -719,7 +1170,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
     # labels are broad labels and no actor/studio signal exists, keep them from
     # floating to the top only because they have resources.
     meaningful_categories = [x for x in categories if _generic_category_factor(x) >= 0.5]
-    if media_count >= 10 and not actor_hits and not maker and not meaningful_categories:
+    if media_count >= 10 and not actor_hits and not maker and not series and not director and not meaningful_categories:
         score -= 10
         penalty_score += 10
         reasons.append("标签过泛降权")
@@ -745,7 +1196,6 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
     if score <= 0:
         return None
     match_bucket = _score_bucket(personalized_score)
-    detail = item.get("detail") if isinstance(item.get("detail"), dict) else {}
     return {
         "code": code,
         "title": item.get("title") or item.get("display_title") or code,
@@ -755,7 +1205,15 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         "release_date": release,
         "actors": actors[:6],
         "categories": categories[:8],
+        "title_traits": title_traits[:8],
+        "title_profile": {
+            "labels": title_traits[:8],
+            "confidence": title_profile.get("confidence") or 0,
+            "tags": (title_profile.get("tags") or [])[:8],
+        },
         "maker": maker,
+        "series": series,
+        "director": director,
         "score": score,
         "personalized_score": round(personalized_score, 1),
         "actionability_score": round(actionability_score, 1),
@@ -765,6 +1223,10 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         "confidence": max(0, min(100, round(personalized_score * 1.6 + actionability_score * 0.45 - penalty_score * 0.7))),
         "score_breakdown": {
             "preference": round(personalized_score, 1),
+            "actor_preference": round(actor_preference_score, 1),
+            "category_preference": round(category_preference_score, 1),
+            "relationship_preference": round(relationship_preference_score, 1),
+            "feedback": round(feedback_score, 1),
             "resources": round(actionability_score, 1),
             "quality": round(quality_score, 1),
             "penalty": round(penalty_score, 1),
@@ -778,9 +1240,6 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         "reasons": reasons[:5],
         "source_tags": list(item.get("source_tags") or []),
         "is_today_increment": bool(item.get("is_today_increment")),
-        "series": item.get("series") or detail.get("series") or "",
-        "director": item.get("director") or detail.get("director") or "",
-        "title_traits": list(item.get("title_traits") or []),
         "source": "javdb",
         "source_label": "JavDB",
         "route": f"/plugins/javdb?code={code}",
@@ -797,7 +1256,7 @@ def _resource_features(resource: dict[str, Any]) -> dict[str, bool]:
         str(resource.get("subtitle") or ""),
         str(resource.get("provider_label") or ""),
         tags,
-        json.dumps(features, ensure_ascii=False),
+        _feature_value_text({key: value for key, value in features.items() if value}),
     ])
     return {
         "has_subtitle": bool(features.get("has_subtitle") or re.search(r"中字|中文字幕|中文|字幕|sub", text, re.I)),
@@ -970,6 +1429,8 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
 
     profile = await _library_profile()
     pool = _pool()
+    if source_mode == "full" and _backfill_candidate_pool_title_profiles(pool):
+        _save_pool(pool)
     pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
     if source_mode == "full":
         candidates = [dict(item) for item in pool_items.values() if isinstance(item, dict)]
@@ -1019,7 +1480,11 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
             "top_actors": _top(profile.get("actors") or Counter(), 10),
             "top_genres": _top(profile.get("genres") or Counter(), 10),
             "top_tags": _top(profile.get("tags") or Counter(), 10),
+            "top_title_traits": _top(profile.get("title_traits") or Counter(), 10),
+            "top_title_terms": _top(profile.get("title_terms") or Counter(), 12),
             "top_studios": _top(profile.get("studios") or Counter(), 8),
+            "top_series": _top(profile.get("series") or Counter(), 8),
+            "top_directors": _top(profile.get("directors") or Counter(), 8),
         },
         "stats": {
             "candidates": len(candidates),
@@ -1060,7 +1525,11 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
                 "top_actors": _top(profile.get("actors") or Counter(), 20),
                 "top_genres": _top(profile.get("genres") or Counter(), 20),
                 "top_tags": _top(profile.get("tags") or Counter(), 20),
+                "top_title_traits": _top(profile.get("title_traits") or Counter(), 20),
+                "top_title_terms": _top(profile.get("title_terms") or Counter(), 30),
                 "top_studios": _top(profile.get("studios") or Counter(), 12),
+                "top_series": _top(profile.get("series") or Counter(), 12),
+                "top_directors": _top(profile.get("directors") or Counter(), 12),
             },
         }
     if action == "scan_candidate_pool":
