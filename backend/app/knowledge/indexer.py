@@ -284,32 +284,45 @@ async def rebuild_knowledge_index(db: AsyncSession, *, max_items: int | None = N
             for library in targets:
                 if remaining is not None and remaining <= 0:
                     break
-                if use_recovery_adapter:
-                    items, total = await media_library_recovery._fetch_items(
-                        config,
-                        library_id=library.get("id"),
-                        limit=remaining or 500,
-                        offset=0,
-                    )
-                else:
-                    items, total = await media_library._list_items(config, library["id"], limit=remaining or 2000, offset=0, force_refresh=False)
-                stats["total"] = max_items or stats.get("total") or total
-                for item in items:
+                offset = 0
+                while True:
+                    if use_recovery_adapter:
+                        page_limit = min(remaining, 500) if remaining is not None else 500
+                        items, total = await media_library_recovery._fetch_items(
+                            config,
+                            library_id=library.get("id"),
+                            limit=page_limit,
+                            offset=offset,
+                        )
+                    else:
+                        page_limit = remaining or 2000
+                        items, total = await media_library._list_items(config, library["id"], limit=page_limit, offset=offset, force_refresh=False)
+                    stats["total"] = max_items or max(int(stats.get("total") or 0), int(total or 0))
+                    if not items:
+                        break
+                    for item in items:
+                        if remaining is not None and remaining <= 0:
+                            break
+                        try:
+                            detail = item if use_recovery_adapter else await media_library._get_item(config, item["id"])
+                        except Exception:
+                            detail = None
+                        item_stats = await _index_media_item(repo, item, detail)
+                        for key in ("entities", "edges", "subtitles", "versions"):
+                            stats[key] += item_stats[key]
+                        stats["media_items"] += 1
+                        stats["processed"] = stats["media_items"]
+                        if stats["media_items"] == 1 or stats["media_items"] % 10 == 0:
+                            await checkpoint("media-library", f"已索引 {stats['processed']} 个作品", 10 + int(min(stats["processed"], stats["total"] or 1) / max(stats["total"] or 1, 1) * 65))
+                        if remaining is not None:
+                            remaining -= 1
+                    offset += len(items)
                     if remaining is not None and remaining <= 0:
                         break
-                    try:
-                        detail = item if use_recovery_adapter else await media_library._get_item(config, item["id"])
-                    except Exception:
-                        detail = None
-                    item_stats = await _index_media_item(repo, item, detail)
-                    for key in ("entities", "edges", "subtitles", "versions"):
-                        stats[key] += item_stats[key]
-                    stats["media_items"] += 1
-                    stats["processed"] = stats["media_items"]
-                    if stats["media_items"] == 1 or stats["media_items"] % 10 == 0:
-                        await checkpoint("media-library", f"已索引 {stats['processed']} 个作品", 10 + int(min(stats["processed"], stats["total"] or 1) / max(stats["total"] or 1, 1) * 65))
-                    if remaining is not None:
-                        remaining -= 1
+                    if offset >= int(total or 0) or len(items) < page_limit:
+                        break
+                    if not use_recovery_adapter:
+                        break
         await checkpoint("jobs", "读取任务历史", 78)
         stats["tasks"] = await _index_jobs(repo)
         await checkpoint("plugins", "读取插件贡献数据", 86)
