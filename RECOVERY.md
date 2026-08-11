@@ -99,6 +99,9 @@ the recovered bytecode modules remain unchanged.
   translation route contract, request schemas, strategy selection, and local-path
   handling against bytecode. The running translation health-check and missing-task
   responses were exercised through the isolated backend.
+- Reconstructed `api/subtitles.py` as maintainable source and verified its local
+  subtitle, online-source, file-content, unique-name, and deletion contracts against
+  bytecode. The isolated backend exercised local reads and invalid-download handling.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
