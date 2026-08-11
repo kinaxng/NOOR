@@ -11,12 +11,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 ENV_FILE_PATH = Path(os.environ.get("NOOR_ENV_FILE", str(PROJECT_ROOT / ".env")))
+DEFAULT_NOOR_DATA_DIR = str(PROJECT_ROOT / "data")
 WHISPER_MODEL_DIR = Path(
     os.environ.get("WHISPER_MODEL_DIR", str(Path.home() / ".cache" / "huggingface"))
 )
@@ -34,15 +35,23 @@ class Settings(BaseSettings):
     emby_user_id: str = ""
     emby_enabled_library_ids: str = ""
 
+    noor_data_dir: str = DEFAULT_NOOR_DATA_DIR
     source_dir: str = ""
     output_dir: str = ""
     whisper_model_dir: str = ""
-    audio_separator_model_dir: str = DEFAULT_AUDIO_SEPARATOR_MODEL_DIR
-    reazon_model_dir: str = DEFAULT_REAZON_MODEL_DIR
-    reazon_nemo_model_path: str = DEFAULT_REAZON_NEMO_MODEL_PATH
+    whisper_cache_dir: str = ""
+    whisper_temp_dir: str = ""
+    audio_separator_model_dir: str = ""
+    reazon_model_dir: str = ""
+    reazon_nemo_model_path: str = ""
     lada_model_dir: str = Field(
-        DEFAULT_LADA_MODEL_WEIGHTS_DIR, validation_alias="LADA_MODEL_WEIGHTS_DIR"
+        "", validation_alias="LADA_MODEL_WEIGHTS_DIR"
     )
+    lada_cache_dir: str = ""
+    lada_temp_dir: str = ""
+    facefusion_model_dir: str = ""
+    facefusion_cache_dir: str = ""
+    facefusion_temp_dir: str = ""
     enable_dev_endpoints: bool = Field(
         False,
         validation_alias=AliasChoices("NOOR_ENABLE_DEV_ENDPOINTS", "ENABLE_DEV_ENDPOINTS"),
@@ -76,7 +85,32 @@ class Settings(BaseSettings):
         default_factory=lambda: not os.path.exists("/.dockerenv"),
         validation_alias=AliasChoices("RELOAD", "UVICORN_RELOAD"),
     )
-    database_url: str = "sqlite+aiosqlite:///./noor.db"
+    database_url: str = ""
+
+    @model_validator(mode="after")
+    def apply_storage_defaults(self):
+        data_dir = Path(self.noor_data_dir or DEFAULT_NOOR_DATA_DIR)
+
+        def fill(attr: str, path: Path) -> None:
+            if not (getattr(self, attr, "") or "").strip():
+                setattr(self, attr, str(path))
+
+        fill("whisper_model_dir", data_dir / "models" / "whisper")
+        fill("whisper_cache_dir", data_dir / "runtime" / "whisper" / "cache")
+        fill("whisper_temp_dir", data_dir / "runtime" / "whisper" / "temp")
+        fill("audio_separator_model_dir", data_dir / "models" / "whisper" / "audio-separator")
+        fill("reazon_model_dir", data_dir / "models" / "whisper" / "reazon")
+        fill("reazon_nemo_model_path", Path(self.reazon_model_dir) / "reazonspeech-nemo-v2.nemo")
+        fill("lada_model_dir", data_dir / "models" / "lada")
+        fill("lada_cache_dir", data_dir / "runtime" / "lada" / "cache")
+        fill("lada_temp_dir", data_dir / "runtime" / "lada" / "temp")
+        fill("facefusion_model_dir", data_dir / "models" / "facefusion")
+        fill("facefusion_cache_dir", data_dir / "runtime" / "facefusion" / "cache")
+        fill("facefusion_temp_dir", data_dir / "runtime" / "facefusion" / "temp")
+        fill("database_url", data_dir / "noor.db")
+        if "://" not in self.database_url:
+            self.database_url = f"sqlite+aiosqlite:///{self.database_url}"
+        return self
 
     @property
     def emby_headers(self) -> dict:

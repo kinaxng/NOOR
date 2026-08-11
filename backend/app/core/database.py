@@ -10,14 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.core.config import get_settings
+from app.core.database_paths import prepare_sqlite_database
 
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, echo=False)
+database_url = prepare_sqlite_database(settings.database_url, noor_data_dir=settings.noor_data_dir)
+engine = create_async_engine(database_url, echo=False)
 async_session_maker = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
-_sync_url = settings.database_url.replace("+aiosqlite", "")
+_sync_url = database_url.replace("+aiosqlite", "")
 _sync_engine = create_engine(_sync_url, echo=False, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=_sync_engine, expire_on_commit=False)
 

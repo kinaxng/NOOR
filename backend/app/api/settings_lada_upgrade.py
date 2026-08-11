@@ -9,6 +9,31 @@ from fastapi import HTTPException
 PROXY_ENV_KEYS = ("http_proxy", "https_proxy", "http://proxy", "https://proxy")
 
 
+def normalize_git_remote_url(url: str) -> str:
+    value = (url or "").strip()
+    prefixes = (
+        "https://ghproxy.com/https://github.com/",
+        "https://ghproxy.net/https://github.com/",
+        "https://ghproxy.cc/https://github.com/",
+        "https://hub.gitmirror.com/https://github.com/",
+    )
+    for prefix in prefixes:
+        if value.startswith(prefix):
+            return "https://github.com/" + value[len(prefix):].lstrip("/")
+    malformed = "https://ghproxy.com/"
+    if value.startswith(malformed) and "github.com/" not in value:
+        return "https://github.com/" + value[len(malformed):].lstrip("/")
+    return value
+
+
+def github_mirror_url(mirror: str, github_url: str) -> str:
+    mirror = (mirror or "https://ghproxy.com").strip().rstrip("/")
+    github_url = normalize_git_remote_url(github_url).strip()
+    if not github_url.startswith("https://github.com/") or "github.com" in mirror:
+        return github_url
+    return f"{mirror}/{github_url}"
+
+
 def build_lada_upgrade_env(env: dict[str, str]) -> dict[str, str]:
     filtered = {}
     for key, value in env.items():

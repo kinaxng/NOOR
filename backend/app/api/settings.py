@@ -16,6 +16,7 @@ from app.api.settings_helpers import (LADA_MODEL_WEIGHTS_ENV, WHISPER_MODELS, fo
 from app.api.settings_lada import get_lada_info_impl
 from app.api.settings_lada_defaults import apply_lada_defaults_updates
 from app.api.settings_lada_upgrade import build_lada_upgrade_env, raise_for_git_pull_failure, resolve_git_branch, should_add_break_system_packages
+from app.api.settings_facefusion_upgrade import get_facefusion_installation_info, upgrade_facefusion_source
 from app.api.settings_response import build_settings_payload
 from app.api.settings_status_helpers import build_status_payload, install_status_path, model_download_status_path, read_install_status_response, read_model_download_status_response, write_status_file
 from app.api.settings_updates import apply_emby_config_updates, apply_lada_config_updates, apply_network_config_updates, build_storage_env_updates
@@ -259,6 +260,28 @@ async def upgrade_lada():
         raise
     except Exception as exc:
         log_mgr.add_log("error", f"[LADA] 升级异常 — {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/facefusion/info")
+async def get_facefusion_info():
+    return get_facefusion_installation_info(get_settings())
+
+
+@router.post("/facefusion/upgrade")
+async def upgrade_facefusion():
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[FaceFusion] 正在升级内置 FaceFusion...")
+    try:
+        result = upgrade_facefusion_source(get_settings(), log_mgr)
+        clear_settings_cache()
+        return result
+    except HTTPException:
+        raise
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="FaceFusion 升级超时")
+    except Exception as exc:
+        log_mgr.add_log("error", f"[FaceFusion] 升级异常 — {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
 

@@ -120,7 +120,7 @@ def _sort_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _payload_name_candidates(values: list[Any]) -> list[str]:
     names: list[str] = []
     for value in values:
-        for part in re.split(r"[\s\u3000、,，/／|·・]+", str(value or "")):
+        for part in re.split(r"[、,，/／|]+", str(value or "")):
             part = part.strip()
             if part:
                 names.append(part)

@@ -7,6 +7,8 @@ from __future__ import annotations
 from typing import Any
 
 from app.api.endpoints.media_library_helpers import load_config as load_media_library_config
+from app.api.settings_facefusion_upgrade import get_facefusion_installation_info
+from app.core.config import get_settings
 from app.pipeline.whisper.strategy import apply_whisper_strategy, normalize_whisper_strategy
 
 
@@ -23,6 +25,7 @@ def build_settings_payload(
     custom_whisper_config: dict[str, Any],
 ) -> dict[str, Any]:
     media_library_config = load_media_library_config()
+    facefusion_info = get_facefusion_installation_info(get_settings())
     whisper_strategy = normalize_whisper_strategy(
         env_data.get("WHISPER_STRATEGY", "recommended")
     )
@@ -114,6 +117,7 @@ def build_settings_payload(
             ).lower()
             == "true",
         },
+        "facefusion": facefusion_info,
         "whisper": {**whisper_payload, "features": whisper_features},
         "network": {
             "acceleration_mode": env_data.get("ACCELERATION_MODE", "mirror"),
