@@ -85,6 +85,9 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `api/settings_whisper_models.py` as maintainable source and verified
   its Transformers, faster-whisper, and Reazon model-cache lookup and deletion
   behavior against the preserved bytecode using temporary cache layouts.
+- Reconstructed `api/settings_whisper_runtime.py` as maintainable source and verified
+  its runtime dependency/CUDA inspection, cache detection, status logging, and
+  install-requirement decisions against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
