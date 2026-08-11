@@ -82,6 +82,9 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `api/settings_lada_defaults.py` and `api/settings_lada_upgrade.py`
   as maintainable source and verified their settings persistence, proxy filtering,
   branch selection, and user-facing upgrade failure behavior against bytecode.
+- Reconstructed `api/settings_whisper_models.py` as maintainable source and verified
+  its Transformers, faster-whisper, and Reazon model-cache lookup and deletion
+  behavior against the preserved bytecode using temporary cache layouts.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
