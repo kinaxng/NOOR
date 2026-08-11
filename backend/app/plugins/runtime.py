@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import inspect
 import json
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -218,6 +219,34 @@ class PluginRuntime:
             except Exception as exc:
                 groups.append({'provider': plugin_id, 'provider_name': self._manifests.get(plugin_id, {}).get('name', plugin_id), 'items': [], 'error': str(exc)})
         return groups
+
+    async def get_dashboard_widgets(self, plugin_ids: list[str] | None = None) -> list[dict[str, Any]]:
+        wanted = set(plugin_ids or [])
+        widgets: list[dict[str, Any]] = []
+        for plugin_id, handler in self._handlers.items():
+            if wanted and plugin_id not in wanted:
+                continue
+            if not self._is_enabled(plugin_id):
+                continue
+            callback = getattr(handler, 'build_widget', None)
+            if not callable(callback):
+                continue
+            try:
+                value = callback(self.get_config(plugin_id))
+                value = await value if asyncio.iscoroutine(value) else value
+            except Exception:
+                continue
+            values = value if isinstance(value, list) else [value]
+            for item in values:
+                if item is None:
+                    continue
+                if is_dataclass(item):
+                    item = asdict(item)
+                elif hasattr(item, 'model_dump'):
+                    item = item.model_dump()
+                if isinstance(item, dict):
+                    widgets.append(item)
+        return widgets
 
     async def resolve_resource_download(self, plugin_id: str, resource: dict[str, Any]) -> dict[str, Any]:
         """Ask a recovered provider to resolve a download URL when supported."""

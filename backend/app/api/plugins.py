@@ -60,6 +60,12 @@ async def search_resources(payload: ResourceSearchPayload):
     return {'groups': groups}
 
 
+@router.get('/dashboard/widgets')
+async def get_dashboard_widgets(plugin_ids: str = ''):
+    ids = [item.strip() for item in plugin_ids.split(',') if item.strip()]
+    return await runtime.get_dashboard_widgets(ids or None)
+
+
 @router.get('/{plugin_id}/rss/items')
 async def get_plugin_rss_items(plugin_id: str, limit: int = 30, refresh: bool = False):
     try:
