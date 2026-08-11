@@ -15,8 +15,12 @@ const error = ref('')
 const pluginId = computed(() => String(route.params.pluginId || ''))
 let dispose: null | (() => void) = null
 let styleEl: HTMLLinkElement | null = null
+let sdkDisposers: Array<() => void> = []
 
 function clearMounted() {
+  for (const stop of sdkDisposers.splice(0)) {
+    try { stop() } catch {}
+  }
   if (dispose) {
     try { dispose() } catch {}
     dispose = null
@@ -838,9 +842,23 @@ function createDownloaderDialogContext(sourcePluginId: string) {
 function sdkFor(id: string) {
   const pluginFetch = (path: string, init?: RequestInit) => fetch(`/api/plugins/${id}${path}`, init)
   const downloads = createDownloaderDialogContext(id)
+  const pluginSubPath = () => {
+    const value = route.params.pluginPath
+    return (Array.isArray(value) ? value.join('/') : String(value || '')).replace(/^\/+|\/+$/g, '')
+  }
   return {
     pluginId: id,
     navigate: (to: any) => router.push(to),
+    route: {
+      get subPath() { return pluginSubPath() },
+      push: (path: string) => router.push(`/plugins/${id}/${String(path || '').replace(/^\/+/, '')}`),
+      replace: (path: string) => router.replace(`/plugins/${id}/${String(path || '').replace(/^\/+/, '')}`),
+      onChange: (handler: () => void) => {
+        const stop = watch(() => route.fullPath, () => handler())
+        sdkDisposers.push(stop)
+        return stop
+      },
+    },
     api: {
       plugin: pluginFetch,
       wsUrl: (path: string) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`,
