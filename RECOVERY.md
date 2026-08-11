@@ -73,6 +73,9 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `api/settings_status_helpers.py` as maintainable source and verified
   its persistent install/model-download status-file behavior and response payloads
   against the preserved bytecode.
+- Reconstructed `api/settings_helpers.py` as maintainable source and verified its
+  environment-file handling, model catalogue, feature flags, LADA installation
+  inspection, version cache, and size formatting against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
