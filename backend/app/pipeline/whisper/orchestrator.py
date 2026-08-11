@@ -26,13 +26,14 @@ from .engine import (
 from .enhancer import AudioEnhancer
 from .merge import MergeEngine
 from .japanese_post import JapanesePostProcessor, RecommendedSubtitlePostProcessor
-from .scene_detector import AudioSceneDetector
+from .scene_detector import AudioSceneDetector, WhisperVadOnnxSceneDetector
 from .runtime import raise_if_cancelled
-from .preprocess import AudioPreprocessError, preprocess_audio
+from .timing_refiner import SubtimerVadTimingRefiner
 from .decoupled import AnimeQwen3ChainProcessor, qwen3_aligner_available
 from app.api.settings_whisper_models import resolve_model_cache_candidates
 
 logger = logging.getLogger(__name__)
+WHISPER_VAD_ONNX_REPO_ID = "TransWithAI/Whisper-Vad-EncDec-ASMR-onnx"
 
 
 # 各预设 pipeline 的推荐增强器组合（仅用于 balanced/faster 等旧架构 pipeline）
@@ -216,6 +217,14 @@ class WhisperPipeline:
             if candidate.exists() and any(candidate.iterdir()):
                 return True
         return False
+
+    def _whisper_vad_onnx_cache_dir(self) -> Path:
+        whisper_model_dir, _, _ = _get_whisper_runtime_paths()
+        candidates = resolve_model_cache_candidates(whisper_model_dir, WHISPER_VAD_ONNX_REPO_ID)
+        for candidate in candidates:
+            if candidate.exists() and any(candidate.rglob("model.onnx")):
+                return candidate
+        return candidates[0]
 
     def _reazon_model_display_path(self) -> str:
         from app.core.config import DEFAULT_REAZON_NEMO_MODEL_PATH, get_settings
@@ -492,36 +501,6 @@ class WhisperPipeline:
             self.log(f"音频提取失败: {e}")
             raise
 
-        # Phase 1.25: 实验性音频前处理（当前推荐链路默认关闭）
-        preprocess_mode = getattr(self.config, "audio_preprocess_mode", "none")
-        preprocess_model = getattr(self.config, "audio_preprocess_model", "vocal_balanced")
-        if (preprocess_mode or "none") != "none":
-            self.log("=" * 50)
-            self.log(f"Phase 1.25: 音频前处理 [{preprocess_mode}:{preprocess_model}]")
-            self.log("音频前处理属于实验功能，默认链路不建议开启")
-            self.log("=" * 50)
-            try:
-                self._raise_if_cancelled()
-                preprocessed_path = preprocess_audio(
-                    str(audio_path),
-                    mode=preprocess_mode,
-                    model=preprocess_model,
-                    output_dir=output_dir,
-                    progress_callback=self.progress_callback,
-                    cancel_callback=self.cancel_callback,
-                )
-                if preprocessed_path != str(audio_path):
-                    self.log(f"音频前处理完成: {preprocessed_path}", 7)
-                    audio_path = Path(preprocessed_path)
-                else:
-                    self.log("音频前处理未修改音频（使用原始音频）", 7)
-            except AudioPreprocessError as e:
-                self.log(f"音频前处理失败: {e}")
-                raise
-            except Exception as e:
-                self.log(f"音频前处理异常: {e}")
-                raise
-
         # Phase 1.5: 语音增强（根据 pipeline 预设组合）
         enhancers = self._get_enhancers()
         if enhancers:
@@ -542,28 +521,46 @@ class WhisperPipeline:
             except Exception as e:
                 self.log(f"语音增强失败（跳过）: {e}")
 
-        # Phase: 场景检测
+        # Phase: ChickenRice Smart VAD chunking
         all_segments: list[tuple[str, float, float]] = []  # (audio_path, start, end)
-        if duration > 60.0:
+        if duration > self.config.target_chunk_duration_s:
             self.log("=" * 50)
-            self.log("场景检测: semantic MFCC")
+            self.log(f"Smart VAD: {self.config.vad_backend}")
             self.log("=" * 50)
             try:
                 self._raise_if_cancelled()
-                detector = AudioSceneDetector(
-                    mode="semantic",
-                    min_silence_duration=1.0,
-                    min_segment_duration=15.0,
-                )
-                scenes = detector.detect(str(audio_path))
-                self.log(f"检测到 {len(scenes)} 个场景段落")
-                if len(scenes) > 1:
-                    all_segments = [(str(audio_path), s.start, s.end) for s in scenes]
+                if self.config.vad_backend == "whisper_vad_onnx":
+                    detector = WhisperVadOnnxSceneDetector(
+                        repo_dir=self._whisper_vad_onnx_cache_dir(),
+                        min_segment_duration=max(3.0, min(10.0, self.config.target_chunk_duration_s * 0.35)),
+                        max_segment_duration=self.config.max_chunk_duration_s,
+                    )
                 else:
-                    all_segments = [(str(audio_path), 0.0, duration)]
+                    detector = AudioSceneDetector(
+                        mode="energy",
+                        min_silence_duration=0.1,
+                        min_segment_duration=max(3.0, min(10.0, self.config.target_chunk_duration_s * 0.35)),
+                        energy_threshold=0.01,
+                        max_segment_duration=self.config.max_chunk_duration_s,
+                    )
+                scenes = detector.detect(str(audio_path))
+                self.log(f"Smart VAD 生成 {len(scenes)} 个安全连续块")
+                all_segments = [(str(audio_path), scene.start, scene.end) for scene in scenes]
             except Exception as e:
-                self.log(f"场景检测失败（跳过）: {e}")
-                all_segments = [(str(audio_path), 0.0, duration)]
+                if self.config.vad_backend == "whisper_vad_onnx":
+                    self.log(f"Whisper-VAD ONNX 失败，回退 energy: {e}")
+                    detector = AudioSceneDetector(
+                        mode="energy",
+                        min_silence_duration=0.1,
+                        min_segment_duration=max(3.0, min(10.0, self.config.target_chunk_duration_s * 0.35)),
+                        energy_threshold=0.01,
+                        max_segment_duration=self.config.max_chunk_duration_s,
+                    )
+                    scenes = detector.detect(str(audio_path))
+                    all_segments = [(str(audio_path), scene.start, scene.end) for scene in scenes]
+                else:
+                    self.log(f"Smart VAD 失败，使用整段音频: {e}")
+                    all_segments = [(str(audio_path), 0.0, duration)]
         else:
             all_segments = [(str(audio_path), 0.0, duration)]
 
@@ -699,6 +696,18 @@ class WhisperPipeline:
             self.log(f"后处理完成: {len(result.segments)} 片段", 95)
         except Exception as e:
             self.log(f"后处理失败（跳过）: {e}")
+
+        timing_refiner = str(getattr(self.config, "timing_refiner", "none") or "none").strip().lower()
+        if timing_refiner == "subtimer_vad":
+            try:
+                self._raise_if_cancelled()
+                scene_bounds = [(start, end) for _, start, end in all_segments]
+                result, changed = SubtimerVadTimingRefiner().refine(result, scene_bounds)
+                self.log(f"实验时间轴微调: subtimer-vad 调整 {changed}/{len(result.segments)} 段", 96)
+            except Exception as e:
+                self.log(f"实验时间轴微调失败（跳过）: {e}")
+        elif timing_refiner not in {"", "none"}:
+            self.log(f"未知时间轴微调模式，已跳过: {timing_refiner}")
 
         # Phase: 生成 SRT
         self.log("=" * 50)

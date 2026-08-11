@@ -1,6 +1,8 @@
 """Audio scene detection for splitting long recordings into natural segments."""
 
+import importlib.util
 from dataclasses import dataclass
+from pathlib import Path
 
 import librosa
 import numpy as np
@@ -270,3 +272,89 @@ class AudioSceneDetector:
             sf.write(output_path, samples, 16000)
             results.append((output_path, segment.start, segment.end))
         return results
+
+
+class WhisperVadOnnxSceneDetector:
+    """Load the managed Whisper-VAD ONNX runtime from its model cache."""
+
+    def __init__(
+        self,
+        repo_dir: str | Path,
+        threshold: float = 0.5,
+        min_speech_duration_ms: int = 300,
+        min_silence_duration_ms: int = 100,
+        speech_pad_ms: int = 200,
+        max_segment_duration: float = 30.0,
+        min_segment_duration: float = 3.0,
+        force_cpu: bool = False,
+    ):
+        self.repo_dir = Path(repo_dir)
+        self.threshold = threshold
+        self.min_speech_duration_ms = min_speech_duration_ms
+        self.min_silence_duration_ms = min_silence_duration_ms
+        self.speech_pad_ms = speech_pad_ms
+        self.max_segment_duration = max_segment_duration
+        self.min_segment_duration = min_segment_duration
+        self.force_cpu = force_cpu
+
+    def detect(self, audio_path: str) -> list[AudioSegment]:
+        inference_path = self._find_file("inference.py")
+        model_path = self._find_file("model.onnx")
+        metadata_path = self._find_file("model_metadata.json")
+        if not inference_path or not model_path:
+            raise RuntimeError("Whisper-VAD ONNX 模型未就绪，请先在 Whisper 模型管理中下载")
+
+        module = self._load_inference_module(inference_path)
+        audio, _ = librosa.load(audio_path, sr=16000, mono=True)
+        duration = len(audio) / 16000
+        model = module.WhisperVADOnnxWrapper(
+            str(model_path),
+            metadata_path=str(metadata_path) if metadata_path else None,
+            force_cpu=self.force_cpu,
+        )
+        speech_segments = module.get_speech_timestamps(
+            audio,
+            model,
+            threshold=self.threshold,
+            sampling_rate=16000,
+            min_speech_duration_ms=self.min_speech_duration_ms,
+            max_speech_duration_s=self.max_segment_duration,
+            min_silence_duration_ms=self.min_silence_duration_ms,
+            speech_pad_ms=self.speech_pad_ms,
+            return_seconds=True,
+        )
+        segments = [
+            AudioSegment(
+                start=max(0.0, float(item["start"])),
+                end=min(duration, float(item["end"])),
+                duration=max(0.0, min(duration, float(item["end"])) - max(0.0, float(item["start"]))),
+            )
+            for item in speech_segments
+            if float(item.get("end", 0)) > float(item.get("start", 0))
+        ]
+        if not segments:
+            return [AudioSegment(0.0, duration, duration)]
+
+        fallback = AudioSceneDetector(
+            mode="energy",
+            min_silence_duration=self.min_silence_duration_ms / 1000.0,
+            min_segment_duration=self.min_segment_duration,
+            max_segment_duration=self.max_segment_duration,
+        )
+        return fallback._split_long_segments(
+            audio,
+            16000,
+            fallback._merge_short_segments(segments),
+        )
+
+    def _find_file(self, filename: str) -> Path | None:
+        return next((path for path in self.repo_dir.rglob(filename) if path.is_file()), None)
+
+    @staticmethod
+    def _load_inference_module(inference_path: Path):
+        spec = importlib.util.spec_from_file_location("noor_whisper_vad_onnx_inference", inference_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"无法加载 Whisper-VAD ONNX inference.py: {inference_path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
