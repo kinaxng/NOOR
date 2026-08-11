@@ -113,6 +113,11 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `api/endpoints/media_library_item_detail.py` as maintainable source
   and verified item retrieval fallback, sibling sorting, version-tag aggregation,
   preferred-poster selection, and NFO lookup against the preserved bytecode.
+- Reconstructed the media-library router's listing and version-deduplication helpers
+  in `api/endpoints/media_library_listing.py`. Representative selection, tag
+  aggregation, poster fallback, search, filtering, and pagination were verified
+  against the matching functions in the preserved router bytecode; the full router
+  replacement remains in progress.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
