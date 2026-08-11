@@ -248,6 +248,66 @@ async def _resource_list(config: dict[str, Any], client: httpx.AsyncClient, pan_
     return [item for item in resources if isinstance(item, dict)] if isinstance(resources, list) else []
 
 
+def _normalize_download_path_item(item: Any) -> dict[str, Any] | None:
+    if isinstance(item, str):
+        path = item.strip()
+        return {"path": path, "file_id": "", "folder_id": "", "name": Path(path.rstrip("/")).name or path, "is_root_path": False} if path else None
+    if not isinstance(item, dict):
+        return None
+    path = str(item.get("path") or item.get("real_path") or item.get("RealPath") or item.get("file_path") or "").strip()
+    if not path:
+        return None
+    folder_id = str(item.get("file_id") or item.get("folder_id") or item.get("id") or "").strip()
+    return {
+        "path": path,
+        "file_id": folder_id,
+        "folder_id": folder_id,
+        "name": str(item.get("name") or Path(path.rstrip("/")).name or path),
+        "is_root_path": bool(item.get("is_root_path", False)),
+    }
+
+
+async def _download_paths(config: dict[str, Any], client: httpx.AsyncClient, pan_auth: str) -> dict[str, Any]:
+    response = await client.get(
+        _api_url(config, "device/download_paths"),
+        params={"pan_auth": pan_auth, "device_space": ""},
+        headers=_headers(config, pan_auth=pan_auth),
+    )
+    if response.status_code >= 400:
+        _response_data(response)
+    try:
+        data = response.json()
+    except ValueError:
+        data = {}
+    raw_items = data if isinstance(data, list) else (data.get("paths") or data.get("download_paths") or data.get("list") or [])
+    paths = []
+    for item in raw_items if isinstance(raw_items, list) else []:
+        normalized = _normalize_download_path_item(item)
+        if normalized:
+            paths.append(normalized)
+    return {"ok": True, "paths": paths, "raw": data}
+
+
+async def _create_download_path(config: dict[str, Any], client: httpx.AsyncClient, pan_auth: str, path: str) -> dict[str, Any]:
+    path = str(path or "").strip()
+    if not path:
+        raise ValueError("缺少下载路径")
+    last_error: Exception | None = None
+    for body in ({"path": path}, {"real_path": path}, {"RealPath": path}, {"file_path": path}):
+        try:
+            response = await client.post(
+                _api_url(config, "device/download_path"),
+                params={"pan_auth": pan_auth, "device_space": ""},
+                headers={**_headers(config, pan_auth=pan_auth), "Content-Type": "application/json"},
+                content=json.dumps(body, ensure_ascii=False, separators=(",", ":")),
+            )
+            data = _response_data(response)
+            return {"ok": True, "path": path, "result": data}
+        except Exception as exc:
+            last_error = exc
+    raise ValueError(f"创建下载路径失败: {last_error}")
+
+
 def _configured_folder_id(config: dict[str, Any], savepath: str) -> str:
     mappings = config.get("path_folder_ids")
     if isinstance(mappings, dict):
@@ -347,7 +407,21 @@ async def submit_download(payload: dict[str, Any], config: dict[str, Any]) -> di
 async def handle_action(action: str, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     payload = payload or {}
     if action == "download_options":
-        return {"ok": True, "downloader": PLUGIN_ID, "default_savepath": str(config.get("savepath") or ""), "supports_categories": False, "supports_savepath": True, "supports_small_file_filter": False}
+        out = {"ok": True, "downloader": PLUGIN_ID, "default_savepath": str(config.get("savepath") or ""), "paths": [], "categories": [], "supports_categories": False, "supports_savepath": True, "supports_small_file_filter": False}
+        try:
+            client = await _client(config)
+            try:
+                pan_auth = await _pan_auth(config, client)
+                paths = (await _download_paths(config, client, pan_auth)).get("paths") or []
+            finally:
+                await client.aclose()
+            out["paths"] = paths
+            out["categories"] = [{"name": item.get("name") or item["path"], "save_path": item["path"]} for item in paths]
+            if paths and not out["default_savepath"]:
+                out["default_savepath"] = paths[0]["path"]
+        except Exception as exc:
+            out["warning"] = str(exc)
+        return out
     if action == "test":
         result = await test(config)
         return {"ok": result.ok, "message": result.message, "details": result.details or {}}
@@ -400,7 +474,7 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
                 })
             return {"ok": True, "folders": folders}
         if action == "create_download_path":
-            raise ValueError("迅雷历史路径写入接口尚未恢复，请在插件设置中保存默认路径")
+            return await _create_download_path(config, client, pan_auth, str(payload.get("path") or payload.get("real_path") or ""))
         if action in {"overview", "tasks"}:
             out = await _tasks(config, client, pan_auth, device_id, phase=str(payload.get("phase") or "all"), limit=int(payload.get("limit") or 100), page_token=str(payload.get("page_token") or ""))
             out.update({"device_id": device_id, "task_daily_limit": _quota_message(info)})
