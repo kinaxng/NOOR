@@ -53,7 +53,7 @@ const navItems = computed(() => {
       return running + queued + blocked + pending || null
     })},
     { path: '/history', name: t('nav.history'), icon: 'history' },
-    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },
+    { path: '/files', name: t('nav.files'), icon: 'folderOpen' },
     { path: '/settings', name: t('nav.settings'), icon: 'settings' },
   ]
 })
