@@ -131,6 +131,13 @@ the recovered bytecode modules remain unchanged.
   library routes and the compatibility helpers used by actor and recovery adapters.
   The isolated backend was restarted with the source module active; status and live
   item-list responses were verified successfully.
+- Reconstructed `api/events.py` as source and verified its SSE missing-job contract
+  after restarting the isolated backend. The router preserves connected, progress,
+  log, queued, blocked, terminal, and keepalive event formats.
+- Reconstructed the Whisper package entrypoint, core task/type dataclasses, progress
+  reporter, decoupled alignment types, and framer selector. The remaining Whisper
+  engine, orchestration, translation, post-processing, and merge implementations
+  remain preserved bytecode until they can be fully verified.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
