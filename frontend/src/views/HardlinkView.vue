@@ -34,7 +34,9 @@ const pageSize = 20
 const deletingHardlinkPaths = ref<Set<string>>(new Set())
 const deletingSourcePaths = ref<Set<string>>(new Set())
 const deletingGroupCodes = ref<Set<string>>(new Set())
+const reorganizingSourcePaths = ref<Set<string>>(new Set())
 const previewVideoPath = ref('')
+const mdcManualAvailable = ref(false)
 
 const pageTitle = computed(() => { void i18nVersion.value; return t('hardlinks.title') })
 const scanBtnLabel = computed(() => { void i18nVersion.value; return t('hardlinks.scan') })
@@ -55,6 +57,7 @@ const previewDeleteLabel = computed(() => { void i18nVersion.value; return t('ha
 const deleteGroupLabel = computed(() => { void i18nVersion.value; return t('hardlinks.deleteGroup') })
 const processingLabel = computed(() => { void i18nVersion.value; return t('hardlinks.processing') })
 const orphanSkippedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.orphanSkipped') })
+const reorganizeLabel = computed(() => { void i18nVersion.value; return t('hardlinks.reorganize') })
 const previewPathLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewPath') })
 const previewUnsupportedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewUnsupported') })
 const previewDeleteNote = computed(() => { void i18nVersion.value; return t('hardlinks.previewDeleteNote') })
@@ -311,6 +314,45 @@ function buildDeletePreviewDetails(plannedDirs: string[], plannedFiles: string[]
   ].filter((section) => section.items.length > 0)
 }
 
+function isReorganizingSource(path?: string | null) {
+  return !!path && reorganizingSourcePaths.value.has(path)
+}
+
+async function loadMdcManualAvailability() {
+  mdcManualAvailable.value = false
+  try {
+    const pluginsResp = await api.get('/api/plugins')
+    const plugins = Array.isArray(pluginsResp.data)
+      ? pluginsResp.data
+      : (Array.isArray(pluginsResp.data?.items) ? pluginsResp.data.items : [])
+    const plugin = plugins.find((item: any) => item?.id === 'mdc-ng-manual')
+    if (!plugin?.enabled) return
+    const testResp = await api.post('/api/plugins/mdc-ng-manual/test')
+    mdcManualAvailable.value = !!testResp.data?.ok
+  } catch {
+    mdcManualAvailable.value = false
+  }
+}
+
+async function reorganizeSource(entry: HardlinkEntry) {
+  const path = entry.source_path
+  if (!path || isReorganizingSource(path)) return
+  reorganizingSourcePaths.value = new Set(reorganizingSourcePaths.value).add(path)
+  try {
+    const { data } = await api.post('/api/plugins/mdc-ng-manual/actions/create', {
+      payload: { source_paths: path },
+    })
+    if (!data?.ok) throw new Error(data?.message || t('hardlinks.reorganizeFailed'))
+    toast.success(data?.message || t('hardlinks.reorganizeSuccess'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.reorganizeFailed'))
+  } finally {
+    const next = new Set(reorganizingSourcePaths.value)
+    next.delete(path)
+    reorganizingSourcePaths.value = next
+  }
+}
+
 type DeleteResultPayload = {
   deleted_dirs?: string[]
   deleted_files?: string[]
@@ -513,7 +555,10 @@ function openSettings() {
 }
 
 onMounted(async () => {
-  await mediaStore.loadHardlinkGroups()
+  await Promise.all([
+    mediaStore.loadHardlinkGroups(),
+    loadMdcManualAvailability(),
+  ])
 })
 </script>
 
@@ -719,6 +764,16 @@ onMounted(async () => {
                   >{{ entry.source_path }}</span>
                   <span v-if="entry.source_size != null" class="hl-row__size">{{ formatBytes(entry.source_size) }}</span>
                   <span v-else class="hl-row__empty font-mono text-xs">{{ t('hardlinks.missingSource') }}</span>
+                  <button
+                    v-if="entry.source_path && mdcManualAvailable"
+                    type="button"
+                    class="row-action-btn row-action-btn--secondary row-action-btn--hover-only"
+                    :class="{ 'row-action-btn--loading': isReorganizingSource(entry.source_path) }"
+                    :disabled="isReorganizingSource(entry.source_path)"
+                    @click.stop="reorganizeSource(entry)"
+                  >
+                    {{ isReorganizingSource(entry.source_path) ? processingLabel : reorganizeLabel }}
+                  </button>
                   <button
                     v-if="entry.source_path"
                     type="button"

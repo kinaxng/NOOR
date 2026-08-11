@@ -1,0 +1,55 @@
+{
+  "id": "mdc-ng-manual",
+  "name": "MDC-NG 手动任务",
+  "version": "0.1.0",
+  "type": "knowledge_app",
+  "description": "向 MDC-NG 的手动任务页提交整理任务，并回看最近任务结果。",
+  "tags": [
+    "mdc-ng",
+    "manual-jobs",
+    "scrape",
+    "reorganize"
+  ],
+  "capabilities": [
+    "network_outbound",
+    "sidebar_page"
+  ],
+  "enabled_by_default": false,
+  "config_schema": {
+    "base_url": {
+      "type": "string",
+      "label": "MDC-NG 地址",
+      "placeholder": "http://192.168.31.10:9208"
+    },
+    "cookie": {
+      "type": "textarea",
+      "label": "Cookie",
+      "placeholder": "可选；当 MDC-NG 开启登录时填写浏览器 Cookie"
+    },
+    "timeout": {
+      "type": "number",
+      "label": "请求超时秒数",
+      "default": 20,
+      "min": 3,
+      "max": 120,
+      "step": 1
+    }
+  },
+  "default_config": {
+    "base_url": "http://192.168.31.10:9208",
+    "cookie": "",
+    "timeout": 20
+  },
+  "contributions": {
+    "sidebar": {
+      "label": "MDC 手动任务",
+      "route": "/plugins/mdc-ng-manual",
+      "icon": "plugin"
+    }
+  },
+  "frontend": {
+    "type": "module",
+    "entry": "frontend/page.js",
+    "style": "frontend/style.css"
+  }
+}
