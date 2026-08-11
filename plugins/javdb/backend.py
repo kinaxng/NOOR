@@ -15,11 +15,13 @@ LATEST_CACHE_TTL = 120
 LATEST_PAGE_CACHE_TTL = 600
 VIDEO_DETAIL_CACHE_TTL = 1800
 FILTER_PAGE_CACHE_TTL = 300
+ACTOR_OPTIONS_CACHE_TTL = 21600
 DETAIL_ENRICH_CONCURRENCY = 8
 LATEST_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 LATEST_PAGE_CACHE: dict[tuple[str, str, str, str, int, int], dict[str, Any]] = {}
 VIDEO_DETAIL_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 FILTER_PAGE_CACHE: dict[tuple[str, str, str, str, int, int], dict[str, Any]] = {}
+ACTOR_OPTIONS_CACHE: dict[tuple[str], dict[str, Any]] = {}
 
 
 class JavDBUpstreamError(RuntimeError):
@@ -1135,9 +1137,52 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
         actors = [_normalize_actor(config, x) for x in (data.get("actors") if isinstance(data, dict) else data or []) if isinstance(x, dict)]
         return {"ok": True, "items": actors, "total": len(actors)}
     if action == "actor_options":
+        cache_key = (_base(config),)
+        cached = _cache_get(ACTOR_OPTIONS_CACHE, cache_key, ACTOR_OPTIONS_CACHE_TTL)
+        if cached is not None:
+            return dict(cached)
         data = _data(await _request(config, "GET", "/options/actors"))
-        items = [x for x in (data or []) if isinstance(x, dict)]
-        return {"ok": True, "items": items, "total": len(items)}
+        ranked_by_id: dict[str, dict[str, Any]] = {}
+        for actor_type in (0, 1, 2, 3):
+            try:
+                ranked_data = _data(await _request(config, "GET", "/actors", params={"type": actor_type}))
+                ranked_items = ranked_data.get("actors") if isinstance(ranked_data, dict) else ranked_data
+                for actor in ranked_items or []:
+                    if not isinstance(actor, dict):
+                        continue
+                    normalized = _normalize_actor(config, actor)
+                    actor_id = str(normalized.get("id") or "").strip()
+                    if actor_id and actor_id not in ranked_by_id:
+                        normalized["ranking_type"] = actor_type
+                        ranked_by_id[actor_id] = normalized
+            except Exception:
+                continue
+        items = []
+        for actor in (data or []):
+            if not isinstance(actor, dict):
+                continue
+            actor_id = str(actor.get("external_id") or actor.get("id") or "").strip()
+            name = str(actor.get("name") or "").strip()
+            if not actor_id or not name or name in {"---", "???"}:
+                continue
+            ranked = ranked_by_id.get(actor_id) or {}
+            items.append({
+                "id": actor_id,
+                "external_id": actor_id,
+                "name": name,
+                "name_zht": ranked.get("name_zht") or "",
+                "other_name": ranked.get("other_name") or "",
+                "avatar_url": ranked.get("avatar_url") or "",
+                "uncensored": bool(ranked.get("uncensored")),
+                "ranking_type": ranked.get("ranking_type"),
+                "raw": actor,
+            })
+        items.sort(key=lambda item: (
+            item.get("ranking_type") is None,
+            int(item.get("ranking_type") or 0),
+            str(item.get("name_zht") or item.get("name") or "").casefold(),
+        ))
+        return _cache_set(ACTOR_OPTIONS_CACHE, cache_key, {"ok": True, "items": items, "total": len(items)})
     if action == "actor_movies":
         actor_id = str(payload.get("actor_id") or payload.get("id") or "")
         page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))

@@ -263,6 +263,92 @@ function makePagination(options: any = {}) {
   return wrap
 }
 
+function makeFilterPanelSection(options: any = {}) {
+  const section = document.createElement('div')
+  section.className = 'noor-control-panel__section'
+  if (options.label) {
+    const label = document.createElement('span')
+    label.className = 'noor-control-panel__section-label'
+    label.textContent = String(options.label)
+    section.appendChild(label)
+  }
+  const body = document.createElement('div')
+  body.className = 'noor-control-panel__section-body'
+  for (const item of (Array.isArray(options.items) ? options.items : [options.items]).filter(Boolean)) body.appendChild(item)
+  section.appendChild(body)
+  return section
+}
+
+function makeFilterPanelGroup(options: any = {}) {
+  const group = document.createElement('div')
+  group.className = 'noor-control-panel__group'
+  if (options.label) {
+    const label = document.createElement('span')
+    label.className = 'noor-control-panel__group-label'
+    label.textContent = String(options.label)
+    group.appendChild(label)
+  }
+  const items = document.createElement('div')
+  items.className = 'noor-control-panel__group-items'
+  for (const item of (Array.isArray(options.items) ? options.items : [options.items]).filter(Boolean)) items.appendChild(item)
+  group.appendChild(items)
+  return group
+}
+
+function makeFilterPanel(options: any = {}) {
+  const panel = document.createElement('section')
+  panel.className = ['noor-control-panel', options.className || '', options.collapsible ? 'is-collapsible' : ''].filter(Boolean).join(' ')
+  const storageKey = options.collapseKey ? `noor:filter-panel:${options.collapseKey}` : ''
+  let collapsed = false
+  if (options.collapsible) {
+    const saved = storageKey ? window.localStorage.getItem(storageKey) : null
+    collapsed = saved == null ? !!options.defaultCollapsed : saved === '1'
+    panel.classList.toggle('is-collapsed', collapsed)
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'noor-control-panel__collapse-btn'
+    button.title = collapsed ? '展开筛选面板' : '收起筛选面板'
+    const icon = document.createElement('span')
+    icon.className = 'noor-control-panel__collapse-icon'
+    icon.textContent = '⌃'
+    button.appendChild(icon)
+    button.onclick = () => {
+      collapsed = !collapsed
+      panel.classList.toggle('is-collapsed', collapsed)
+      button.title = collapsed ? '展开筛选面板' : '收起筛选面板'
+      if (storageKey) window.localStorage.setItem(storageKey, collapsed ? '1' : '0')
+    }
+    panel.appendChild(button)
+  }
+  if (options.title || options.summary) {
+    const header = document.createElement('div')
+    header.className = 'noor-control-panel__header'
+    const main = document.createElement('div')
+    main.className = 'noor-control-panel__header-main'
+    if (options.title) {
+      const title = document.createElement('strong')
+      title.className = 'noor-control-panel__title'
+      title.textContent = String(options.title)
+      main.appendChild(title)
+    }
+    if (options.summary) {
+      const summary = document.createElement('span')
+      summary.className = 'noor-control-panel__summary'
+      summary.textContent = String(options.summary)
+      main.appendChild(summary)
+    }
+    header.appendChild(main)
+    panel.appendChild(header)
+  }
+  for (const [index, row] of (Array.isArray(options.rows) ? options.rows : []).entries()) {
+    const rowEl = document.createElement('div')
+    rowEl.className = `noor-control-panel__row noor-control-panel__row--${index === 0 ? 'primary' : index === 1 ? 'secondary' : 'tertiary'}`
+    for (const section of (Array.isArray(row?.sections) ? row.sections : []).filter(Boolean)) rowEl.appendChild(section)
+    panel.appendChild(rowEl)
+  }
+  return panel
+}
+
 function makeSubmitButton(options: any = {}) {
   const btn = makeButton({ label: '', tone: 'primary', className: ['noor-submit-btn', options.className || ''].filter(Boolean).join(' ') })
   const bar = document.createElement('i')
@@ -881,6 +967,12 @@ function sdkFor(id: string) {
       panel: makePanel,
       tabs: makeTabs,
       pagination: makePagination,
+      filterPanel: makeFilterPanel,
+      controlPanel: makeFilterPanel,
+      filterPanelGroup: makeFilterPanelGroup,
+      controlPanelGroup: makeFilterPanelGroup,
+      filterPanelSection: makeFilterPanelSection,
+      controlPanelSection: makeFilterPanelSection,
       submitButton: makeSubmitButton,
       topBar: makeTopBar,
       actionRow: makeActionRow,
