@@ -123,6 +123,10 @@ the recovered bytecode modules remain unchanged.
   folder deletion, sibling-NFO handling, dry-run target previews, and error response
   behavior were verified against the preserved router bytecode using a temporary
   media tree.
+- Reconstructed the media-library router's local preview streaming helpers in
+  `api/endpoints/media_library_streaming.py`. HTTP Range parsing, invalid-range
+  response semantics, suffix-range support, and chunked local-file streaming were
+  verified against the preserved router bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
