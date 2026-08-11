@@ -1,0 +1,11 @@
+from __future__ import annotations
+from dataclasses import dataclass, field
+@dataclass
+class WordTimestamp:
+ word:str
+ start:float
+ end:float
+@dataclass
+class AlignmentResult:
+ words:list[WordTimestamp]=field(default_factory=list)
+ metadata:dict=field(default_factory=dict)
