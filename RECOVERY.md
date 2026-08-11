@@ -110,6 +110,9 @@ the recovered bytecode modules remain unchanged.
   verified its environment-backed configuration, media-path mapping, release-tag
   classification, Emby poster URL generation, and local subtitle counting against
   the preserved bytecode.
+- Reconstructed `api/endpoints/media_library_item_detail.py` as maintainable source
+  and verified item retrieval fallback, sibling sorting, version-tag aggregation,
+  preferred-poster selection, and NFO lookup against the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
