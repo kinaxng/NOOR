@@ -153,6 +153,9 @@ the recovered bytecode modules remain unchanged.
 - Recovered `pipeline/whisper/scene_detector.py` from overlapping July 5 source
   captures. Short-segment merging and low-energy long-segment splitting were
   compared against preserved bytecode using synthetic audio arrays.
+- Reconstructed `pipeline/whisper/decoupled/recommended.py` from preserved
+  bytecode. Noise scoring, Qwen retry gating, lazy model lifecycle, fallback
+  metadata, and forced-alignment result construction retain the original contract.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
