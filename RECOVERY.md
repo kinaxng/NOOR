@@ -143,6 +143,10 @@ the recovered bytecode modules remain unchanged.
   refusal detection, and health-check behavior were verified against preserved
   bytecode and mocked OpenAI-compatible responses. Explicit `/v1/chat` and
   `/v1/chat/completions` endpoints are retained exactly as entered.
+- Recovered `pipeline/lada/runner.py` from complete June 25 session captures and
+  verified its progress mapping against preserved bytecode. A simulated LADA CLI
+  run exercised command construction, subprocess output parsing, phase events,
+  completion handling, and the model-directory environment contract.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
