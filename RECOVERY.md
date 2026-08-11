@@ -182,6 +182,12 @@ the recovered bytecode modules remain unchanged.
   function and processor method retains the bytecode constant contract; cache-path
   helpers, sensitivity presets, a mocked Faster-Whisper stream, and generated SRT
   bytes were behaviorally compared.
+- Recovered `pipeline/whisper/orchestrator.py` from overlapping historical source
+  captures and reconciled preprocessing, Anime-Qwen3 step-down, Reazon, Kotoba,
+  phase-based execution, diagnostics, and cancellation against preserved bytecode.
+  All 39 pipeline methods and the three task wrapper functions match the Python 3.13
+  bytecode instruction shape, constants, names, local variables, and nested code
+  objects; the prepared-segment schema and pipeline-enhancer mapping also match.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
