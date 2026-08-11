@@ -147,6 +147,9 @@ the recovered bytecode modules remain unchanged.
   verified its progress mapping against preserved bytecode. A simulated LADA CLI
   run exercised command construction, subprocess output parsing, phase events,
   completion handling, and the model-directory environment contract.
+- Recovered `pipeline/whisper/preprocess.py` from its complete June 29 source
+  capture. Separator preset resolution, output selection, passthrough behavior,
+  and user-facing errors were compared with the preserved bytecode.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
