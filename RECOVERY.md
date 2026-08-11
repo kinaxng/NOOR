@@ -88,6 +88,10 @@ the recovered bytecode modules remain unchanged.
 - Reconstructed `api/settings_whisper_runtime.py` as maintainable source and verified
   its runtime dependency/CUDA inspection, cache detection, status logging, and
   install-requirement decisions against the preserved bytecode.
+- Reconstructed the main `api/settings.py` router as maintainable source. Its 18
+  routes and all request-model schemas match the bytecode router; the settings,
+  Whisper runtime/model/status, and dependency-check endpoints were exercised
+  against the isolated running backend.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
