@@ -104,6 +104,12 @@ export interface JobSettings {
   execution_provider?: string
   device_ids?: string
   processors?: string
+  thread_count?: number
+  video_memory_strategy?: string
+  system_memory_limit?: number
+  download_providers?: string
+  halt_on_error?: boolean
+  log_level?: string
   face_swapper_model?: string
   face_swapper_pixel_boost?: string
   face_swapper_weight?: number
@@ -112,20 +118,46 @@ export interface JobSettings {
   face_enhancer_weight?: number
   frame_enhancer_model?: string
   frame_enhancer_blend?: number
+  expression_restorer_model?: string
+  expression_restorer_factor?: number
+  expression_restorer_areas?: string
+  deep_swapper_model?: string
+  deep_swapper_morph?: number
+  face_debugger_items?: string
   face_detector_model?: string
+  face_detector_size?: string
   face_detector_score?: number
   face_detector_angles?: string
+  face_detector_margin?: string
+  face_landmarker_model?: string
+  face_landmarker_score?: number
   face_mask_types?: string
+  face_mask_areas?: string
   face_mask_regions?: string
   face_mask_blur?: number
+  face_mask_padding?: string
   face_occluder_model?: string
+  face_parser_model?: string
   face_selector_mode?: string
+  face_selector_order?: string
+  face_selector_gender?: string
+  face_selector_race?: string
+  face_selector_age_start?: number | string
+  face_selector_age_end?: number | string
   reference_frame_number?: number
   reference_face_position?: number
   reference_face_distance?: number
   output_video_encoder?: string
   output_video_preset?: string
   output_video_quality?: number
+  output_video_scale?: number | string
+  output_video_fps?: number | string
+  output_audio_encoder?: string
+  output_audio_quality?: number
+  output_audio_volume?: number
+  output_image_quality?: number
+  output_image_scale?: number | string
+  temp_frame_format?: string
 }
 
 export interface Job {
