@@ -118,6 +118,11 @@ the recovered bytecode modules remain unchanged.
   aggregation, poster fallback, search, filtering, and pagination were verified
   against the matching functions in the preserved router bytecode; the full router
   replacement remains in progress.
+- Reconstructed the media-library router's safe deletion helpers in
+  `api/endpoints/media_library_deletion.py`. Scan-root restrictions, code-bucket
+  folder deletion, sibling-NFO handling, dry-run target previews, and error response
+  behavior were verified against the preserved router bytecode using a temporary
+  media tree.
 - Rebuilt the plugin runtime and recovered functional first-party plugin sources for
   JavDB, recommendations, subscriptions, Gfriends, qBittorrent, Transmission,
   Xunlei Remote, M-Team, and AVDB.
