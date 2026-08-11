@@ -84,6 +84,58 @@ export interface MediaItemDetail {
   variant_count?: number
 }
 
+export interface MediaActor {
+  id: string
+  server_id?: string
+  name: string
+  display_name?: string
+  identity_names?: {
+    selected_name?: string
+    selected_lang?: string
+    emby_name?: string
+    emby_sort_name?: string
+    jp?: string
+    zh_cn?: string
+    zh_tw?: string
+    aliases?: string[]
+    source?: string
+  }
+  sort_name?: string
+  overview?: string
+  image_url?: string
+  emby_url?: string
+  media_server?: {
+    kind?: string
+    name?: string
+    server_name?: string
+    version?: string
+  }
+  provider_ids?: Record<string, string>
+  mapping_id?: string | null
+  mapping_tmdb_id?: string | null
+  tmdb_id?: string
+  imdb_id?: string
+  birthday?: string
+  deathday?: string
+  place_of_birth?: string
+  gender?: string
+  known_for_department?: string
+  popularity?: number | null
+  homepage?: string
+  external_urls?: Record<string, string>
+  movie_count?: number | null
+  premiere_date?: string
+  date_created?: string
+}
+
+export interface MediaActorDuplicateGroup {
+  key: string
+  name: string
+  count: number
+  actors: MediaActor[]
+  tmdb_ids: string[]
+}
+
 export interface JobSettings {
   detection_model?: string
   restoration_model?: string
