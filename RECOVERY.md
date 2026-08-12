@@ -213,13 +213,17 @@ the recovered bytecode modules remain unchanged.
 - `POST /api/webhooks/emby` accepts Emby JSON or text notifications and records a
   concise event in the system log using the actual request address (or the first
   `X-Forwarded-For` address). The settings page exposes the URL, copy action,
-  Emby JSON-content-type guidance, and the recent audit log.
+  Emby JSON-content-type guidance, and the recent audit log. The legacy route and
+  the token-protected media-library route both invalidate the media-library cache
+  and expose the sync-state payload used by the frontend.
 - The surviving actor APIs support Emby actor browsing, mapped multilingual names,
   duplicate detection, movie lookup, and explicitly selected GFriends avatar writes.
   The list filters invalid Emby people before paginating, supports mapped-name search,
   and browser actor detail routes load independently of the complete actor scan.
-  Actor merge, actor deletion, and arbitrary metadata writes have not been recreated
-  because the original Emby mutation contracts could not be verified.
+  Actor merge, empty-actor cleanup, selected actor deletion, editable actor metadata,
+  MDC-NG mapping ingestion, mapping review diagnostics, and guarded TMDB/Emby sync
+  flows have been recreated from available behavior. Emby orphan-person deletion
+  remains limited by the remote Emby server's metadata/provider state.
 - FaceFusion source-image management and frame-preview controls are restored. Opening a
   media detail reads only preview metadata; a preview is generated only after a source
   image is selected and the frame slider is released.
