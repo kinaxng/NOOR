@@ -380,7 +380,6 @@ async function selectAvatar(candidate: any) {
     actor.value = resp.data.actor || actor.value
     avatarModalOpen.value = false
     toast.success(t('files.actors.avatarUpdated'))
-    toast.success(t('files.actors.avatarUpdated'))
   } catch (error: any) {
     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.avatarUpdateFailed'))
   } finally {

@@ -41,6 +41,11 @@ def apply_network_config_updates(
     update_env_value_fn("ACCELERATION_MODE", config.acceleration_mode)
     update_env_value_fn("HTTP_PROXY", config.http_proxy)
     update_env_value_fn("GITHUB_MIRROR", config.github_mirror)
+    update_env_value_fn("GITHUB_TOKEN", config.github_token)
     update_env_value_fn("HF_MIRROR", config.hf_mirror)
     update_env_value_fn("PIP_MIRROR", config.pip_mirror)
     update_env_value_fn("HF_TOKEN", config.hf_token)
+    update_env_value_fn(
+        "ACTOR_MAPPING_AUTO_UPDATE",
+        "true" if config.actor_mapping_auto_update else "false",
+    )

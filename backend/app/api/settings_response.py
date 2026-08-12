@@ -130,11 +130,16 @@ def build_settings_payload(
             "acceleration_mode": env_data.get("ACCELERATION_MODE", "mirror"),
             "http_proxy": env_data.get("HTTP_PROXY", ""),
             "github_mirror": env_data.get("GITHUB_MIRROR", "https://ghproxy.com"),
+            "github_token": env_data.get("GITHUB_TOKEN", ""),
             "hf_mirror": env_data.get("HF_MIRROR", "https://hf-mirror.com"),
             "pip_mirror": env_data.get(
                 "PIP_MIRROR", "https://pypi.tuna.tsinghua.edu.cn/simple"
             ),
             "hf_token": env_data.get("HF_TOKEN", ""),
+            "actor_mapping_auto_update": env_data.get(
+                "ACTOR_MAPPING_AUTO_UPDATE", "true"
+            ).lower()
+            != "false",
         },
         "ui": {
             "cover_blur_enabled": bool(ui_settings.get("cover_blur", False)),
