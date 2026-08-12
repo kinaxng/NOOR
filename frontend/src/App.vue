@@ -301,8 +301,9 @@ onMounted(() => {
         <div class="flex items-center gap-3">
           <!-- Hamburger (mobile only) -->
           <button
-            class="navbar-icon-btn hidden lg:hidden"
+            class="navbar-icon-btn lg:hidden"
             @click="mobileSidebarOpen = true"
+            title="打开导航"
           >
             <BaseIcon name="menu" class="w-4 h-4" />
           </button>
@@ -437,7 +438,7 @@ onMounted(() => {
 .navbar-search-trigger {
   min-width: 10rem;
   height: 2.375rem;
-  display: none;
+  display: inline-flex;
   align-items: center;
   gap: .5rem;
   padding: 0 .72rem;
@@ -466,6 +467,16 @@ onMounted(() => {
 }
 @media (min-width: 768px) {
   .navbar-search-trigger { display: inline-flex; }
+}
+@media (max-width: 767px) {
+  .navbar-search-trigger {
+    min-width: 2.375rem;
+    width: 2.375rem;
+    padding: 0;
+    justify-content: center;
+  }
+  .navbar-search-trigger__text,
+  .navbar-search-trigger__kbd { display: none; }
 }
 
 .navbar-icon-btn {
