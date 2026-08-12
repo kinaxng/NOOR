@@ -35,6 +35,7 @@ export async function mount(root, sdk = {}) {
     events: [],
     formOpen: false,
     form: { code: '', title: '', mode: 'loose', require_cracked: false, require_subtitle: false },
+    coverRefreshes: new Map(),
   }
   const apiPost = async (action, payload = {}) => {
     if (sdk.api?.post) return (await sdk.api.post(`/plugins/${pluginId}/actions/${action}`, { payload })).data
@@ -132,6 +133,52 @@ export async function mount(root, sdk = {}) {
     return out
   }
 
+  function coverSource(item) {
+    const best = item?.best_resource || {}
+    return String(item?.fanart_url || item?.cover_url || best.fanart_url || best.cover_url || '').trim()
+  }
+
+  async function refreshCover(item, host) {
+    const code = String(item?.code || '').trim()
+    if (!code || !host || host.dataset.coverFallback === 'done') return
+    host.dataset.coverFallback = 'done'
+    host.classList.add('is-refreshing')
+    host.textContent = code
+    try {
+      let promise = state.coverRefreshes.get(code)
+      if (!promise) {
+        promise = sdk.api.post('/plugins/javdb/actions/video', { payload: { code } })
+        state.coverRefreshes.set(code, promise)
+      }
+      const res = await promise
+      const video = res?.data?.data || {}
+      const fresh = String(video.cover_url || video.thumb_url || '').trim()
+      if (!fresh) return
+      item.cover_url = fresh
+      item.fanart_url = fresh
+      renderCover(item, host, false)
+    } catch (_) {
+      host.textContent = code || 'NO IMAGE'
+    } finally {
+      host.classList.remove('is-refreshing')
+    }
+  }
+
+  function renderCover(item, host, retry = true) {
+    host.innerHTML = ''
+    const src = coverSource(item)
+    if (!src) {
+      host.textContent = item?.code || 'NO IMAGE'
+      return
+    }
+    const img = h('img')
+    img.loading = 'lazy'
+    img.alt = ''
+    if (retry) img.onerror = () => refreshCover(item, host)
+    img.src = src
+    host.appendChild(img)
+  }
+
   function renderItems() {
     const host = $('items')
     host.innerHTML = ''
@@ -146,6 +193,10 @@ export async function mount(root, sdk = {}) {
     for (const item of state.items) {
       const card = h('article', 'sub-card')
       const best = item.best_resource || null
+      const cover = h('button', 'sub-card__cover')
+      cover.type = 'button'
+      cover.onclick = () => item.code && sdk.navigate?.(`/plugins/javdb?code=${encodeURIComponent(item.code)}`)
+      renderCover(item, cover)
       card.innerHTML = `
         <div class="sub-card__main">
           <div class="sub-card__title"><strong>${esc(item.code)}</strong><span>${esc(item.title || '')}</span></div>
@@ -155,6 +206,7 @@ export async function mount(root, sdk = {}) {
         </div>
         <div class="sub-card__actions"><button data-action="check" type="button">检测</button><button data-action="delete" type="button">删除</button></div>
       `
+      card.prepend(cover)
       const bHost = card.querySelector('.sub-card__badges')
       itemBadges(item).forEach(x => bHost.appendChild(x))
       card.querySelector('[data-action="check"]').onclick = () => checkOne(item.id)
