@@ -66,6 +66,8 @@ export const en: Record<string, string> = {
   'files.actors.rejectedReasonTmdbConflict': 'TMDB alias conflict',
   'files.actors.rejectedReasonIgnoredEmpty': 'Ignored empty actor',
   'files.actors.rejectedReasonIgnoredPerson': 'Ignored actor',
+  'files.actors.rejectedReasonSingleMapped': 'Single mapped actor',
+  'files.actors.rejectedReasonUnmatchedEmby': 'Unmatched Emby actor',
   'files.actors.rejectedReasonUnknown': 'Unknown reason',
   'files.actors.tmdbBackfillPreview': 'Fill TMDB',
   'files.actors.tmdbBackfillPreviewFailed': 'Failed to preview TMDB ID fill',

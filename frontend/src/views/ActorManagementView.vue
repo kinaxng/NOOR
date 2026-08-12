@@ -160,6 +160,8 @@ function rejectedReasonLabel(reason: string) {
   if (reason === 'tmdb_conflict_alias') return t('files.actors.rejectedReasonTmdbConflict')
   if (reason === 'ignored_empty_non_target_person') return t('files.actors.rejectedReasonIgnoredEmpty')
   if (reason === 'ignored_person') return t('files.actors.rejectedReasonIgnoredPerson')
+  if (reason === 'single_mapped_actor') return t('files.actors.rejectedReasonSingleMapped')
+  if (reason === 'unmatched_emby_actor') return t('files.actors.rejectedReasonUnmatchedEmby')
   return reason || t('files.actors.rejectedReasonUnknown')
 }
 

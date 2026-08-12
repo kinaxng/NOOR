@@ -703,6 +703,7 @@ async def actor_mapping_matches(
     index = _mapping_index(config)
     grouped: dict[str, dict[str, Any]] = {}
     unmatched: list[dict[str, Any]] = []
+    rejected_matches: list[dict[str, Any]] = []
     for actor in actors:
         record = index.get(_normalize_name(actor.get("name"))) or index.get(_normalize_name(actor.get("sort_name")))
         if not record:
@@ -737,6 +738,25 @@ async def actor_mapping_matches(
         })
         if not only_candidates or len(group["actors"]) > 1:
             groups.append(group)
+        else:
+            actor = dict(group["actors"][0])
+            actor.update({
+                "rejected_reason": "single_mapped_actor",
+                "rejected_mapping_id": group.get("mapping_id") or "",
+                "rejected_mapping_name": group.get("display_name") or "",
+                "rejected_mapping_tmdb_id": group.get("tmdb_id") or "",
+            })
+            rejected_matches.append(actor)
+    for actor in unmatched:
+        if actor.get("tmdb_id") or actor.get("image_url") or actor.get("sort_name"):
+            rejected = dict(actor)
+            rejected.update({
+                "rejected_reason": "unmatched_emby_actor",
+                "rejected_mapping_id": "",
+                "rejected_mapping_name": "",
+                "rejected_mapping_tmdb_id": "",
+            })
+            rejected_matches.append(rejected)
     groups.sort(key=lambda item: (-item["count"], item["display_name"]))
     return {
         "ok": True,
@@ -745,8 +765,8 @@ async def actor_mapping_matches(
         "conflict_groups": conflict_groups,
         "matched_actors": sum(len(group["actors"]) for group in grouped.values()),
         "unmatched_actors": len(unmatched),
-        "rejected_actors": 0,
-        "rejected_matches": [],
+        "rejected_actors": len(rejected_matches),
+        "rejected_matches": rejected_matches,
         "mapping_records": len(records),
         "total_actors": total,
     }

@@ -66,6 +66,8 @@ export const zh: Record<string, string> = {
   'files.actors.rejectedReasonTmdbConflict': 'TMDB 冲突别名',
   'files.actors.rejectedReasonIgnoredEmpty': '已忽略的空演员',
   'files.actors.rejectedReasonIgnoredPerson': '已忽略演员',
+  'files.actors.rejectedReasonSingleMapped': '单人映射项',
+  'files.actors.rejectedReasonUnmatchedEmby': '未命中映射的 Emby 演员',
   'files.actors.rejectedReasonUnknown': '未知原因',
   'files.actors.tmdbBackfillPreview': '补全 TMDB',
   'files.actors.tmdbBackfillPreviewFailed': '预览 TMDB ID 补全失败',
