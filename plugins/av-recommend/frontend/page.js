@@ -100,6 +100,7 @@ export async function mount(root, sdk) {
     error: '',
     data: null,
     activePanel: null,
+    coverRefreshes: new Map(),
   }
 
   root.innerHTML = ''
@@ -359,6 +360,53 @@ export async function mount(root, sdk) {
     host.innerHTML = ''
     if (sdk.ui?.loadingState) host.appendChild(sdk.ui.loadingState({ text }))
     else host.appendChild(el('div', 'av-rec-detail-loading', text))
+  }
+
+  function coverSource(item) {
+    return String(item?.fanart_url || item?.cover_url || item?.thumb_url || '').trim()
+  }
+
+  async function refreshCover(item, host) {
+    const code = detailCode(item)
+    if (!code || !host || host.dataset.coverFallback === 'done') return
+    host.dataset.coverFallback = 'done'
+    host.classList.add('is-refreshing')
+    host.textContent = code
+    try {
+      let promise = state.coverRefreshes.get(code)
+      if (!promise) {
+        promise = sdk.api.post('/plugins/javdb/actions/video', { payload: { code } })
+        state.coverRefreshes.set(code, promise)
+      }
+      const res = await promise
+      const video = res?.data?.data || {}
+      const fresh = String(video.cover_url || video.thumb_url || '').trim()
+      if (!fresh) return
+      item.cover_url = fresh
+      item.fanart_url = fresh
+      renderCover(item, host, { retry: false })
+    } catch (_) {
+      host.textContent = code || 'NO IMAGE'
+    } finally {
+      host.classList.remove('is-refreshing')
+    }
+  }
+
+  function renderCover(item, host, options = {}) {
+    const src = coverSource(item)
+    host.innerHTML = ''
+    if (!src) {
+      host.textContent = detailCode(item) || 'NO IMAGE'
+      return
+    }
+    const img = el('img')
+    img.loading = 'lazy'
+    img.alt = ''
+    if (options.retry !== false) {
+      img.onerror = () => refreshCover(item, host)
+    }
+    img.src = src
+    host.appendChild(img)
   }
 
   async function openDetail(item) {
@@ -631,8 +679,7 @@ export async function mount(root, sdk) {
       const image = el('button', 'av-rec-cover')
       image.type = 'button'
       image.onclick = () => openDetail(item)
-      if (item.fanart_url || item.cover_url) image.innerHTML = `<img src="${escapeHtml(item.fanart_url || item.cover_url)}" loading="lazy" alt="">`
-      else image.textContent = item.code || 'NO IMAGE'
+      renderCover(item, image)
       const body = el('section', 'av-rec-body')
       const head = el('div', 'av-rec-card-head')
       const title = el('button', 'av-rec-card-title')
@@ -731,4 +778,3 @@ export async function mount(root, sdk) {
 
   await load(false)
 }
-
