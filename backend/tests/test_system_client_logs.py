@@ -38,3 +38,28 @@ def test_system_logs_accepts_legacy_since_cursor():
     logs = client.get("/api/system/logs", params={"since": first}).json()
     assert logs["next_index"] >= first
     assert [item["line"] for item in logs["logs"]] == ["second"]
+
+
+def test_legacy_emby_webhook_invalidates_media_library_cache():
+    from app.api.endpoints import media_library
+
+    client = TestClient(_app())
+    before = media_library._sync_state_payload()["version"]
+
+    response = client.post(
+        "/api/webhooks/emby",
+        json={"Event": "Library.New", "Item": {"Name": "Webhook Test"}},
+        headers={"X-Forwarded-For": "192.168.31.10"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["source"] == "192.168.31.10"
+    assert payload["summary"] == "Library.New: Webhook Test"
+    assert payload["sync_state"]["version"] == before + 1
+    assert payload["sync_state"]["last_webhook_at"]
+
+    logs = client.get("/api/system/logs", params={"tail": 1}).json()["logs"]
+    assert logs[-1]["source"] == "Emby · 192.168.31.10"
+    assert "Webhook Test" in logs[-1]["message"]

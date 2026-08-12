@@ -173,9 +173,9 @@ def _webhook_summary(payload: object) -> str:
 async def receive_emby_webhook(request: Request):
     """Accept Emby notification webhooks and retain a concise audit log.
 
-    The recovery media adapter reads Emby live, so a webhook does not need to
-    mutate a local media cache.  Recording the event gives the user a reliable
-    connection test and preserves the real sender address for diagnostics.
+    This legacy route is still referenced by older recovery notes and setups.
+    Keep it useful by invalidating the media-library cache just like the newer
+    token-protected media-library webhook route.
     """
     body = await request.body()
     if len(body) > 1024 * 1024:
@@ -194,7 +194,16 @@ async def receive_emby_webhook(request: Request):
         source=f'Emby · {source}',
         event_type=(payload.get('Event') if isinstance(payload, dict) else None),
     )
-    return {'ok': True, 'message': 'Webhook 已接收', 'source': source, 'summary': summary}
+    from app.api.endpoints import media_library
+
+    state = media_library._bump_sync_state(webhook=True)
+    return {
+        'ok': True,
+        'message': 'Webhook 已接收',
+        'source': source,
+        'summary': summary,
+        'sync_state': state,
+    }
 
 
 @router.get('/system/info')
