@@ -401,6 +401,17 @@ def _text_has_cracked(value: Any) -> bool:
     return bool(re.search(r"破解|无码破解|uncensored|crack|leak|流出", text, re.I))
 
 
+def _detail_has_cracked_signal(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return _text_has_cracked(value)
+    if bool(value.get("is_cracked") or value.get("cracked")):
+        return True
+    return any(
+        _text_has_cracked(value.get(key))
+        for key in ("tags", "categories", "magnets", "resources")
+    )
+
+
 def _feature_value_text(value: Any) -> str:
     if value is None:
         return ""
@@ -802,7 +813,7 @@ async def _library_profile() -> dict[str, Any]:
             if code:
                 profile["local_features"][code] = {
                     "has_subtitle": _text_has_subtitle(data),
-                    "is_cracked": _text_has_cracked(data),
+                    "is_cracked": _detail_has_cracked_signal(data),
                 }
         return profile
 
@@ -938,7 +949,7 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
                         item["cover_url"] = data.get("cover_url") or item.get("cover_url")
                         item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
                         item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
-                        item["is_cracked"] = bool(item.get("is_cracked") or _text_has_cracked(data))
+                        item["is_cracked"] = bool(item.get("is_cracked") or _detail_has_cracked_signal(data))
                         magnets = data.get("magnets") if isinstance(data.get("magnets"), list) else []
                         if magnets:
                             item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))

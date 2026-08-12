@@ -146,11 +146,9 @@ def _movie_list(data: Any) -> list[dict[str, Any]]:
 
 
 def _is_cracked_movie(item: dict[str, Any]) -> bool:
-    text_parts = [
-        item.get("title"),
-        item.get("origin_title"),
-        item.get("name"),
-    ]
+    if bool(item.get("is_cracked") or item.get("cracked")):
+        return True
+    text_parts = []
     tags = item.get("tags")
     if isinstance(tags, list):
         for tag in tags:
@@ -189,9 +187,7 @@ def _detail_has_cnsub(detail: dict[str, Any]) -> bool:
 
 def _detail_is_cracked(detail: dict[str, Any]) -> bool:
     cracked_keywords = ("破解", "破解版", "无码破解", "uncensored leak")
-    if _contains_any_text(detail.get("title"), cracked_keywords):
-        return True
-    if _contains_any_text(detail.get("origin_title"), cracked_keywords):
+    if bool(detail.get("is_cracked") or detail.get("cracked")):
         return True
     if _contains_any_text(detail.get("tags"), cracked_keywords):
         return True

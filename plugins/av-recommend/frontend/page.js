@@ -58,9 +58,10 @@ function detectCnsub(detail) {
 
 function detectCracked(detail) {
   const keywords = ['破解', '破解版', '无码破解', 'uncensored leak']
+  if (detail?.is_cracked || detail?.cracked) return true
   return textHasKeywords(detail?.categories, keywords)
     || textHasKeywords(detail?.magnets, keywords)
-    || textHasKeywords(detail?.title, keywords)
+    || textHasKeywords(detail?.tags, keywords)
 }
 
 function compactResourceSubtitle(resource) {

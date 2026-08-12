@@ -37,6 +37,14 @@ def test_media_library_item_codes_include_provider_and_nfo_values():
     assert "ABCD-123" in codes
 
 
+def test_recommend_crack_signal_ignores_title_only_keywords():
+    backend = _load_backend()
+
+    assert backend._detail_has_cracked_signal({"title": "MIDA-669 無碼破解"}) is False
+    assert backend._detail_has_cracked_signal({"magnets": [{"name": "MIDA-669 破解版"}]}) is True
+    assert backend._detail_has_cracked_signal({"is_cracked": True, "title": "MIDA-669"}) is True
+
+
 async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     backend = _load_backend()
 
