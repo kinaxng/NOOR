@@ -233,30 +233,24 @@ export interface Job {
   completed_at?: string
 }
 
-export interface BackgroundTaskRunAction {
-  plugin_id: string
-  action: string
-  payload?: Record<string, any>
-}
-
 export interface BackgroundTask {
-  id: string
   plugin_id: string
   plugin_name: string
+  id: string
   title: string
-  status: 'running' | 'idle' | 'failed' | 'disabled' | string
+  status?: 'running' | 'idle' | 'failed' | 'disabled' | string
   enabled?: boolean
   interval_minutes?: number
-  last_run_at?: string
   last_started_at?: string
-  last_finished_at?: string
   next_run_at?: string
   progress?: number | null
   summary?: string
   detail?: string
+  last_run_at?: string
+  last_finished_at?: string
   metrics?: Record<string, number | string>
   can_run?: boolean
-  run_action?: BackgroundTaskRunAction
+  run_action?: { plugin_id: string; action: string; payload?: Record<string, any> }
 }
 
 export interface WhisperExecutionMetadata {

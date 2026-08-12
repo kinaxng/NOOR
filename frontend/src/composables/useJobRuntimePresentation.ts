@@ -25,7 +25,7 @@ export type JobRuntimeViewState = {
   detail?: string
 }
 
-export type JobTabKey = 'running' | 'completed' | 'failed'
+export type JobTabKey = 'running' | 'completed' | 'failed' | 'background'
 
 type UseJobRuntimePresentationOptions = {
   allJobs: () => Job[]

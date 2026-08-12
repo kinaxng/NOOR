@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useJobsStore } from '../stores/jobs'
 import { useRoute, useRouter } from 'vue-router'
-import type { Job, SSEEvent } from '../api/types'
+import type { BackgroundTask, Job, SSEEvent } from '../api/types'
 import api from '../api'
 import LogViewer from '../components/noor/LogViewer.vue'
 import BaseIcon from '../components/noor/BaseIcon.vue'
@@ -27,6 +27,27 @@ const toast = useToast()
 const allJobs = () => jobsStore.jobs
 
 const MAX_VISIBLE_LOG_LINES = 400
+const backgroundTasks = ref<BackgroundTask[]>([])
+const backgroundTasksLoading = ref(false)
+let backgroundTasksTimer: ReturnType<typeof setInterval> | null = null
+
+async function fetchBackgroundTasks() {
+  backgroundTasksLoading.value = true
+  try {
+    const response = await api.get('/plugins/background/tasks')
+    backgroundTasks.value = Array.isArray(response.data?.items) ? response.data.items : []
+  } catch (error) {
+    console.error('Fetch background tasks failed:', error)
+  } finally {
+    backgroundTasksLoading.value = false
+  }
+}
+
+function formatBackgroundTime(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+}
 
 const {
   jobStatuses,
@@ -88,6 +109,8 @@ function syncWatchableJobs() {
 
 onMounted(async () => {
   await jobsStore.fetchJobs()
+  await fetchBackgroundTasks()
+  backgroundTasksTimer = setInterval(fetchBackgroundTasks, 15000)
   syncWatchableJobs()
   await applyRouteFocus()
 })
@@ -95,6 +118,8 @@ onMounted(async () => {
 onUnmounted(() => {
   jobsStore.disconnectFromEvents()
   disposeSelection()
+  if (backgroundTasksTimer) clearInterval(backgroundTasksTimer)
+  backgroundTasksTimer = null
 })
 
 watch(() => [route.query.job, route.query.chain, jobsStore.jobs.length], async () => {
@@ -218,13 +243,17 @@ const activeTab = useRouteTabs<JobTabKey>({
   router,
   basePath: '/jobs',
   paramName: 'jobTab',
-  tabs: ['running', 'completed', 'failed'],
+  tabs: ['running', 'completed', 'failed', 'background'],
   defaultTab: 'running',
 })
 const jobPage = ref(1)
 const JOB_PAGE_SIZE = 10
 const { connectingLabel, queuedLabel: queuedStatusLabel, blockedLabel: blockedStatusLabel, completedLabel: completedStatusLabel, failedLabel: failedStatusLabel, cancelledLabel: cancelledStatusLabel, fallbackStatusLabel, getRunningBadgeLabel, getJobHeaderMetaTokens, getWhisperStrategyHint, getJobDisplayName } = useJobPresentation(allJobs)
 const { sortChainJobs, filterTabs, currentTabJobs, currentTabTitle, currentEmptyLabel } = useJobsTabs(allJobs, activeTab)
+const jobTabs = computed(() => [
+  ...filterTabs.value,
+  { key: 'background', label: `${t('jobs.background')} ${backgroundTasks.value.length}` },
+])
 const currentTabTotalPages = computed(() => Math.max(1, Math.ceil(currentTabJobs.value.length / JOB_PAGE_SIZE)))
 const paginatedCurrentTabJobs = computed(() => {
   const start = (jobPage.value - 1) * JOB_PAGE_SIZE
@@ -293,7 +322,7 @@ function selectChainMember(jobId: string) {
   <div class="w-full space-y-6 animate-fade-in">
     <!-- Header -->
     <div class="jobs-toolbar flex items-center justify-between gap-4">
-      <VisionTabs v-model="activeTab" :tabs="filterTabs" />
+      <VisionTabs v-model="activeTab" :tabs="jobTabs" />
       <VuiButton variant="contained" color="info" size="small" customClass="jobs-toolbar__action" @click="cleanupOrphanedJobs">
         {{ cleanupLabel }}
       </VuiButton>
@@ -302,7 +331,38 @@ function selectChainMember(jobId: string) {
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Jobs List -->
       <div class="lg:col-span-2 space-y-4">
-        <div v-if="currentTabJobCards.length > 0" class="space-y-3">
+        <div v-if="activeTab === 'background'" class="background-task-list">
+          <div v-if="backgroundTasksLoading && !backgroundTasks.length" class="empty-state-card ui-card flex items-center justify-center text-sm text-white/40">
+            {{ t('common.loading') }}
+          </div>
+          <div v-else-if="!backgroundTasks.length" class="empty-state-card ui-card flex flex-col items-center justify-center text-center">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 empty-state-icon">
+              <BaseIcon name="history" class="w-7 h-7 text-white/20" />
+            </div>
+            <h3 class="text-base font-medium mb-1 text-white font-display">{{ t('jobs.background') }}</h3>
+            <p class="text-sm text-white/30">{{ t('jobs.noBackground') }}</p>
+          </div>
+          <template v-else>
+            <article v-for="task in backgroundTasks" :key="task.id" class="background-task-card ui-card">
+              <div class="background-task-card__header">
+                <div class="min-w-0">
+                  <h3 class="background-task-card__title">{{ task.title || task.id }}</h3>
+                  <p class="background-task-card__plugin">{{ task.plugin_name || task.plugin_id }}</p>
+                </div>
+                <span class="background-task-card__status" :class="`is-${task.status || 'idle'}`">
+                  {{ task.status === 'running' ? t('jobs.running') : task.status === 'failed' ? t('history.filter.failed') : task.status === 'disabled' ? '已禁用' : '待机' }}
+                </span>
+              </div>
+              <p v-if="task.summary" class="background-task-card__summary">{{ task.summary }}</p>
+              <p v-if="task.detail" class="background-task-card__detail">{{ task.detail }}</p>
+              <div class="background-task-card__meta">
+                <span v-if="task.last_run_at">最近运行 {{ formatBackgroundTime(task.last_run_at) }}</span>
+                <span v-if="task.last_finished_at">完成 {{ formatBackgroundTime(task.last_finished_at) }}</span>
+              </div>
+            </article>
+          </template>
+        </div>
+        <div v-if="activeTab !== 'background' && currentTabJobCards.length > 0" class="space-y-3">
           <JobCard
             v-for="entry in currentTabJobCards"
             :key="entry.job.id"
@@ -320,7 +380,7 @@ function selectChainMember(jobId: string) {
 
         <!-- Empty State -->
         <div
-          v-if="currentTabJobCards.length === 0"
+          v-if="activeTab !== 'background' && currentTabJobCards.length === 0"
           class="empty-state-card ui-card flex flex-col items-center justify-center text-center"
         >
           <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 empty-state-icon">
@@ -376,6 +436,52 @@ function selectChainMember(jobId: string) {
 .jobs-toolbar__action {
   flex-shrink: 0;
 }
+
+.background-task-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.background-task-card {
+  padding: 1rem 1.1rem;
+}
+
+.background-task-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.background-task-card__title {
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.background-task-card__plugin,
+.background-task-card__detail,
+.background-task-card__meta {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+}
+
+.background-task-card__plugin { margin-top: 0.22rem; }
+.background-task-card__summary { margin-top: 0.8rem; color: var(--color-text-secondary); font-size: 0.82rem; }
+.background-task-card__detail { margin-top: 0.35rem; line-height: 1.5; }
+.background-task-card__meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
+
+.background-task-card__status {
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+.background-task-card__status.is-running { border-color: rgba(0,117,255,.38); color: #65a9ff; }
+.background-task-card__status.is-failed { border-color: rgba(227,26,26,.38); color: #ff8d8d; }
+.background-task-card__status.is-disabled { color: #aab3c2; }
 
 .empty-state-card {
   min-height: 15rem;

@@ -27,18 +27,21 @@ export function useJobsTabs(allJobs: () => Job[], activeTab: Ref<JobTabKey>) {
   const currentTabJobs = computed(() => {
     if (activeTab.value === 'running') return runningTabJobs.value
     if (activeTab.value === 'completed') return completedTabJobs.value
+    if (activeTab.value === 'background') return []
     return failedTabJobs.value
   })
 
   const currentTabTitle = computed(() => {
     if (activeTab.value === 'running') return tabRunningLabel.value
     if (activeTab.value === 'completed') return tabCompletedLabel.value
+    if (activeTab.value === 'background') return t('jobs.background')
     return tabFailedLabel.value
   })
 
   const currentEmptyLabel = computed(() => {
     if (activeTab.value === 'running') return emptyRunningLabel.value
     if (activeTab.value === 'completed') return emptyCompletedLabel.value
+    if (activeTab.value === 'background') return t('jobs.noBackground')
     return emptyFailedLabel.value
   })
 
@@ -50,4 +53,3 @@ export function useJobsTabs(allJobs: () => Job[], activeTab: Ref<JobTabKey>) {
     currentEmptyLabel,
   }
 }
-
