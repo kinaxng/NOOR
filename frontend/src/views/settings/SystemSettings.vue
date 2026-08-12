@@ -27,6 +27,7 @@ const apiKey = ref('')
 const userId = ref('')
 const tmdbApiKey = ref('')
 const tmdbApiToken = ref('')
+const mdcNgActorMappingPath = ref('')
 const webhookToken = ref('')
 const webhookGuideVisible = ref(false)
 const enabledLibraryIds = ref<string[]>([])
@@ -65,6 +66,7 @@ async function loadSettings() {
         userId.value = cfg.user_id || ''
         tmdbApiKey.value = cfg.tmdb_api_key || ''
         tmdbApiToken.value = cfg.tmdb_api_token || ''
+        mdcNgActorMappingPath.value = cfg.mdc_ng_actor_mapping_path || ''
         webhookToken.value = cfg.webhook_token || ''
         const ids = cfg.enabled_library_ids || ''
         enabledLibraryIds.value = ids ? ids.split(',').map((s: string) => s.trim()).filter(Boolean) : []
@@ -187,6 +189,7 @@ async function saveEmby() {
         user_id: userId.value,
         tmdb_api_key: tmdbApiKey.value,
         tmdb_api_token: tmdbApiToken.value,
+        mdc_ng_actor_mapping_path: mdcNgActorMappingPath.value,
         enabled_library_ids: enabledLibraryIds.value.join(','),
       })
     })
@@ -290,6 +293,10 @@ function toggleLibrary(libId: string) {
 
           <FieldRow :label="t('settings.emby.tmdbApiToken')" :description="t('settings.emby.tmdbApiTokenDesc')">
             <input v-model="tmdbApiToken" type="password" placeholder="TMDB v4 Read Access Token" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow :label="t('settings.emby.mdcNgActorMappingPath')" :description="t('settings.emby.mdcNgActorMappingPathDesc')">
+            <input v-model="mdcNgActorMappingPath" type="text" placeholder="/home/kinax/dsm/docker/mdc-ng" class="settings-input" />
           </FieldRow>
 
           <!-- Test Connection -->
