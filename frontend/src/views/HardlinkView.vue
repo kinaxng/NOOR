@@ -321,13 +321,13 @@ function isReorganizingSource(path?: string | null) {
 async function loadMdcManualAvailability() {
   mdcManualAvailable.value = false
   try {
-    const pluginsResp = await api.get('/api/plugins')
+    const pluginsResp = await api.get('/plugins')
     const plugins = Array.isArray(pluginsResp.data)
       ? pluginsResp.data
       : (Array.isArray(pluginsResp.data?.items) ? pluginsResp.data.items : [])
     const plugin = plugins.find((item: any) => item?.id === 'mdc-ng-manual')
     if (!plugin?.enabled) return
-    const testResp = await api.post('/api/plugins/mdc-ng-manual/test')
+    const testResp = await api.post('/plugins/mdc-ng-manual/test')
     mdcManualAvailable.value = !!testResp.data?.ok
   } catch {
     mdcManualAvailable.value = false
@@ -339,7 +339,7 @@ async function reorganizeSource(entry: HardlinkEntry) {
   if (!path || isReorganizingSource(path)) return
   reorganizingSourcePaths.value = new Set(reorganizingSourcePaths.value).add(path)
   try {
-    const { data } = await api.post('/api/plugins/mdc-ng-manual/actions/create', {
+    const { data } = await api.post('/plugins/mdc-ng-manual/actions/create', {
       payload: { source_paths: path },
     })
     if (!data?.ok) throw new Error(data?.message || t('hardlinks.reorganizeFailed'))

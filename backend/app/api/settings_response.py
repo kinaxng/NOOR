@@ -8,7 +8,9 @@ from typing import Any
 
 from app.api.endpoints.media_library_helpers import load_config as load_media_library_config
 from app.api.settings_facefusion_upgrade import get_facefusion_installation_info
+from app.core.facefusion_defaults import facefusion_settings_payload
 from app.core.config import get_settings
+from app.api.system import _ui_settings
 from app.pipeline.whisper.strategy import apply_whisper_strategy, normalize_whisper_strategy
 
 
@@ -25,7 +27,14 @@ def build_settings_payload(
     custom_whisper_config: dict[str, Any],
 ) -> dict[str, Any]:
     media_library_config = load_media_library_config()
-    facefusion_info = get_facefusion_installation_info(get_settings())
+    settings = get_settings()
+    facefusion_info = get_facefusion_installation_info(settings)
+    facefusion_values = facefusion_settings_payload(settings)
+    facefusion_defaults = {
+        key.removeprefix("facefusion_"): value
+        for key, value in facefusion_values.items()
+        if key.startswith("facefusion_")
+    }
     whisper_strategy = normalize_whisper_strategy(env_data.get("WHISPER_STRATEGY", "chickenrice"))
     default_model_backend = env_data.get("WHISPER_MODEL_BACKEND", env_data.get("WHISPER_MODEL", "chickenrice-zh"))
     whisper_payload: dict[str, Any] = {
@@ -54,6 +63,7 @@ def build_settings_payload(
         "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
     }
     whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
+    ui_settings = _ui_settings()
 
     return {
         "emby": {
@@ -104,7 +114,17 @@ def build_settings_payload(
             ).lower()
             == "true",
         },
-        "facefusion": facefusion_info,
+        "facefusion": {
+            **facefusion_info,
+            "dir": facefusion_values.get("facefusion_dir", ""),
+            "python_path": facefusion_values.get("facefusion_python_path", ""),
+            "native_model_dir": facefusion_values.get("facefusion_model_dir", ""),
+            "resolved_dir": facefusion_info.get("source_dir", ""),
+            "execution_providers": [],
+            "python_executable": "",
+            "runtime_versions": {},
+        },
+        "facefusion_defaults": facefusion_defaults,
         "whisper": {**whisper_payload, "features": whisper_features},
         "network": {
             "acceleration_mode": env_data.get("ACCELERATION_MODE", "mirror"),
@@ -115,5 +135,8 @@ def build_settings_payload(
                 "PIP_MIRROR", "https://pypi.tuna.tsinghua.edu.cn/simple"
             ),
             "hf_token": env_data.get("HF_TOKEN", ""),
+        },
+        "ui": {
+            "cover_blur_enabled": bool(ui_settings.get("cover_blur", False)),
         },
     }

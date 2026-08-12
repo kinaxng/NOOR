@@ -46,6 +46,8 @@ class HardlinkDeleteRequest(BaseModel):
  file_path:str; remove_nfo:bool=True; dry_run:bool=False
 class SourceChainDeleteRequest(BaseModel):
  source_path:str; hardlink_paths:list[str]=[]; code:str|None=None; dry_run:bool=False
+class ItemChainDeleteRequest(BaseModel):
+ item_id:str; dry_run:bool=False
 class HardlinkEntryDeletePayload(BaseModel):
  source_path:str|None=None; hardlink_paths:list[str]=[]
 class GroupDeleteRequest(BaseModel):
@@ -196,6 +198,29 @@ async def delete_source_chain(req:SourceChainDeleteRequest):
  for path in paths:_assert_safe_path(path,hardlinks,'硬链接文件')
  dirs,files=_collect_chain_delete_targets(source,paths,code=req.code,source_roots=sources,hardlink_roots=hardlinks)
  return {'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else _execute_delete_targets(dirs,files)
+@router.post('/items/delete-chain')
+async def delete_item_chain(req:ItemChainDeleteRequest):
+ config=_load_config();_configured(config);sources,hardlinks=_allowed_scan_roots(config)
+ item=await _get_item(config,req.item_id)
+ if not item:raise HTTPException(404,f'未找到媒体项目: {req.item_id}')
+ paths=[]
+ current=item.get('file_path')
+ if current:paths.append(Path(current).resolve())
+ for sibling in item.get('siblings') or []:
+  sibling_path=sibling.get('file_path')
+  if sibling_path:paths.append(Path(sibling_path).resolve())
+ deduped=[]
+ for path in paths:
+  if path not in deduped:deduped.append(path)
+ if not deduped:raise HTTPException(400,'该作品没有可删除的本地文件路径')
+ all_roots=sources+hardlinks
+ for path in deduped:_assert_safe_path(path,all_roots,'作品文件')
+ code=(item.get('tags') or {}).get('code') or item.get('name') or req.item_id
+ dirs,files=_collect_chain_delete_targets(None,deduped,code=code,source_roots=sources,hardlink_roots=hardlinks)
+ result={'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else _execute_delete_targets(dirs,files)
+ result['code']=code;result['item_id']=req.item_id
+ if not req.dry_run:_bump_sync_state()
+ return result
 @router.post('/hardlinks/delete-group')
 async def delete_hardlink_group(req:GroupDeleteRequest):
  config=_load_config();sources,hardlinks=_allowed_scan_roots(config);dirs=set();files=set()

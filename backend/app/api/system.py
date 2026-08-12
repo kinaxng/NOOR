@@ -71,14 +71,58 @@ class SystemLogManager:
             entries = list(self._entries)
             if cursor is not None:
                 entries = [entry for entry in entries if int(entry['id']) > cursor]
+            elif int(tail) <= 0:
+                entries = []
             else:
                 entries = entries[-max(1, min(int(tail), 1000)):]
-            return {'logs': entries, 'cursor': self._cursor}
+            logs = []
+            for entry in entries:
+                logs.append({
+                    **entry,
+                    'seq': entry.get('id'),
+                    'time': entry.get('timestamp'),
+                    'line': entry.get('message'),
+                })
+            return {'logs': logs, 'cursor': self._cursor, 'next_index': self._cursor}
 
 
 @router.get('/logs')
-async def get_logs(tail: int = Query(200, ge=1, le=1000), cursor: int | None = None):
-    return SystemLogManager.get_instance().get_logs(tail=tail, cursor=cursor)
+async def get_logs(
+    tail: int = Query(200, ge=0, le=1000),
+    cursor: int | None = None,
+    since: int | None = None,
+):
+    return SystemLogManager.get_instance().get_logs(tail=tail, cursor=cursor if cursor is not None else since)
+
+
+@router.post('/system/logs/client')
+async def add_client_log(payload: dict[str, Any], request: Request):
+    level = str(payload.get('level') or 'info').lower()
+    if level not in {'debug', 'info', 'success', 'warning', 'error'}:
+        level = 'info'
+    message = str(payload.get('message') or '').strip()
+    if not message:
+        message = '客户端事件'
+    source = str(payload.get('source') or 'Client').strip() or 'Client'
+    if request.client:
+        source = f'{source} · {request.client.host}'
+    entry = SystemLogManager.get_instance().add_log(
+        level,
+        message[:2000],
+        source=source,
+        path=payload.get('path'),
+        user_agent=request.headers.get('user-agent'),
+    )
+    return {'ok': True, 'log': entry}
+
+
+@router.get('/system/logs')
+async def get_system_logs(
+    tail: int = Query(200, ge=0, le=1000),
+    cursor: int | None = None,
+    since: int | None = None,
+):
+    return await get_logs(tail=tail, cursor=cursor, since=since)
 
 
 @router.get('/ui-settings')

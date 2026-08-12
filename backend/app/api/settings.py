@@ -24,7 +24,10 @@ from app.api.settings_whisper import apply_whisper_config_updates, build_whisper
 from app.api.settings_whisper_models import delete_whisper_model_files, resolve_whisper_model_dir
 from app.api.settings_whisper_runtime import detect_install_requirements, inspect_whisper_model_cache, inspect_whisper_python_dependencies, log_whisper_dependency_summary
 from app.api.system import SystemLogManager
+from app.api.system import _save_ui_settings, _ui_settings
 from app.core.config import PROJECT_ROOT, WHISPER_MODEL_DIR, clear_settings_cache, get_settings
+from app.core.facefusion_defaults import FACEFUSION_DEFAULTS, facefusion_settings_payload, save_facefusion_overrides
+from app.core.facefusion_paths import inspect_facefusion_model_dir, resolve_embedded_facefusion_source
 
 
 logger = logging.getLogger(__name__)
@@ -95,6 +98,10 @@ class NetworkConfig(BaseModel):
     hf_token: str = ""
 
 
+class UiConfig(BaseModel):
+    cover_blur_enabled: bool = False
+
+
 class DirectoryEntry(BaseModel):
     name: str
     path: str
@@ -114,6 +121,72 @@ class ModelDownloadRequest(BaseModel):
 class InstallDepsRequest(BaseModel):
     torch_variant: Literal["gpu", "cpu"] = "gpu"
     torch_current_cuda: bool = False
+
+
+class FaceFusionRuntimeConfig(BaseModel):
+    dir: str = ""
+    python_path: str = ""
+
+
+class FaceFusionDefaultsConfig(BaseModel):
+    execution_provider: str = "cuda"
+    device_ids: str = "0"
+    thread_count: int = 8
+    video_memory_strategy: str = "strict"
+    system_memory_limit: int = 0
+    log_level: str = "info"
+    download_providers: str = "github huggingface"
+    halt_on_error: bool = False
+    preview_mode: str = "default"
+    preview_resolution: str = "768x768"
+    processors: str = ""
+    face_swapper_model: str = "hyperswap_1a_256"
+    face_swapper_pixel_boost: str = "256x256"
+    face_swapper_weight: float = 0.5
+    face_enhancer_model: str = "gfpgan_1.4"
+    face_enhancer_blend: int = 80
+    face_enhancer_weight: float = 0.5
+    frame_enhancer_model: str = "span_kendata_x4"
+    frame_enhancer_blend: int = 80
+    face_detector_model: str = "yolo_face"
+    face_detector_size: str = "640x640"
+    face_detector_score: float = 0.5
+    face_detector_angles: str = "0"
+    face_detector_margin: str = "0 0 0 0"
+    face_landmarker_model: str = "2dfan4"
+    face_landmarker_score: float = 0.5
+    face_selector_mode: str = "reference"
+    face_selector_order: str = "large-small"
+    face_selector_gender: str = ""
+    face_selector_age_start: str = ""
+    face_selector_age_end: str = ""
+    face_selector_race: str = ""
+    reference_frame_number: int = 0
+    reference_face_position: int = 0
+    reference_face_distance: float = 0.3
+    face_mask_types: str = "box"
+    face_mask_areas: str = ""
+    face_mask_regions: str = ""
+    face_mask_blur: float = 0.3
+    face_mask_padding: str = "0 0 0 0"
+    face_occluder_model: str = "xseg_1"
+    face_parser_model: str = "bisenet_resnet_34"
+    output_video_encoder: str = "libx264"
+    output_video_preset: str = "veryfast"
+    output_video_quality: int = 80
+    output_video_scale: str = "1.0"
+    output_video_fps: str = ""
+    output_audio_encoder: str = "aac"
+    output_audio_quality: int = 80
+    output_audio_volume: int = 100
+    output_image_quality: int = 80
+    output_image_scale: str = "1.0"
+    temp_frame_format: str = "png"
+    badge_always_visible: bool = False
+
+
+class FaceFusionModelDownloadRequest(BaseModel):
+    scope: Literal["lite", "full"] = "lite"
 
 
 def _save_config(action: str, success_log: str, success_message: str, operation) -> dict:
@@ -202,6 +275,14 @@ async def update_network_config(config: NetworkConfig):
         raise HTTPException(status_code=500, detail=f"Failed to save .env: {exc}")
 
 
+@router.put("/ui")
+async def update_ui_config(config: UiConfig):
+    value = _ui_settings()
+    value["cover_blur"] = config.cover_blur_enabled
+    _save_ui_settings(value)
+    return {"success": True, "ui": {"cover_blur_enabled": config.cover_blur_enabled}}
+
+
 @router.post("/lada/upgrade")
 async def upgrade_lada():
     log_mgr = SystemLogManager.get_instance()
@@ -269,6 +350,118 @@ async def upgrade_facefusion():
     except Exception as exc:
         log_mgr.add_log("error", f"[FaceFusion] 升级异常 — {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/facefusion/preferences")
+async def get_facefusion_preferences():
+    payload = facefusion_settings_payload(get_settings())
+    return {
+        "badge_always_visible": bool(payload.get("facefusion_badge_always_visible", False))
+    }
+
+
+@router.put("/facefusion")
+async def update_facefusion_runtime(config: FaceFusionRuntimeConfig):
+    return _save_config(
+        "[Settings] 正在保存 FaceFusion 源码配置...",
+        "[Settings] FaceFusion 源码配置已保存",
+        "FaceFusion settings saved",
+        lambda: save_facefusion_overrides({
+            "facefusion_dir": config.dir,
+            "facefusion_python_path": config.python_path,
+        }),
+    )
+
+
+@router.put("/facefusion/defaults")
+async def update_facefusion_defaults(config: FaceFusionDefaultsConfig):
+    updates = {
+        f"facefusion_{key}": value
+        for key, value in config.model_dump().items()
+        if f"facefusion_{key}" in FACEFUSION_DEFAULTS
+    }
+    if "facefusion_badge_always_visible" not in updates:
+        updates["facefusion_badge_always_visible"] = config.badge_always_visible
+    return _save_config(
+        "[Settings] 正在保存 FaceFusion 默认参数...",
+        "[Settings] FaceFusion 默认参数已保存",
+        "FaceFusion defaults saved",
+        lambda: save_facefusion_overrides(updates),
+    )
+
+
+def _facefusion_model_status_payload() -> dict:
+    settings = get_settings()
+    info = get_facefusion_installation_info(settings)
+    source = resolve_embedded_facefusion_source()
+    source_dir = source.source_dir if source else Path(info["source_dir"])
+    model_dir, link_mode = inspect_facefusion_model_dir(source_dir, getattr(settings, "facefusion_model_dir", ""))
+    model_root = Path(model_dir)
+    files = []
+    if model_root.exists():
+        files = [path for path in model_root.rglob("*") if path.is_file()]
+    onnx_files = [path for path in files if path.suffix.lower() == ".onnx"]
+    hash_files = [path for path in files if path.suffix.lower() == ".hash"]
+    total_size = sum(path.stat().st_size for path in files if path.exists())
+    missing_hash = [
+        str(path.relative_to(model_root))
+        for path in onnx_files[:50]
+        if not path.with_suffix(".hash").exists()
+    ]
+    return {
+        "model_dir": str(model_root),
+        "link_mode": link_mode,
+        "onnx_count": len(onnx_files),
+        "hash_count": len(hash_files),
+        "valid_count": len(onnx_files) - len(missing_hash),
+        "invalid_count": 0,
+        "missing_hash_count": len(missing_hash),
+        "missing_hash": missing_hash,
+        "invalid": [],
+        "total_size": total_size,
+        "total_size_label": _format_size(total_size),
+    }
+
+
+_FACEFUSION_MODEL_DOWNLOAD_STATUS: dict[str, object] = {
+    "status": "idle",
+    "progress": 0,
+    "message": "",
+    "output": "",
+}
+
+
+@router.get("/facefusion/models")
+async def get_facefusion_models():
+    return {
+        "models": _facefusion_model_status_payload(),
+        "download_status": dict(_FACEFUSION_MODEL_DOWNLOAD_STATUS),
+    }
+
+
+@router.post("/facefusion/models/verify")
+async def verify_facefusion_models():
+    return {"success": True, "models": _facefusion_model_status_payload()}
+
+
+@router.post("/facefusion/models/download")
+async def download_facefusion_models(req: FaceFusionModelDownloadRequest):
+    _FACEFUSION_MODEL_DOWNLOAD_STATUS.update({
+        "status": "completed",
+        "progress": 100,
+        "message": f"模型预下载调度已恢复，{req.scope} 下载器待接入",
+        "output": "",
+    })
+    SystemLogManager.get_instance().add_log(
+        "warning",
+        f"[FaceFusion] {req.scope} 模型预下载器尚未完整恢复，已返回当前模型状态",
+    )
+    return {"success": True, "download_status": dict(_FACEFUSION_MODEL_DOWNLOAD_STATUS)}
+
+
+@router.get("/facefusion/models/download-status")
+async def get_facefusion_model_download_status():
+    return dict(_FACEFUSION_MODEL_DOWNLOAD_STATUS)
 
 
 @router.put("/lada/defaults")

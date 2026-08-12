@@ -68,6 +68,7 @@ FACEFUSION_DEFAULTS: dict[str, Any] = {
     "facefusion_preview_mode": "default",
     "facefusion_preview_resolution": "768x768",
     "facefusion_log_level": "info",
+    "facefusion_badge_always_visible": False,
 }
 
 

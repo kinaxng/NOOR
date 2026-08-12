@@ -187,7 +187,9 @@ async function loadData(force = false) {
       api.get('/plugins'),
       api.get('/plugins/market/items').catch(() => ({ data: [] })),
     ])
-    installedPlugins.value = Array.isArray(pluginsRes.data) ? pluginsRes.data : []
+    installedPlugins.value = Array.isArray(pluginsRes.data?.items)
+      ? pluginsRes.data.items
+      : (Array.isArray(pluginsRes.data) ? pluginsRes.data : [])
     marketPlugins.value = Array.isArray(marketRes.data)
       ? marketRes.data.filter((item: any) => item && item.id && !item.error)
       : []

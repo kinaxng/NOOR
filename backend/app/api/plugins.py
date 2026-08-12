@@ -37,6 +37,11 @@ class FeedPushPayload(BaseModel):
     item: dict[str, Any] = Field(default_factory=dict)
 
 
+class MarketInstallPayload(BaseModel):
+    repo_url: str = ''
+    plugin_id: str = ''
+
+
 @router.get('')
 async def list_plugins():
     if not runtime._manifests:
@@ -87,6 +92,22 @@ async def run_core_runtime_cleanup(payload: PluginActionPayload):
 async def search_resources(payload: ResourceSearchPayload):
     groups = await runtime.search_resources(payload.query, limit_per_plugin=payload.limit_per_plugin)
     return {'groups': groups}
+
+
+@router.get('/market/items')
+async def list_market_plugins():
+    """Compatibility endpoint for the recovered plugin manager UI.
+
+    Local plugin manifests are the source of truth in the current runtime.  The
+    old UI still asks for a market list, so expose an empty market instead of
+    failing the whole page.
+    """
+    return []
+
+
+@router.post('/market/install')
+async def install_market_plugin(payload: MarketInstallPayload):
+    raise HTTPException(status_code=501, detail='插件市场安装器尚未恢复，请先手动放入 plugins 目录')
 
 
 @router.get('/dashboard/widgets')
@@ -164,6 +185,27 @@ async def set_plugin_enabled(plugin_id: str, payload: PluginEnabledPayload):
         return {'enabled': await runtime.set_enabled(plugin_id, payload.enabled)}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail='Plugin not found') from exc
+
+
+@router.post('/{plugin_id}/enable')
+async def enable_plugin(plugin_id: str):
+    try:
+        return {'enabled': await runtime.set_enabled(plugin_id, True)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='Plugin not found') from exc
+
+
+@router.post('/{plugin_id}/disable')
+async def disable_plugin(plugin_id: str):
+    try:
+        return {'enabled': await runtime.set_enabled(plugin_id, False)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='Plugin not found') from exc
+
+
+@router.post('/{plugin_id}/test')
+async def test_plugin(plugin_id: str):
+    return await plugin_action(plugin_id, 'test', PluginActionPayload())
 
 
 @router.post('/{plugin_id}/actions/{action}')
