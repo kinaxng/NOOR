@@ -6,6 +6,13 @@
   "description": "NOOR 官方内置订阅与洗版中心。",
   "tags": ["official", "subscription", "upgrade", "resource"],
   "capabilities": ["sidebar_page", "subscription_core", "resource_match", "download_submit"],
+  "contributions": {
+    "sidebar": {
+      "label": "订阅中心",
+      "route": "/plugins/subscription-core",
+      "icon": "plugin"
+    }
+  },
   "frontend": {
     "type": "module",
     "entry": "frontend/page.js",
