@@ -59,6 +59,7 @@ const navItems = computed(() => {
 })
 
 const activeNavName = computed(() => {
+  if (route.name === 'actor-detail' || route.path.startsWith('/actors/')) return t('files.actors.title')
   if (route.path.startsWith('/plugins/')) {
     const plugin = enabledPagePlugins.value.find(p => route.path === p.route || route.path.startsWith(`${p.route}/`))
     return plugin?.contributions?.sidebar?.label || plugin?.name || '插件'
