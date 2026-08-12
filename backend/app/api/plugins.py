@@ -33,6 +33,12 @@ class ResourceSearchPayload(BaseModel):
     limit_per_plugin: int = Field(24, ge=1, le=100)
 
 
+class ResourceResolvePayload(BaseModel):
+    provider_id: str = ''
+    provider: str = ''
+    item: dict[str, Any] = Field(default_factory=dict)
+
+
 class FeedPushPayload(BaseModel):
     item: dict[str, Any] = Field(default_factory=dict)
 
@@ -92,6 +98,19 @@ async def run_core_runtime_cleanup(payload: PluginActionPayload):
 async def search_resources(payload: ResourceSearchPayload):
     groups = await runtime.search_resources(payload.query, limit_per_plugin=payload.limit_per_plugin)
     return {'groups': groups}
+
+
+@router.post('/resources/resolve-download')
+async def resolve_resource_download(payload: ResourceResolvePayload):
+    provider_id = str(payload.provider_id or payload.provider or payload.item.get('provider') or '').strip()
+    if not provider_id:
+        raise HTTPException(status_code=400, detail='缺少资源来源')
+    try:
+        return await runtime.resolve_resource_download(provider_id, payload.item)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get('/market/items')

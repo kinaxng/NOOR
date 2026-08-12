@@ -52,3 +52,31 @@ def test_market_items_compat_returns_empty_list():
     response = TestClient(_app()).get("/api/plugins/market/items")
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_resource_resolve_download_route_forwards_to_runtime(monkeypatch):
+    async def fake_resolve(plugin_id: str, item: dict):
+        return {"item": item, "url": item["url"], "plugin_id": plugin_id}
+
+    monkeypatch.setattr(plugins.runtime, "resolve_resource_download", fake_resolve)
+
+    response = TestClient(_app()).post(
+        "/api/plugins/resources/resolve-download",
+        json={"provider_id": "avdb", "item": {"url": "magnet:?xt=urn:btih:test"}},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "item": {"url": "magnet:?xt=urn:btih:test"},
+        "url": "magnet:?xt=urn:btih:test",
+        "plugin_id": "avdb",
+    }
+
+
+def test_resource_resolve_download_route_requires_provider():
+    response = TestClient(_app()).post(
+        "/api/plugins/resources/resolve-download",
+        json={"item": {"url": "magnet:?xt=urn:btih:test"}},
+    )
+
+    assert response.status_code == 400
