@@ -5,6 +5,13 @@
   "type": "source",
   "description": "通过 DBOnline API 提供 JavDB 作品、演员、榜单和资源信息。",
   "capabilities": ["sidebar_page", "resource_search", "actor_lookup", "knowledge_contributions"],
+  "contributions": {
+    "sidebar": {
+      "label": "JavDB",
+      "route": "/plugins/javdb",
+      "icon": "plugin"
+    }
+  },
   "frontend": {
     "type": "module",
     "entry": "frontend/page.js",
