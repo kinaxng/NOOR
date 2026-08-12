@@ -171,7 +171,8 @@ async function loadActor() {
     syncForm(actor.value)
     editMode.value = false
     overviewExpanded.value = false
-    void enrichActorFromTmdb(seq)
+    // TMDB enrichment is an explicit edit-mode action. Do not probe the
+    // remote API while merely opening a profile, especially when no key is set.
   } catch (error: any) {
     actor.value = null
     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.detailLoadFailed'))
