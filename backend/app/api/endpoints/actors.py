@@ -803,7 +803,7 @@ async def apply_actor_tmdb_backfill(req: ActorTmdbBackfillRequest, lang: str = "
     elif req.only_high_confidence:
         candidates = [item for item in candidates if item["confidence"] == "high"]
     key = str(req.progress_key or "").strip()
-    progress = {"ok": True, "status": "running", "processed": 0, "total": len(candidates), "applied_count": 0, "skipped_count": 0, "current_actor": ""}
+    progress = {"ok": True, "status": "running", "processed": 0, "total": len(candidates), "applied_count": 0, "skipped_count": 0, "current_actor": "", "failures": []}
     if key:
         _tmdb_backfill_progress[key] = progress
     for item in candidates:
@@ -811,7 +811,11 @@ async def apply_actor_tmdb_backfill(req: ActorTmdbBackfillRequest, lang: str = "
         if req.dry_run or item["conflict_actors"]:
             progress["skipped_count"] += 1
         else:
-            result = await update_actor(item["actor_id"], ActorProfileUpdateRequest(provider_ids={"Tmdb": item["tmdb_id"]}), lang)
+            try:
+                result = await update_actor(item["actor_id"], ActorProfileUpdateRequest(provider_ids={"Tmdb": item["tmdb_id"]}), lang)
+            except Exception as exc:
+                progress["failures"].append({"actor_id": item["actor_id"], "name": progress["current_actor"], "error": str(exc)})
+                result = {}
             if result.get("synced"):
                 progress["applied_count"] += 1
             else:
@@ -858,7 +862,7 @@ async def apply_actor_name_sync(req: ActorNameSyncRequest, lang: str = "zh-CN"):
     if selected:
         candidates = [item for item in candidates if item["actor_id"] in selected]
     key = str(req.progress_key or "").strip()
-    progress = {"ok": True, "status": "running", "processed": 0, "total": len(candidates), "applied_count": 0, "skipped_count": 0, "current_actor": "", "current_target": ""}
+    progress = {"ok": True, "status": "running", "processed": 0, "total": len(candidates), "applied_count": 0, "skipped_count": 0, "current_actor": "", "current_target": "", "failures": []}
     if key:
         _name_sync_progress[key] = progress
     for item in candidates:
@@ -866,7 +870,11 @@ async def apply_actor_name_sync(req: ActorNameSyncRequest, lang: str = "zh-CN"):
         if req.dry_run:
             progress["skipped_count"] += 1
         else:
-            result = await update_actor(item["actor_id"], ActorProfileUpdateRequest(name=item["target_name"]), lang)
+            try:
+                result = await update_actor(item["actor_id"], ActorProfileUpdateRequest(name=item["target_name"]), lang)
+            except Exception as exc:
+                progress["failures"].append({"actor_id": item["actor_id"], "name": item["current_name"], "target": item["target_name"], "error": str(exc)})
+                result = {}
             progress["applied_count" if result.get("synced") else "skipped_count"] += 1
         progress["processed"] += 1
     progress.update({"status": "completed", "current_actor": "", "current_target": ""})
@@ -1024,6 +1032,19 @@ async def get_actor(actor_id: str, lang: str = "zh-CN"):
 async def update_actor(actor_id: str, req: ActorProfileUpdateRequest, lang: str = "zh-CN"):
     config = _require_config()
     raw = await _raw_actor(config, actor_id)
+    emby_update_fields = {
+        "name": req.name,
+        "sort_name": req.sort_name,
+        "overview": req.overview,
+        "provider_ids": req.provider_ids,
+        "birthday": req.birthday,
+        "deathday": req.deathday,
+        "place_of_birth": req.place_of_birth,
+        "gender": req.gender,
+        "known_for_department": req.known_for_department,
+        "homepage": req.homepage,
+    }
+    needs_emby_sync = any(value is not None for value in emby_update_fields.values())
     if req.name is not None:
         raw["Name"] = req.name
     if req.sort_name is not None:
@@ -1056,27 +1077,23 @@ async def update_actor(actor_id: str, req: ActorProfileUpdateRequest, lang: str 
 
     synced = False
     sync_error = None
-    try:
-        async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
-            response = await client.post(
-                f"{_base_url(config)}/emby/Items/{quote(actor_id)}",
-                headers={**_headers(config), "Content-Type": "application/json"},
-                json=raw,
-            )
-            response.raise_for_status()
-            synced = True
-    except Exception as exc:
-        sync_error = str(exc)
+    if needs_emby_sync:
+        try:
+            async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+                response = await client.post(
+                    f"{_base_url(config)}/emby/Items/{quote(actor_id)}",
+                    headers={**_headers(config), "Content-Type": "application/json"},
+                    json=raw,
+                )
+                response.raise_for_status()
+                synced = True
+        except Exception as exc:
+            sync_error = str(exc)
+            raise HTTPException(status_code=502, detail=f"同步 Emby 演员资料失败: {sync_error}") from exc
 
     overrides = _load_profile_overrides()
     override = dict(overrides.get(str(actor_id)) or {})
-    for key, value in {
-        "name": req.name, "sort_name": req.sort_name, "overview": req.overview,
-        "provider_ids": req.provider_ids, "birthday": req.birthday, "deathday": req.deathday,
-        "place_of_birth": req.place_of_birth, "gender": req.gender,
-        "known_for_department": req.known_for_department, "popularity": req.popularity,
-        "homepage": req.homepage, "external_urls": req.external_urls,
-    }.items():
+    for key, value in {"popularity": req.popularity, "external_urls": req.external_urls}.items():
         if value is not None:
             override[key] = value
     identity = dict(override.get("identity_names") or {})
