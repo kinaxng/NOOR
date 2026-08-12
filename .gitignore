@@ -9,3 +9,8 @@ data/plugin_cache/
 .env
 frontend/node_modules/
 frontend/dist/
+data/av_recommend/candidate_pool.json
+data/av_recommend/title_profile.json
+data/av_recommend/feedback.json
+data/noor.db
+forensics/reconstructed-manager-20260625.py

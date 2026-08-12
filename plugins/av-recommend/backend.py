@@ -140,6 +140,18 @@ def _pool_scan_due(pool: dict[str, Any], interval_minutes: int = 360) -> bool:
         return True
 
 
+def _scan_interval_minutes(config: dict[str, Any]) -> int:
+    """Read both the historical and temporary names used during recovery."""
+    raw = config.get("full_scan_interval_minutes")
+    if raw in (None, ""):
+        raw = config.get("scan_interval_minutes")
+    try:
+        value = int(raw or 360)
+    except (TypeError, ValueError):
+        value = 360
+    return max(30, min(value, 1440))
+
+
 def _merge_candidate(existing: dict[str, Any] | None, item: dict[str, Any], source: str, label: str) -> dict[str, Any]:
     current = dict(existing or {})
     if not current:
@@ -904,8 +916,9 @@ async def _scheduler_loop() -> None:
         try:
             from app.plugins.runtime import runtime
             config = runtime.get_config(PLUGIN_ID)
-            minutes = max(30, min(int(config.get("scan_interval_minutes") or 360), 1440))
-            if _pool_scan_due(_pool(), minutes):
+            minutes = _scan_interval_minutes(config)
+            enabled = config.get("full_scan_background_enabled", True)
+            if enabled and _pool_scan_due(_pool(), minutes):
                 await _scan_candidate_pool(config)
         except asyncio.CancelledError:
             raise
@@ -1572,7 +1585,7 @@ def background_tasks(config: dict[str, Any] | None = None) -> list[dict[str, Any
     stats = _candidate_pool_stats(pool)
     background = stats.get("background") or {}
     last_scan = stats.get("last_full_scan") or {}
-    interval = max(30, min(int(config.get("scan_interval_minutes") or 360), 1440))
+    interval = _scan_interval_minutes(config)
     running = bool(background.get("running"))
     failed = bool(background.get("last_error"))
     status = "failed" if failed else ("running" if running else "idle")
