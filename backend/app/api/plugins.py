@@ -183,10 +183,12 @@ async def get_plugin_asset(plugin_id: str, asset_path: str):
     manifest = runtime._manifests.get(plugin_id)
     if not manifest:
         raise HTTPException(status_code=404, detail='Plugin not found')
-    frontend_dir = runtime.plugin_root.joinpath(plugin_id, 'frontend').resolve()
-    asset = frontend_dir.joinpath(asset_path).resolve()
+    # Frontend modules live under frontend/, while manifests may reference
+    # plugin-owned icons (for example icons/service.svg) as well.
+    plugin_dir = runtime.plugin_root.joinpath(plugin_id).resolve()
+    asset = plugin_dir.joinpath(asset_path).resolve()
     try:
-        asset.relative_to(frontend_dir)
+        asset.relative_to(plugin_dir)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail='Plugin asset not found') from exc
     if not asset.is_file():
