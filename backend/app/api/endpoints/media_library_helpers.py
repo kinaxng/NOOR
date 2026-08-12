@@ -189,20 +189,18 @@ def parse_tags(name: str, studios: list[str], file_path: str | None) -> dict[str
     )
     has_uncensored_studio = any(s.lower() in UNCENSORED_STUDIOS or any(k in s.lower() for k in UNCENSORED_STUDIOS) for s in studios)
     has_uncensored_path = any(k in (file_path or "").lower() for k in UNCENSORED_PATH_KEYWORDS)
-    if (has_uncensored_studio or has_uncensored_path) and not is_leaked and not is_cracked:
+    is_uncensored = bool(has_uncensored_studio or has_uncensored_path)
+    if is_uncensored and not is_leaked and not is_cracked:
         release_type = "无码"
         release_type_key = "uncensored"
     elif is_leaked:
         release_type = "流出"
         release_type_key = "leaked"
-    elif "無碼" in base or "无码" in base:
-        release_type = "无码"
-        release_type_key = "uncensored"
     else:
         release_type = None
         release_type_key = None
     return {
-        "is_uncensored": is_cracked,
+        "is_uncensored": is_uncensored,
         "is_cracked": is_cracked,
         "has_chinese": has_chinese,
         "is_leaked": is_leaked,

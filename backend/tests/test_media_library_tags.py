@@ -14,6 +14,24 @@ def test_parse_tags_does_not_match_partial_words_as_facefusion():
     assert tags['has_facefusion'] is False
 
 
+def test_parse_tags_does_not_treat_title_uncensored_crack_as_uncensored_release():
+    tags = parse_tags('DLDSS-498 無碼破解.mp4', [], '/media/DLDSS-498/DLDSS-498-u.mp4')
+
+    assert tags['is_cracked'] is True
+    assert tags['is_uncensored'] is False
+    assert tags['release_type_key'] is None
+
+
+def test_parse_tags_detects_uncensored_release_from_path_or_studio():
+    by_path = parse_tags('HEYZO-123.mp4', [], '/media/heyzo/HEYZO-123.mp4')
+    by_studio = parse_tags('ABC-123.mp4', ['Tokyo-Hot'], '/media/ABC-123/ABC-123.mp4')
+
+    assert by_path['is_uncensored'] is True
+    assert by_path['release_type_key'] == 'uncensored'
+    assert by_studio['is_uncensored'] is True
+    assert by_studio['release_type_key'] == 'uncensored'
+
+
 def test_variant_group_promotes_facefusion_tag_from_any_sibling():
     plain = {
         'id': 'plain',
