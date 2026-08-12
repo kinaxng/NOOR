@@ -18,6 +18,25 @@ def test_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     asyncio.run(_run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path))
 
 
+def test_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
+    asyncio.run(_run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path))
+
+
+def test_media_library_item_codes_include_provider_and_nfo_values():
+    backend = _load_backend()
+
+    codes = backend._media_library_item_codes({
+        "name": "无码破解标题不应作为唯一依据",
+        "provider_ids": {"Javdb": "DLDSS-498"},
+        "nfo": {"num": "mida669"},
+        "siblings": [{"label": "ABCD-123-facefusion.mp4"}],
+    })
+
+    assert "DLDSS-498" in codes
+    assert "MIDA-669" in codes
+    assert "ABCD-123" in codes
+
+
 async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     backend = _load_backend()
 
@@ -66,3 +85,32 @@ async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     result = await backend._recommendations({}, {"source_mode": "latest", "refresh": True})
 
     assert [item["code"] for item in result["items"]] == ["ABCD-123"]
+
+
+async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
+    backend = _load_backend()
+
+    monkeypatch.setattr(backend, "_pool_path", lambda: tmp_path / "candidate_pool.json")
+
+    class FakeRuntime:
+        def is_enabled(self, plugin_id):
+            return plugin_id == "javdb"
+
+        async def handle_action(self, plugin_id, action, payload):
+            assert plugin_id == "javdb"
+            return {
+                "items": [
+                    {"code": "ABCD-123", "title": "测试标题"},
+                    {"number": "MIDA669", "display_title": "MIDA-669 测试标题"},
+                ]
+            }
+
+    import app.plugins.runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "runtime", FakeRuntime())
+
+    result = await backend._scan_candidate_pool({"full_scan_pages": 1}, force=True)
+
+    assert result["ok"] is True
+    pool = backend._pool()
+    assert set(pool["items"]) == {"ABCD-123", "MIDA-669"}

@@ -255,7 +255,47 @@ def _feedback_counter(entries: Any, key: str) -> Counter:
 
 
 def _candidate_code(item: dict[str, Any]) -> str:
-    return _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
+    return _norm_code(
+        item.get("code")
+        or item.get("number")
+        or item.get("num")
+        or item.get("display_title")
+        or item.get("title")
+        or item.get("original_title")
+        or item.get("name")
+        or item.get("id")
+    )
+
+
+def _media_library_item_codes(item: dict[str, Any]) -> set[str]:
+    values: list[Any] = [
+        item.get("code"),
+        item.get("number"),
+        item.get("num"),
+        item.get("name"),
+        item.get("title"),
+        item.get("original_title"),
+        item.get("file_path"),
+        item.get("path"),
+        item.get("emby_path"),
+    ]
+    provider_ids = item.get("provider_ids")
+    if isinstance(provider_ids, dict):
+        values.extend(provider_ids.values())
+    nfo = item.get("nfo")
+    if isinstance(nfo, dict):
+        values.extend(nfo.get(key) for key in ("num", "id", "code", "title", "originaltitle"))
+    siblings = item.get("siblings")
+    if isinstance(siblings, list):
+        for sibling in siblings:
+            if isinstance(sibling, dict):
+                values.extend(sibling.get(key) for key in ("label", "name", "file_path", "path"))
+    codes = {_norm_code(value) for value in values if _norm_code(value)}
+    combined = " ".join(str(value or "") for value in values)
+    code = _norm_code(combined)
+    if code:
+        codes.add(code)
+    return codes
 
 
 def _media_library_cache_key(config: dict[str, Any]) -> str:
@@ -308,9 +348,8 @@ async def _live_library_codes(config: dict[str, Any], *, force: bool = False) ->
                 if not items:
                     break
                 for item in items:
-                    code = _norm_code(" ".join(str(item.get(key) or "") for key in ("name", "original_title", "file_path", "path")))
-                    if code:
-                        codes.add(code)
+                    if isinstance(item, dict):
+                        codes.update(_media_library_item_codes(item))
                 offset += len(items)
                 if offset >= int(total or 0) or len(items) < page_limit:
                     break
@@ -954,7 +993,7 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
                 for value in values or []:
                     if not isinstance(value, dict):
                         continue
-                    code = _norm_code(value)
+                    code = _candidate_code(value)
                     if not code:
                         continue
                     existed = code in items
