@@ -26,6 +26,7 @@ TITLE_PROFILE_FILE = PROJECT_ROOT / "data" / "av_recommend" / "title_profile.jso
 TITLE_PROFILE_VERSION = 2
 CACHE_TTL = 300
 _CACHE: dict[str, Any] = {"ts": 0, "key": "", "value": None}
+_LIVE_LIBRARY_CODES_CACHE: dict[str, Any] = {"ts": 0.0, "key": "", "codes": set(), "warning": ""}
 _pool_lock = asyncio.Lock()
 _scheduler_task: asyncio.Task[None] | None = None
 _scheduler_stop: asyncio.Event | None = None
@@ -251,6 +252,74 @@ def _feedback_counter(entries: Any, key: str) -> Counter:
             if text:
                 counter[text] += 1
     return counter
+
+
+def _candidate_code(item: dict[str, Any]) -> str:
+    return _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
+
+
+def _media_library_cache_key(config: dict[str, Any]) -> str:
+    try:
+        from app.api.endpoints.media_library_helpers import load_config
+
+        media_config = load_config()
+    except Exception:
+        media_config = {}
+    return json.dumps({
+        "server_url": media_config.get("server_url") or "",
+        "api_key": bool(media_config.get("api_key")),
+        "user_id": media_config.get("user_id") or "",
+        "enabled_library_ids": media_config.get("enabled_library_ids") or "",
+        "limit": config.get("library_exclusion_scan_limit") or "",
+    }, ensure_ascii=False, sort_keys=True)
+
+
+async def _live_library_codes(config: dict[str, Any], *, force: bool = False) -> tuple[set[str], str]:
+    """Fetch a lightweight Emby code set so recommendations track fresh library changes.
+
+    Knowledge Core is still the primary profile source.  This is only a TTL
+    exclusion guard for recently added media that has not been indexed yet.
+    """
+    cache_key = _media_library_cache_key(config)
+    now = time.time()
+    if not force and _LIVE_LIBRARY_CODES_CACHE.get("key") == cache_key and now - float(_LIVE_LIBRARY_CODES_CACHE.get("ts") or 0) < 300:
+        return set(_LIVE_LIBRARY_CODES_CACHE.get("codes") or set()), str(_LIVE_LIBRARY_CODES_CACHE.get("warning") or "")
+    try:
+        from app.api.endpoints import media_library_recovery
+        from app.api.endpoints.media_library_helpers import load_config
+
+        media_config = load_config()
+        if not media_config.get("server_url") or not media_config.get("api_key"):
+            return set(), ""
+        enabled = [value.strip() for value in str(media_config.get("enabled_library_ids") or "").split(",") if value.strip()]
+        limit = max(100, min(int(config.get("library_exclusion_scan_limit") or 5000), 20000))
+        page_limit = 500
+        codes: set[str] = set()
+        targets = enabled or [None]
+        for library_id in targets:
+            offset = 0
+            while len(codes) < limit:
+                items, total = await media_library_recovery._fetch_items(
+                    media_config,
+                    library_id=library_id,
+                    limit=min(page_limit, limit - len(codes)),
+                    offset=offset,
+                )
+                if not items:
+                    break
+                for item in items:
+                    code = _norm_code(" ".join(str(item.get(key) or "") for key in ("name", "original_title", "file_path", "path")))
+                    if code:
+                        codes.add(code)
+                offset += len(items)
+                if offset >= int(total or 0) or len(items) < page_limit:
+                    break
+        _LIVE_LIBRARY_CODES_CACHE.update({"ts": now, "key": cache_key, "codes": set(codes), "warning": ""})
+        return codes, ""
+    except Exception as exc:
+        warning = f"实时媒体库排除失败：{exc}"
+        _LIVE_LIBRARY_CODES_CACHE.update({"ts": now, "key": cache_key, "codes": set(), "warning": warning})
+        return set(), warning
 
 
 def _ensure_store() -> dict[str, Any]:
@@ -1426,6 +1495,8 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         "disliked_actors": _feedback_counter(store.get("disliked"), "actors"),
         "disliked_categories": _feedback_counter(store.get("disliked"), "categories"),
     }
+    profile = await _library_profile()
+    live_codes, live_warning = await _live_library_codes(config, force=bool(payload.get("refresh")))
     cache_key = json.dumps({
         "config": config,
         "ignored": sorted(feedback["ignored_codes"]),
@@ -1435,12 +1506,12 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         "liked_categories": dict(feedback["liked_categories"]),
         "disliked_actors": dict(feedback["disliked_actors"]),
         "disliked_categories": dict(feedback["disliked_categories"]),
+        "library_codes": sorted(live_codes),
         "source_mode": source_mode,
     }, sort_keys=True, ensure_ascii=False)
     if not payload.get("refresh") and _CACHE.get("value") is not None and _CACHE.get("key") == cache_key and time.time() - float(_CACHE.get("ts") or 0) < CACHE_TTL:
         return _CACHE["value"]
 
-    profile = await _library_profile()
     pool = _pool()
     if source_mode == "full" and _backfill_candidate_pool_title_profiles(pool):
         _save_pool(pool)
@@ -1455,19 +1526,22 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         # Reuse persisted source and first-seen metadata without replacing the
         # fresher fields returned by the latest feed.
         for item in candidates:
-            code = _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
+            code = _candidate_code(item)
             persisted = pool_items.get(code) if code else None
             if isinstance(persisted, dict):
                 item["source_tags"] = list(persisted.get("source_tags") or [])
                 item["is_today_increment"] = bool(persisted.get("is_today_increment"))
 
     excluded_codes = set(profile.get("codes") or set())
+    excluded_codes.update(live_codes)
     excluded_codes.update(_subscription_codes())
     candidates = [
         item for item in candidates
-        if _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title")) not in excluded_codes
+        if _candidate_code(item) not in excluded_codes
         and not bool((item.get("library") or {}).get("in_library") if isinstance(item.get("library"), dict) else False)
     ]
+    if live_warning:
+        warnings.append(live_warning)
     scored = []
     for item in candidates:
         rec = _candidate_score(item, profile, config, feedback)
