@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.plugins.runtime import runtime
+from app.core.runtime_cleanup import DEFAULT_MIN_AGE_HOURS, run_runtime_cleanup, runtime_cleanup_status
 
 router = APIRouter(prefix='/api/plugins', tags=['plugins'])
 
@@ -51,7 +52,35 @@ async def reload_plugins():
 @router.get('/background/tasks')
 async def get_background_tasks():
     items = await runtime.get_background_tasks()
+    cleanup = runtime_cleanup_status(min_age_hours=DEFAULT_MIN_AGE_HOURS)
+    last = cleanup.get('last_cleanup') or {}
+    items.insert(0, {
+        'plugin_id': 'noor-core',
+        'plugin_name': 'NOOR 核心',
+        'id': 'noor-core.runtime-cleanup',
+        'title': '运行时资源清理',
+        'status': last.get('status') if last.get('status') in {'running', 'failed'} else 'idle',
+        'last_run_at': last.get('started_at') or None,
+        'last_finished_at': last.get('finished_at') or None,
+        'summary': cleanup.get('summary', ''),
+        'detail': last.get('message') or '按需清理过期的 NOOR 任务临时目录',
+        'metrics': {
+            'reclaimable_bytes': cleanup.get('reclaimable_bytes', 0),
+            'candidate_count': cleanup.get('candidate_count', 0),
+            'min_age_hours': DEFAULT_MIN_AGE_HOURS,
+        },
+    })
     return {'ok': True, 'items': items, 'total': len(items)}
+
+
+@router.post('/noor-core/actions/runtime-cleanup')
+async def run_core_runtime_cleanup(payload: PluginActionPayload):
+    min_age_hours = payload.payload.get('min_age_hours', DEFAULT_MIN_AGE_HOURS)
+    try:
+        min_age_hours = max(0, min(168, int(min_age_hours)))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail='min_age_hours 必须为整数') from exc
+    return run_runtime_cleanup(min_age_hours=min_age_hours)
 
 
 @router.post('/resources/search')

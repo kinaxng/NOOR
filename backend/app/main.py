@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import init_db
-from app.api import jobs, events, settings, subtitles, whisper, system, plugins, search, facefusion
+from app.api import jobs, events, settings, subtitles, whisper, system, plugins, search, facefusion, runtime_cleanup
 from app.api.endpoints import media_library as media_library_router
 from app.api.endpoints import media_library_recovery as media_library_recovery_router
 from app.api.endpoints import actors as actor_router
@@ -59,6 +59,7 @@ app.include_router(subtitles.router)
 app.include_router(whisper.router)
 app.include_router(system.router)
 app.include_router(plugins.router)
+app.include_router(runtime_cleanup.router)
 app.include_router(search.router)
 app.include_router(facefusion.router)
 app.include_router(knowledge_api.router)
