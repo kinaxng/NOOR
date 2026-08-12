@@ -925,9 +925,41 @@ function createDownloaderDialogContext(sourcePluginId: string) {
   return { open, openTask: open }
 }
 
+function createSubscriptionContext() {
+  async function open(options: any = {}) {
+    const payload = {
+      code: options.code || options.number || '',
+      title: options.title || '',
+      cover_url: options.cover_url || options.coverUrl || options.image || '',
+      fanart_url: options.fanart_url || options.fanartUrl || options.backdrop_url || '',
+      source_plugin: options.source_plugin || options.sourcePlugin || '',
+      source_label: options.source_label || options.sourceLabel || '',
+      source_route: options.source_route || options.sourceRoute || window.location.pathname + window.location.search,
+      source_context: options.source_context || options.sourceContext || '',
+      mode: options.mode || options.defaultMode || 'loose',
+      require_cracked: !!(options.require_cracked ?? options.requireCracked),
+      require_subtitle: !!(options.require_subtitle ?? options.requireSubtitle),
+      savepath: options.savepath || options.defaultSavepath || '',
+      type: options.type || 'auto',
+    }
+    try {
+      const response = await api.post('/plugins/subscription-core/actions/create', { payload })
+      const result = response.data || {}
+      options.onSuccess?.(result)
+      return result
+    } catch (error: any) {
+      options.onError?.(error)
+      throw error
+    }
+  }
+
+  return { open }
+}
+
 function sdkFor(id: string) {
   const pluginFetch = (path: string, init?: RequestInit) => fetch(`/api/plugins/${id}${path}`, init)
   const downloads = createDownloaderDialogContext(id)
+  const subscription = createSubscriptionContext()
   const pluginSubPath = () => {
     const value = route.params.pluginPath
     return (Array.isArray(value) ? value.join('/') : String(value || '')).replace(/^\/+|\/+$/g, '')
@@ -958,6 +990,7 @@ function sdkFor(id: string) {
       warning: (msg: string) => toast.warning(msg),
     },
     downloads,
+    subscription,
     ui: {
       button: makeButton,
       input: makeInput,
