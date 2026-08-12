@@ -54,6 +54,49 @@ def test_market_items_compat_returns_empty_list():
     assert response.json() == []
 
 
+def test_resource_search_returns_groups_and_flat_items(monkeypatch):
+    async def fake_search_resources(query: dict, *, limit_per_plugin: int):
+        assert query == {"code": "AAA-001"}
+        assert limit_per_plugin == 6
+        return [
+            {
+                "provider": "javdb",
+                "provider_name": "JavDB",
+                "items": [{"id": "j1", "title": "JavDB resource"}],
+            },
+            {
+                "provider": "mteam-plugin",
+                "provider_name": "M-Team",
+                "items": [{"id": "m1", "title": "M-Team resource", "provider": "mteam-plugin"}],
+            },
+        ]
+
+    monkeypatch.setattr(plugins.runtime, "search_resources", fake_search_resources)
+
+    response = TestClient(_app()).post(
+        "/api/plugins/resources/search",
+        json={"query": {"code": "AAA-001"}, "limit_per_plugin": 6},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["groups"]) == 2
+    assert data["items"] == [
+        {
+            "id": "j1",
+            "title": "JavDB resource",
+            "provider": "javdb",
+            "provider_label": "JavDB",
+        },
+        {
+            "id": "m1",
+            "title": "M-Team resource",
+            "provider": "mteam-plugin",
+            "provider_label": "M-Team",
+        },
+    ]
+
+
 def test_resource_resolve_download_route_forwards_to_runtime(monkeypatch):
     async def fake_resolve(plugin_id: str, item: dict):
         return {"item": item, "url": item["url"], "plugin_id": plugin_id}

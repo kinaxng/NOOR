@@ -97,7 +97,20 @@ async def run_core_runtime_cleanup(payload: PluginActionPayload):
 @router.post('/resources/search')
 async def search_resources(payload: ResourceSearchPayload):
     groups = await runtime.search_resources(payload.query, limit_per_plugin=payload.limit_per_plugin)
-    return {'groups': groups}
+    items: list[dict[str, Any]] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        provider = str(group.get('provider') or '')
+        provider_name = str(group.get('provider_name') or provider or '')
+        for item in group.get('items') or []:
+            if not isinstance(item, dict):
+                continue
+            row = dict(item)
+            row.setdefault('provider', provider)
+            row.setdefault('provider_label', provider_name)
+            items.append(row)
+    return {'groups': groups, 'items': items}
 
 
 @router.post('/resources/resolve-download')
