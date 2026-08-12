@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import importlib
 import sys
+from pathlib import Path
 
 
 def test_embedded_facefusion_uses_noor_tensorrt_cache(monkeypatch, tmp_path):
-    source_dir = "backend/app/pipeline/facefusion/source"
+    source_dir = Path(__file__).resolve().parents[1] / "app/pipeline/facefusion/source"
     monkeypatch.syspath_prepend(source_dir)
     monkeypatch.setenv("ORT_TENSORRT_CACHE_PATH", str(tmp_path / "trt-cache"))
     sys.modules.pop("facefusion.execution", None)
