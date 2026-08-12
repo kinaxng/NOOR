@@ -43,6 +43,8 @@ def merge_group_metadata(representative: dict[str, Any], group: list[dict[str, A
         merged_tags["has_chinese"] = True
     if any((item.get("tags") or {}).get("is_leaked") for item in group):
         merged_tags["is_leaked"] = True
+    if any((item.get("tags") or {}).get("has_facefusion") for item in group):
+        merged_tags["has_facefusion"] = True
     release_type_key = None
     if any((item.get("tags") or {}).get("release_type_key") == "leaked" for item in group):
         release_type_key = "leaked"

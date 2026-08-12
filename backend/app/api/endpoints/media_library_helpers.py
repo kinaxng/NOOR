@@ -183,6 +183,10 @@ def parse_tags(name: str, studios: list[str], file_path: str | None) -> dict[str
         or (file_path and (fp_name.endswith("-u") or fp_name.endswith("-u1")))
     )
     is_leaked = bool("流出" in base or "leaked" in lower or "流出" in fp_lower)
+    has_facefusion = bool(
+        re.search(r"(^|[^a-z0-9])(facefusion|ff)(?=[^a-z0-9]|$)", lower)
+        or re.search(r"(^|[^a-z0-9])(facefusion|ff)(?=[^a-z0-9]|$)", fp_lower)
+    )
     has_uncensored_studio = any(s.lower() in UNCENSORED_STUDIOS or any(k in s.lower() for k in UNCENSORED_STUDIOS) for s in studios)
     has_uncensored_path = any(k in (file_path or "").lower() for k in UNCENSORED_PATH_KEYWORDS)
     if (has_uncensored_studio or has_uncensored_path) and not is_leaked and not is_cracked:
@@ -202,6 +206,7 @@ def parse_tags(name: str, studios: list[str], file_path: str | None) -> dict[str
         "is_cracked": is_cracked,
         "has_chinese": has_chinese,
         "is_leaked": is_leaked,
+        "has_facefusion": has_facefusion,
         "release_type": release_type,
         "release_type_key": release_type_key,
     }
