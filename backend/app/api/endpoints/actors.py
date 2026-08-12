@@ -933,6 +933,7 @@ async def _execute_merge(config: dict[str, Any], req: ActorMappingMergeRequest, 
     updated: list[dict[str, Any]] = []
     deleted: list[str] = []
     delete_failed: list[dict[str, str]] = []
+    remaining_source_counts: dict[str, int] = {}
     async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
         for movie in plan["movies"]:
             raw_response = await client.get(f"{_base_url(config)}/emby/Items/{quote(str(movie['id']))}", headers=_headers(config), params={"Fields": "People,ProviderIds,Path"})
@@ -954,13 +955,37 @@ async def _execute_merge(config: dict[str, Any], req: ActorMappingMergeRequest, 
             response.raise_for_status()
             updated.append({"id": movie["id"], "name": movie["name"]})
         for actor_id in source_ids:
+            # Emby can retain a Person row while its visible page shows no
+            # works.  Re-read the live PersonIds relation after the merge and
+            # only request deletion when the source actor is truly empty.
+            try:
+                remaining = await _related_movies(client, config, actor_id)
+                remaining_source_counts[actor_id] = len(remaining)
+            except Exception as exc:
+                delete_failed.append({"id": actor_id, "error": f"无法确认关联作品，跳过删除: {exc}"})
+                continue
+            if remaining_source_counts[actor_id] != 0:
+                delete_failed.append({
+                    "id": actor_id,
+                    "error": f"仍关联 {remaining_source_counts[actor_id]} 部作品，跳过删除",
+                })
+                continue
             try:
                 response = await client.delete(f"{_base_url(config)}/emby/Items/{quote(actor_id)}", headers=_headers(config))
                 response.raise_for_status()
                 deleted.append(actor_id)
             except Exception as exc:
                 delete_failed.append({"id": actor_id, "error": str(exc)})
-    return {"ok": True, "updated_count": len(updated), "updated": updated, "deleted_actor_count": len(deleted), "deleted_actor_ids": deleted, "delete_failed_actor_ids": delete_failed, "plan": plan}
+    return {
+        "ok": True,
+        "updated_count": len(updated),
+        "updated": updated,
+        "deleted_actor_count": len(deleted),
+        "deleted_actor_ids": deleted,
+        "delete_failed_actor_ids": delete_failed,
+        "remaining_source_counts": remaining_source_counts,
+        "plan": plan,
+    }
 
 
 @router.post("/actors/mapping/merge-execute")
