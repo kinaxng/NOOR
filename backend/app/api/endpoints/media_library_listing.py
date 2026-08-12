@@ -108,7 +108,7 @@ def item_matches_query(item: dict[str, Any], query: str | None) -> bool:
     return query in "\n".join(str(field) for field in fields if field).lower()
 
 
-def apply_filter_and_paginate(items: list[dict[str, Any]], filter_name: str | None, query: str | None, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
+def apply_filter_and_paginate(items: list[dict[str, Any]], filter_name: str | None, query: str | None, offset: int, limit: int) -> dict[str, Any]:
     filtered = []
     for item in items:
         tags = item.get("tags", {})
@@ -126,4 +126,11 @@ def apply_filter_and_paginate(items: list[dict[str, Any]], filter_name: str | No
                 matches_filter = tags.get("release_type_key") == "uncensored"
         if matches_filter and item_matches_query(item, query):
             filtered.append(item)
-    return filtered[offset:offset + limit], len(filtered)
+    offset = max(0, int(offset or 0))
+    limit = max(1, int(limit or 1))
+    return {
+        "items": filtered[offset:offset + limit],
+        "total": len(filtered),
+        "offset": offset,
+        "limit": limit,
+    }

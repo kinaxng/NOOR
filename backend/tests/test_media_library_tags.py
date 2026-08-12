@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.api.endpoints.media_library_helpers import parse_tags
-from app.api.endpoints.media_library_listing import merge_group_metadata
+from app.api.endpoints.media_library_listing import apply_filter_and_paginate, merge_group_metadata
 
 
 def test_parse_tags_detects_facefusion_in_file_path():
@@ -31,3 +31,20 @@ def test_variant_group_promotes_facefusion_tag_from_any_sibling():
     merged = merge_group_metadata(plain, [plain, output])
 
     assert merged['tags']['has_facefusion'] is True
+
+
+def test_media_library_pagination_response_shape():
+    items = [
+        {'id': '1', 'name': 'AAA-001', 'tags': {'is_cracked': True}},
+        {'id': '2', 'name': 'AAA-002', 'tags': {'is_cracked': False}},
+        {'id': '3', 'name': 'AAA-003', 'tags': {'is_cracked': True}},
+    ]
+
+    payload = apply_filter_and_paginate(items, 'cracked', None, 1, 1)
+
+    assert payload == {
+        'items': [{'id': '3', 'name': 'AAA-003', 'tags': {'is_cracked': True}}],
+        'total': 2,
+        'offset': 1,
+        'limit': 1,
+    }

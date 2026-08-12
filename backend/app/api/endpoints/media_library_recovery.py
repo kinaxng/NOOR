@@ -201,7 +201,12 @@ async def get_items(
     # Emby performs pagination before these local derived-tag filters.  Return
     # its authoritative total when no local filtering is requested.
     filtered = [item for item in items if _matches_filter(item, filter) and _matches_query(item, q)]
-    return {"items": filtered, "total": total if not (filter or q) else len(filtered)}
+    return {
+        "items": filtered,
+        "total": total if not (filter or q) else len(filtered),
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 @router.get("/item/{item_id}")

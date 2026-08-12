@@ -80,7 +80,8 @@ async def _list_items(config:dict,library_id:str,limit:int=50,offset:int=0,filte
  async with httpx.AsyncClient(timeout=60.0) as client:
   resp=await client.get(f'{_server_url(config)}/emby/Items',headers=_headers(config.get('api_key','')),params={'ParentId':library_id,'IncludeItemTypes':'Movie','Recursive':'true','Fields':'MediaSources,Path,DateCreated,Studios,ImageTags','Limit':limit,'StartIndex':offset,'SortBy':'DateCreated','SortOrder':'Descending'});resp.raise_for_status();data=resp.json()
  items=_deduplicate_items([_parse_item(i,config) for i in data.get('Items',[])])
- return _apply_filter_and_paginate(items,filter,q,0,len(items))
+ payload=_apply_filter_and_paginate(items,filter,q,0,len(items))
+ return payload['items'],payload['total']
 
 async def _get_siblings(config,parent_id,current_id):return await get_siblings_impl(config,parent_id,current_id,httpx_module=httpx,server_url_fn=_server_url,headers_fn=_headers,map_path_fn=_map_path)
 def _get_main_nfo(file_path):return get_main_nfo_impl(file_path)
