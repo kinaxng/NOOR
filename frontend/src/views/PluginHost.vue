@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
+import { useSystemLog } from '../composables/useSystemLog'
 import { createDownloaderDialogContext as createSharedDownloaderDialogContext } from '../composables/useDownloaderDialog'
 import { openSubscriptionDialog } from '../composables/useSubscriptionDialog'
 
@@ -11,15 +12,45 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
+const { show: showSystemLog } = useSystemLog()
 const host = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const error = ref('')
 const pluginId = computed(() => String(route.params.pluginId || ''))
 let dispose: null | (() => void) = null
 let styleEl: HTMLLinkElement | null = null
+let mountSeq = 0
+let sdkAbortController: AbortController | null = null
 let sdkDisposers: Array<() => void> = []
 
+function isLifecycleCancelMessage(value: unknown) {
+  const text = String(value || '').toLowerCase()
+  return ['aborterror', 'err_canceled', 'operation was aborted', 'request aborted', 'request canceled', 'request cancelled', 'is unmounted', 'plugin unmounted', 'cancelederror'].some(token => text.includes(token))
+}
+
+function isAbortLikeError(error: any) {
+  return error?.name === 'AbortError'
+    || error?.name === 'CanceledError'
+    || error?.code === 'ERR_CANCELED'
+    || isLifecycleCancelMessage(error?.response?.data?.detail || error?.message)
+}
+
+function pluginDiagnostic(level: 'info' | 'warning' | 'error', message: string, sourceId = pluginId.value) {
+  if (!showSystemLog.value || isLifecycleCancelMessage(message)) return
+  void api.post('/system/logs/client', {
+    level,
+    source: `plugin.${sourceId || 'unknown'}.frontend`,
+    message: String(message || '').slice(0, 2000),
+    route: window.location.pathname + window.location.search,
+  }).catch(() => {})
+}
+
 function clearMounted() {
+  mountSeq += 1
+  if (sdkAbortController) {
+    try { sdkAbortController.abort() } catch {}
+    sdkAbortController = null
+  }
   for (const stop of sdkDisposers.splice(0)) {
     try { stop() } catch {}
   }
@@ -562,7 +593,27 @@ function renderResourcePreview(resourceState: any) {
 }
 
 function sdkFor(id: string) {
-  const pluginFetch = (path: string, init?: RequestInit) => fetch(`/api/plugins/${id}${path}`, init)
+  const controller = sdkAbortController || new AbortController()
+  sdkAbortController = controller
+  const ensureActive = () => {
+    if (controller.signal.aborted) throw new DOMException('Plugin is unmounted.', 'AbortError')
+  }
+  const onUnmount = (cleanup: () => void) => {
+    sdkDisposers.push(cleanup)
+    return () => {
+      const index = sdkDisposers.indexOf(cleanup)
+      if (index >= 0) sdkDisposers.splice(index, 1)
+    }
+  }
+  const pluginFetch = async (path: string, init?: RequestInit) => {
+    ensureActive()
+    try {
+      return await fetch(`/api/plugins/${id}${path}`, { ...(init || {}), signal: init?.signal || controller.signal })
+    } catch (error: any) {
+      if (!isAbortLikeError(error)) pluginDiagnostic('error', `${path}: ${error?.message || '请求失败'}`, id)
+      throw error
+    }
+  }
   const downloads = createSharedDownloaderDialogContext(id)
   const pluginSubPath = () => {
     const value = route.params.pluginPath
@@ -584,14 +635,68 @@ function sdkFor(id: string) {
     api: {
       plugin: pluginFetch,
       wsUrl: (path: string) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`,
-      get: (path: string, config?: any) => api.get(path, config),
-      post: (path: string, data?: any, config?: any) => api.post(path, data, config),
+      get: async (path: string, config?: any) => {
+        ensureActive()
+        try {
+          return await api.get(path, { ...(config || {}), signal: config?.signal || controller.signal })
+        } catch (error: any) {
+          if (!isAbortLikeError(error)) pluginDiagnostic('error', `${path}: ${error?.response?.data?.detail || error?.message || '请求失败'}`, id)
+          throw error
+        }
+      },
+      post: async (path: string, data?: any, config?: any) => {
+        ensureActive()
+        try {
+          return await api.post(path, data, { ...(config || {}), signal: config?.signal || controller.signal })
+        } catch (error: any) {
+          if (!isAbortLikeError(error)) pluginDiagnostic('error', `${path}: ${error?.response?.data?.detail || error?.message || '请求失败'}`, id)
+          throw error
+        }
+      },
+    },
+    lifecycle: {
+      signal: controller.signal,
+      get aborted() { return controller.signal.aborted },
+      onUnmount,
+    },
+    timers: {
+      setTimeout: (handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        ensureActive()
+        const timer = window.setTimeout(handler, timeout, ...args)
+        const off = onUnmount(() => window.clearTimeout(timer))
+        return { id: timer, clear: () => { window.clearTimeout(timer); off() } }
+      },
+      setInterval: (handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        ensureActive()
+        const timer = window.setInterval(handler, timeout, ...args)
+        const off = onUnmount(() => window.clearInterval(timer))
+        return { id: timer, clear: () => { window.clearInterval(timer); off() } }
+      },
+    },
+    events: {
+      on: (target: EventTarget, type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean) => {
+        ensureActive()
+        target.addEventListener(type, listener, options)
+        const cleanup = () => target.removeEventListener(type, listener, options)
+        const off = onUnmount(cleanup)
+        return () => { cleanup(); off() }
+      },
+    },
+    net: {
+      webSocket: (path: string) => {
+        ensureActive()
+        const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`)
+        onUnmount(() => {
+          try { ws.close() } catch {}
+        })
+        return ws
+      },
     },
     toast: {
       success: (msg: string) => toast.success(msg),
-      error: (msg: string) => toast.error(msg),
+      error: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.error(msg) },
       info: (msg: string) => toast.info(msg),
-      warning: (msg: string) => toast.warning(msg),
+      warning: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.warning(msg) },
     },
     downloads,
     subscription: {
@@ -634,10 +739,14 @@ function sdkFor(id: string) {
 async function mountPlugin() {
   clearMounted()
   if (!pluginId.value || !host.value) return
+  const currentMount = mountSeq
+  const controller = new AbortController()
+  sdkAbortController = controller
   loading.value = true
   error.value = ''
   try {
-    const info = await api.get(`/plugins/${pluginId.value}/config`).then(r => r.data)
+    const info = await api.get(`/plugins/${pluginId.value}/config`, { signal: controller.signal }).then(r => r.data)
+    if (currentMount !== mountSeq) return
     const style = info?.plugin?.frontend?.style
     if (style) {
       const bust = Date.now()
@@ -648,13 +757,22 @@ async function mountPlugin() {
     }
     const entry = info?.plugin?.frontend?.entry || 'frontend/page.js'
     const mod = await import(/* @vite-ignore */ `/api/plugins/${pluginId.value}/assets/${entry.replace(/^frontend\//, '')}?t=${Date.now()}`)
+    if (currentMount !== mountSeq) return
     await nextTick()
+    if (currentMount !== mountSeq || !host.value) return
     const ret = await mod.mount(host.value, sdkFor(pluginId.value))
+    if (currentMount !== mountSeq) {
+      if (typeof ret === 'function') ret()
+      return
+    }
     if (typeof ret === 'function') dispose = ret
   } catch (e: any) {
-    error.value = e?.response?.data?.detail || e?.message || '插件加载失败'
+    if (!isAbortLikeError(e) && currentMount === mountSeq) {
+      error.value = e?.response?.data?.detail || e?.message || '插件加载失败'
+      pluginDiagnostic('error', error.value)
+    }
   } finally {
-    loading.value = false
+    if (currentMount === mountSeq) loading.value = false
   }
 }
 
