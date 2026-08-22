@@ -875,6 +875,7 @@ export const en: Record<string, string> = {
   'settings.whisper.depSourceExternal': 'External site',
   'settings.whisper.onnxNoCuda': 'CUDA disabled',
   'settings.saveSuccess': 'Settings saved',
+  'settings.save': 'Save settings',
   'settings.saveFailed': 'Save failed: {error}',
   'settings.saveNetwork': 'Network settings saved',
   'settings.saveNetworkFailed': 'Failed to save network settings',
