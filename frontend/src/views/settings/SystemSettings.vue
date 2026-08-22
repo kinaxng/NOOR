@@ -54,6 +54,7 @@ onMounted(async () => {
 
 async function loadSettings() {
   loading.value = true
+  let loadLibrariesAfterRender = false
   try {
     // Load media library config
     try {
@@ -71,10 +72,9 @@ async function loadSettings() {
         const ids = cfg.enabled_library_ids || ''
         enabledLibraryIds.value = ids ? ids.split(',').map((s: string) => s.trim()).filter(Boolean) : []
 
-        // Auto-fetch libraries if credentials exist
-        if (serverUrl.value && apiKey.value) {
-          await fetchLibraries()
-        }
+        // The Emby request can take several seconds. Render the settings form
+        // first and let the library selector own its loading state.
+        loadLibrariesAfterRender = Boolean(serverUrl.value && apiKey.value)
       }
     } catch (e) {
       console.error('Failed to load media library config:', e)
@@ -101,6 +101,9 @@ async function loadSettings() {
     }
   } finally {
     loading.value = false
+    if (loadLibrariesAfterRender) {
+      void fetchLibraries()
+    }
   }
 }
 
