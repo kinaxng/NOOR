@@ -9,13 +9,16 @@ from typing import Any
 import httpx
 
 from app.plugins.contracts import PluginTestResult
-from app.core.database import async_session_maker
-from app.core.models import Job, JobCreate, JobResponse
-from app.tasks.job_phases import get_phase_display_state
+from app.core.models import Job
+from app.plugins.external_tasks import (
+    create_external_task_job,
+    list_provider_external_jobs,
+    set_external_task_state,
+)
 from app.tasks.manager import job_manager
 
 PLUGIN_ID = "mdc-ng-manual"
-NOOR_JOB_TYPE = "mdc_manual"
+NOOR_JOB_TYPE = "external_task"
 STATUS_LABELS = {
     -2: "已终止",
     -1: "失败",
@@ -33,7 +36,6 @@ LINK_MODE_LABELS = {
     4: "软链接",
 }
 EMPTY_STATE = {"status": "UNSET", "message": "", "fieldErrors": {}, "timestamp": 0}
-ACTIVE_NOOR_STATUSES = {"pending", "queued", "blocked", "running"}
 
 
 def _base_url(config: dict[str, Any]) -> str:
@@ -231,67 +233,33 @@ def _noor_progress_from_external(job: dict[str, Any] | None, *, status: str | No
     return 15 if resolved_status == "running" else 3
 
 
-def _build_result_metadata(source_paths: list[str], target_folder: str, remote_job: dict[str, Any] | None = None) -> dict[str, Any]:
+def _remote_id(remote_job: dict[str, Any] | None) -> str | None:
+    value = remote_job.get("id") if isinstance(remote_job, dict) else None
+    return str(value) if value is not None else None
+
+
+def _build_external_task_data(
+    source_paths: list[str],
+    target_folder: str,
+    remote_job: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "external_provider": PLUGIN_ID,
-        "mdc_manual": {
-            "source_paths": source_paths,
-            "target_folder": target_folder,
-        },
+        "source_paths": source_paths,
+        "target_folder": target_folder,
     }
     if remote_job:
-        payload["mdc_manual"]["remote_job"] = remote_job
+        payload["remote_job"] = remote_job
     return payload
 
 
-async def _set_noor_job_state(
-    noor_job_id: str,
-    *,
-    status: str,
-    progress: int,
-    detail: str | None = None,
-    error_message: str | None = None,
-    result_metadata: dict[str, Any] | None = None,
-) -> JobResponse | None:
-    async with async_session_maker() as session:
-        job = await session.get(Job, noor_job_id)
-        if not job:
-            return None
-        job.status = status
-        job.progress = max(0, min(int(progress), 100))
-        if detail is not None:
-            job.detail = detail
-        job.error_message = error_message
-        if result_metadata is not None:
-            job.result_metadata = result_metadata
-        phase_state = get_phase_display_state(
-            job.job_type,
-            status,
-            phase_key=job.phase_key,
-            phase_label=job.phase_label,
-            phase_progress=job.phase_progress,
-            detail=detail,
-            error_message=error_message,
-        )
-        job.phase_key = phase_state.get("phase_key")
-        job.phase_label = phase_state.get("phase_label")
-        job.phase_progress = phase_state.get("phase_progress")
-        job.detail = phase_state.get("detail")
-        if status in {"completed", "failed", "cancelled", "skipped"}:
-            job.completed_at = datetime.utcnow()
-        else:
-            job.completed_at = None
-        await session.commit()
-        await session.refresh(job)
-        return JobResponse.model_validate(job)
-
-
 def _match_remote_job_for_local(local_job: Job, remote_jobs: list[dict[str, Any]]) -> dict[str, Any] | None:
-    result_metadata = local_job.result_metadata or {}
-    mdc_meta = result_metadata.get("mdc_manual") if isinstance(result_metadata, dict) else {}
-    if isinstance(mdc_meta, dict):
-        remote_job = mdc_meta.get("remote_job")
-        remote_id = remote_job.get("id") if isinstance(remote_job, dict) else None
+    metadata = local_job.result_metadata or {}
+    ext = metadata.get("external_task") if isinstance(metadata, dict) else {}
+    if isinstance(ext, dict):
+        remote_id = ext.get("external_id")
+        data = ext.get("data") if isinstance(ext.get("data"), dict) else {}
+        remote_job = data.get("remote_job") if isinstance(data, dict) else None
+        remote_id = remote_id or (remote_job.get("id") if isinstance(remote_job, dict) else None)
         if remote_id is not None:
             for candidate in remote_jobs:
                 if str(candidate.get("id")) == str(remote_id):
@@ -310,40 +278,37 @@ async def _create_noor_job_for_remote_submission(
     submit_result: dict[str, Any],
 ) -> dict[str, Any]:
     source_paths = _parse_source_paths(payload.get("source_paths") or payload.get("paths") or payload.get("sources"))
+    original_source_paths = _parse_source_paths(payload.get("original_source_paths")) or source_paths
     defaults = await _fetch_defaults(config)
     target_folder = str(payload.get("target_folder") or defaults.get("target_folder") or "").strip()
     display_name = _display_name_for_paths(source_paths)
-    job_response = await job_manager.create_job(
-        JobCreate(
-            emby_item_id=PLUGIN_ID,
-            emby_item_name=display_name,
-            input_path=source_paths[0] if source_paths else "",
-            settings={},
-        ),
-        job_type=NOOR_JOB_TYPE,
-        status="queued",
-        enqueue_now=False,
-    )
-    noor_job_id = job_response.id
     remote_job = submit_result.get("remote_job") if isinstance(submit_result, dict) else None
     noor_status = _noor_status_from_external(remote_job) if submit_result.get("ok") else "failed"
     progress = _noor_progress_from_external(remote_job, status=noor_status) if submit_result.get("ok") else 0
     detail = submit_result.get("message") or (remote_job.get("status_label") if isinstance(remote_job, dict) else None)
     error_message = None if submit_result.get("ok") else (submit_result.get("message") or "提交失败")
-    metadata = _build_result_metadata(source_paths, target_folder, remote_job if isinstance(remote_job, dict) else None)
-    updated = await _set_noor_job_state(
-        noor_job_id,
+    job = await create_external_task_job(
+        provider_id=PLUGIN_ID,
+        provider_label="MDC-NG",
+        name=display_name,
+        input_path=original_source_paths[0] if original_source_paths else "",
+        external_id=_remote_id(remote_job),
         status=noor_status,
         progress=progress,
         detail=detail,
         error_message=error_message,
-        result_metadata=metadata,
+        can_cancel=False,
+        data={
+            **_build_external_task_data(source_paths, target_folder, remote_job if isinstance(remote_job, dict) else None),
+            "original_source_paths": original_source_paths,
+        },
+        phase_label="MDC-NG 重新整理",
     )
-    await job_manager.add_log(noor_job_id, f"MDC-NG 提交结果: {submit_result.get('message') or ('成功' if submit_result.get('ok') else '失败')}")
+    await job_manager.add_log(job.id, f"MDC-NG 提交结果: {submit_result.get('message') or ('成功' if submit_result.get('ok') else '失败')}")
     if isinstance(remote_job, dict):
-        await job_manager.add_log(noor_job_id, f"MDC-NG 任务 ID: {remote_job.get('id')}")
-    submit_result["noor_job_id"] = noor_job_id
-    submit_result["noor_job"] = updated.model_dump() if updated else None
+        await job_manager.add_log(job.id, f"MDC-NG 任务 ID: {remote_job.get('id')}")
+    submit_result["noor_job_id"] = job.id
+    submit_result["noor_job"] = job.model_dump()
     return submit_result
 
 
@@ -394,6 +359,31 @@ def _parse_source_paths(value: Any) -> list[str]:
     text = str(value or "")
     parts = [line.strip() for line in text.replace("\r", "\n").split("\n")]
     return [part for part in parts if part]
+
+
+def _source_path_mappings(config: dict[str, Any]) -> list[tuple[str, str]]:
+    mappings: list[tuple[str, str]] = []
+    raw = str(config.get("source_path_mappings") or "")
+    for line in raw.splitlines():
+        if "=>" not in line:
+            continue
+        source, target = (part.strip().rstrip("/") for part in line.split("=>", 1))
+        if source and target:
+            mappings.append((source, target))
+    local_prefix = str(config.get("local_source_prefix") or "").strip().rstrip("/")
+    mdc_prefix = str(config.get("mdc_source_prefix") or "").strip().rstrip("/")
+    if local_prefix and mdc_prefix:
+        mappings.append((local_prefix, mdc_prefix))
+    return sorted(mappings, key=lambda item: len(item[0]), reverse=True)
+
+
+def _map_source_path(config: dict[str, Any], path: str) -> str:
+    for source, target in _source_path_mappings(config):
+        if path == source:
+            return target
+        if path.startswith(f"{source}/"):
+            return f"{target}{path[len(source):]}"
+    return path
 
 
 async def _create_manual_job(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
@@ -464,18 +454,8 @@ async def _create_manual_job(config: dict[str, Any], payload: dict[str, Any]) ->
     }
 
 
-async def sync_noor_jobs(config: dict[str, Any], *, job_id: str | None = None) -> dict[str, Any]:
-    async with async_session_maker() as session:
-        from sqlalchemy import select
-
-        query = select(Job).where(Job.job_type == NOOR_JOB_TYPE)
-        if job_id:
-            query = query.where(Job.id == job_id)
-        else:
-            query = query.where(Job.status.in_(ACTIVE_NOOR_STATUSES))
-        result = await session.execute(query.order_by(Job.created_at.desc()))
-        local_jobs = result.scalars().all()
-
+async def sync_external_tasks(config: dict[str, Any], *, job_id: str | None = None) -> dict[str, Any]:
+    local_jobs = await list_provider_external_jobs(PLUGIN_ID, job_id=job_id, active_only=not bool(job_id))
     if not local_jobs:
         return {"updated": 0}
 
@@ -492,17 +472,20 @@ async def sync_noor_jobs(config: dict[str, Any], *, job_id: str | None = None) -
         )
         next_error = remote_job.get("error_message") if isinstance(remote_job, dict) and next_status in {"failed", "cancelled"} else None
         metadata = local_job.result_metadata or {}
-        mdc_meta = metadata.get("mdc_manual") if isinstance(metadata, dict) else None
-        if isinstance(mdc_meta, dict):
-            mdc_meta = {**mdc_meta, "remote_job": remote_job or mdc_meta.get("remote_job")}
-            metadata = {**metadata, "mdc_manual": mdc_meta}
-        updated_job = await _set_noor_job_state(
+        ext = metadata.get("external_task") if isinstance(metadata, dict) else None
+        if isinstance(ext, dict):
+            data = ext.get("data") if isinstance(ext.get("data"), dict) else {}
+            data = {**data, "remote_job": remote_job or data.get("remote_job")}
+            ext = {**ext, "external_id": _remote_id(remote_job) or ext.get("external_id"), "data": data}
+            metadata = {**metadata, "external_task": ext}
+        updated_job = await set_external_task_state(
             local_job.id,
             status=next_status,
             progress=next_progress,
             detail=next_detail,
             error_message=next_error,
             result_metadata=metadata if isinstance(metadata, dict) else None,
+            phase_label="MDC-NG 重新整理",
         )
         if updated_job:
             updated += 1
@@ -543,6 +526,9 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
             },
         }
     if action == "create":
-        result = await _create_manual_job(config, payload)
-        return await _create_noor_job_for_remote_submission(config, payload, result)
+        original_source_paths = _parse_source_paths(payload.get("source_paths") or payload.get("paths") or payload.get("sources"))
+        mapped_source_paths = [_map_source_path(config, path) for path in original_source_paths]
+        mapped_payload = {**payload, "source_paths": mapped_source_paths, "original_source_paths": original_source_paths}
+        result = await _create_manual_job(config, mapped_payload)
+        return await _create_noor_job_for_remote_submission(config, mapped_payload, result)
     raise ValueError(f"unsupported action: {action}")

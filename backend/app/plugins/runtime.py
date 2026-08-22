@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import inspect
 import json
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from app.core.config import PROJECT_ROOT
 from app.core.runtime_paths import data_path
 from app.plugins.contracts import PluginManifest
+from app.plugins.handlers import clear_handler_cache, get_plugin_handler
+from app.plugins.runtime_paths import PLUGINS_DIR
 
 
 class PluginRuntime:
     def __init__(self) -> None:
-        self.plugin_root = PROJECT_ROOT / 'plugins'
+        self.plugin_root = PLUGINS_DIR
         self._manifests: dict[str, dict[str, Any]] = {}
         self._handlers: dict[str, Any] = {}
         self._background_started: set[str] = set()
@@ -59,23 +59,9 @@ class PluginRuntime:
     def is_enabled(self, plugin_id: str) -> bool:
         return plugin_id in self._manifests and self._is_enabled(plugin_id)
 
-    def _load_handler(self, plugin_id: str, plugin_dir: Path) -> Any | None:
-        backend = plugin_dir / 'backend.py'
-        if not backend.is_file():
-            return None
-        module_name = f'noor_plugin_{plugin_id.replace("-", "_")}'
-        try:
-            spec = importlib.util.spec_from_file_location(module_name, backend)
-            if spec is None or spec.loader is None:
-                return None
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return module
-        except Exception:
-            return None
-
     async def reload_plugins(self) -> list[dict[str, Any]]:
         async with self._lock:
+            clear_handler_cache()
             self._manifests.clear()
             self._handlers.clear()
             if not self.plugin_root.is_dir():
@@ -89,7 +75,7 @@ class PluginRuntime:
                 manifest['id'] = plugin_id
                 manifest['_directory'] = str(manifest_path.parent)
                 self._manifests[plugin_id] = manifest
-                handler = self._load_handler(plugin_id, manifest_path.parent)
+                handler = get_plugin_handler(plugin_id)
                 if handler is not None:
                     self._handlers[plugin_id] = handler
             return self.list_plugins()
@@ -392,6 +378,49 @@ class PluginRuntime:
                 if isinstance(value, dict):
                     items.append({'plugin_id': plugin_id, 'plugin_name': self._manifests.get(plugin_id, {}).get('name', plugin_id), **value})
         return items
+
+    def get_external_task_contributions(self) -> dict[str, dict[str, Any]]:
+        contributions: dict[str, dict[str, Any]] = {}
+        for plugin_id, manifest in self._manifests.items():
+            ext = (manifest.get('contributions') or {}).get('external_task')
+            if isinstance(ext, dict):
+                contributions[plugin_id] = {
+                    'provider_id': plugin_id,
+                    'label': ext.get('label') or manifest.get('name') or plugin_id,
+                    'phase_label': ext.get('phase_label') or '外部任务',
+                    'can_cancel': bool(ext.get('can_cancel', False)),
+                    'poll_interval': int(ext.get('poll_interval') or 10000),
+                    **ext,
+                }
+        return contributions
+
+    def is_external_task_cancelable(self, job: Any) -> bool:
+        from app.plugins.external_tasks import is_external_task_cancelable
+
+        return is_external_task_cancelable(job)
+
+    async def sync_external_tasks(self, job_id: str | None = None) -> dict[str, Any]:
+        updated = 0
+        checked = 0
+        errors: list[dict[str, str]] = []
+        for plugin_id, manifest in self._manifests.items():
+            if not self.is_enabled(plugin_id):
+                continue
+            if 'external_task_provider' not in (manifest.get('capabilities') or []):
+                continue
+            handler = self._handlers.get(plugin_id)
+            callback = getattr(handler, 'sync_external_tasks', None)
+            if not callable(callback):
+                continue
+            checked += 1
+            try:
+                result = callback(self.get_config(plugin_id), job_id=job_id)
+                result = await result if asyncio.iscoroutine(result) else result
+                if isinstance(result, dict):
+                    updated += int(result.get('updated') or 0)
+            except Exception as exc:
+                errors.append({'plugin_id': plugin_id, 'error': str(exc)})
+        return {'checked': checked, 'updated': updated, 'errors': errors}
 
 
 runtime = PluginRuntime()

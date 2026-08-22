@@ -66,6 +66,12 @@ TERMINAL_STATUS_DETAILS = {
         "cancelled": "字幕翻译已取消",
         "skipped": "字幕翻译已跳过",
     },
+    "external_task": {
+        "completed": "外部任务完成",
+        "failed": "外部任务失败",
+        "cancelled": "外部任务已取消",
+        "skipped": "外部任务已跳过",
+    },
 }
 FOLLOWUP_STATUS_DETAILS = {
     "blocked": "等待主任务完成后自动开始",
@@ -78,6 +84,7 @@ JOB_TYPE_PHASE_DEFAULTS = {
     "whisper": {"phase_key": "prepare", "phase_label": "准备任务"},
     "whisper_transcribe": {"phase_key": "prepare", "phase_label": "准备任务"},
     "translate-srt": {"phase_key": "translate", "phase_label": "字幕翻译"},
+    "external_task": {"phase_key": "output", "phase_label": "外部任务"},
 }
 PHASE_NORMALIZATION = {
     "prepare": "prepare",

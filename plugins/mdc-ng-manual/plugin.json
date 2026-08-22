@@ -12,7 +12,7 @@
   ],
   "capabilities": [
     "network_outbound",
-    "sidebar_page"
+    "external_task_provider"
   ],
   "enabled_by_default": false,
   "config_schema": {
@@ -33,19 +33,48 @@
       "min": 3,
       "max": 120,
       "step": 1
+    },
+    "local_source_prefix": {
+      "type": "string",
+      "label": "NOOR 本机源路径前缀",
+      "placeholder": "/home/kinax/Videos/downloads/av"
+    },
+    "mdc_source_prefix": {
+      "type": "string",
+      "label": "MDC-NG 可见源路径前缀",
+      "placeholder": "/data/downloads/av"
+    },
+    "source_path_mappings": {
+      "type": "textarea",
+      "label": "高级路径映射",
+      "placeholder": "/home/kinax/Videos/downloads/av => /data/downloads/av\n/mnt/downloads => /data/downloads"
     }
   },
   "default_config": {
     "base_url": "http://192.168.31.10:9208",
     "cookie": "",
-    "timeout": 20
+    "timeout": 20,
+    "local_source_prefix": "",
+    "mdc_source_prefix": "",
+    "source_path_mappings": ""
   },
   "contributions": {
-    "sidebar": {
-      "label": "MDC 手动任务",
-      "route": "/plugins/mdc-ng-manual",
-      "icon": "plugin"
-    }
+    "external_task": {
+      "label": "MDC-NG",
+      "phase_label": "MDC-NG 重新整理",
+      "can_cancel": false,
+      "poll_interval": 10000
+    },
+    "hardlink_source_actions": [
+      {
+        "id": "mdc-reorganize",
+        "label": "重新整理",
+        "action": "create",
+        "tone": "secondary",
+        "requires_test": true
+      }
+    ],
+    "icon": "icons/service.svg"
   },
   "frontend": {
     "type": "module",
