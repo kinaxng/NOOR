@@ -87,17 +87,125 @@ function makeInput(options: any = {}) {
 }
 
 function makeSelect(options: any = {}) {
-  const select = document.createElement('select')
-  select.className = ['noor-plugin-input', 'noor-plugin-select', options.className || ''].filter(Boolean).join(' ')
-  for (const item of options.options || []) {
-    const opt = document.createElement('option')
-    opt.value = String(item.value ?? '')
-    opt.textContent = String(item.label ?? item.value ?? '')
-    select.appendChild(opt)
+  const items = (Array.isArray(options.options) ? options.options : []).map((item: any) => ({
+    value: String(item?.value ?? ''),
+    label: String(item?.label ?? item?.value ?? ''),
+    disabled: !!item?.disabled,
+  }))
+  let current = String(options.value ?? '')
+  let open = false
+  let detachOutside: null | (() => void) = null
+  const wrap = document.createElement('div')
+  wrap.className = ['noor-plugin-select', 'noor-plugin-select--pill', options.className || ''].filter(Boolean).join(' ')
+  if (options.disabled) wrap.classList.add('is-disabled')
+  const trigger = document.createElement('button')
+  trigger.type = 'button'
+  trigger.className = 'noor-plugin-select__trigger'
+  trigger.disabled = !!options.disabled
+  const labelNode = document.createElement('span')
+  labelNode.className = 'noor-plugin-select__label'
+  labelNode.textContent = String(options.label || '')
+  const valueNode = document.createElement('span')
+  valueNode.className = 'noor-plugin-select__value'
+  const caret = document.createElement('span')
+  caret.className = 'noor-plugin-select__caret'
+  caret.setAttribute('aria-hidden', 'true')
+  if (options.label) trigger.appendChild(labelNode)
+  trigger.append(valueNode, caret)
+  const menu = document.createElement('div')
+  menu.className = 'noor-plugin-select__menu'
+  menu.hidden = true
+  const selectedItem = () => items.find((item: any) => item.value === current) || items[0] || { value: '', label: '' }
+  const syncLabel = () => {
+    const selected = selectedItem()
+    valueNode.textContent = selected.label || ''
+    wrap.classList.toggle('is-active', !!current)
+    trigger.title = selected.label || ''
   }
-  select.value = options.value ?? ''
-  select.onchange = () => options.onChange?.(select.value)
-  return select
+  const closeMenu = () => {
+    if (!open) return
+    open = false
+    wrap.classList.remove('is-open')
+    trigger.setAttribute('aria-expanded', 'false')
+    menu.hidden = true
+    detachOutside?.()
+    detachOutside = null
+  }
+  const setValue = (value: string, emit = true) => {
+    current = String(value ?? '')
+    syncLabel()
+    Array.from(menu.children).forEach(child => {
+      const node = child as HTMLElement
+      node.classList.toggle('is-active', node.dataset.value === current)
+    })
+    if (emit) options.onChange?.(current)
+  }
+  const onOutside = (event: PointerEvent) => {
+    if (!wrap.contains(event.target as Node)) closeMenu()
+  }
+  const openMenu = () => {
+    if (options.disabled || open) return
+    open = true
+    wrap.classList.add('is-open')
+    trigger.setAttribute('aria-expanded', 'true')
+    menu.hidden = false
+    detachOutside = () => document.removeEventListener('pointerdown', onOutside, true)
+    document.addEventListener('pointerdown', onOutside, true)
+  }
+  const moveSelection = (direction: number) => {
+    const enabled = items.filter((item: any) => !item.disabled)
+    if (!enabled.length) return
+    const index = Math.max(0, enabled.findIndex((item: any) => item.value === current))
+    const next = enabled[(index + direction + enabled.length) % enabled.length]
+    setValue(next.value)
+  }
+  for (const item of items) {
+    const option = document.createElement('button')
+    option.type = 'button'
+    option.className = 'noor-plugin-select__option'
+    option.dataset.value = item.value
+    option.textContent = item.label
+    option.disabled = item.disabled
+    option.classList.toggle('is-active', item.value === current)
+    option.onclick = event => {
+      event.stopPropagation()
+      if (item.disabled) return
+      setValue(item.value)
+      closeMenu()
+      trigger.focus()
+    }
+    menu.appendChild(option)
+  }
+  trigger.setAttribute('aria-haspopup', 'listbox')
+  trigger.setAttribute('aria-expanded', 'false')
+  trigger.onclick = event => {
+    event.stopPropagation()
+    open ? closeMenu() : openMenu()
+  }
+  trigger.onkeydown = event => {
+    if (event.key === 'Escape') {
+      closeMenu()
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!open) openMenu()
+      moveSelection(event.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      open ? closeMenu() : openMenu()
+    }
+  }
+  syncLabel()
+  wrap.append(trigger, menu)
+  ;(wrap as any).__noorSetValue = (value: string) => setValue(value, false)
+  Object.defineProperty(wrap, 'value', {
+    get: () => current,
+    set: value => setValue(String(value ?? ''), false),
+  })
+  return wrap
 }
 
 function makeField(options: any = {}) {
@@ -803,7 +911,23 @@ onBeforeUnmount(clearMounted)
 .noor-plugin-btn--danger { background: rgba(227,26,26,.18); color: #ff8a80; border-color: rgba(227,26,26,.28); }
 .noor-plugin-input { width: 100%; min-height: 36px; padding: .5rem .75rem; border-radius: var(--radius-md); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: white; outline: none; }
 .noor-plugin-input:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgba(0,117,255,.12); }
-.noor-plugin-select option { background: #111936; color: white; }
+.noor-plugin-input option, .noor-plugin-select option { background: #111936; color: white; }
+.noor-plugin-select { position: relative; min-width: 0; }
+.noor-plugin-select__trigger { width: 100%; min-height: 1.85rem; display: inline-flex; align-items: center; justify-content: space-between; gap: .35rem; padding: .32rem .68rem; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(255,255,255,.04); color: var(--color-text-primary,#fff); font-size: .76rem; font-weight: 700; line-height: 1.1; white-space: nowrap; cursor: pointer; transition: border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease; }
+.noor-plugin-select__trigger:hover:not(:disabled), .noor-plugin-select.is-open .noor-plugin-select__trigger { border-color: color-mix(in srgb, var(--color-brand,#0075ff) 45%, transparent); background: color-mix(in srgb, var(--color-brand,#0075ff) 10%, transparent); }
+.noor-plugin-select.is-active .noor-plugin-select__trigger { border-color: color-mix(in srgb, var(--color-brand,#0075ff) 52%, transparent); background: color-mix(in srgb, var(--color-brand,#0075ff) 16%, transparent); color: color-mix(in srgb, var(--color-brand,#0075ff) 28%, white); }
+.noor-plugin-select__trigger:focus-visible { outline: none; border-color: var(--color-brand,#0075ff); box-shadow: 0 0 0 3px rgba(0,117,255,.14); }
+.noor-plugin-select__trigger:disabled { opacity: .5; cursor: not-allowed; }
+.noor-plugin-select__label { flex: none; color: inherit; opacity: .68; font-weight: 650; }
+.noor-plugin-select__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.noor-plugin-select__caret { flex: none; width: 0; height: 0; border-left: .22rem solid transparent; border-right: .22rem solid transparent; border-top: .28rem solid currentColor; opacity: .65; transition: transform .18s ease; }
+.noor-plugin-select.is-open .noor-plugin-select__caret { transform: rotate(180deg); }
+.noor-plugin-select__menu { position: absolute; z-index: calc(var(--z-modal,1000) + 20); top: calc(100% + 6px); left: 0; min-width: 100%; max-width: min(28rem, calc(100vw - 2rem)); max-height: 18rem; overflow: auto; display: flex; flex-direction: column; gap: .25rem; padding: .45rem; border: 1px solid rgba(255,255,255,.1); border-radius: var(--radius-lg,.8rem); background: color-mix(in srgb, var(--color-bg-elevated,rgb(30,37,68)) 94%, black); box-shadow: 0 16px 42px rgba(0,0,0,.42); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.noor-plugin-select__menu[hidden] { display: none; }
+.noor-plugin-select__option { width: 100%; min-height: 1.85rem; display: flex; align-items: center; text-align: left; padding: .32rem .62rem; border: 1px solid transparent; border-radius: var(--radius-md,.55rem); background: transparent; color: var(--color-text-secondary,rgba(255,255,255,.72)); font-size: .76rem; font-weight: 650; cursor: pointer; }
+.noor-plugin-select__option:hover:not(:disabled) { border-color: color-mix(in srgb, var(--color-brand,#0075ff) 34%, transparent); background: color-mix(in srgb, var(--color-brand,#0075ff) 10%, transparent); color: #fff; }
+.noor-plugin-select__option.is-active { border-color: color-mix(in srgb, var(--color-brand,#0075ff) 45%, transparent); background: color-mix(in srgb, var(--color-brand,#0075ff) 18%, transparent); color: color-mix(in srgb, var(--color-brand,#0075ff) 24%, white); }
+.noor-plugin-select__option:disabled { opacity: .45; cursor: not-allowed; }
 .noor-plugin-field { display: flex; flex-direction: column; gap: .35rem; }
 .noor-plugin-field__label { font-size: .75rem; color: rgba(255,255,255,.52); font-weight: 600; }
 .noor-plugin-field__hint { color: rgba(255,255,255,.35); }

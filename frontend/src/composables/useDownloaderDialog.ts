@@ -14,7 +14,7 @@ function injectStyle() {
 .noor-plugin-modal--lg{width:min(920px,100%)}.noor-plugin-modal__head,.noor-plugin-modal__actions{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:1rem;border-bottom:1px solid rgba(255,255,255,.06)}
 .noor-plugin-modal__actions{justify-content:flex-end;border-top:1px solid rgba(255,255,255,.06);border-bottom:0;flex:none}.noor-plugin-modal__title{display:inline-flex;align-items:baseline;gap:.45rem;color:white;font-weight:700}.noor-plugin-modal__body{padding:1rem;display:grid;gap:.85rem;overflow:auto;min-height:0}
 .noor-plugin-btn{height:32px;display:inline-flex;align-items:center;justify-content:center;gap:.35rem;padding:0 .85rem;border-radius:var(--radius-button,.65rem);border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:var(--color-text-secondary,#cbd5e1);font-size:.76rem;font-weight:750;cursor:pointer}.noor-plugin-btn:hover:not(:disabled){border-color:rgba(0,117,255,.28);background:rgba(0,117,255,.11);color:#fff}.noor-plugin-btn:disabled{opacity:.58;cursor:default}.noor-plugin-btn--primary{border-color:rgba(0,117,255,.34);background:rgba(0,117,255,.16);color:#fff}.noor-plugin-modal__close{width:30px;min-width:30px;padding:0;border-radius:50%;font-size:18px;line-height:1}
-.noor-plugin-field{display:grid;gap:.38rem}.noor-plugin-field__label{color:var(--color-text-muted,#94a3b8);font-size:.72rem;font-weight:750}.noor-plugin-field__hint{color:var(--color-text-muted,#94a3b8);font-size:.7rem;line-height:1.45}.noor-plugin-input{width:100%;min-height:36px;border:1px solid var(--color-border-default,rgba(255,255,255,.1));border-radius:var(--radius-md,.55rem);background:rgba(255,255,255,.045);color:#fff;font:inherit;font-size:.8rem;padding:0 .65rem}.noor-plugin-input[readonly]{color:var(--color-text-secondary,#cbd5e1)}.noor-downloader-textarea{min-height:92px;padding:.65rem;resize:vertical}.noor-downloader-form{display:grid;gap:.75rem}.noor-downloader-title-combo{display:grid;grid-template-columns:minmax(0,1fr) minmax(9rem,auto);gap:.5rem}
+.noor-plugin-field{display:grid;gap:.38rem}.noor-plugin-field__label{color:var(--color-text-muted,#94a3b8);font-size:.72rem;font-weight:750}.noor-plugin-field__hint{color:var(--color-text-muted,#94a3b8);font-size:.7rem;line-height:1.45}.noor-plugin-input{width:100%;min-height:36px;border:1px solid var(--color-border-default,rgba(255,255,255,.1));border-radius:var(--radius-md,.55rem);background:rgba(255,255,255,.045);color:#fff;font:inherit;font-size:.8rem;padding:0 .65rem}.noor-plugin-input[readonly]{color:var(--color-text-secondary,#cbd5e1)}.noor-plugin-input option,.noor-plugin-select option{background:#111936;color:#fff}.noor-plugin-select{position:relative;min-width:0}.noor-plugin-select__trigger{width:100%;min-height:1.85rem;display:inline-flex;align-items:center;justify-content:space-between;gap:.35rem;padding:.32rem .68rem;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.04);color:var(--color-text-primary,#fff);font-size:.76rem;font-weight:700;line-height:1.1;white-space:nowrap;cursor:pointer;transition:border-color .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease}.noor-plugin-select__trigger:hover:not(:disabled),.noor-plugin-select.is-open .noor-plugin-select__trigger{border-color:color-mix(in srgb,var(--color-brand,#0075ff) 45%,transparent);background:color-mix(in srgb,var(--color-brand,#0075ff) 10%,transparent)}.noor-plugin-select.is-active .noor-plugin-select__trigger{border-color:color-mix(in srgb,var(--color-brand,#0075ff) 52%,transparent);background:color-mix(in srgb,var(--color-brand,#0075ff) 16%,transparent);color:color-mix(in srgb,var(--color-brand,#0075ff) 28%,white)}.noor-plugin-select__trigger:focus-visible{outline:none;border-color:var(--color-brand,#0075ff);box-shadow:0 0 0 3px rgba(0,117,255,.14)}.noor-plugin-select__trigger:disabled{opacity:.5;cursor:not-allowed}.noor-plugin-select__value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.noor-plugin-select__caret{flex:none;width:0;height:0;border-left:.22rem solid transparent;border-right:.22rem solid transparent;border-top:.28rem solid currentColor;opacity:.65;transition:transform .18s ease}.noor-plugin-select.is-open .noor-plugin-select__caret{transform:rotate(180deg)}.noor-plugin-select__menu{position:absolute;z-index:calc(var(--z-modal,1000) + 20);top:calc(100% + 6px);left:0;min-width:100%;max-width:min(28rem,calc(100vw - 2rem));max-height:18rem;overflow:auto;display:flex;flex-direction:column;gap:.25rem;padding:.45rem;border:1px solid rgba(255,255,255,.1);border-radius:var(--radius-lg,.8rem);background:color-mix(in srgb,var(--color-bg-elevated,rgb(30,37,68)) 94%,black);box-shadow:0 16px 42px rgba(0,0,0,.42);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}.noor-plugin-select__menu[hidden]{display:none}.noor-plugin-select__option{width:100%;min-height:1.85rem;display:flex;align-items:center;text-align:left;padding:.32rem .62rem;border:1px solid transparent;border-radius:var(--radius-md,.55rem);background:transparent;color:var(--color-text-secondary,rgba(255,255,255,.72));font-size:.76rem;font-weight:650;cursor:pointer}.noor-plugin-select__option:hover:not(:disabled){border-color:color-mix(in srgb,var(--color-brand,#0075ff) 34%,transparent);background:color-mix(in srgb,var(--color-brand,#0075ff) 10%,transparent);color:#fff}.noor-plugin-select__option.is-active{border-color:color-mix(in srgb,var(--color-brand,#0075ff) 45%,transparent);background:color-mix(in srgb,var(--color-brand,#0075ff) 18%,transparent);color:color-mix(in srgb,var(--color-brand,#0075ff) 24%,white)}.noor-plugin-select__option:disabled{opacity:.45;cursor:not-allowed}.noor-downloader-textarea{min-height:92px;padding:.65rem;resize:vertical}.noor-downloader-form{display:grid;gap:.75rem}.noor-downloader-title-combo{display:grid;grid-template-columns:minmax(0,1fr) minmax(9rem,auto);gap:.5rem}
 .noor-plugin-notice{padding:.75rem .85rem;border-radius:var(--radius-lg,.8rem);font-size:.8rem;font-weight:700}.noor-plugin-notice--error{border:1px solid rgba(239,68,68,.24);background:rgba(239,68,68,.12);color:#fecaca}.noor-loading-state{min-height:48px;display:flex;align-items:center;gap:.5rem;color:var(--color-text-secondary,#cbd5e1);font-size:.8rem}.noor-loading-state:before{content:'';width:1rem;height:1rem;border-radius:999px;border:2px solid rgba(255,255,255,.18);border-top-color:#fff;animation:noor-spin .8s linear infinite}@keyframes noor-spin{to{transform:rotate(360deg)}}
 .noor-submit-btn{position:relative;overflow:hidden;isolation:isolate;min-width:108px}.noor-submit-btn__bar{position:absolute;inset:0 auto 0 0;width:var(--submit-progress,0);background:linear-gradient(90deg,rgba(0,117,255,.52),rgba(33,212,253,.34));z-index:-1;transition:width .2s ease}.noor-submit-btn__text{position:relative;z-index:1;white-space:nowrap}.noor-submit-btn.is-success{border-color:rgba(1,181,116,.46);background:rgba(1,181,116,.22)}.noor-submit-btn.is-error{border-color:rgba(227,26,26,.38);background:rgba(227,26,26,.14)}
 .noor-downloader-preview{display:grid;gap:.55rem;padding:.75rem;border:1px solid rgba(255,255,255,.07);border-radius:var(--radius-lg,.8rem);background:rgba(255,255,255,.025)}.noor-downloader-preview__head{display:flex;justify-content:space-between;gap:.75rem;color:#fff;font-size:.78rem;font-weight:750}.noor-downloader-preview__head em{color:var(--color-text-muted,#94a3b8);font-style:normal}.noor-downloader-preview__head .is-error{color:#fca5a5}.noor-downloader-preview__files{display:grid;gap:.35rem}.noor-downloader-preview__file{display:flex;justify-content:space-between;gap:.75rem;color:var(--color-text-secondary,#cbd5e1);font-size:.72rem}.noor-downloader-preview__file span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.noor-downloader-preview__file em,.noor-downloader-preview__more{color:var(--color-text-muted,#94a3b8);font-style:normal;font-size:.7rem}`
@@ -47,17 +47,122 @@ function makeInput(options: any = {}) {
 }
 
 function makeSelect(options: any = {}) {
-  const select = document.createElement('select')
-  select.className = ['noor-plugin-input', 'noor-plugin-select', options.className || ''].filter(Boolean).join(' ')
-  for (const item of options.options || []) {
-    const opt = document.createElement('option')
-    opt.value = String(item.value ?? '')
-    opt.textContent = String(item.label ?? item.value ?? '')
-    select.appendChild(opt)
+  type SelectItem = { value: string; label: string; disabled: boolean }
+  const items = (Array.isArray(options.options) ? options.options : []).map((item: any) => ({
+    value: String(item?.value ?? ''),
+    label: String(item?.label ?? item?.value ?? ''),
+    disabled: !!item?.disabled,
+  })) as SelectItem[]
+  let current = String(options.value ?? '')
+  let open = false
+  let detachOutside: null | (() => void) = null
+  const wrap = document.createElement('div')
+  wrap.className = ['noor-plugin-select', options.className || ''].filter(Boolean).join(' ')
+  if (options.disabled) wrap.classList.add('is-disabled')
+  const trigger = document.createElement('button')
+  trigger.type = 'button'
+  trigger.className = 'noor-plugin-select__trigger'
+  trigger.disabled = !!options.disabled
+  const valueNode = document.createElement('span')
+  valueNode.className = 'noor-plugin-select__value'
+  const caret = document.createElement('span')
+  caret.className = 'noor-plugin-select__caret'
+  caret.setAttribute('aria-hidden', 'true')
+  trigger.append(valueNode, caret)
+  const menu = document.createElement('div')
+  menu.className = 'noor-plugin-select__menu'
+  menu.hidden = true
+  const selectedItem = () => items.find(item => item.value === current) || items[0] || { value: '', label: '' }
+  const syncLabel = () => {
+    const selected = selectedItem()
+    valueNode.textContent = selected.label || ''
+    wrap.classList.toggle('is-active', !!current)
+    trigger.title = selected.label || ''
   }
-  select.value = options.value ?? ''
-  select.onchange = () => options.onChange?.(select.value)
-  return select
+  const closeMenu = () => {
+    if (!open) return
+    open = false
+    wrap.classList.remove('is-open')
+    trigger.setAttribute('aria-expanded', 'false')
+    menu.hidden = true
+    detachOutside?.()
+    detachOutside = null
+  }
+  const setValue = (value: string, emit = true) => {
+    current = String(value ?? '')
+    syncLabel()
+    Array.from(menu.children).forEach(child => {
+      const node = child as HTMLElement
+      node.classList.toggle('is-active', node.dataset.value === current)
+    })
+    if (emit) options.onChange?.(current)
+  }
+  const onOutside = (event: PointerEvent) => {
+    if (!wrap.contains(event.target as Node)) closeMenu()
+  }
+  const openMenu = () => {
+    if (options.disabled || open) return
+    open = true
+    wrap.classList.add('is-open')
+    trigger.setAttribute('aria-expanded', 'true')
+    menu.hidden = false
+    detachOutside = () => document.removeEventListener('pointerdown', onOutside, true)
+    document.addEventListener('pointerdown', onOutside, true)
+  }
+  const moveSelection = (direction: number) => {
+    const enabled = items.filter((item: SelectItem) => !item.disabled)
+    if (!enabled.length) return
+    const index = Math.max(0, enabled.findIndex((item: SelectItem) => item.value === current))
+    const next = enabled[(index + direction + enabled.length) % enabled.length]
+    setValue(next.value)
+  }
+  for (const item of items) {
+    const option = document.createElement('button')
+    option.type = 'button'
+    option.className = 'noor-plugin-select__option'
+    option.dataset.value = item.value
+    option.textContent = item.label
+    option.disabled = item.disabled
+    option.classList.toggle('is-active', item.value === current)
+    option.onclick = event => {
+      event.stopPropagation()
+      if (item.disabled) return
+      setValue(item.value)
+      closeMenu()
+      trigger.focus()
+    }
+    menu.appendChild(option)
+  }
+  trigger.setAttribute('aria-haspopup', 'listbox')
+  trigger.setAttribute('aria-expanded', 'false')
+  trigger.onclick = event => {
+    event.stopPropagation()
+    open ? closeMenu() : openMenu()
+  }
+  trigger.onkeydown = event => {
+    if (event.key === 'Escape') {
+      closeMenu()
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!open) openMenu()
+      moveSelection(event.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      open ? closeMenu() : openMenu()
+    }
+  }
+  syncLabel()
+  wrap.append(trigger, menu)
+  ;(wrap as any).__noorSetValue = (value: string) => setValue(value, false)
+  Object.defineProperty(wrap, 'value', {
+    get: () => current,
+    set: value => setValue(String(value ?? ''), false),
+  })
+  return wrap
 }
 
 function makeField(options: any = {}) {
