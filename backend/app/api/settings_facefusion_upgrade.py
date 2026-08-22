@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import sys
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
@@ -59,11 +60,48 @@ def get_facefusion_version(source_dir: Path | None = None) -> str | None:
         return None
 
 
+def _package_version(package_name: str) -> str | None:
+    try:
+        return metadata.version(package_name)
+    except Exception:
+        return None
+
+
+def get_facefusion_runtime_info() -> dict[str, Any]:
+    onnxruntime_version = _package_version("onnxruntime") or _package_version("onnxruntime-gpu")
+    providers: list[str] = []
+    try:
+        import onnxruntime
+
+        onnxruntime_version = str(getattr(onnxruntime, "__version__", "") or onnxruntime_version or "") or None
+        providers = list(onnxruntime.get_available_providers())
+    except Exception:
+        providers = []
+    return {
+        "versions": {
+            "python": ".".join(str(part) for part in sys.version_info[:3]),
+            "onnxruntime": onnxruntime_version,
+            "onnx": _package_version("onnx"),
+            "numpy": _package_version("numpy"),
+            "opencv": _package_version("opencv-python") or _package_version("opencv-python-headless"),
+            "scipy": _package_version("scipy"),
+            "tqdm": _package_version("tqdm"),
+            "gradio": _package_version("gradio"),
+        },
+        "execution_providers": providers,
+        "python_executable": sys.executable,
+    }
+
+
 def get_facefusion_installation_info(settings: Any) -> dict[str, Any]:
     source_dir = get_facefusion_source_dir()
     is_docker = os.path.exists("/.dockerenv")
+    runtime_info = get_facefusion_runtime_info()
     return {
         "version": get_facefusion_version(source_dir),
+        "runtime_versions": runtime_info["versions"],
+        "execution_providers": runtime_info["execution_providers"],
+        "python_executable": runtime_info["python_executable"],
         "source_mode": "embedded",
         "source_dir": str(source_dir),
         "is_docker": is_docker,

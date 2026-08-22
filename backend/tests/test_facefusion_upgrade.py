@@ -5,6 +5,7 @@ from pathlib import Path
 from app.api.settings_facefusion_upgrade import (
     _apply_noor_facefusion_patch,
     _replace_source_from_clone,
+    get_facefusion_runtime_info,
     get_facefusion_version,
 )
 
@@ -68,3 +69,13 @@ def test_get_facefusion_version_reads_metadata(tmp_path):
     metadata_path.write_text("METADATA = {'version': '9.9.9'}\n", encoding="utf-8")
 
     assert get_facefusion_version(Path(tmp_path)) == "9.9.9"
+
+
+def test_get_facefusion_runtime_info_includes_core_versions():
+    info = get_facefusion_runtime_info()
+
+    assert info["versions"]["python"]
+    assert info["versions"]["onnxruntime"]
+    assert info["versions"]["numpy"]
+    assert isinstance(info["execution_providers"], list)
+    assert info["python_executable"]
