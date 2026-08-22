@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from app.plugins.market import MarketError
 from app.plugins.runtime import runtime
 from app.core.runtime_cleanup import DEFAULT_MIN_AGE_HOURS, run_runtime_cleanup, runtime_cleanup_status
 
@@ -46,6 +47,11 @@ class FeedPushPayload(BaseModel):
 class MarketInstallPayload(BaseModel):
     repo_url: str = ''
     plugin_id: str = ''
+
+
+class MarketRepoPayload(BaseModel):
+    repo_url: str = ''
+    url: str = ''
 
 
 @router.get('')
@@ -126,20 +132,35 @@ async def resolve_resource_download(payload: ResourceResolvePayload):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get('/market/repos')
+async def list_market_repos():
+    return runtime.list_market_repos()
+
+
+@router.post('/market/repos')
+async def add_market_repo(payload: MarketRepoPayload):
+    try:
+        return runtime.add_market_repo(payload.repo_url or payload.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete('/market/repos')
+async def remove_market_repo(payload: MarketRepoPayload):
+    return runtime.remove_market_repo(payload.repo_url or payload.url)
+
+
 @router.get('/market/items')
 async def list_market_plugins():
-    """Compatibility endpoint for the recovered plugin manager UI.
-
-    Local plugin manifests are the source of truth in the current runtime.  The
-    old UI still asks for a market list, so expose an empty market instead of
-    failing the whole page.
-    """
-    return []
+    return await runtime.list_market_items()
 
 
 @router.post('/market/install')
 async def install_market_plugin(payload: MarketInstallPayload):
-    raise HTTPException(status_code=501, detail='插件市场安装器尚未恢复，请先手动放入 plugins 目录')
+    try:
+        return await runtime.install_market_plugin(payload.repo_url, payload.plugin_id)
+    except (MarketError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get('/dashboard/widgets')

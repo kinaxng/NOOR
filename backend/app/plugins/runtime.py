@@ -10,7 +10,9 @@ from typing import Any
 from app.core.runtime_paths import data_path
 from app.plugins.contracts import PluginManifest
 from app.plugins.handlers import clear_handler_cache, get_plugin_handler
+from app.plugins.market import MarketError, fetch_repo_index, install_from_market_item
 from app.plugins.runtime_paths import PLUGINS_DIR
+from app.plugins.store import load_market_repos, save_market_repos
 
 
 class PluginRuntime:
@@ -97,6 +99,53 @@ class PluginRuntime:
 
     def get_plugin(self, plugin_id: str) -> dict[str, Any] | None:
         return next((item for item in self.list_plugins() if item['id'] == plugin_id), None)
+
+    def list_market_repos(self) -> list[dict[str, str]]:
+        return load_market_repos()
+
+    def add_market_repo(self, repo_url: str) -> list[dict[str, str]]:
+        url = str(repo_url or '').strip()
+        if not url:
+            raise ValueError('插件仓库地址不能为空')
+        repos = self.list_market_repos()
+        if not any(item.get('url') == url for item in repos):
+            repos.append({'url': url})
+            save_market_repos(repos)
+        return repos
+
+    def remove_market_repo(self, repo_url: str) -> list[dict[str, str]]:
+        url = str(repo_url or '').strip()
+        repos = [item for item in self.list_market_repos() if item.get('url') != url]
+        save_market_repos(repos)
+        return repos
+
+    async def list_market_items(self) -> list[dict[str, Any]]:
+        installed = set(self._manifests)
+        items: list[dict[str, Any]] = []
+        for repo in self.list_market_repos():
+            repo_url = str(repo.get('url') or '').strip()
+            if not repo_url:
+                continue
+            try:
+                values = await fetch_repo_index(repo_url)
+            except MarketError as exc:
+                items.append({'repo_url': repo_url, 'error': str(exc)})
+                continue
+            for value in values:
+                plugin_id = str(value.get('id') or '').strip()
+                if not plugin_id:
+                    continue
+                items.append({**value, 'repo_url': repo_url, 'installed': plugin_id in installed})
+        return items
+
+    async def install_market_plugin(self, repo_url: str, plugin_id: str) -> dict[str, Any]:
+        values = await fetch_repo_index(repo_url)
+        item = next((value for value in values if str(value.get('id') or '') == plugin_id), None)
+        if item is None:
+            raise MarketError('plugin not found in repository')
+        target = await install_from_market_item({**item, 'repo_url': repo_url})
+        await self.reload_plugins()
+        return {'ok': True, 'plugin_id': plugin_id, 'path': str(target)}
 
     def get_config(self, plugin_id: str) -> dict[str, Any]:
         manifest = self._manifests.get(plugin_id) or {}
