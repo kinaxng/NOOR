@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import PROJECT_ROOT
+from app.core.runtime_paths import data_path
 
 
 def status_timestamp() -> str:
@@ -24,7 +25,12 @@ def install_status_path() -> Path:
     return PROJECT_ROOT / "install_status.json"
 
 
+def facefusion_model_status_path() -> Path:
+    return data_path("runtime", "status", "facefusion_model_status.json")
+
+
 def write_status_file(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload))
 
 
@@ -64,6 +70,25 @@ def read_model_download_status_response() -> dict[str, Any]:
         "progress": status.get("progress", 0),
         "message": status.get("message", ""),
         "model": status.get("model", ""),
+        "output": status.get("output"),
+    }
+
+
+def read_facefusion_model_status_response() -> dict[str, Any]:
+    status = read_status_file(facefusion_model_status_path())
+    if status is None:
+        return {
+            "status": "idle",
+            "progress": 0,
+            "message": "",
+            "scope": "",
+            "output": None,
+        }
+    return {
+        "status": status.get("status", "idle"),
+        "progress": status.get("progress", 0),
+        "message": status.get("message", ""),
+        "scope": status.get("scope", ""),
         "output": status.get("output"),
     }
 

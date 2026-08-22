@@ -33,7 +33,7 @@ def conditional_download(download_directory_path : str, urls : List[str]) -> Non
 					curl_builder.set_retry(5)
 				)
 
-				open_curl(commands)
+				process = open_curl(commands)
 				current_size = initial_size
 				progress.set_postfix(download_providers = state_manager.get_item('download_providers'), file_name = download_file_name)
 
@@ -41,6 +41,7 @@ def conditional_download(download_directory_path : str, urls : List[str]) -> Non
 					if is_file(download_file_path):
 						current_size = get_file_size(download_file_path)
 						progress.update(current_size - progress.n)
+				process.communicate()
 
 
 @lru_cache(maxsize = 64)

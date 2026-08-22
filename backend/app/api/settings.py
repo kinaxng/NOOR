@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
+import zlib
+from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -18,7 +21,7 @@ from app.api.settings_lada_defaults import apply_lada_defaults_updates
 from app.api.settings_lada_upgrade import build_lada_upgrade_env, raise_for_git_pull_failure, resolve_git_branch, should_add_break_system_packages
 from app.api.settings_facefusion_upgrade import get_facefusion_installation_info, upgrade_facefusion_source
 from app.api.settings_response import build_settings_payload
-from app.api.settings_status_helpers import build_status_payload, install_status_path, model_download_status_path, read_install_status_response, read_model_download_status_response, write_status_file
+from app.api.settings_status_helpers import build_status_payload, facefusion_model_status_path, install_status_path, model_download_status_path, read_facefusion_model_status_response, read_install_status_response, read_model_download_status_response, write_status_file
 from app.api.settings_updates import apply_emby_config_updates, apply_lada_config_updates, apply_network_config_updates, build_storage_env_updates
 from app.api.settings_whisper import apply_whisper_config_updates, build_whisper_models_payload, normalize_whisper_config_payload, sanitize_download_status
 from app.api.settings_whisper_models import delete_whisper_model_files, resolve_whisper_model_dir
@@ -26,8 +29,8 @@ from app.api.settings_whisper_runtime import detect_install_requirements, inspec
 from app.api.system import SystemLogManager
 from app.api.system import _save_ui_settings, _ui_settings
 from app.core.config import PROJECT_ROOT, WHISPER_MODEL_DIR, clear_settings_cache, get_settings
-from app.core.facefusion_defaults import FACEFUSION_DEFAULTS, facefusion_settings_payload, save_facefusion_overrides
-from app.core.facefusion_paths import inspect_facefusion_model_dir, resolve_embedded_facefusion_source
+from app.core.facefusion_defaults import FACEFUSION_DEFAULTS, facefusion_settings, facefusion_settings_payload, save_facefusion_overrides
+from app.core.facefusion_paths import build_facefusion_python_env, inspect_facefusion_model_dir, resolve_embedded_facefusion_source, resolve_facefusion_model_dir, resolve_facefusion_python, resolve_facefusion_source
 
 
 logger = logging.getLogger(__name__)
@@ -393,78 +396,183 @@ async def update_facefusion_defaults(config: FaceFusionDefaultsConfig):
     )
 
 
+def _facefusion_model_context() -> tuple[str, str, dict[str, str], str, str]:
+    settings = facefusion_settings(get_settings())
+    source = resolve_facefusion_source(settings.facefusion_dir)
+    python_path = resolve_facefusion_python(source.source_dir, settings.facefusion_python_path)
+    model_dir, link_mode = resolve_facefusion_model_dir(source.source_dir, settings.facefusion_model_dir)
+    env = build_facefusion_python_env(source.source_dir, os.environ.copy())
+    return python_path, str(source.source_dir), env, model_dir, link_mode
+
+
+def _crc32_file(path: Path) -> str:
+    checksum = 0
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            checksum = zlib.crc32(chunk, checksum)
+    return format(checksum, "08x")
+
+
 def _facefusion_model_status_payload() -> dict:
-    settings = get_settings()
-    info = get_facefusion_installation_info(settings)
-    source = resolve_embedded_facefusion_source()
-    source_dir = source.source_dir if source else Path(info["source_dir"])
-    model_dir, link_mode = inspect_facefusion_model_dir(source_dir, getattr(settings, "facefusion_model_dir", ""))
+    _python_path, _source_dir, _env, model_dir, link_mode = _facefusion_model_context()
     model_root = Path(model_dir)
-    files = []
-    if model_root.exists():
-        files = [path for path in model_root.rglob("*") if path.is_file()]
-    onnx_files = [path for path in files if path.suffix.lower() == ".onnx"]
-    hash_files = [path for path in files if path.suffix.lower() == ".hash"]
-    total_size = sum(path.stat().st_size for path in files if path.exists())
-    missing_hash = [
-        str(path.relative_to(model_root))
-        for path in onnx_files[:50]
-        if not path.with_suffix(".hash").exists()
-    ]
+    model_root.mkdir(parents=True, exist_ok=True)
+    onnx_files = sorted(model_root.rglob("*.onnx"))
+    hash_files = sorted(model_root.rglob("*.hash"))
+    total_size = sum(path.stat().st_size for path in onnx_files if path.is_file())
+    invalid: list[dict[str, str]] = []
+    missing_hash: list[str] = []
+    valid_count = 0
+    for model_path in onnx_files:
+        hash_path = model_path.with_suffix(".hash")
+        relative_name = str(model_path.relative_to(model_root))
+        if not hash_path.exists():
+            missing_hash.append(relative_name)
+            continue
+        expected = hash_path.read_text(encoding="utf-8", errors="ignore").strip().lower()
+        actual = _crc32_file(model_path)
+        if expected == actual:
+            valid_count += 1
+        else:
+            invalid.append({"name": relative_name, "expected": expected, "actual": actual})
     return {
         "model_dir": str(model_root),
         "link_mode": link_mode,
         "onnx_count": len(onnx_files),
         "hash_count": len(hash_files),
-        "valid_count": len(onnx_files) - len(missing_hash),
-        "invalid_count": 0,
+        "valid_count": valid_count,
+        "invalid_count": len(invalid),
         "missing_hash_count": len(missing_hash),
-        "missing_hash": missing_hash,
-        "invalid": [],
+        "missing_hash": missing_hash[:50],
+        "invalid": invalid[:50],
         "total_size": total_size,
         "total_size_label": _format_size(total_size),
     }
-
-
-_FACEFUSION_MODEL_DOWNLOAD_STATUS: dict[str, object] = {
-    "status": "idle",
-    "progress": 0,
-    "message": "",
-    "output": "",
-}
 
 
 @router.get("/facefusion/models")
 async def get_facefusion_models():
     return {
         "models": _facefusion_model_status_payload(),
-        "download_status": dict(_FACEFUSION_MODEL_DOWNLOAD_STATUS),
+        "download_status": read_facefusion_model_status_response(),
     }
 
 
 @router.post("/facefusion/models/verify")
 async def verify_facefusion_models():
-    return {"success": True, "models": _facefusion_model_status_payload()}
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[FaceFusion] 正在校验模型 hash...")
+    try:
+        result = _facefusion_model_status_payload()
+    except Exception as exc:
+        log_mgr.add_log("error", f"[FaceFusion] 模型校验失败 — {exc}")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if result["invalid_count"] or result["missing_hash_count"]:
+        log_mgr.add_log(
+            "warning",
+            f"[FaceFusion] 模型校验完成：异常 {result['invalid_count']}，缺少 hash {result['missing_hash_count']}",
+        )
+    else:
+        log_mgr.add_log("success", f"[FaceFusion] 模型校验通过：{result['valid_count']} 个模型")
+    return {"success": True, "models": result}
 
 
 @router.post("/facefusion/models/download")
 async def download_facefusion_models(req: FaceFusionModelDownloadRequest):
-    _FACEFUSION_MODEL_DOWNLOAD_STATUS.update({
-        "status": "completed",
-        "progress": 100,
-        "message": f"模型预下载调度已恢复，{req.scope} 下载器待接入",
-        "output": "",
-    })
-    SystemLogManager.get_instance().add_log(
-        "warning",
-        f"[FaceFusion] {req.scope} 模型预下载器尚未完整恢复，已返回当前模型状态",
-    )
-    return {"success": True, "download_status": dict(_FACEFUSION_MODEL_DOWNLOAD_STATUS)}
+    scope = req.scope or "lite"
+    status_file = facefusion_model_status_path()
+    current = read_facefusion_model_status_response()
+    if current.get("status") == "running":
+        return {"success": True, "message": "FaceFusion 模型预下载已在运行"}
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", f"[FaceFusion] 正在预下载模型 scope={scope}...")
+    write_status_file(status_file, build_status_payload(
+        status="running",
+        progress=0,
+        message=f"FaceFusion 模型预下载已开始 ({scope})",
+        scope=scope,
+        output="",
+    ))
+
+    def run_download() -> None:
+        background_log = SystemLogManager.get_instance()
+
+        def update(status: str, progress: int, message: str, output: str = "") -> None:
+            write_status_file(status_file, build_status_payload(
+                status=status,
+                progress=progress,
+                message=message,
+                scope=scope,
+                output=output[-8000:],
+            ))
+
+        try:
+            base_settings = get_settings()
+            base_settings.apply_network_env()
+            resolved = facefusion_settings(base_settings)
+            python_path, source_dir, env, model_dir, _link_mode = _facefusion_model_context()
+            cmd = [
+                python_path,
+                "facefusion.py",
+                "force-download",
+                "--download-scope",
+                scope,
+                "--log-level",
+                "info",
+            ]
+            providers = [
+                item.strip()
+                for item in re.split(r"[\s,]+", str(resolved.facefusion_download_providers or "github huggingface"))
+                if item.strip()
+            ]
+            if providers:
+                cmd += ["--download-providers", *providers]
+            update("running", 5, f"正在下载 FaceFusion 模型到 {model_dir}")
+            proc = subprocess.Popen(
+                cmd,
+                cwd=source_dir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            output_lines: list[str] = []
+            if proc.stdout:
+                for raw_line in proc.stdout:
+                    line = raw_line.rstrip()
+                    if not line:
+                        continue
+                    output_lines.append(line)
+                    output_lines = output_lines[-160:]
+                    progress = 50
+                    match = re.search(r"(\d{1,3})%", line)
+                    if match:
+                        progress = max(5, min(95, int(match.group(1))))
+                    if "validating" in line.lower() or "验证" in line:
+                        progress = max(progress, 90)
+                    update("running", progress, line, "\n".join(output_lines))
+            returncode = proc.wait()
+            output = "\n".join(output_lines)
+            if returncode == 0:
+                result = _facefusion_model_status_payload()
+                update("completed", 100, f"FaceFusion 模型预下载完成，已校验 {result['valid_count']} 个模型", output)
+                background_log.add_log("success", f"[FaceFusion] 模型预下载完成 scope={scope}")
+            else:
+                update("failed", 0, f"FaceFusion 模型预下载失败，退出码 {returncode}", output)
+                background_log.add_log("error", f"[FaceFusion] 模型预下载失败 scope={scope} code={returncode}")
+        except Exception as exc:
+            update("failed", 0, f"FaceFusion 模型预下载失败: {exc}")
+            background_log.add_log("error", f"[FaceFusion] 模型预下载异常 — {exc}")
+
+    threading.Thread(target=run_download, daemon=True).start()
+    return {"success": True, "message": "FaceFusion 模型预下载已开始"}
 
 
 @router.get("/facefusion/models/download-status")
 async def get_facefusion_model_download_status():
-    return dict(_FACEFUSION_MODEL_DOWNLOAD_STATUS)
+    return read_facefusion_model_status_response()
 
 
 @router.put("/lada/defaults")
