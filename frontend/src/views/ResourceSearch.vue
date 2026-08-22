@@ -8,6 +8,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import BaseIcon from '../components/noor/BaseIcon.vue'
+import { createDownloaderDialogContext } from '../composables/useDownloaderDialog'
+import { useToast } from '../composables/useToast'
 
 type ResourceItem = {
   provider: string
@@ -40,6 +42,8 @@ type ResourceGroup = {
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
+const downloads = createDownloaderDialogContext('resource-search')
 const query = ref(String(route.query.q || ''))
 const loading = ref(false)
 const error = ref('')
@@ -63,6 +67,21 @@ const subtitleCount = computed(() => groups.value.flatMap(group => group.items |
 const ptCount = computed(() => groups.value.flatMap(group => group.items || []).filter(item => item.features?.is_private_tracker || item.requirements?.accepts_private_tracker).length)
 const directCount = computed(() => groups.value.flatMap(group => group.items || []).filter(item => item.url).length)
 const codeHint = computed(() => extractCode(query.value))
+
+function normalizeGroup(raw: any): ResourceGroup {
+  const provider = String(raw?.provider || '')
+  const providerLabel = String(raw?.provider_label || provider)
+  return {
+    ...raw,
+    provider,
+    provider_label: providerLabel,
+    items: (Array.isArray(raw?.items) ? raw.items : []).map((item: any) => ({
+      ...item,
+      provider: String(item?.provider || provider),
+      provider_label: String(item?.provider_label || providerLabel),
+    })),
+  }
+}
 
 function extractCode(value: string) {
   const match = String(value || '').match(/\b(FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,8}[-_ ]?\d{2,7}|\d{6}[-_]\d{2,5})\b/i)
@@ -121,6 +140,34 @@ async function openItem(item: ResourceItem) {
   await router.push(targetRoute(item))
 }
 
+async function downloadItem(item: ResourceItem) {
+  try {
+    const response = await api.post('/plugins/resources/resolve-download', {
+      provider_id: item.provider,
+      item,
+    })
+    const resolved = response.data || {}
+    const resolvedItem = resolved.item || item
+    const resolvedUrl = resolved.url || resolvedItem.url
+    const downloaderIds = Array.isArray(resolvedItem.compatible_downloaders)
+      ? resolvedItem.compatible_downloaders.filter(Boolean)
+      : []
+    const downloaderId = resolvedItem.preferred_downloader || downloaderIds[0]
+    if (!downloaderId) throw new Error('没有兼容的下载器')
+    if (!resolvedUrl) throw new Error('资源链接解析失败')
+    await downloads.open({
+      downloaderId,
+      downloaderIds,
+      url: resolvedUrl,
+      title: item.title,
+      rename: item.title,
+      itemTitle: item.title,
+    })
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || '推送失败')
+  }
+}
+
 function switchProvider(provider: string) {
   activeProvider.value = provider
 }
@@ -163,7 +210,7 @@ async function loadMoreProvider(group: ResourceGroup) {
       providers: [group.provider],
       limit_per_plugin: displayLimitPerProvider,
     })
-    const nextGroup = (resp.data?.groups || [])[0]
+    const nextGroup = normalizeGroup((resp.data?.groups || [])[0] || {})
     const incoming = Array.isArray(nextGroup?.items) ? nextGroup.items : []
     const target = groups.value.find(item => item.provider === group.provider)
     if (!target) return
@@ -216,7 +263,7 @@ async function search() {
       limit_per_plugin: displayLimitPerProvider,
     })
     if (current !== seq) return
-    groups.value = resp.data?.groups || []
+    groups.value = (resp.data?.groups || []).map(normalizeGroup)
     if (activeProvider.value !== 'all' && !groups.value.some(group => group.provider === activeProvider.value)) {
       activeProvider.value = 'all'
     }
@@ -262,7 +309,6 @@ onUnmounted(() => {
   <div class="resource-search-page">
     <header class="resource-search-hero">
       <div class="resource-search-hero__main">
-        <p class="resource-search-eyebrow">全局资源搜索</p>
         <p class="resource-search-eyebrow">全局资源搜索</p>
         <h1>资源结果</h1>
         <p>主程序统一聚合资源类插件，结果按来源拆分，点击后进入对应作品或插件页面。</p>
@@ -345,7 +391,7 @@ onUnmounted(() => {
         <em>{{ group.items.length }} 条</em>
       </div>
       <div class="resource-search-grid">
-        <button v-for="item in group.items" :key="`${group.provider}:${item.id}`" type="button" class="resource-search-card" @click="openItem(item)">
+        <article v-for="item in group.items" :key="`${group.provider}:${item.id}`" class="resource-search-card" tabindex="0" @click="openItem(item)" @keydown.enter="openItem(item)">
           <div class="resource-search-cover" :class="{ 'has-image': !!item.cover_url }">
             <img v-if="item.cover_url" :src="item.cover_url" alt="" loading="lazy" />
             <BaseIcon v-else name="download" />
@@ -358,8 +404,16 @@ onUnmounted(() => {
           <div class="resource-search-badges">
             <span v-for="badge in badges(item)" :key="badge.label" class="resource-search-badge" :class="toneClass(badge.tone)">{{ badge.label }}</span>
           </div>
-          <BaseIcon name="chevronRight" class="resource-search-card__arrow" />
-        </button>
+          <div class="resource-search-card__actions">
+            <button v-if="item.url || item.source_url" type="button" class="resource-search-download" @click.stop="downloadItem(item)">
+              <BaseIcon name="download" />
+              <span>推送下载</span>
+            </button>
+            <button type="button" class="resource-search-open" @click.stop="openItem(item)" title="打开来源">
+              <BaseIcon name="chevronRight" />
+            </button>
+          </div>
+        </article>
       </div>
       <button v-if="hasMoreForGroup(group)" type="button" class="resource-search-more-row" @click="loadMoreProvider(group)">
         <BaseIcon v-if="providerLoading[group.provider]" name="loading" class="resource-search-spin" />
@@ -408,7 +462,7 @@ onUnmounted(() => {
 .resource-search-more-row:hover { border-color: rgba(0,117,255,.24); background: rgba(0,117,255,.1); color: #fff; }
 .resource-search-more-row svg, .resource-search-more-row :deep(svg) { width: 1rem; height: 1rem; }
 .resource-search-more-row em { color: var(--color-text-muted); font-style: normal; font-weight: 650; }
-.resource-search-card { position: relative; min-width: 0; display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: .8rem; align-items: stretch; padding: .65rem 2.35rem .65rem .65rem; border: 1px solid var(--color-glass-border); background: var(--color-bg-surface); color: inherit; text-align: left; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.14); transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); }
+.resource-search-card { position: relative; min-width: 0; display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: .8rem; align-items: stretch; padding: .65rem; border: 1px solid var(--color-glass-border); background: var(--color-bg-surface); color: inherit; text-align: left; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.14); transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); cursor: pointer; }
 .resource-search-card:hover { transform: translateY(-1px); border-color: rgba(0,117,255,.28); background: var(--color-bg-elevated); }
 .resource-search-cover { aspect-ratio: 2184 / 1468; display: flex; align-items: center; justify-content: center; overflow: hidden; background: rgba(255,255,255,.05); color: var(--color-text-muted); }
 .resource-search-cover img { width: 100%; height: 100%; object-fit: cover; }
@@ -424,7 +478,12 @@ onUnmounted(() => {
 .resource-search-badge--warning { background: rgba(245,158,11,.16); color: #fcd34d; }
 .resource-search-badge--danger { background: rgba(239,68,68,.15); color: #fca5a5; }
 .resource-search-badge--info { background: rgba(148,163,184,.12); color: #cbd5e1; }
-.resource-search-card__arrow { position: absolute; right: .75rem; top: 50%; width: 1rem; height: 1rem; color: var(--color-text-muted); transform: translateY(-50%); }
+.resource-search-card__actions { grid-column: 2 / 3; display: flex; align-items: center; justify-content: flex-end; gap: .4rem; }
+.resource-search-download,.resource-search-open { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; border: 1px solid rgba(0,117,255,.25); border-radius: var(--radius-button); background: rgba(0,117,255,.12); color: #dbeafe; font-size: .72rem; font-weight: 750; }
+.resource-search-download { padding: 0 .7rem; }
+.resource-search-open { width: 30px; }
+.resource-search-download:hover,.resource-search-open:hover { border-color: rgba(0,117,255,.5); background: rgba(0,117,255,.22); color: #fff; }
+.resource-search-download svg,.resource-search-open svg,.resource-search-download :deep(svg),.resource-search-open :deep(svg) { width: .9rem; height: .9rem; }
 .resource-search-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(31rem, 1fr)); gap: .65rem; }
 .resource-search-card.is-skeleton { pointer-events: none; }
 .resource-search-card.is-skeleton .resource-search-cover, .resource-search-card.is-skeleton strong, .resource-search-card.is-skeleton span, .resource-search-card.is-skeleton small { position: relative; overflow: hidden; color: transparent; background: rgba(255,255,255,.055); }
@@ -435,5 +494,5 @@ onUnmounted(() => {
 @keyframes resource-search-shimmer { to { transform: translateX(100%); } }
 @media (max-width: 1100px) { .resource-search-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } .resource-search-toolbar, .resource-search-hero { grid-template-columns: 1fr; } .resource-search-status { justify-content: flex-start; white-space: normal; } }
 @media (max-width: 760px) { .resource-search-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-search-grid, .resource-search-skeleton-grid { grid-template-columns: 1fr; } .resource-search-card { grid-template-columns: 7rem minmax(0,1fr); } }
-@media (max-width: 560px) { .resource-search-hero { padding: .8rem; } .resource-search-card { grid-template-columns: 1fr; padding-right: .65rem; } .resource-search-badges { grid-column: 1 / -1; } .resource-search-card__arrow { display: none; } }
+@media (max-width: 560px) { .resource-search-hero { padding: .8rem; } .resource-search-card { grid-template-columns: 1fr; } .resource-search-badges,.resource-search-card__actions { grid-column: 1 / -1; } }
 </style>
