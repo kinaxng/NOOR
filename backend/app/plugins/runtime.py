@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.runtime_paths import data_path
+from app.plugins.adapters import build_widget, fetch_rss_items, search_subtitles_for_plugin, submit_download
 from app.plugins.contracts import PluginManifest
 from app.plugins.handlers import clear_handler_cache, get_plugin_handler
 from app.plugins.market import MarketError, fetch_repo_index, install_from_market_item
@@ -220,13 +221,12 @@ class PluginRuntime:
     async def get_rss_items(self, plugin_id: str, *, limit: int = 30, force_refresh: bool = False) -> Any:
         handler = self._handlers.get(plugin_id)
         manifest_data = self._manifests.get(plugin_id)
-        if handler is None or manifest_data is None:
+        if manifest_data is None:
             raise LookupError(plugin_id)
-        callback = getattr(handler, 'fetch_rss_items', None)
-        if not callable(callback):
-            raise LookupError(f'Plugin RSS provider not found: {plugin_id}')
         fields = PluginManifest.__dataclass_fields__
         manifest = PluginManifest(**{key: value for key, value in manifest_data.items() if key in fields})
+        callback = getattr(handler, 'fetch_rss_items', None) if handler is not None else None
+        callback = callback if callable(callback) else fetch_rss_items
         result = callback(manifest, self.get_config(plugin_id), limit=limit, force_refresh=force_refresh)
         return await result if asyncio.iscoroutine(result) else result
 
@@ -265,16 +265,23 @@ class PluginRuntime:
     async def get_dashboard_widgets(self, plugin_ids: list[str] | None = None) -> list[dict[str, Any]]:
         wanted = set(plugin_ids or [])
         widgets: list[dict[str, Any]] = []
-        for plugin_id, handler in self._handlers.items():
+        for plugin_id, manifest_data in self._manifests.items():
             if wanted and plugin_id not in wanted:
                 continue
             if not self._is_enabled(plugin_id):
                 continue
-            callback = getattr(handler, 'build_widget', None)
-            if not callable(callback):
+            capabilities = set(manifest_data.get('capabilities') or [])
+            if manifest_data.get('type') != 'dashboard_widget' and 'dashboard_widget' not in capabilities:
                 continue
+            handler = self._handlers.get(plugin_id)
+            callback = getattr(handler, 'build_widget', None) if handler is not None else None
             try:
-                value = callback(self.get_config(plugin_id))
+                if callable(callback):
+                    value = callback(self.get_config(plugin_id))
+                else:
+                    fields = PluginManifest.__dataclass_fields__
+                    manifest = PluginManifest(**{key: value for key, value in manifest_data.items() if key in fields})
+                    value = build_widget(manifest, self.get_config(plugin_id))
                 value = await value if asyncio.iscoroutine(value) else value
             except Exception:
                 continue
@@ -292,17 +299,20 @@ class PluginRuntime:
 
     async def search_subtitles(self, video_code: str, *, local_only: bool = False) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
-        for plugin_id, handler in self._handlers.items():
-            manifest = self._manifests.get(plugin_id) or {}
+        for plugin_id, manifest in self._manifests.items():
             if not self._is_enabled(plugin_id) or 'subtitle_search' not in (manifest.get('capabilities') or []):
                 continue
             if local_only and 'subtitle_search_local' not in (manifest.get('capabilities') or []):
                 continue
-            callback = getattr(handler, 'search_subtitles', None)
-            if not callable(callback):
-                continue
+            handler = self._handlers.get(plugin_id)
+            callback = getattr(handler, 'search_subtitles', None) if handler is not None else None
             try:
-                value = callback(self.get_config(plugin_id), video_code)
+                if callable(callback):
+                    value = callback(self.get_config(plugin_id), video_code)
+                else:
+                    fields = PluginManifest.__dataclass_fields__
+                    model = PluginManifest(**{key: value for key, value in manifest.items() if key in fields})
+                    value = search_subtitles_for_plugin(model, self.get_config(plugin_id), video_code)
                 value = await value if asyncio.iscoroutine(value) else value
                 if isinstance(value, list):
                     results.extend(item for item in value if isinstance(item, dict))
@@ -369,8 +379,11 @@ class PluginRuntime:
         if not self.is_enabled(plugin_id):
             raise ValueError('下载器插件未启用')
         handler = self._handlers.get(plugin_id)
+        manifest_data = self._manifests.get(plugin_id) or {}
+        fields = PluginManifest.__dataclass_fields__
+        manifest = PluginManifest(**{key: value for key, value in manifest_data.items() if key in fields})
         if handler is None:
-            raise LookupError(plugin_id)
+            return await submit_download(manifest, self.get_config(plugin_id), payload)
         for name, args in (
             ('submit_download', (payload, self.get_config(plugin_id))),
             ('handle_action', ('submit_download', payload, self.get_config(plugin_id))),
