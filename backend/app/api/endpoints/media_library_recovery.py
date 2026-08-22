@@ -18,7 +18,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.endpoints import media_library as media
-from app.api.endpoints.media_library_item_detail import get_main_nfo_impl, _sort_siblings
+from app.api.endpoints.media_library_item_detail import build_stream_url_for_server_impl, get_main_nfo_impl, _sort_siblings
 
 
 router = APIRouter(prefix="/api/media-library", tags=["media-library-recovery"])
@@ -211,11 +211,23 @@ def _parse_nfo(path: str | None) -> dict[str, Any] | None:
 
 def _sibling_from_raw(raw: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     file_path = _media_source_path(raw, config)
+    media_sources = raw.get("MediaSources") if isinstance(raw.get("MediaSources"), list) else []
+    selected_source = next((source for source in media_sources if source.get("Type") == "Default"), None)
+    if selected_source is None and media_sources:
+        selected_source = media_sources[0]
+    container = str((selected_source or {}).get("Container") or Path(file_path or "").suffix.lstrip("."))
+    item_id = str(raw.get("Id") or "")
     return {
-        "id": raw.get("Id"),
+        "id": item_id,
         "label": raw.get("Name") or (Path(file_path).name if file_path else ""),
         "file_path": file_path,
         "name": raw.get("Name") or (Path(file_path).name if file_path else ""),
+        "media_source_id": (selected_source or {}).get("Id"),
+        "container": container,
+        "stream_url": build_stream_url_for_server_impl(
+            _base(config), str(config.get("api_key") or ""), item_id,
+            (selected_source or {}).get("Id"), container,
+        ) if item_id else None,
     }
 
 
@@ -261,6 +273,12 @@ async def _fetch_sibling_raws(config: dict[str, Any], parent_id: str | None, cur
 async def _detail_from_raw(raw: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     item_id = str(raw.get("Id") or "")
     file_path = _media_source_path(raw, config)
+    media_sources = raw.get("MediaSources") if isinstance(raw.get("MediaSources"), list) else []
+    selected_source = next((source for source in media_sources if source.get("Type") == "Default"), None)
+    if selected_source is None and media_sources:
+        selected_source = media_sources[0]
+    media_source_id = (selected_source or {}).get("Id")
+    media_container = str((selected_source or {}).get("Container") or Path(file_path or "").suffix.lstrip("."))
     sibling_raws = await _fetch_sibling_raws(config, str(raw.get("ParentId") or ""), item_id)
     siblings = _sort_siblings([_sibling_from_raw(item, config) for item in sibling_raws])
     studios = [s.get("Name") for s in raw.get("Studios", []) if isinstance(s, dict) and s.get("Name")]
@@ -305,7 +323,9 @@ async def _detail_from_raw(raw: dict[str, Any], config: dict[str, Any]) -> dict[
         "file_path": file_path,
         "path": file_path,
         "emby_path": raw.get("Path"),
-        "stream_url": None if file_path else f"{_base(config)}/emby/Items/{item_id}/Download",
+        "stream_url": build_stream_url_for_server_impl(
+            _base(config), str(config.get("api_key") or ""), item_id, media_source_id, media_container,
+        ),
         "date_created": raw.get("DateCreated"),
         "premiered": raw.get("PremiereDate"),
         "overview": raw.get("Overview"),

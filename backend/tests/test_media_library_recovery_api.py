@@ -103,6 +103,7 @@ def test_recovery_item_detail_includes_panel_contract(monkeypatch, tmp_path):
     assert response.status_code == 200
     data = response.json()
     assert data["file_path"] == movie_path
+    assert data["stream_url"] == "/api/media-library/stream/123?container=mp4"
     assert data["poster_path"] == "http://emby/emby/Items/123/Images/Primary?tag=poster-tag"
     assert data["backdrop_path"] == "http://emby/emby/Items/123/Images/Backdrop?tag=backdrop-tag"
     assert data["actors"] == [{"name": "演员A", "role": "Actor"}]
@@ -112,6 +113,7 @@ def test_recovery_item_detail_includes_panel_contract(monkeypatch, tmp_path):
     assert data["provider_ids"] == {"Tmdb": "345"}
     assert data["variant_count"] == 2
     assert data["siblings"][0]["file_path"] == sibling_path
+    assert data["siblings"][0]["stream_url"] == "/api/media-library/stream/124?container=mp4"
     assert data["siblings"][0]["tags"]["has_chinese"] is True
     assert data["main_nfo"] == str(nfo_path)
     assert data["nfo"]["title"] == "AAA-001 中文标题"

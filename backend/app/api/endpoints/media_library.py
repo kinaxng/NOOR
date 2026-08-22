@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED, VIDEO_EXTS, config_path as _config_path, headers as _headers, load_config as _load_config, map_path as _map_path, parse_item as _parse_item, parse_tags as _parse_tags, save_config as _save_config, server_url as _server_url
-from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl
+from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
 from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl, fetch_emby_item_info_impl, hardlink_groups_path_impl, load_hardlink_groups_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
 from app.api.endpoints.media_library_listing import deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, apply_filter_and_paginate as _apply_filter_and_paginate
 from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, execute_delete_targets as _execute_delete_targets, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
@@ -173,6 +173,38 @@ async def get_item(item_id:str):
  except Exception as e:raise HTTPException(502,f'获取详情失败: {e}')
 @router.get('/hardlinks/groups')
 async def get_hardlink_groups():return {**_enrich_hardlink_groups(_load_hardlink_groups()),'last_scanned_at':_hardlink_groups_last_scanned_at()}
+@router.get('/stream/{item_id}')
+async def stream_emby_item(request:Request,item_id:str,media_source_id:str|None=Query(default=None),container:str|None=Query(default=None)):
+ config=_load_config();server_url=_server_url(config);api_key=config.get('api_key','')
+ if not server_url or not api_key:raise HTTPException(400,'Emby 未配置，无法播放')
+ playback=await resolve_playback_stream_url_impl(config,item_id,media_source_id=media_source_id,container=container,httpx_module=httpx,server_url_fn=_server_url,headers_fn=_headers)
+ upstream_url=playback.get('url')
+ if not upstream_url:raise HTTPException(502,'未能解析 Emby 播放地址')
+ upstream_headers={}
+ if request.headers.get('range'):upstream_headers['Range']=request.headers['range']
+ client=httpx.AsyncClient(timeout=None,trust_env=False)
+ try:
+  upstream_request=client.build_request('GET',upstream_url,headers=upstream_headers)
+  upstream_response=await client.send(upstream_request,stream=True)
+ except Exception as exc:
+  await client.aclose();raise HTTPException(502,f'Emby 播放流打开失败: {exc}') from exc
+ if upstream_response.status_code>=400:
+  try:detail=await upstream_response.aread()
+  finally:await upstream_response.aclose();await client.aclose()
+  message=detail.decode('utf-8',errors='ignore') if detail else ''
+  raise HTTPException(upstream_response.status_code,message or f"Emby 播放失败 ({playback.get('play_method') or 'unknown'})")
+ response_headers={}
+ for header_name in ('content-type','content-length','accept-ranges','content-range','cache-control','etag','last-modified'):
+  value=upstream_response.headers.get(header_name)
+  if value:response_headers[header_name]=value
+ if playback.get('play_method'):response_headers['x-noor-play-method']=str(playback['play_method'])
+ if playback.get('play_session_id'):response_headers['x-noor-play-session-id']=str(playback['play_session_id'])
+ async def _iter_upstream():
+  try:
+   async for chunk in upstream_response.aiter_bytes():
+    if chunk:yield chunk
+  finally:await upstream_response.aclose();await client.aclose()
+ return StreamingResponse(_iter_upstream(),status_code=upstream_response.status_code,headers=response_headers,media_type=upstream_response.headers.get('content-type') or 'application/octet-stream')
 @router.post('/hardlinks/scan')
 async def scan_hardlinks():
  config=_load_config()
