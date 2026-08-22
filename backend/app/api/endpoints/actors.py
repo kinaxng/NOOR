@@ -146,6 +146,116 @@ def _lang_key(value: str | None) -> str:
     return "zh_cn"
 
 
+def _clean_text_lines(value: str | None) -> str:
+    text = re.sub(r"<br\s*/?>", "\n", str(value or ""), flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    return "\n".join(line.strip() for line in text.splitlines() if line.strip()).strip()
+
+
+def _overview_external_urls(value: str | None) -> tuple[str, dict[str, str]]:
+    text = _clean_text_lines(value)
+    if not text:
+        return "", {}
+    urls: dict[str, str] = {}
+    kept: list[str] = []
+    label_map = {
+        "twitter": "x", "x": "x", "instagram": "instagram", "ins": "instagram",
+        "tiktok": "tiktok", "youtube": "youtube", "facebook": "facebook",
+        "fanza": "fanza", "dmm": "fanza", "tmdb": "tmdb", "imdb": "imdb",
+        "homepage": "homepage", "official": "homepage", "主页": "homepage", "官网": "homepage",
+    }
+    url_pattern = re.compile(r'https?://[^\s<>\"]+')
+    for line in text.splitlines():
+        lowered = line.lower()
+        found = url_pattern.findall(line)
+        is_link_line = bool(found) or "外部链接" in line or set(line) <= {"=", "-", " "}
+        if found:
+            label_text = lowered.split(found[0].lower(), 1)[0].strip(" :=：-[]()")
+            key = next(
+                (
+                    mapped
+                    for label, mapped in label_map.items()
+                    if (label == "x" and label_text == "x") or (label != "x" and label in label_text)
+                ),
+                "",
+            )
+            for url in found:
+                clean_url = url.rstrip("。.,，；;")
+                next_key = key or "homepage"
+                if next_key in urls and urls[next_key] != clean_url:
+                    suffix = 2
+                    while f"{next_key}_{suffix}" in urls:
+                        suffix += 1
+                    next_key = f"{next_key}_{suffix}"
+                urls[next_key] = clean_url
+        if not is_link_line:
+            kept.append(line)
+    return "\n".join(kept).strip(), urls
+
+
+def _translation_name_map(person: dict[str, Any]) -> dict[str, str]:
+    translations = ((person.get("translations") or {}).get("translations") or (person.get("translations") or {}).get("data") or [])
+    if not isinstance(translations, list):
+        return {}
+    names: dict[str, str] = {}
+    for item in translations:
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        name = str(data.get("name") or "").strip()
+        if not name:
+            continue
+        iso = str(item.get("iso_639_1") or "").lower()
+        country = str(item.get("iso_3166_1") or "").upper()
+        if iso and country:
+            names[f"{iso}-{country}"] = name
+        if iso:
+            names.setdefault(iso, name)
+    return names
+
+
+def _tmdb_identity_names(person: dict[str, Any]) -> dict[str, Any]:
+    translated = _translation_name_map(person)
+    jp = translated.get("ja-JP") or translated.get("ja") or ""
+    zh_cn = translated.get("zh-CN") or translated.get("zh-HANS") or translated.get("zh-SG") or translated.get("zh") or ""
+    zh_tw = translated.get("zh-TW") or translated.get("zh-HK") or translated.get("zh-HANT") or ""
+    aliases: list[str] = []
+    known_aliases = person.get("also_known_as") if isinstance(person.get("also_known_as"), list) else []
+    for value in [person.get("name"), *known_aliases]:
+        name = str(value or "").strip()
+        if name and name not in {jp, zh_cn, zh_tw} and name not in aliases:
+            aliases.append(name)
+    return {"jp": jp, "zh_cn": zh_cn, "zh_tw": zh_tw, "aliases": aliases}
+
+
+def _tmdb_external_urls(external_ids: dict[str, Any], tmdb_id: str | None = None) -> dict[str, str]:
+    urls: dict[str, str] = {}
+    if tmdb_id:
+        urls["tmdb"] = f"https://www.themoviedb.org/person/{quote(str(tmdb_id))}"
+    definitions = {
+        "imdb_id": ("imdb", "https://www.imdb.com/name/{}/"),
+        "twitter_id": ("x", "https://x.com/{}"),
+        "instagram_id": ("instagram", "https://www.instagram.com/{}/"),
+        "tiktok_id": ("tiktok", "https://www.tiktok.com/@{}"),
+        "youtube_id": ("youtube", "https://www.youtube.com/{}"),
+        "wikidata_id": ("wikidata", "https://www.wikidata.org/wiki/{}"),
+        "facebook_id": ("facebook", "https://www.facebook.com/{}"),
+    }
+    for source_key, (target_key, template) in definitions.items():
+        value = str(external_ids.get(source_key) or "").strip().lstrip("@")
+        if value:
+            urls[target_key] = template.format(quote(value))
+    return urls
+
+
+def _tmdb_gender_label(value: object) -> str:
+    try:
+        gender = int(value or 0)
+    except (TypeError, ValueError):
+        gender = 0
+    return {1: "female", 2: "male", 3: "non-binary"}.get(gender, "")
+
+
 def _is_actor_name(value: str | None) -> bool:
     name = str(value or "").strip()
     if not name or name.isdecimal() or re.fullmatch(r"[-_ .·・]+", name):
@@ -1385,7 +1495,7 @@ async def _tmdb_person(config: dict[str, Any], actor: dict[str, Any], lang: str)
     async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
         response = await client.get(
             f"https://api.themoviedb.org/3/person/{quote(tmdb_id)}",
-            params={"api_key": api_key, "language": lang, "append_to_response": "external_ids,translations"},
+            params={"api_key": api_key, "language": lang, "append_to_response": "external_ids,translations,images"},
         )
         response.raise_for_status()
         return response.json()
@@ -1395,35 +1505,37 @@ def _tmdb_proposal(person: dict[str, Any], current: dict[str, Any]) -> dict[str,
     external = person.get("external_ids") or {}
     provider_ids = dict(current.get("provider_ids") or {})
     provider_ids["Tmdb"] = str(person.get("id") or current.get("tmdb_id") or "")
-    if external.get("imdb_id"):
-        provider_ids["Imdb"] = str(external["imdb_id"])
-    external_urls = dict(current.get("external_urls") or {})
-    links = {
-        "x": external.get("twitter_id"), "instagram": external.get("instagram_id"),
-        "facebook": external.get("facebook_id"), "tiktok": external.get("tiktok_id"),
-        "youtube": external.get("youtube_id"),
+    provider_keys = {
+        "imdb_id": "Imdb", "twitter_id": "Twitter", "instagram_id": "Instagram",
+        "tiktok_id": "TikTok", "youtube_id": "YouTube", "wikidata_id": "Wikidata",
+        "facebook_id": "Facebook",
     }
-    prefixes = {
-        "x": "https://x.com/", "instagram": "https://www.instagram.com/", "facebook": "https://www.facebook.com/",
-        "tiktok": "https://www.tiktok.com/@", "youtube": "https://www.youtube.com/",
-    }
-    for key, value in links.items():
+    for source_key, provider_key in provider_keys.items():
+        value = str(external.get(source_key) or "").strip().lstrip("@")
         if value:
-            external_urls[key] = prefixes[key] + str(value)
+            provider_ids[provider_key] = value
+    external_urls = {**dict(current.get("external_urls") or {}), **_tmdb_external_urls(external, provider_ids["Tmdb"])}
     if person.get("homepage"):
         external_urls["homepage"] = person["homepage"]
+    overview, overview_links = _overview_external_urls(person.get("biography"))
+    external_urls = {**overview_links, **external_urls}
+    identity_names = _tmdb_identity_names(person)
     profile = str(person.get("profile_path") or "")
     return {
         "name": person.get("name") or current.get("name"),
         "sort_name": person.get("name") or current.get("sort_name"),
-        "overview": person.get("biography") or current.get("overview") or "",
+        "overview": overview or current.get("overview") or "",
         "provider_ids": provider_ids,
         "tmdb_id": provider_ids.get("Tmdb", ""),
         "imdb_id": provider_ids.get("Imdb", ""),
+        "jp_name": identity_names["jp"],
+        "zh_cn_name": identity_names["zh_cn"],
+        "zh_tw_name": identity_names["zh_tw"],
+        "aliases": identity_names["aliases"],
         "birthday": person.get("birthday") or "",
         "deathday": person.get("deathday") or "",
         "place_of_birth": person.get("place_of_birth") or "",
-        "gender": str(person.get("gender") or ""),
+        "gender": _tmdb_gender_label(person.get("gender")),
         "known_for_department": person.get("known_for_department") or "",
         "popularity": person.get("popularity"),
         "homepage": person.get("homepage") or "",
@@ -1445,15 +1557,26 @@ async def preview_actor_tmdb_metadata(actor_id: str, lang: str = "zh-CN"):
 @router.post("/actor/{actor_id}/metadata/tmdb-apply")
 async def apply_actor_tmdb_metadata(actor_id: str, req: ActorTmdbApplyRequest, lang: str = "zh-CN"):
     preview = await preview_actor_tmdb_metadata(actor_id, lang)
+    current = preview["current"]
     proposal = preview["proposal"]
+    current_overview, current_overview_links = _overview_external_urls(current.get("overview"))
+    next_external_urls = {
+        **dict(current.get("external_urls") or {}),
+        **current_overview_links,
+        **dict(proposal.get("external_urls") or {}),
+    }
     update = ActorProfileUpdateRequest(
         name=proposal["name"] if req.apply_name else None,
         sort_name=proposal["sort_name"] if req.apply_name else None,
-        overview=proposal["overview"] if req.apply_overview else None,
+        jp_name=proposal.get("jp_name") or None,
+        zh_cn_name=proposal.get("zh_cn_name") or None,
+        zh_tw_name=proposal.get("zh_tw_name") or None,
+        aliases=proposal.get("aliases") or None,
+        overview=proposal["overview"] if req.apply_overview else current_overview,
         provider_ids=proposal["provider_ids"] if req.apply_provider_ids else None,
         birthday=proposal["birthday"], deathday=proposal["deathday"], place_of_birth=proposal["place_of_birth"],
         gender=proposal["gender"], known_for_department=proposal["known_for_department"], popularity=proposal["popularity"],
-        homepage=proposal["homepage"], external_urls=proposal["external_urls"],
+        homepage=proposal["homepage"], external_urls=next_external_urls,
     )
     result = await update_actor(actor_id, update, lang)
     avatar_synced = False

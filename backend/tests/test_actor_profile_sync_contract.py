@@ -123,6 +123,45 @@ def test_actor_merge_ignored_ghost_storage_accepts_legacy_list(monkeypatch, tmp_
     assert actors._load_actor_merge_ignored_ghosts() == {"34", "56"}
 
 
+def test_tmdb_proposal_imports_translated_names_aliases_and_social_links():
+    person = {
+        "id": 3453337,
+        "name": "倉本すみれ",
+        "also_known_as": ["仓本堇", "仓本菫", "Kuramoto Sumire"],
+        "biography": "人物简介\nInstagram: https://www.instagram.com/example/\n官网: https://example.test/",
+        "profile_path": "/portrait.jpg",
+        "gender": 1,
+        "external_ids": {
+            "imdb_id": "nm123",
+            "twitter_id": "@example_x",
+            "instagram_id": "example_ins",
+            "tiktok_id": "@example_tt",
+            "youtube_id": "@example_yt",
+            "wikidata_id": "Q123",
+        },
+        "translations": {
+            "translations": [
+                {"iso_639_1": "ja", "iso_3166_1": "JP", "data": {"name": "倉本すみれ"}},
+                {"iso_639_1": "zh", "iso_3166_1": "CN", "data": {"name": "仓本堇"}},
+                {"iso_639_1": "zh", "iso_3166_1": "TW", "data": {"name": "倉本堇"}},
+            ]
+        },
+    }
+
+    proposal = actors._tmdb_proposal(person, {"provider_ids": {}, "external_urls": {}})
+
+    assert proposal["jp_name"] == "倉本すみれ"
+    assert proposal["zh_cn_name"] == "仓本堇"
+    assert proposal["zh_tw_name"] == "倉本堇"
+    assert proposal["aliases"] == ["仓本菫", "Kuramoto Sumire"]
+    assert proposal["overview"] == "人物简介"
+    assert proposal["gender"] == "female"
+    assert proposal["provider_ids"]["TikTok"] == "example_tt"
+    assert proposal["provider_ids"]["Wikidata"] == "Q123"
+    assert proposal["external_urls"]["tiktok"] == "https://www.tiktok.com/@example_tt"
+    assert proposal["external_urls"]["homepage"] == "https://example.test/"
+
+
 def test_actor_delete_diagnostics_reports_related_items_and_provider_ids(monkeypatch, tmp_path):
     monkeypatch.setattr(actors, "_profile_overrides_path", lambda: tmp_path / "actor_profile_overrides.json")
 
