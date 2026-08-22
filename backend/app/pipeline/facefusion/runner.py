@@ -293,6 +293,7 @@ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tup
     cmd += ["--reference-frame-number", str(job_settings.get("reference_frame_number", settings.facefusion_reference_frame_number))]
     cmd += ["--reference-face-position", str(job_settings.get("reference_face_position", settings.facefusion_reference_face_position))]
     cmd += ["--reference-face-distance", str(job_settings.get("reference_face_distance", settings.facefusion_reference_face_distance))]
+    cmd += ["--face-tracker-score", str(job_settings.get("face_tracker_score", settings.facefusion_face_tracker_score))]
 
     mask_types = _split_words(job_settings.get("face_mask_types", settings.facefusion_face_mask_types), ["box"])
     if mask_types:

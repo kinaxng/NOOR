@@ -128,6 +128,7 @@ const faceSelectorRace = ref('')
 const referenceFrameNumber = ref(0)
 const referenceFacePosition = ref(0)
 const referenceFaceDistance = ref(0.3)
+const faceTrackerScore = ref(0)
 const faceMaskTypes = ref('box')
 const faceMaskAreas = ref('')
 const faceMaskRegions = ref('')
@@ -275,6 +276,7 @@ async function loadSettings() {
       referenceFrameNumber.value = data.facefusion_defaults.reference_frame_number ?? 0
       referenceFacePosition.value = data.facefusion_defaults.reference_face_position ?? 0
       referenceFaceDistance.value = data.facefusion_defaults.reference_face_distance ?? 0.3
+      faceTrackerScore.value = data.facefusion_defaults.face_tracker_score ?? 0
       faceMaskTypes.value = data.facefusion_defaults.face_mask_types || 'box'
       faceMaskAreas.value = data.facefusion_defaults.face_mask_areas || ''
       faceMaskRegions.value = data.facefusion_defaults.face_mask_regions || ''
@@ -434,6 +436,7 @@ async function saveDefaults() {
       reference_frame_number: referenceFrameNumber.value,
       reference_face_position: referenceFacePosition.value,
       reference_face_distance: referenceFaceDistance.value,
+      face_tracker_score: faceTrackerScore.value,
       face_mask_types: faceMaskTypes.value,
       face_mask_areas: faceMaskAreas.value,
       face_mask_regions: faceMaskRegions.value,
@@ -974,6 +977,13 @@ async function saveDefaults() {
             <div class="range-control">
               <input v-model.number="referenceFaceDistance" type="range" min="0" max="1" step="0.05" />
               <span>{{ Number(referenceFaceDistance).toFixed(2) }}</span>
+            </div>
+          </FieldRow>
+
+          <FieldRow v-if="faceSelectorMode === 'reference'" label="追踪匹配阈值" description="0.00 关闭跨帧人脸追踪">
+            <div class="range-control">
+              <input v-model.number="faceTrackerScore" type="range" min="0" max="0.5" step="0.05" />
+              <span>{{ Number(faceTrackerScore).toFixed(2) }}</span>
             </div>
           </FieldRow>
         </div>

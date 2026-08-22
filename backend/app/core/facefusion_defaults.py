@@ -48,6 +48,7 @@ FACEFUSION_DEFAULTS: dict[str, Any] = {
     "facefusion_reference_frame_number": 0,
     "facefusion_reference_face_position": 0,
     "facefusion_reference_face_distance": 0.3,
+    "facefusion_face_tracker_score": 0.0,
     "facefusion_face_mask_types": "box",
     "facefusion_face_mask_areas": "",
     "facefusion_face_mask_regions": "",

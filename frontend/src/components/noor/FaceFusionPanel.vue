@@ -119,6 +119,7 @@ const facefusionSettings = ref<JobSettings>({
   reference_frame_number: 0,
   reference_face_position: 0,
   reference_face_distance: 0.3,
+  face_tracker_score: 0,
   face_mask_types: 'box',
   face_mask_areas: 'upper-face lower-face mouth',
   face_mask_regions: 'skin left-eyebrow right-eyebrow left-eye right-eye glasses nose mouth upper-lip lower-lip',
@@ -296,6 +297,7 @@ watch(() => props.open, async (isOpen) => {
       reference_frame_number: ffDefaults.reference_frame_number ?? 0,
       reference_face_position: ffDefaults.reference_face_position ?? 0,
       reference_face_distance: ffDefaults.reference_face_distance ?? 0.3,
+      face_tracker_score: ffDefaults.face_tracker_score ?? 0,
       face_mask_types: ffDefaults.face_mask_types || 'box',
       face_mask_areas: ffDefaults.face_mask_areas || facefusionMaskAreaOptions.join(' '),
       face_mask_regions: ffDefaults.face_mask_regions || facefusionMaskRegionOptions.join(' '),
@@ -1079,6 +1081,10 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
                             <span>参考人脸距离 {{ Number(facefusionSettings.reference_face_distance || 0).toFixed(2) }}</span>
                             <input v-model.number="facefusionSettings.reference_face_distance" type="range" min="0" max="1" step="0.05" class="facefusion-range" />
                           </label>
+                          <label>
+                            <span>追踪阈值 {{ Number(facefusionSettings.face_tracker_score || 0).toFixed(2) }}</span>
+                            <input v-model.number="facefusionSettings.face_tracker_score" type="range" min="0" max="0.5" step="0.05" class="facefusion-range" />
+                          </label>
                           <button type="button" class="facefusion-reference-box__refresh" :disabled="referenceFacesLoading" @click="loadReferenceFaces">
                             {{ referenceFacesLoading ? '读取中' : '刷新人脸库' }}
                           </button>
@@ -1530,6 +1536,10 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
                         <label>
                           <span>匹配距离 {{ Number(facefusionSettings.reference_face_distance || 0).toFixed(2) }}</span>
                           <input v-model.number="facefusionSettings.reference_face_distance" type="range" min="0" max="1" step="0.05" class="facefusion-range" />
+                        </label>
+                        <label>
+                          <span>追踪阈值 {{ Number(facefusionSettings.face_tracker_score || 0).toFixed(2) }}</span>
+                          <input v-model.number="facefusionSettings.face_tracker_score" type="range" min="0" max="0.5" step="0.05" class="facefusion-range" />
                         </label>
                         <button type="button" class="facefusion-reference-box__refresh" :disabled="referenceFacesLoading" @click="loadReferenceFaces">
                           {{ referenceFacesLoading ? '读取中' : '刷新人脸库' }}

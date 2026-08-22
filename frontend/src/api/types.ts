@@ -196,6 +196,7 @@ export interface JobSettings {
   reference_frame_number?: number
   reference_face_position?: number
   reference_face_distance?: number
+  face_tracker_score?: number
   output_video_encoder?: string
   output_video_preset?: string
   output_video_quality?: number

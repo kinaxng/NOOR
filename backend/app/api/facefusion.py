@@ -396,6 +396,7 @@ def _build_reference_face_cli_args(input_path: str, job_settings: dict[str, Any]
     cli_args += ["--reference-frame-number", str(frame_number)]
     cli_args += ["--reference-face-position", str(job_settings.get("reference_face_position", settings.facefusion_reference_face_position))]
     cli_args += ["--reference-face-distance", str(job_settings.get("reference_face_distance", settings.facefusion_reference_face_distance))]
+    cli_args += ["--face-tracker-score", str(job_settings.get("face_tracker_score", settings.facefusion_face_tracker_score))]
     cli_args += ["--log-level", str(job_settings.get("log_level", settings.facefusion_log_level))]
 
     env = build_facefusion_python_env(source.source_dir, _build_env(
@@ -604,6 +605,7 @@ async def list_facefusion_reference_faces(payload: FaceFusionReferenceFacesReque
                 "face_selector_age_end",
                 "face_selector_race",
                 "reference_face_distance",
+                "face_tracker_score",
                 "log_level",
             )
         },

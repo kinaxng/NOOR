@@ -166,6 +166,7 @@ class FaceFusionDefaultsConfig(BaseModel):
     reference_frame_number: int = 0
     reference_face_position: int = 0
     reference_face_distance: float = 0.3
+    face_tracker_score: float = 0.0
     face_mask_types: str = "box"
     face_mask_areas: str = ""
     face_mask_regions: str = ""
