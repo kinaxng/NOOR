@@ -11,26 +11,11 @@ from sqlalchemy.orm import aliased
 
 from app.api.endpoints import media_library, media_library_recovery
 from app.api.endpoints.media_library_helpers import SUBTITLE_EXTS
-from app.api.subtitles import extract_video_code
 from app.core.models import Job
+from app.knowledge.codes import extract_video_code_candidates
 from app.knowledge.models import KnowledgeEdge, KnowledgeEntity
 from app.knowledge.repository import KnowledgeRepository
 from app.plugins.runtime import runtime as plugin_runtime
-
-
-CODE_RE = re.compile(r"\b(FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,8}[-_ ]?\d{2,7}|\d{6}[-_]\d{2,5})\b", re.I)
-
-
-def _normalize_code(value: Any) -> str:
-    match = CODE_RE.search(str(value or ""))
-    if not match:
-        return ""
-    raw = re.sub(r"[_ ]+", "-", match.group(1).upper())
-    fc2 = re.match(r"FC2-?(?:PPV-?)?(\d{4,9})$", raw, re.I)
-    if fc2:
-        return f"FC2-PPV-{fc2.group(1)}"
-    compact = re.match(r"^([A-Z]{2,8})(\d{2,7})$", raw)
-    return f"{compact.group(1)}-{compact.group(2)}" if compact else raw
 
 
 def _clean_values(values: list[Any]) -> list[str]:
@@ -77,11 +62,9 @@ def _video_codes(detail: dict[str, Any]) -> list[str]:
     values = [nfo.get("num"), nfo.get("id"), nfo.get("title"), nfo.get("originaltitle"), detail.get("name"), detail.get("file_path"), detail.get("path")]
     out: list[str] = []
     for value in values:
-        code = _normalize_code(value)
-        if not code and value:
-            code = _normalize_code(extract_video_code(str(value)))
-        if code and code not in out:
-            out.append(code)
+        for code in extract_video_code_candidates(str(value or "")):
+            if code not in out:
+                out.append(code)
     return out
 
 
