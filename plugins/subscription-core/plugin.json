@@ -10,8 +10,9 @@
     "sidebar": {
       "label": "订阅中心",
       "route": "/plugins/subscription-core",
-      "icon": "plugin"
-    }
+      "icon": "icons/service.svg"
+    },
+    "icon": "icons/service.svg"
   },
   "frontend": {
     "type": "module",

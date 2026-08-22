@@ -30,7 +30,8 @@
     "min_file_size_mb": {"type": "number", "label": "最小保留文件大小 MB", "min": 0, "max": 4096}
   },
   "contributions": {
-    "sidebar": {"label": "qBittorrent", "route": "/plugins/qbittorrent", "icon": "plugin"}
+    "sidebar": {"label": "qBittorrent", "route": "/plugins/qbittorrent", "icon": "icons/sidebar.svg"},
+    "icon": "icons/sidebar.svg"
   },
   "frontend": {
     "type": "module",

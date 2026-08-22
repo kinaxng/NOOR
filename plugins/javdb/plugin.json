@@ -9,8 +9,9 @@
     "sidebar": {
       "label": "JavDB",
       "route": "/plugins/javdb",
-      "icon": "plugin"
-    }
+      "icon": "icons/service.svg"
+    },
+    "icon": "icons/service.svg"
   },
   "frontend": {
     "type": "module",

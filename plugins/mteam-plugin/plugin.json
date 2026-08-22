@@ -52,7 +52,8 @@
     "knowledge_search_per_code": 3
   },
   "contributions": {
-    "sidebar": {"label": "M-Team", "route": "/plugins/mteam-plugin", "icon": "plugin"}
+    "sidebar": {"label": "M-Team", "route": "/plugins/mteam-plugin", "icon": "icons/service.svg"},
+    "icon": "icons/service.svg"
   },
   "frontend": {"type": "module", "entry": "frontend/page.js", "style": "frontend/style.css"}
 }

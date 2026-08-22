@@ -30,7 +30,8 @@
     "timeout": {"type": "number", "label": "请求超时（秒）", "min": 5, "max": 120}
   },
   "contributions": {
-    "sidebar": {"label": "迅雷远程", "route": "/plugins/xunlei-remote", "icon": "plugin"}
+    "sidebar": {"label": "迅雷远程", "route": "/plugins/xunlei-remote", "icon": "icons/sidebar.svg"},
+    "icon": "icons/sidebar.svg"
   },
   "frontend": {
     "type": "module",
