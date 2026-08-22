@@ -52,7 +52,7 @@ def extract_file_patch(patch: str, target: str) -> str | None:
     return "*** Begin Patch\n" + "\n".join(sections) + "\n*** End Patch\n"
 
 
-def load_events(rollout: Path, target: str, cutoff: str) -> list[PatchEvent]:
+def load_events(rollout: Path, target: str, cutoff: str, after: str = "") -> list[PatchEvent]:
     pending: list[tuple[str, PatchEvent]] = []
     successful_calls: set[str] = set()
     with rollout.open(encoding="utf-8", errors="replace") as handle:
@@ -63,6 +63,8 @@ def load_events(rollout: Path, target: str, cutoff: str) -> list[PatchEvent]:
                 continue
             timestamp = str(event.get("timestamp") or "")
             if cutoff and timestamp >= cutoff:
+                continue
+            if after and timestamp <= after:
                 continue
             if event.get("type") != "response_item":
                 continue
@@ -86,11 +88,21 @@ def load_events(rollout: Path, target: str, cutoff: str) -> list[PatchEvent]:
     return [event for call_id, event in pending if call_id in successful_calls]
 
 
-def replay(events: list[PatchEvent], target: str, output_dir: Path, apply_patch: Path) -> Path:
+def replay(
+    events: list[PatchEvent],
+    target: str,
+    output_dir: Path,
+    apply_patch: Path,
+    seed: Path | None = None,
+) -> Path:
     worktree = output_dir / "worktree"
     if worktree.exists():
         shutil.rmtree(worktree)
     worktree.mkdir(parents=True)
+    if seed is not None:
+        destination = worktree / target
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(seed, destination)
     log_rows: list[dict[str, Any]] = []
 
     for index, event in enumerate(events, start=1):
@@ -133,6 +145,8 @@ def main() -> None:
     parser.add_argument("target")
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--cutoff", default="2026-08-09T17:05:00Z")
+    parser.add_argument("--after", default="")
+    parser.add_argument("--seed", type=Path)
     parser.add_argument(
         "--apply-patch",
         type=Path,
@@ -141,10 +155,10 @@ def main() -> None:
     args = parser.parse_args()
 
     target = normalize_path(args.target)
-    events = load_events(args.rollout, target, args.cutoff)
-    if not events:
+    events = load_events(args.rollout, target, args.cutoff, args.after)
+    if not events and args.seed is None:
         raise SystemExit(f"no patch events found for {target}")
-    result_path = replay(events, target, args.output_dir, args.apply_patch)
+    result_path = replay(events, target, args.output_dir, args.apply_patch, args.seed)
     print(f"events={len(events)} result={result_path}")
 
 
