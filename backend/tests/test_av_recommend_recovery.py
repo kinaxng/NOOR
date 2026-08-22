@@ -22,6 +22,21 @@ def test_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
     asyncio.run(_run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path))
 
 
+def test_image_candidates_keep_proxy_before_inner_url():
+    backend = _load_backend()
+
+    proxy = "http://noor.test/api/image?url=https%3A%2F%2Fcdn.test%2Fcover.jpg"
+    assert backend._image_candidates({"cover_url": proxy}, {"thumb_url": "https://cdn.test/thumb.jpg"}) == [
+        proxy,
+        "https://cdn.test/cover.jpg",
+        "https://cdn.test/thumb.jpg",
+    ]
+
+
+def test_refresh_candidate_cover_persists_candidates(monkeypatch, tmp_path):
+    asyncio.run(_run_refresh_candidate_cover_persists_candidates(monkeypatch, tmp_path))
+
+
 def test_media_library_item_codes_include_provider_and_nfo_values():
     backend = _load_backend()
 
@@ -122,3 +137,40 @@ async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
     assert result["ok"] is True
     pool = backend._pool()
     assert set(pool["items"]) == {"ABCD-123", "MIDA-669"}
+
+
+async def _run_refresh_candidate_cover_persists_candidates(monkeypatch, tmp_path):
+    backend = _load_backend()
+    pool_path = tmp_path / "candidate_pool.json"
+    pool_path.write_text('{"items":{"MIDA-669":{"code":"MIDA-669","title":"测试"}}}', encoding="utf-8")
+    monkeypatch.setattr(backend, "_pool_path", lambda: pool_path)
+
+    class FakeRuntime:
+        def is_enabled(self, plugin_id):
+            return plugin_id == "javdb"
+
+        async def handle_action(self, plugin_id, action, payload):
+            assert (plugin_id, action) == ("javdb", "video")
+            assert payload == {"code": "MIDA-669", "refresh": True}
+            return {
+                "data": {
+                    "cover_url": "https://cdn.test/MIDA-669.jpg",
+                    "thumb_url": "https://cdn.test/MIDA-669-thumb.jpg",
+                    "preview_images": ["https://cdn.test/MIDA-669-preview.jpg"],
+                }
+            }
+
+    import app.plugins.runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "runtime", FakeRuntime())
+    result = await backend._refresh_candidate_cover("mida669")
+
+    assert result["image_candidates"] == [
+        "https://cdn.test/MIDA-669.jpg",
+        "https://cdn.test/MIDA-669-thumb.jpg",
+        "https://cdn.test/MIDA-669-preview.jpg",
+    ]
+    saved = backend._pool()["items"]["MIDA-669"]
+    assert saved["image_candidates"] == result["image_candidates"]
+    assert saved["title"] == "测试"
+    assert saved["cover_refreshed_at"]

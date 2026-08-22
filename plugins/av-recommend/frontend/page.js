@@ -9,6 +9,85 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
 }
 
+function imageCandidates(...values) {
+  const out = []
+  const push = value => {
+    if (!value) return
+    if (Array.isArray(value)) {
+      value.forEach(push)
+      return
+    }
+    const text = String(value || '').trim()
+    if (text && !out.includes(text)) out.push(text)
+  }
+  values.forEach(push)
+  return out
+}
+
+async function refreshStoredImageCandidates(sdk, code) {
+  const text = String(code || '').trim()
+  if (!text) return []
+  try {
+    let payload
+    if (sdk.api?.post) {
+      const resp = await sdk.api.post('/plugins/av-recommend/actions/refresh_cover', { payload: { code: text } })
+      payload = resp.data
+    } else {
+      payload = await fetch('/api/plugins/av-recommend/actions/refresh_cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: { code: text } }),
+      }).then(r => r.json())
+    }
+    return imageCandidates(payload?.image_candidates, payload?.cover_url, payload?.thumb_url, payload?.fanart_url)
+  } catch {
+    return []
+  }
+}
+
+function loadImageUrl(url) {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.decoding = 'async'
+    img.onload = () => resolve(url)
+    img.onerror = () => resolve('')
+    img.src = url
+  })
+}
+
+async function firstLoadableImage(urls) {
+  for (const url of imageCandidates(urls)) {
+    const loaded = await loadImageUrl(url)
+    if (loaded) return loaded
+  }
+  return ''
+}
+
+async function renderFallbackImage(host, candidates, placeholder, onExhausted) {
+  const urls = imageCandidates(candidates)
+  const token = Symbol('image-load')
+  host.__imageLoadToken = token
+  host.innerHTML = ''
+  host.classList.add('is-loading')
+  let loaded = await firstLoadableImage(urls)
+  if (!loaded && typeof onExhausted === 'function') {
+    const fresh = imageCandidates(await onExhausted())
+    loaded = await firstLoadableImage(fresh.filter(url => !urls.includes(url)))
+  }
+  if (host.__imageLoadToken !== token) return
+  host.classList.remove('is-loading')
+  host.innerHTML = ''
+  if (!loaded) {
+    host.textContent = placeholder || 'NO IMAGE'
+    return
+  }
+  const img = document.createElement('img')
+  img.loading = 'lazy'
+  img.alt = ''
+  img.src = loaded
+  host.appendChild(img)
+}
+
 function fmtSizeMb(value) {
   const mb = Number(value || 0)
   if (!Number.isFinite(mb) || mb <= 0) return ''
@@ -101,7 +180,6 @@ export async function mount(root, sdk) {
     error: '',
     data: null,
     activePanel: null,
-    coverRefreshes: new Map(),
   }
 
   root.innerHTML = ''
@@ -361,53 +439,6 @@ export async function mount(root, sdk) {
     host.innerHTML = ''
     if (sdk.ui?.loadingState) host.appendChild(sdk.ui.loadingState({ text }))
     else host.appendChild(el('div', 'av-rec-detail-loading', text))
-  }
-
-  function coverSource(item) {
-    return String(item?.fanart_url || item?.cover_url || item?.thumb_url || '').trim()
-  }
-
-  async function refreshCover(item, host) {
-    const code = detailCode(item)
-    if (!code || !host || host.dataset.coverFallback === 'done') return
-    host.dataset.coverFallback = 'done'
-    host.classList.add('is-refreshing')
-    host.textContent = code
-    try {
-      let promise = state.coverRefreshes.get(code)
-      if (!promise) {
-        promise = sdk.api.post('/plugins/javdb/actions/video', { payload: { code } })
-        state.coverRefreshes.set(code, promise)
-      }
-      const res = await promise
-      const video = res?.data?.data || {}
-      const fresh = String(video.cover_url || video.thumb_url || '').trim()
-      if (!fresh) return
-      item.cover_url = fresh
-      item.fanart_url = fresh
-      renderCover(item, host, { retry: false })
-    } catch (_) {
-      host.textContent = code || 'NO IMAGE'
-    } finally {
-      host.classList.remove('is-refreshing')
-    }
-  }
-
-  function renderCover(item, host, options = {}) {
-    const src = coverSource(item)
-    host.innerHTML = ''
-    if (!src) {
-      host.textContent = detailCode(item) || 'NO IMAGE'
-      return
-    }
-    const img = el('img')
-    img.loading = 'lazy'
-    img.alt = ''
-    if (options.retry !== false) {
-      img.onerror = () => refreshCover(item, host)
-    }
-    img.src = src
-    host.appendChild(img)
   }
 
   async function openDetail(item) {
@@ -680,7 +711,12 @@ export async function mount(root, sdk) {
       const image = el('button', 'av-rec-cover')
       image.type = 'button'
       image.onclick = () => openDetail(item)
-      renderCover(item, image)
+      renderFallbackImage(
+        image,
+        imageCandidates(item.image_candidates, item.fanart_url, item.cover_url, item.thumb_url, item.image, item.poster_url, item.jacket_url),
+        item.code || 'NO IMAGE',
+        () => refreshStoredImageCandidates(sdk, item.code || item.number),
+      )
       const body = el('section', 'av-rec-body')
       const head = el('div', 'av-rec-card-head')
       const title = el('button', 'av-rec-card-title')

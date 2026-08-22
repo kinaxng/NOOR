@@ -11,6 +11,7 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -103,6 +104,52 @@ TITLE_TRAIT_PATTERNS: tuple[dict[str, Any], ...] = (
     {"name": "高潮绝顶", "group": "theme", "weight": 0.66, "patterns": ("絶頂", "イキ", "イキ狂", "高潮", "痙攣", "快感")},
     {"name": "美体肉感", "group": "body", "weight": 0.62, "patterns": ("肉感", "恵体", "極上ボディ", "美ボディ", "ドエロボディ")},
 )
+
+
+def _image_candidates(*items: Any) -> list[str]:
+    out: list[str] = []
+    keys = ("fanart_url", "cover_url", "thumb_url", "image", "poster_url", "jacket_url", "preview_url")
+
+    def append_url(url: str) -> None:
+        text = str(url or "").strip()
+        if text and text not in out:
+            out.append(text)
+
+    def expand_url(url: str) -> list[str]:
+        text = str(url or "").strip()
+        if not text:
+            return []
+        parsed = urlparse(text)
+        inner = ""
+        if parsed.path.rstrip("/").endswith("/api/image"):
+            values = parse_qs(parsed.query).get("url") or []
+            if values:
+                inner = unquote(str(values[0] or "").strip())
+        candidates: list[str] = []
+        if inner and text:
+            candidates.append(text)
+        raw = inner or text
+        if raw:
+            candidates.append(raw)
+        return candidates
+
+    def push(value: Any) -> None:
+        if not value:
+            return
+        if isinstance(value, dict):
+            for key in keys:
+                push(value.get(key))
+            return
+        if isinstance(value, (list, tuple)):
+            for entry in value:
+                push(entry)
+            return
+        for url in expand_url(str(value or "").strip()):
+            append_url(url)
+
+    for item in items:
+        push(item)
+    return out
 
 
 def _pool_path() -> Path:
@@ -948,6 +995,7 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
                         item["director"] = _name_one(data.get("director"))
                         item["cover_url"] = data.get("cover_url") or item.get("cover_url")
                         item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
+                        item["image_candidates"] = _image_candidates(data, item, data.get("preview_images"))
                         item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
                         item["is_cracked"] = bool(item.get("is_cracked") or _detail_has_cracked_signal(data))
                         magnets = data.get("magnets") if isinstance(data.get("magnets"), list) else []
@@ -1026,6 +1074,52 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
             pool["background"] = {**(pool.get("background") or {}), "running": False, "failed_at": dt.datetime.now(dt.timezone.utc).isoformat(), "last_error": str(exc)}
             _save_pool(pool)
         raise
+
+
+async def _refresh_candidate_cover(code_value: Any) -> dict[str, Any]:
+    from app.plugins.runtime import runtime
+
+    code = _norm_code(code_value)
+    if not code:
+        raise ValueError("缺少番号")
+    if not runtime.is_enabled("javdb"):
+        raise ValueError("JavDB 插件未启用")
+    detail = await runtime.handle_action("javdb", "video", {"code": code, "refresh": True})
+    data = detail.get("data") if isinstance(detail, dict) else {}
+    if not isinstance(data, dict):
+        data = {}
+    cover_url = str(data.get("cover_url") or "")
+    thumb_url = str(data.get("thumb_url") or "")
+    fanart_url = cover_url or thumb_url
+    candidates = _image_candidates(data, data.get("previews"), data.get("preview_images"))
+    async with _pool_lock:
+        pool = _pool()
+        pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+        item = pool_items.get(code)
+        if not isinstance(item, dict):
+            item = {"code": code, "number": code}
+        if cover_url:
+            item["cover_url"] = cover_url
+        if thumb_url:
+            item["thumb_url"] = thumb_url
+        if fanart_url:
+            item["fanart_url"] = fanart_url
+        if candidates:
+            item["image_candidates"] = candidates
+        item["detail"] = data or item.get("detail") or {}
+        item["cover_refreshed_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        pool_items[code] = item
+        pool["items"] = pool_items
+        _save_pool(pool)
+    _CACHE["value"] = None
+    return {
+        "ok": True,
+        "code": code,
+        "cover_url": cover_url,
+        "thumb_url": thumb_url,
+        "fanart_url": fanart_url,
+        "image_candidates": candidates,
+    }
 
 
 async def _scheduler_loop() -> None:
@@ -1334,6 +1428,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         "display_title": item.get("display_title") or f"{code} {item.get('title') or ''}".strip(),
         "cover_url": item.get("cover_url") or item.get("thumb_url") or "",
         "fanart_url": item.get("fanart_url") or item.get("cover_url") or item.get("thumb_url") or "",
+        "image_candidates": _image_candidates(item, item.get("detail")),
         "release_date": release,
         "actors": actors[:6],
         "categories": categories[:8],
@@ -1671,6 +1766,8 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
         }
     if action == "scan_candidate_pool":
         return await _scan_candidate_pool(config, force=bool(payload.get("force")))
+    if action == "refresh_cover":
+        return await _refresh_candidate_cover(payload.get("code") or payload.get("number"))
     if action == "candidate_pool":
         return {"ok": True, "pool": _candidate_pool_stats(_pool())}
     if action == "feedback":
