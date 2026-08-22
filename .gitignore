@@ -4,6 +4,11 @@ backend/noor.db
 data/plugins_config.json
 data/plugins_state.json
 data/actor_management_settings.json
+data/media_actor_mappings.json
+data/media_actor_mapping_sync_state.json
+data/actor_profile_overrides.json
+data/actor_merge_ignored_ghosts.json
+data/actor_merge_backups/
 data/facefusion_settings.json
 data/plugin_cache/
 .env

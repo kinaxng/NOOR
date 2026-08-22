@@ -54,9 +54,11 @@ class Settings(BaseSettings):
     acceleration_mode: str = "mirror"
     http_proxy: str = ""
     github_mirror: str = "https://ghproxy.com"
+    github_token: str = ""
     hf_mirror: str = "https://hf-mirror.com"
     pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
     hf_token: str = ""
+    actor_mapping_auto_update: bool = True
 
     whisper_strategy: str = "chickenrice"
     whisper_subtitle_profile: str = "standard"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
 
@@ -78,6 +80,42 @@ def test_actor_mapping_matches_reports_reviewable_non_candidates(monkeypatch):
     assert result["groups"] == []
     assert result["rejected_actors"] == 2
     assert {item["rejected_reason"] for item in result["rejected_matches"]} == {"single_mapped_actor", "unmatched_emby_actor"}
+
+
+def test_actor_mapping_path_accepts_legacy_saved_root(monkeypatch, tmp_path):
+    root = tmp_path / "mdc-ng"
+    expected = root / actors.MDC_NG_ACTOR_MAPPING_RELATIVE_PATH
+    expected.parent.mkdir(parents=True)
+    expected.write_text("<actors />", encoding="utf-8")
+    settings_path = tmp_path / "actor_management_settings.json"
+    settings_path.write_text(
+        actors.json.dumps({"mdc_ng_path": str(root)}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(actors, "_mapping_settings_path", lambda: settings_path)
+
+    assert actors._configured_mapping_root({}) == str(root)
+    assert actors._mapping_path({}) == expected
+
+
+def test_actor_mapping_auto_update_schedules_stale_source(monkeypatch, tmp_path):
+    root = tmp_path / "mdc-ng"
+    monkeypatch.setattr(actors, "get_settings", lambda: SimpleNamespace(actor_mapping_auto_update=True))
+    monkeypatch.setattr(actors.media, "_load_config", lambda: {"mdc_ng_actor_mapping_path": str(root)})
+    monkeypatch.setattr(actors, "_load_json", lambda path, default: {})
+    monkeypatch.setattr(actors, "_mapping_auto_update_task", None)
+    scheduled = []
+
+    def fake_create_task(coro):
+        scheduled.append(coro)
+        coro.close()
+        return SimpleNamespace(done=lambda: False)
+
+    monkeypatch.setattr(actors.asyncio, "create_task", fake_create_task)
+
+    actors._maybe_schedule_actor_mapping_auto_update()
+
+    assert len(scheduled) == 1
 
 
 def test_actor_mapping_matches_excludes_persisted_ghost_from_candidates(monkeypatch, tmp_path):

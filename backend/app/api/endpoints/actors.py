@@ -21,6 +21,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.api.endpoints import media_library as media
+from app.core.config import get_settings
 from app.core.runtime_paths import data_path
 
 
@@ -263,13 +264,19 @@ def _is_actor_name(value: str | None) -> bool:
     return not bool(re.fullmatch(r"\[(?:red|deleted|unknown)\]", name, flags=re.IGNORECASE))
 
 
-def _mapping_path(config: dict[str, Any]) -> Path | None:
-    root = str(
+def _configured_mapping_root(config: dict[str, Any]) -> str:
+    saved = _mapping_settings()
+    return str(
         config.get("mdc_ng_actor_mapping_path")
         or config.get("mdc_ng_path")
-        or _mapping_settings().get("mdc_ng_actor_mapping_path")
+        or saved.get("mdc_ng_actor_mapping_path")
+        or saved.get("mdc_ng_path")
         or ""
     ).strip()
+
+
+def _mapping_path(config: dict[str, Any]) -> Path | None:
+    root = _configured_mapping_root(config)
     if not root:
         return None
     candidate = Path(root).expanduser()
@@ -701,6 +708,7 @@ async def get_actors(
 
 @router.get("/actors/mapping/status")
 async def actor_mapping_status():
+    _maybe_schedule_actor_mapping_auto_update()
     config = media._load_config()
     store = _mapping_store_path()
     payload = _load_json(store, {})
@@ -714,7 +722,8 @@ async def actor_mapping_status():
         "updated_at": payload.get("updated_at", ""),
         "stats": payload.get("stats") or {"total": 0, "verified": 0, "with_tmdb": 0},
         "mdc_ng": {
-            "configured_root": str(config.get("mdc_ng_actor_mapping_path") or config.get("mdc_ng_path") or ""),
+            "enabled": bool(getattr(get_settings(), "actor_mapping_auto_update", True)),
+            "configured_root": _configured_mapping_root(config),
             "relative_path": str(MDC_NG_ACTOR_MAPPING_RELATIVE_PATH),
             "configured_path": str(source) if source else "",
             **state,
@@ -779,6 +788,32 @@ async def _sync_mapping_from_mdc_ng(*, force: bool = False) -> dict[str, Any]:
         if force:
             raise
         return {"ok": False, "error": str(exc), "mdc_ng": state}
+
+
+def _maybe_schedule_actor_mapping_auto_update() -> None:
+    global _mapping_auto_update_task
+    try:
+        if not bool(getattr(get_settings(), "actor_mapping_auto_update", True)):
+            return
+        config = media._load_config()
+        if not _configured_mapping_root(config):
+            return
+        state = _load_json(_mapping_sync_state_path(), {})
+        if state.get("running"):
+            return
+        if _mapping_auto_update_task and not _mapping_auto_update_task.done():
+            return
+        last_success = str(state.get("last_success_at") or "")
+        if last_success:
+            try:
+                last_dt = datetime.fromisoformat(last_success.replace("Z", "+00:00"))
+                if (datetime.now(timezone.utc) - last_dt).total_seconds() < 24 * 3600:
+                    return
+            except ValueError:
+                pass
+        _mapping_auto_update_task = asyncio.create_task(_sync_mapping_from_mdc_ng(force=False))
+    except RuntimeError:
+        return
 
 
 @router.post("/actors/mapping/sync-mdc-ng")
