@@ -14,9 +14,12 @@ from typing import Any
 
 
 SOURCE_MAP_RE = re.compile(
-    rb"sourceMappingURL=data:application/json;base64,([A-Za-z0-9+/=]+)"
+    rb"sourceMappingURL=data:application/json(?:;charset=[^;,]+)?;base64,([A-Za-z0-9+/=]+)"
 )
-NOOR_SOURCE_PREFIX = "/home/kinax/noor/frontend/"
+NOOR_SOURCE_PREFIXES = (
+    "/home/kinax/noor/frontend/",
+    "/home/kinax/noor/frontend_rewrite/",
+)
 
 
 @dataclass(frozen=True)
@@ -33,8 +36,9 @@ class Candidate:
 
 def source_path_for(source_map: dict[str, Any], source: str) -> str:
     file_name = str(source_map.get("file") or "")
-    if file_name.startswith(NOOR_SOURCE_PREFIX):
-        return file_name.removeprefix(NOOR_SOURCE_PREFIX)
+    for prefix in NOOR_SOURCE_PREFIXES:
+        if file_name.startswith(prefix):
+            return file_name.removeprefix(prefix)
     source = str(source or "").replace("\\", "/")
     marker = "frontend/"
     if marker in source:
@@ -45,6 +49,34 @@ def source_path_for(source_map: dict[str, Any], source: str) -> str:
 def safe_candidate_name(cache_file: Path, index: int, source_path: str) -> str:
     suffix = Path(source_path).suffix or ".txt"
     return f"{cache_file.stem}-{index}{suffix}"
+
+
+def decode_source_map(encoded: bytes) -> dict[str, Any] | None:
+    # Chrome's disk cache can append a few metadata bytes immediately after
+    # the inline source map. Trim only the tail until a complete JSON map is
+    # recovered instead of rejecting the otherwise intact source payload.
+    for trim in range(65):
+        candidate = encoded[:-trim] if trim else encoded
+        if not candidate:
+            break
+        try:
+            decoded = base64.b64decode(candidate, validate=True)
+            source_map = json.loads(decoded)
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(source_map, dict):
+            return source_map
+    return None
+
+
+def belongs_to_noor(source_map: dict[str, Any]) -> bool:
+    file_name = str(source_map.get("file") or "").replace("\\", "/")
+    sources = [str(source).replace("\\", "/") for source in source_map.get("sources") or []]
+    return any(file_name.startswith(prefix) for prefix in NOOR_SOURCE_PREFIXES) or any(
+        source.startswith(prefix)
+        for source in sources
+        for prefix in NOOR_SOURCE_PREFIXES
+    )
 
 
 def extract(cache_dir: Path, output_dir: Path) -> list[Candidate]:
@@ -60,9 +92,8 @@ def extract(cache_dir: Path, output_dir: Path) -> list[Candidate]:
         match = SOURCE_MAP_RE.search(payload)
         if not match:
             continue
-        try:
-            source_map = json.loads(base64.b64decode(match.group(1), validate=True))
-        except (ValueError, json.JSONDecodeError):
+        source_map = decode_source_map(match.group(1))
+        if source_map is None or not belongs_to_noor(source_map):
             continue
         sources = source_map.get("sources") or []
         contents = source_map.get("sourcesContent") or []
