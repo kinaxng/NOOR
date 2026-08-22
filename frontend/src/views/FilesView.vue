@@ -1,10 +1,9 @@
-
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BaseIcon from '../components/noor/BaseIcon.vue'
-import HardlinkView from './HardlinkView.vue'
 import ActorManagementView from './ActorManagementView.vue'
+import HardlinkView from './HardlinkView.vue'
 import { useI18n } from '../composables/useI18n'
 
 type FileTab = 'hardlinks' | 'actors'
@@ -26,6 +25,12 @@ const tabs = computed(() => {
   ]
 })
 
+watch(activeTab, (tab) => {
+  if (!route.params.fileTab) {
+    router.replace(`/files/${tab}`)
+  }
+}, { immediate: true })
+
 function switchTab(tab: FileTab) {
   if (tab === activeTab.value) return
   router.push(`/files/${tab}`)
@@ -34,9 +39,8 @@ function switchTab(tab: FileTab) {
 
 <template>
   <div class="files-page animate-fade-in">
-    <header class="files-header">
-      <h1 class="files-title">{{ t('files.title') }}</h1>
-      <div class="files-tabs" role="tablist" aria-label="Files">
+    <header class="files-header" :aria-label="t('files.title')">
+      <div class="files-tabs" role="tablist" :aria-label="t('files.title')">
         <button
           v-for="tab in tabs"
           :key="tab.key"
@@ -69,15 +73,8 @@ function switchTab(tab: FileTab) {
 .files-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
-}
-
-.files-title {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
 }
 
 .files-tabs {
@@ -115,24 +112,9 @@ function switchTab(tab: FileTab) {
   height: 1rem;
 }
 
-.files-empty {
-  min-height: 16rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  color: var(--color-text-muted);
-}
-
-.files-empty__icon {
-  width: 1.1rem;
-  height: 1.1rem;
-}
-
 @media (max-width: 720px) {
   .files-header {
     align-items: stretch;
-    flex-direction: column;
   }
 
   .files-tabs {
@@ -145,5 +127,3 @@ function switchTab(tab: FileTab) {
   }
 }
 </style>
-
-
