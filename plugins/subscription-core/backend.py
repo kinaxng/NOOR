@@ -9,6 +9,7 @@ import uuid
 import datetime as dt
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from app.core.config import PROJECT_ROOT
 from app.plugins.contracts import PluginManifest, PluginTestResult
@@ -69,6 +70,52 @@ def _save(data: dict[str, Any]) -> None:
     tmp = DATA_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(DATA_FILE)
+
+
+def _image_candidates(*items: Any) -> list[str]:
+    out: list[str] = []
+    keys = ("fanart_url", "cover_url", "thumb_url", "image", "poster_url", "jacket_url", "backdrop_url")
+
+    def append_url(url: str) -> None:
+        text = str(url or "").strip()
+        if text and text not in out:
+            out.append(text)
+
+    def expand_url(url: str) -> list[str]:
+        text = str(url or "").strip()
+        if not text:
+            return []
+        parsed = urlparse(text)
+        inner = ""
+        if parsed.path.rstrip("/").endswith("/api/image"):
+            values = parse_qs(parsed.query).get("url") or []
+            if values:
+                inner = unquote(str(values[0] or "").strip())
+        candidates: list[str] = []
+        if inner and text:
+            candidates.append(text)
+        raw = inner or text
+        if raw:
+            candidates.append(raw)
+        return candidates
+
+    def push(value: Any) -> None:
+        if not value:
+            return
+        if isinstance(value, dict):
+            for key in keys:
+                push(value.get(key))
+            return
+        if isinstance(value, (list, tuple)):
+            for entry in value:
+                push(entry)
+            return
+        for url in expand_url(str(value or "").strip()):
+            append_url(url)
+
+    for item in items:
+        push(item)
+    return out
 
 
 def _event(data: dict[str, Any], subscription_id: str, level: str, message: str, payload: dict[str, Any] | None = None) -> None:
@@ -641,6 +688,7 @@ def _public_subscription(sub: dict[str, Any]) -> dict[str, Any]:
     best = out.get("best_resource") if isinstance(out.get("best_resource"), dict) else {}
     if not out.get("fanart_url"):
         out["fanart_url"] = best.get("fanart_url") or best.get("cover_url") or out.get("cover_url") or ""
+    out["image_candidates"] = _image_candidates(out, best)
     out["current_profile"] = {
         "score": int(out.get("current_score") or 0),
         "is_cracked": bool(out.get("current_is_cracked")),
@@ -722,6 +770,7 @@ async def _create_subscription(config: dict[str, Any], payload: dict[str, Any]) 
         "title": str(payload.get("title") or code),
         "cover_url": str(payload.get("cover_url") or payload.get("image") or (media_item or {}).get("poster_path") or ""),
         "fanart_url": str(payload.get("fanart_url") or payload.get("backdrop_url") or (media_item or {}).get("fanart_path") or payload.get("cover_url") or payload.get("image") or ""),
+        "image_candidates": _image_candidates(payload, media_item),
         "type": sub_type,
         "mode": str(payload.get("mode") or config.get("default_mode") or "loose"),
         "require_cracked": bool(payload.get("require_cracked", config.get("default_require_cracked", False))),
@@ -1281,6 +1330,51 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
         _event(data, sub_id, "info", "更新订阅设置", {k: payload.get(k) for k in payload.keys() if k != "id"})
         _save(data)
         return {"ok": True, "subscription": _public_subscription(sub)}
+    if action == "refresh_cover":
+        from app.plugins.runtime import runtime
+
+        code = str(payload.get("code") or "").strip()
+        sub_id = str(payload.get("id") or "").strip()
+        sub = None
+        if sub_id:
+            sub = next((s for s in data["subscriptions"] if s.get("id") == sub_id and s.get("status") != "deleted"), None)
+        if not sub and code:
+            target = _norm_code(code)
+            sub = next((s for s in data["subscriptions"] if s.get("status") != "deleted" and target in {_norm_code(v) for v in _subscription_code_values(s)}), None)
+        if not sub:
+            raise ValueError("订阅不存在")
+        lookup_code = code or str(sub.get("code") or sub.get("search_code") or "")
+        if not lookup_code:
+            raise ValueError("缺少番号")
+        if not runtime.is_enabled("javdb"):
+            raise ValueError("JavDB 插件未启用")
+        detail = await runtime.handle_action("javdb", "video", {"code": lookup_code, "refresh": True})
+        item = detail.get("data") if isinstance(detail, dict) else {}
+        if not isinstance(item, dict):
+            item = {}
+        cover_url = str(item.get("cover_url") or "")
+        thumb_url = str(item.get("thumb_url") or "")
+        fanart_url = cover_url or thumb_url
+        if cover_url:
+            sub["cover_url"] = cover_url
+        if thumb_url:
+            sub["thumb_url"] = thumb_url
+        if fanart_url:
+            sub["fanart_url"] = fanart_url
+        candidates = _image_candidates(item, item.get("previews"), item.get("preview_images"))
+        if candidates:
+            sub["image_candidates"] = candidates
+        sub["cover_refreshed_at"] = _now()
+        sub["updated_at"] = sub["cover_refreshed_at"]
+        _save(data)
+        return {
+            "ok": True,
+            "subscription": _public_subscription(sub),
+            "cover_url": cover_url,
+            "thumb_url": thumb_url,
+            "fanart_url": fanart_url,
+            "image_candidates": candidates,
+        }
     if action == "delete":
         sub_id = str(payload.get("id") or "")
         sub = next((s for s in data["subscriptions"] if s.get("id") == sub_id), None)

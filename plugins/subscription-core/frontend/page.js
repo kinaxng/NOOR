@@ -19,6 +19,82 @@ function fmtSize(bytes) {
 function esc(value) {
   return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
+function imageCandidates(...values) {
+  const out = []
+  const push = value => {
+    if (!value) return
+    if (Array.isArray(value)) {
+      value.forEach(push)
+      return
+    }
+    const text = String(value || '').trim()
+    if (text && !out.includes(text)) out.push(text)
+  }
+  values.forEach(push)
+  return out
+}
+async function refreshStoredImageCandidates(sdk, item) {
+  const code = item?.code || item?.number || item?.search_code
+  const text = String(code || '').trim()
+  const id = String(item?.id || '').trim()
+  if (!text && !id) return []
+  try {
+    let payload
+    if (sdk.api?.post) {
+      const resp = await sdk.api.post('/plugins/subscription-core/actions/refresh_cover', { payload: { id, code: text } })
+      payload = resp.data
+    } else {
+      payload = await fetch('/api/plugins/subscription-core/actions/refresh_cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: { id, code: text } }),
+      }).then(r => r.json())
+    }
+    return imageCandidates(payload?.image_candidates, payload?.cover_url, payload?.thumb_url, payload?.fanart_url)
+  } catch {
+    return []
+  }
+}
+function loadImageUrl(url) {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.decoding = 'async'
+    img.onload = () => resolve(url)
+    img.onerror = () => resolve('')
+    img.src = url
+  })
+}
+async function firstLoadableImage(urls) {
+  for (const url of imageCandidates(urls)) {
+    const loaded = await loadImageUrl(url)
+    if (loaded) return loaded
+  }
+  return ''
+}
+async function renderFallbackImage(host, candidates, placeholder = 'NO IMAGE', onExhausted) {
+  const urls = imageCandidates(candidates)
+  const token = Symbol('image-load')
+  host.__imageLoadToken = token
+  host.innerHTML = ''
+  host.classList.add('is-loading')
+  let loaded = await firstLoadableImage(urls)
+  if (!loaded && typeof onExhausted === 'function') {
+    const fresh = imageCandidates(await onExhausted())
+    loaded = await firstLoadableImage(fresh.filter(url => !urls.includes(url)))
+  }
+  if (host.__imageLoadToken !== token) return
+  host.classList.remove('is-loading')
+  host.innerHTML = ''
+  if (!loaded) {
+    host.textContent = placeholder
+    return
+  }
+  const img = document.createElement('img')
+  img.alt = ''
+  img.loading = 'lazy'
+  img.src = loaded
+  host.appendChild(img)
+}
 function badge(label, tone = 'info') {
   const b = h('span', `sub-badge sub-badge--${tone}`, label)
   return b
@@ -35,7 +111,6 @@ export async function mount(root, sdk = {}) {
     events: [],
     formOpen: false,
     form: { code: '', title: '', mode: 'loose', require_cracked: false, require_subtitle: false },
-    coverRefreshes: new Map(),
   }
   const apiPost = async (action, payload = {}) => {
     if (sdk.api?.post) return (await sdk.api.post(`/plugins/${pluginId}/actions/${action}`, { payload })).data
@@ -133,52 +208,6 @@ export async function mount(root, sdk = {}) {
     return out
   }
 
-  function coverSource(item) {
-    const best = item?.best_resource || {}
-    return String(item?.fanart_url || item?.cover_url || best.fanart_url || best.cover_url || '').trim()
-  }
-
-  async function refreshCover(item, host) {
-    const code = String(item?.code || '').trim()
-    if (!code || !host || host.dataset.coverFallback === 'done') return
-    host.dataset.coverFallback = 'done'
-    host.classList.add('is-refreshing')
-    host.textContent = code
-    try {
-      let promise = state.coverRefreshes.get(code)
-      if (!promise) {
-        promise = sdk.api.post('/plugins/javdb/actions/video', { payload: { code } })
-        state.coverRefreshes.set(code, promise)
-      }
-      const res = await promise
-      const video = res?.data?.data || {}
-      const fresh = String(video.cover_url || video.thumb_url || '').trim()
-      if (!fresh) return
-      item.cover_url = fresh
-      item.fanart_url = fresh
-      renderCover(item, host, false)
-    } catch (_) {
-      host.textContent = code || 'NO IMAGE'
-    } finally {
-      host.classList.remove('is-refreshing')
-    }
-  }
-
-  function renderCover(item, host, retry = true) {
-    host.innerHTML = ''
-    const src = coverSource(item)
-    if (!src) {
-      host.textContent = item?.code || 'NO IMAGE'
-      return
-    }
-    const img = h('img')
-    img.loading = 'lazy'
-    img.alt = ''
-    if (retry) img.onerror = () => refreshCover(item, host)
-    img.src = src
-    host.appendChild(img)
-  }
-
   function renderItems() {
     const host = $('items')
     host.innerHTML = ''
@@ -196,7 +225,12 @@ export async function mount(root, sdk = {}) {
       const cover = h('button', 'sub-card__cover')
       cover.type = 'button'
       cover.onclick = () => item.code && sdk.navigate?.(`/plugins/javdb?code=${encodeURIComponent(item.code)}`)
-      renderCover(item, cover)
+      renderFallbackImage(
+        cover,
+        imageCandidates(item.image_candidates, item.fanart_url, item.cover_url, item.thumb_url, item.image, best?.image_candidates, best?.fanart_url, best?.cover_url, best?.thumb_url, best?.image),
+        item.code || 'NO IMAGE',
+        () => refreshStoredImageCandidates(sdk, item),
+      )
       card.innerHTML = `
         <div class="sub-card__main">
           <div class="sub-card__title"><strong>${esc(item.code)}</strong><span>${esc(item.title || '')}</span></div>

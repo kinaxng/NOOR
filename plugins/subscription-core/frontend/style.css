@@ -18,7 +18,7 @@
 .sub-card { display: grid; grid-template-columns: 11rem minmax(0, 1fr) auto; gap: 1rem; padding: .9rem; align-items: stretch; }
 .sub-card__cover { width: 100%; aspect-ratio: 2184 / 1468; min-height: 0; align-self: start; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 0; border-radius: .75rem; background: rgba(255,255,255,.04); color: rgba(255,255,255,.44); font-size: .72rem; font-weight: 800; cursor: pointer; }
 .sub-card__cover img { width: 100%; height: 100%; object-fit: cover; display: block; background: rgba(0,0,0,.16); }
-.sub-card__cover.is-refreshing { color: rgba(255,255,255,.56); background: linear-gradient(90deg,rgba(255,255,255,.035),rgba(255,255,255,.075),rgba(255,255,255,.035)); background-size: 200% 100%; animation: sub-pulse 1.2s linear infinite; }
+.sub-card__cover.is-loading,.sub-card__cover.is-refreshing { color: rgba(255,255,255,.56); background: linear-gradient(90deg,rgba(255,255,255,.035),rgba(255,255,255,.075),rgba(255,255,255,.035)); background-size: 200% 100%; animation: sub-pulse 1.2s linear infinite; }
 .sub-card__main { min-width: 0; display: grid; gap: .48rem; }
 .sub-card__title { display: flex; align-items: baseline; gap: .55rem; min-width: 0; }
 .sub-card__title strong { color: #fff; font-size: .98rem; }
