@@ -11,6 +11,8 @@ from sqlalchemy import select
 
 from app.core.database import async_session_maker
 from app.core.config import get_settings
+from app.core.facefusion_defaults import facefusion_settings
+from app.core.gpu_guard import ensure_gpu_memory
 from app.core.models import Job, JobCreate, JobResponse
 from app.pipeline.facefusion.runner import run_facefusion_restoration
 from app.pipeline.lada.runner import run_lada_restoration
@@ -194,6 +196,53 @@ class JobManager:
         if job:
             await self._emit(job_id, 'progress', progress=job.progress, phase_key=job.phase_key, phase_label=job.phase_label, phase_progress=job.phase_progress or job.progress, detail=job.detail)
 
+    async def _ensure_gpu_memory_for_job(
+        self,
+        job_id: str,
+        task_key: str,
+        task_name: str,
+        job_settings: dict | None = None,
+    ) -> None:
+        settings = get_settings()
+        if not settings.gpu_guard_enabled:
+            return
+        job_settings = job_settings or {}
+
+        if task_key == 'lada':
+            device = str(job_settings.get('device', settings.lada_device or '')).lower()
+            preset = str(job_settings.get('encoding_preset', settings.lada_encoding_preset or '')).lower()
+            if 'cuda' not in device and 'nvidia' not in preset:
+                return
+        elif task_key == 'facefusion':
+            ff_settings = facefusion_settings(settings)
+            provider = str(job_settings.get('execution_provider', ff_settings.facefusion_execution_provider or '')).lower()
+            if 'cuda' not in provider and 'tensorrt' not in provider:
+                return
+
+        required_map = {
+            'lada': settings.gpu_guard_lada_required_free_mb,
+            'facefusion': settings.gpu_guard_facefusion_required_free_mb,
+            'whisper': settings.gpu_guard_whisper_required_free_mb,
+        }
+        required_free_mb = int(required_map.get(task_key, 0) or 0)
+        if required_free_mb <= 0:
+            return
+
+        try:
+            logs = await asyncio.to_thread(
+                ensure_gpu_memory,
+                task_name=task_name,
+                required_free_mb=required_free_mb,
+                device_index=int(settings.gpu_guard_device_index or 0),
+                cleanup_policy=settings.gpu_guard_cleanup_policy,
+                grace_seconds=int(settings.gpu_guard_grace_seconds or 8),
+            )
+        except Exception as exc:
+            await self._log(job_id, f'GPU Guard: {exc}')
+            raise
+        for line in logs:
+            await self._log(job_id, line)
+
     async def _process_queue(self) -> None:
         while True:
             job_id = await self.queue.get()
@@ -220,6 +269,7 @@ class JobManager:
         try:
             if job_type == 'lada':
                 runtime_settings = get_settings()
+                await self._ensure_gpu_memory_for_job(job_id, 'lada', 'LADA', settings)
                 output_path = build_lada_output_path(
                     input_path,
                     str(settings.get('source_dir') or runtime_settings.source_dir or ''),
@@ -261,6 +311,7 @@ class JobManager:
         # model fields. Keep only Whisper's declared dataclass options.
         whisper_fields = set(WhisperConfig.__dataclass_fields__)
         config = WhisperConfig(**{key: value for key, value in settings.items() if key in whisper_fields})
+        await self._ensure_gpu_memory_for_job(job_id, 'whisper', 'Whisper', settings)
         task = create_task(input_path, config)
         loop = asyncio.get_running_loop()
 
@@ -297,6 +348,7 @@ class JobManager:
         source = Path(input_path)
         if not source.is_file():
             raise RuntimeError(f'输入文件不存在: {input_path}')
+        await self._ensure_gpu_memory_for_job(job_id, 'facefusion', 'FaceFusion', settings)
         configured_output_dir = str(settings.get('output_dir') or '').strip()
         output_dir = Path(configured_output_dir) if configured_output_dir else source.parent
         output_path = output_dir / f'{source.stem}.facefusion{source.suffix}'

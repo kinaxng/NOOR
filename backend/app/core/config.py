@@ -75,6 +75,14 @@ class Settings(BaseSettings):
     whisper_language: str = "ja"
     whisper_sensitivity: str = "balanced"
 
+    gpu_guard_enabled: bool = True
+    gpu_guard_device_index: int = 0
+    gpu_guard_cleanup_policy: str = "services"
+    gpu_guard_grace_seconds: int = 8
+    gpu_guard_lada_required_free_mb: int = 6144
+    gpu_guard_facefusion_required_free_mb: int = 8192
+    gpu_guard_whisper_required_free_mb: int = 4096
+
     lada_device: str = "cuda:0"
     lada_fp16: bool = True
     lada_detection_model: str = "v4-fast"
