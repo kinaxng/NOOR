@@ -123,6 +123,71 @@ def test_actor_merge_ignored_ghost_storage_accepts_legacy_list(monkeypatch, tmp_
     assert actors._load_actor_merge_ignored_ghosts() == {"34", "56"}
 
 
+def test_actor_merge_people_reuses_selected_target_and_removes_sources():
+    item = {
+        "Id": "movie-1",
+        "People": [
+            {"Id": "source-1", "Name": "旧名一", "Type": "Actor", "PrimaryImageTag": "old"},
+            {"Id": "target-1", "Name": "目标名", "Type": "Actor", "PrimaryImageTag": "target"},
+            {"Id": "director-1", "Name": "导演", "Type": "Director"},
+            {"Id": "source-2", "Name": "旧名二", "Type": "Actor"},
+        ],
+    }
+
+    updated, changed = actors._actor_merge_apply_people(
+        item,
+        source_actor_ids={"source-1", "source-2"},
+        target_actor_id="target-1",
+        target_name="目标名",
+    )
+
+    assert {entry["id"] for entry in changed} == {"source-1", "source-2"}
+    assert updated["People"] == [
+        {"Id": "target-1", "Name": "目标名", "Type": "Actor", "PrimaryImageTag": "target"},
+        {"Id": "director-1", "Name": "导演", "Type": "Director"},
+    ]
+
+
+def test_actor_merge_people_creates_selected_target_when_missing():
+    updated, changed = actors._actor_merge_apply_people(
+        {"People": [{"Id": "source-1", "Name": "旧名", "Type": "Actor"}]},
+        source_actor_ids={"source-1"},
+        target_actor_id="target-1",
+        target_name="目标名",
+    )
+
+    assert changed[0]["id"] == "source-1"
+    assert updated["People"] == [{"Id": "target-1", "Name": "目标名", "Type": "Actor"}]
+
+
+def test_actor_mapping_batch_discovers_candidates_and_skips_conflicts(monkeypatch):
+    monkeypatch.setattr(actors, "_require_config", lambda: {"server_url": "http://emby", "api_key": "k"})
+
+    async def fake_matches(**kwargs):
+        return {
+            "groups": [
+                {"mapping_id": "safe", "target_actor_id": "target-1", "display_name": "安全组", "has_tmdb_conflict": False},
+                {"mapping_id": "conflict", "target_actor_id": "target-2", "display_name": "冲突组", "has_tmdb_conflict": True},
+            ]
+        }
+
+    executed: list[str] = []
+
+    async def fake_execute(config, req, lang):
+        executed.append(req.mapping_id)
+        return {"ok": True, "updated_count": 2, "deleted_actor_count": 1, "delete_failed_actor_ids": []}
+
+    monkeypatch.setattr(actors, "actor_mapping_matches", fake_matches)
+    monkeypatch.setattr(actors, "_execute_merge", fake_execute)
+
+    result = actors.asyncio.run(actors.execute_actor_mapping_batch(actors.ActorMappingMergeBatchRequest(), "zh-CN"))
+
+    assert executed == ["safe"]
+    assert result["candidate_count"] == 2
+    assert result["executed_count"] == 1
+    assert result["skipped"] == [{"mapping_id": "conflict", "name": "冲突组", "reason": "tmdb_conflict"}]
+
+
 def test_tmdb_proposal_imports_translated_names_aliases_and_social_links():
     person = {
         "id": 3453337,

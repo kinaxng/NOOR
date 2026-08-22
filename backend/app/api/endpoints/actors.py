@@ -302,6 +302,12 @@ def _actor_merge_ignored_ghosts_path() -> Path:
     return path
 
 
+def _actor_merge_backup_dir() -> Path:
+    path = data_path() / "actor_merge_backups"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _load_actor_merge_ignored_ghosts() -> set[str]:
     payload = _load_json(_actor_merge_ignored_ghosts_path(), {})
     if isinstance(payload, list):
@@ -1088,6 +1094,141 @@ async def _related_movies(client: httpx.AsyncClient, config: dict[str, Any], act
     return [item for item in response.json().get("Items") or [] if isinstance(item, dict)]
 
 
+async def _emby_item_for_update(client: httpx.AsyncClient, config: dict[str, Any], item_id: str) -> dict[str, Any]:
+    user_id = str(config.get("user_id") or "").strip()
+    safe_item_id = quote(str(item_id), safe="")
+    path = f"/emby/Users/{quote(user_id, safe='')}/Items/{safe_item_id}" if user_id else f"/emby/Items/{safe_item_id}"
+    response = await client.get(
+        f"{_base_url(config)}{path}",
+        headers=_headers(config),
+        params={
+            "Fields": (
+                "Path,People,ProviderIds,Genres,Studios,Tags,Overview,PremiereDate,SortName,"
+                "DateCreated,ImageTags,LockedFields,OriginalTitle,ProductionYear,CommunityRating,"
+                "CriticRating,OfficialRating,CustomRating,Taglines"
+            )
+        },
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _actor_merge_apply_people(
+    item: dict[str, Any],
+    *,
+    source_actor_ids: set[str],
+    target_actor_id: str,
+    target_name: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    people = item.get("People") if isinstance(item.get("People"), list) else []
+    has_existing_target = any(
+        isinstance(person, dict)
+        and str(person.get("Type") or "") == "Actor"
+        and (
+            str(person.get("Id") or "") == target_actor_id
+            or str(person.get("Name") or "") == target_name
+        )
+        and str(person.get("Id") or "") not in source_actor_ids
+        for person in people
+    )
+    next_people: list[dict[str, Any]] = []
+    changed_people: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for person in people:
+        if not isinstance(person, dict):
+            continue
+        next_person = dict(person)
+        person_type = str(next_person.get("Type") or "")
+        person_id = str(next_person.get("Id") or "")
+        if person_type == "Actor" and person_id in source_actor_ids:
+            changed_people.append({
+                "id": person_id,
+                "name": next_person.get("Name") or "",
+                "type": person_type,
+                "primary_image_tag": next_person.get("PrimaryImageTag"),
+            })
+            if has_existing_target:
+                continue
+            next_person = {"Name": target_name, "Type": "Actor", "Id": target_actor_id}
+            has_existing_target = True
+        dedupe_key = (str(next_person.get("Type") or ""), str(next_person.get("Id") or next_person.get("Name") or ""))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        next_people.append(next_person)
+    next_item = dict(item)
+    next_item["People"] = next_people
+    return next_item, changed_people
+
+
+def _actor_merge_remove_source_people(
+    item: dict[str, Any], *, source_actor_ids: set[str]
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    people = item.get("People") if isinstance(item.get("People"), list) else []
+    next_people: list[dict[str, Any]] = []
+    removed: list[dict[str, Any]] = []
+    for person in people:
+        if (
+            isinstance(person, dict)
+            and str(person.get("Type") or "") == "Actor"
+            and str(person.get("Id") or "") in source_actor_ids
+        ):
+            removed.append({
+                "id": person.get("Id"),
+                "name": person.get("Name") or "",
+                "type": person.get("Type") or "",
+                "primary_image_tag": person.get("PrimaryImageTag"),
+            })
+            continue
+        if isinstance(person, dict):
+            next_people.append(person)
+    next_item = dict(item)
+    next_item["People"] = next_people
+    return next_item, removed
+
+
+async def _emby_delete_item(client: httpx.AsyncClient, config: dict[str, Any], item_id: str) -> None:
+    safe_id = quote(str(item_id), safe="")
+    user_id = str(config.get("user_id") or "").strip()
+    attempts: list[tuple[str, str, dict[str, str] | None]] = [
+        ("DELETE", f"{_base_url(config)}/emby/Items/{safe_id}", None),
+    ]
+    if user_id:
+        safe_user_id = quote(user_id, safe="")
+        attempts.extend([
+            ("DELETE", f"{_base_url(config)}/emby/Users/{safe_user_id}/Items/{safe_id}", None),
+            ("POST", f"{_base_url(config)}/emby/Users/{safe_user_id}/Items/Delete", {"Ids": str(item_id)}),
+        ])
+    attempts.append(("POST", f"{_base_url(config)}/emby/Items/Delete", {"Ids": str(item_id)}))
+    last_response: httpx.Response | None = None
+    for method, url, params in attempts:
+        if method == "DELETE":
+            response = await client.delete(url, headers=_headers(config), params=params)
+        else:
+            response = await client.post(url, headers=_headers(config), params=params)
+        last_response = response
+        if response.status_code not in {404, 405}:
+            break
+    if last_response is None:
+        raise RuntimeError("未执行 Emby 删除请求")
+    last_response.raise_for_status()
+
+
+async def _emby_item_exists(client: httpx.AsyncClient, config: dict[str, Any], item_id: str) -> bool:
+    safe_id = quote(str(item_id), safe="")
+    paths = [f"/emby/Items/{safe_id}"]
+    user_id = str(config.get("user_id") or "").strip()
+    if user_id:
+        paths.append(f"/emby/Users/{quote(user_id, safe='')}/Items/{safe_id}")
+    for path in paths:
+        response = await client.get(f"{_base_url(config)}{path}", headers=_headers(config))
+        if response.status_code == 404:
+            continue
+        response.raise_for_status()
+        return True
+    return False
+
+
 async def _related_items_for_delete(client: httpx.AsyncClient, config: dict[str, Any], actor_id: str) -> tuple[int, list[dict[str, Any]]]:
     response = await client.get(
         f"{_base_url(config)}/emby/Items",
@@ -1193,7 +1334,13 @@ async def _merge_plan(config: dict[str, Any], mapping_id: str, target_actor_id: 
                 movies_by_id.setdefault(str(movie.get("Id") or ""), movie)
     movies: list[dict[str, Any]] = []
     for movie in movies_by_id.values():
-        changed = [person for person in movie.get("People") or [] if str(person.get("Id") or "") in source_ids]
+        changed = [
+            person
+            for person in movie.get("People") or []
+            if isinstance(person, dict)
+            and str(person.get("Type") or "") == "Actor"
+            and str(person.get("Id") or "") in source_ids
+        ]
         if changed:
             movies.append({"id": movie.get("Id"), "name": movie.get("Name", ""), "path": movie.get("Path", ""), "changed_people": changed, "target_name": target})
     return {"mapping_id": mapping_id, "target_name": target, "target_actor_id": target_id, "group": group, "source_actor_ids": source_ids, "source_counts": source_counts, "empty_source_actor_ids": [actor_id for actor_id in source_ids if not source_counts.get(actor_id)], "movie_count": len(movies), "movies": movies}
@@ -1210,33 +1357,56 @@ async def _execute_merge(config: dict[str, Any], req: ActorMappingMergeRequest, 
         return {"ok": True, "dry_run": True, **plan}
     source_ids = set(plan["source_actor_ids"])
     updated: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    backups: list[dict[str, Any]] = []
     deleted: list[str] = []
     delete_failed: list[dict[str, str]] = []
     remaining_source_counts: dict[str, int] = {}
     async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
         for movie in plan["movies"]:
-            raw_response = await client.get(f"{_base_url(config)}/emby/Items/{quote(str(movie['id']))}", headers=_headers(config), params={"Fields": "People,ProviderIds,Path"})
-            raw_response.raise_for_status()
-            raw = raw_response.json()
-            people = []
-            target_present = False
-            for person in raw.get("People") or []:
-                person_id = str(person.get("Id") or "")
-                if person_id == plan["target_actor_id"] or str(person.get("Name") or "") == plan["target_name"]:
-                    target_present = True
-                    people.append(person)
-                elif person_id not in source_ids:
-                    people.append(person)
-            if not target_present:
-                people.append({"Name": plan["target_name"], "Type": "Actor", "Id": plan["target_actor_id"]})
-            raw["People"] = people
-            response = await client.post(f"{_base_url(config)}/emby/Items/{quote(str(movie['id']))}", headers={**_headers(config), "Content-Type": "application/json"}, json=raw)
+            item_id = str(movie.get("id") or "")
+            if not item_id:
+                continue
+            raw = await _emby_item_for_update(client, config, item_id)
+            next_item, changed_people = _actor_merge_apply_people(
+                raw,
+                source_actor_ids=source_ids,
+                target_actor_id=str(plan["target_actor_id"]),
+                target_name=str(plan["target_name"]),
+            )
+            if not changed_people:
+                skipped.append({"id": item_id, "name": raw.get("Name") or "", "reason": "no_matching_people"})
+                continue
+            backups.append({
+                "id": item_id,
+                "name": raw.get("Name") or "",
+                "path": raw.get("Path") or "",
+                "people": raw.get("People") or [],
+            })
+            response = await client.post(
+                f"{_base_url(config)}/emby/Items/{quote(item_id, safe='')}",
+                headers={**_headers(config), "Content-Type": "application/json"},
+                json=next_item,
+            )
             response.raise_for_status()
-            updated.append({"id": movie["id"], "name": movie["name"]})
+            verify_item = await _emby_item_for_update(client, config, item_id)
+            cleanup_item, cleanup_people = _actor_merge_remove_source_people(verify_item, source_actor_ids=source_ids)
+            if cleanup_people:
+                cleanup_response = await client.post(
+                    f"{_base_url(config)}/emby/Items/{quote(item_id, safe='')}",
+                    headers={**_headers(config), "Content-Type": "application/json"},
+                    json=cleanup_item,
+                )
+                cleanup_response.raise_for_status()
+            updated.append({
+                "id": item_id,
+                "name": raw.get("Name") or movie.get("name") or "",
+                "path": raw.get("Path") or movie.get("path") or "",
+                "changed_people": changed_people,
+                "cleanup_people": cleanup_people,
+                "target_name": plan["target_name"],
+            })
         for actor_id in source_ids:
-            # Emby can retain a Person row while its visible page shows no
-            # works.  Re-read the live PersonIds relation after the merge and
-            # only request deletion when the source actor is truly empty.
             try:
                 remaining = await _related_movies(client, config, actor_id)
                 remaining_source_counts[actor_id] = len(remaining)
@@ -1250,19 +1420,36 @@ async def _execute_merge(config: dict[str, Any], req: ActorMappingMergeRequest, 
                 })
                 continue
             try:
-                response = await client.delete(f"{_base_url(config)}/emby/Items/{quote(actor_id)}", headers=_headers(config))
-                response.raise_for_status()
+                await _emby_delete_item(client, config, actor_id)
+                if await _emby_item_exists(client, config, actor_id):
+                    raise RuntimeError("Emby 删除接口返回成功，但该演员仍可通过 Items 查询到")
                 deleted.append(actor_id)
             except Exception as exc:
                 delete_failed.append({"id": actor_id, "error": str(exc)})
+    backup_path = None
+    if backups:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        safe_mapping_id = re.sub(r"[^A-Za-z0-9._-]+", "_", str(req.mapping_id)).strip("._") or "mapping"
+        backup_file = _actor_merge_backup_dir() / f"{timestamp}_{safe_mapping_id}.json"
+        _save_json(backup_file, {
+            "mapping_id": req.mapping_id,
+            "target_actor_id": plan["target_actor_id"],
+            "target_name": plan["target_name"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "backups": backups,
+        })
+        backup_path = str(backup_file)
     if deleted:
         ignored_ghost_ids = _load_actor_merge_ignored_ghosts()
         ignored_ghost_ids.update(str(actor_id) for actor_id in deleted)
         _save_actor_merge_ignored_ghosts(ignored_ghost_ids)
     return {
         "ok": True,
+        "dry_run": False,
         "updated_count": len(updated),
         "updated": updated,
+        "skipped": skipped,
+        "backup_path": backup_path,
         "deleted_actor_count": len(deleted),
         "deleted_actor_ids": deleted,
         "delete_failed_actor_ids": delete_failed,
@@ -1278,20 +1465,60 @@ async def execute_actor_mapping_merge(req: ActorMappingMergeRequest, lang: str =
 
 @router.post("/actors/mapping/merge-batch")
 async def execute_actor_mapping_batch(req: ActorMappingMergeBatchRequest, lang: str = "zh-CN"):
+    config = _require_config()
+    preview = await actor_mapping_matches(limit=5000, only_candidates=True, lang=lang)
     results: list[dict[str, Any]] = []
-    failures: list[dict[str, str]] = []
-    for mapping_id, target_actor_id in req.target_actor_ids.items():
+    failures: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for group in preview.get("groups") or []:
+        mapping_id = str(group.get("mapping_id") or "").strip()
+        if not mapping_id:
+            continue
+        if req.skip_conflicts and group.get("has_tmdb_conflict"):
+            skipped.append({
+                "mapping_id": mapping_id,
+                "name": group.get("display_name") or group.get("canonical_name") or "",
+                "reason": "tmdb_conflict",
+            })
+            continue
+        target_actor_id = str(req.target_actor_ids.get(mapping_id) or group.get("target_actor_id") or "").strip()
+        if not target_actor_id:
+            skipped.append({
+                "mapping_id": mapping_id,
+                "name": group.get("display_name") or group.get("canonical_name") or "",
+                "reason": "missing_target",
+            })
+            continue
         try:
-            results.append(await _execute_merge(_require_config(), ActorMappingMergeRequest(mapping_id=mapping_id, target_actor_id=target_actor_id, dry_run=req.dry_run), lang))
+            results.append(await _execute_merge(
+                config,
+                ActorMappingMergeRequest(mapping_id=mapping_id, target_actor_id=target_actor_id, dry_run=req.dry_run),
+                lang,
+            ))
+        except HTTPException as exc:
+            failures.append({
+                "mapping_id": mapping_id,
+                "name": group.get("display_name") or group.get("canonical_name") or "",
+                "status_code": exc.status_code,
+                "error": exc.detail,
+            })
         except Exception as exc:
-            failures.append({"mapping_id": mapping_id, "error": str(exc)})
+            failures.append({
+                "mapping_id": mapping_id,
+                "name": group.get("display_name") or group.get("canonical_name") or "",
+                "error": str(exc),
+            })
     return {
         "ok": not failures,
+        "dry_run": req.dry_run,
+        "candidate_count": len(preview.get("groups") or []),
         "executed_count": len(results),
         "updated_count": sum(item.get("updated_count", 0) for item in results),
         "deleted_actor_count": sum(item.get("deleted_actor_count", 0) for item in results),
         "delete_failed_actor_ids": [failure for item in results for failure in item.get("delete_failed_actor_ids", [])],
-        "skipped_count": len(failures),
+        "skipped_count": len(skipped),
+        "failed_count": len(failures),
+        "skipped": skipped,
         "failures": failures,
         "results": results,
     }
