@@ -40,9 +40,10 @@ def resolve_embedded_facefusion_source() -> FaceFusionSource | None:
 
 def normalize_configured_facefusion_dir(value: str | None) -> str:
     configured = (value or "").strip()
-    # An old migration treated the historical external path as an instruction
-    # to use an embedded copy. During recovery there is no embedded source, so
-    # preserve an explicit existing installation instead of making it unusable.
+    # The historical host install path was used before FaceFusion was embedded
+    # into NOOR.  Once the embedded source exists, treat that legacy value as
+    # "use the built-in source" so old settings do not keep routing jobs to the
+    # host project by accident.
     if configured == LEGACY_EXTERNAL_FACEFUSION_DIR and resolve_embedded_facefusion_source() is not None:
         return ""
     return configured

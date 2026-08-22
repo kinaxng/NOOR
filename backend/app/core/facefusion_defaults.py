@@ -5,13 +5,14 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.core.facefusion_paths import normalize_configured_facefusion_dir
 from app.core.runtime_paths import data_path
 
 
 # The recovered core configuration bytecode predates FaceFusion. This keeps
 # recovered FaceFusion modules executable until the full settings API returns.
 FACEFUSION_DEFAULTS: dict[str, Any] = {
-    "facefusion_dir": "/volume1/facefusion/facefusion",
+    "facefusion_dir": "",
     "facefusion_python_path": "",
     "facefusion_model_dir": "/volume1/models/noor/facefusion",
     "facefusion_cache_dir": "/volume1/models/noor-runtime/facefusion/cache",
@@ -81,7 +82,12 @@ def load_facefusion_overrides() -> dict[str, Any]:
         payload = json.loads(_settings_path().read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return {}
-    return {key: value for key, value in payload.items() if key in FACEFUSION_DEFAULTS} if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        return {}
+    values = {key: value for key, value in payload.items() if key in FACEFUSION_DEFAULTS}
+    if "facefusion_dir" in values:
+        values["facefusion_dir"] = normalize_configured_facefusion_dir(str(values.get("facefusion_dir") or ""))
+    return values
 
 
 def save_facefusion_overrides(updates: dict[str, Any]) -> dict[str, Any]:
