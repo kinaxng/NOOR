@@ -1,0 +1,207 @@
+timestamp	commit	subject	files_changed	insertions	deletions	staged_paths
+2026-06-22T07:00:02.287Z	dd000a8	Checkpoint NOOR feature updates	710	19348	4352	
+2026-06-24T08:17:06.441Z	41117b0	Add recommendation subscriptions and inline details	2	349	8	plugins/av-recommend/frontend/page.js plugins/av-recommend/frontend/style.css
+2026-06-24T08:26:50.756Z	6ab498a	Refine recommendation detail panel layout	2	68	10	plugins/av-recommend/frontend/page.js plugins/av-recommend/frontend/style.css
+2026-06-24T08:32:20.502Z	6a80f72	Fix recommendation plugin icon assets	3	14	7	plugins/av-recommend
+2026-06-24T08:53:25.136Z	fc08fd6	Parse local media NFO in item details	2	156		backend/app/api/endpoints/media_library_item_detail.py backend/tests/test_media_library_api.py
+2026-06-24T16:39:33.211Z	d6441c3	Add Emby media library webhook sync	4	222	5	backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py frontend/src/views/Home.vue frontend/src/views/settings/SystemSettings.vue
+2026-06-24T16:45:34.662Z	6547cf2	Clarify Emby webhook setup	1	19	3	frontend/src/views/settings/SystemSettings.vue
+2026-06-24T16:54:55.960Z	f9ca871	Improve Emby webhook test logging	2	20	4	backend/app/api/endpoints/media_library.py frontend/src/views/settings/SystemSettings.vue
+2026-06-24T16:59:23.157Z	a5cf7ba	Refine webhook guide and source IP	2	16	2	backend/app/api/endpoints/media_library.py frontend/src/views/settings/SystemSettings.vue
+2026-06-24T18:41:30.474Z	3226a05	Support qBittorrent 5.2 control API	2	88	17	plugins/qbittorrent/backend.py plugins/qbittorrent/frontend/page.js
+2026-06-24T18:45:51.887Z	fd44ab3	Support qBittorrent API key auth	3	25	4	plugins/qbittorrent/backend.py plugins/qbittorrent/frontend/page.js plugins/qbittorrent/plugin.json
+2026-06-24T18:48:40.217Z	c0dc3b8	Keep qBittorrent password auth compatible	1	4	3	plugins/qbittorrent/backend.py
+2026-06-24T19:28:58.150Z	d4c6188	Clarify Xunlei NAS auth failures	1	12	2	plugins/xunlei-remote/backend.py
+2026-06-25T14:51:16.374Z	ab6d2b0	Guard Xunlei retries when quota is exhausted	2	13	1	plugins/xunlei-remote/backend.py plugins/xunlei-remote/frontend/page.js
+2026-06-25T15:18:41.741Z	15f6ac8	Add Xunlei residual task restore	4	280	1	plugins/xunlei-remote/backend.py plugins/xunlei-remote/frontend/page.js plugins/xunlei-remote/frontend/style.css plugins/xunlei-remote/plugin.json
+2026-06-25T15:38:56.501Z	1feffc1	Change Xunlei residual handling to search and delete	3	41	40	plugins/xunlei-remote/backend.py plugins/xunlei-remote/frontend/page.js plugins/xunlei-remote/frontend/style.css
+2026-06-25T15:47:17.928Z	7d9120d	Simplify Xunlei residual cleanup flow	2	6	20	plugins/xunlei-remote/frontend/page.js plugins/xunlei-remote/frontend/style.css
+2026-06-25T16:52:05.509Z	806de25	Add FaceFusion crack processing integration	17	836	10	backend/app/api/jobs.py backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/core/models.py backend/app/tasks/job_phases.py backend/app/tasks/manager.py backend/app/tasks/manager_helpers.py backend/app/pipeline/facefusion frontend/src/api/types.ts frontend/src/components/noor/LadaPanel.vue frontend/src/composables/useJobPresentation.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/LadaSettings.vue
+2026-06-25T17:12:00.052Z	7219ca2	Split FaceFusion settings into dedicated tab	11	611	168	backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/pipeline/facefusion/runner.py frontend/src/components/noor/LadaPanel.vue frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/LadaSettings.vue frontend/src/views/settings/SettingsIndex.vue frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-25T17:19:10.673Z	3955550	Use tabbed layout for FaceFusion settings	1	89	11	frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-26T07:36:28.853Z	7c23a4f	Refine FaceFusion settings controls	6	503	22	backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/pipeline/facefusion/runner.py frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-26T07:58:49.982Z	714dc60	Restyle FaceFusion inner tabs	1	76	40	frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-26T08:10:25.445Z	aeae407	Polish FaceFusion inner tab layout	1	54	30	frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-26T08:16:43.303Z	1220755	Keep active tabs visible on mobile	1	7	6	frontend/src/components/ui/Tabs.vue
+2026-06-26T09:51:49.992Z	17602ad	Organize AI runtime storage paths	16	390	68	backend/app/api/settings.py backend/app/api/settings_directories.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/core/runtime_paths.py backend/app/pipeline/facefusion/runner.py backend/app/pipeline/lada/runner.py backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py backend/app/pipeline/whisper/decoupled/qwen3.py backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/orchestrator.py backend/app/pipeline/whisper/preprocess.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/StorageSettings.vue
+2026-06-26T10:00:16.130Z	0458364	Tighten AI runtime path tests	6	29	6	.gitignore backend/app/api/settings.py backend/app/pipeline/whisper/enhancer.py backend/app/pipeline/whisper/orchestrator.py backend/tests/test_lada_runner_cancel.py backend/tests/test_settings_updates.py
+2026-06-26T10:07:56.254Z	d9f5a73	Derive AI storage defaults from data dir	11	161	29	backend/app/api/settings.py backend/app/api/settings_directories.py backend/app/api/settings_helpers.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/tests/test_core_config_storage_defaults.py backend/tests/test_settings_updates.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/StorageSettings.vue
+2026-06-26T14:47:33.072Z	7f76e42	Restrict Whisper model deletion to configured storage	2	29	35	backend/app/api/settings_whisper_models.py backend/tests/test_settings_whisper_models.py
+2026-06-26T14:50:34.719Z	17e8059	Clarify FaceFusion native model storage	4	22	9	backend/app/api/settings_response.py backend/app/pipeline/facefusion/runner.py backend/tests/test_settings_response.py frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-26T15:13:44.957Z	d5826f0	Route plugin data through runtime storage	12	147	61	backend/app/core/runtime_paths.py backend/app/plugins/store.py backend/app/api/local_library.py backend/app/api/endpoints/media_library_helpers.py plugins/gfriends/backend.py plugins/avdb/backend.py plugins/mteam-plugin/backend.py plugins/subscription-core/backend.py plugins/av-recommend/backend.py backend/tests/test_core_config_storage_defaults.py backend/tests/test_env_backed_library_configs.py backend/tests/test_plugin_store_paths.py
+2026-06-26T15:16:37.834Z	9716085	Store task runtime files under data dir	4	38	6	backend/app/tasks/manager_helpers.py backend/app/api/settings_status_helpers.py backend/tests/test_settings_status_helpers.py backend/tests/test_task_runtime_paths.py
+2026-06-26T15:21:32.893Z	2ceba68	Move default database into data dir	6	157	3	.gitignore backend/app/core/config.py backend/app/core/database.py backend/app/core/database_paths.py backend/tests/test_core_config_storage_defaults.py backend/tests/test_database_paths.py
+2026-06-26T15:23:58.915Z	c2b5111	Show database path in storage settings	6	31	1	backend/app/api/settings_response.py backend/tests/test_settings_response.py frontend/src/views/settings/StorageSettings.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts frontend/src/style.css
+2026-06-26T15:27:49.058Z	9d4f3ce	Align docker storage with data dir	2	33	11	.env.example docker-compose.yml
+2026-06-26T15:29:59.115Z	914b6bd	Default docker runtime paths to data dir	1	20	18	Dockerfile
+2026-06-26T15:34:18.950Z	cdee066	Drop deprecated transformers cache env	4	23	5	Dockerfile docker-compose.yml backend/app/core/runtime_paths.py backend/tests/test_core_config_storage_defaults.py
+2026-06-26T18:32:02.829Z	458b503	Report resolved storage settings	2	75	19	backend/app/api/settings_response.py backend/tests/test_settings_response.py
+2026-06-26T18:33:33.984Z	a34b737	Document docker data dir behavior	2	12	10	README.md docs/DEV_DOCKER_ALIGNMENT.md
+2026-06-28T15:20:10.551Z	353934d	Remove legacy whisper cache default	2	1	6	backend/app/core/config.py backend/app/api/settings.py
+2026-06-28T15:22:37.288Z	45fdd54	Update docker data directory guide	1	25	26	DOCKER.md
+2026-06-28T15:24:03.884Z	92a5398	Normalize docker temp cache env	2	2	2	.env.example docker-compose.yml
+2026-06-28T15:56:45.025Z	9693636	Exclude runtime data from docker build	1	1		.dockerignore
+2026-06-28T15:57:58.670Z	1a482d1	Ignore remaining runtime artifacts in docker build	1	6		.dockerignore
+2026-06-28T16:01:19.958Z	584273a	Ignore tracked runtime data names	1	4		.gitignore
+2026-06-28T16:03:31.078Z	ddbf4c0	Move hardlink groups into runtime data	2	50	2	backend/app/api/endpoints/media_library_hardlinks.py backend/tests/test_media_library_hardlinks.py
+2026-06-28T16:33:59.169Z	1376fb8	Move subtitle index into runtime data	2	31	5	backend/app/api/local_library.py backend/tests/test_env_backed_library_configs.py
+2026-06-28T16:34:28.934Z	efd8da9	Stop tracking runtime data files	3		755	
+2026-06-28T16:43:03.251Z	45cda56	Split FaceFusion runtime cache dirs	4	29	4	backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts
+2026-06-28T16:44:12.060Z	33a2708	Derive Reazon defaults from data dir	2	7	2	backend/app/core/config.py backend/tests/test_core_config_storage_defaults.py
+2026-06-28T16:52:53.354Z	4575fd3	Use generic storage path examples	4	42	39	.env.example frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/StorageSettings.vue
+2026-06-28T16:54:07.304Z	f0917d6	Align Docker Whisper model directory	4	4	3	.env.example docker-compose.yml DOCKER.md README.md
+2026-06-28T16:57:56.217Z	0450ee5	Use generic Docker media root defaults	3	8	8	.env.example docker-compose.yml DOCKER.md
+2026-06-28T17:00:20.842Z	07f0fdd	Ignore legacy backend app data	2	2		.gitignore .dockerignore
+2026-06-28T17:05:10.077Z	0965d3b	Stop tracking plugin config data	1		131	
+2026-06-28T17:07:10.893Z	72d45aa	Share default data dir constant	2	7	2	backend/app/core/runtime_paths.py backend/tests/test_core_config_storage_defaults.py
+2026-06-28T17:18:59.356Z	2ecda9d	Migrate legacy subtitle indexes	2	59	3	backend/app/api/local_library.py backend/tests/test_env_backed_library_configs.py
+2026-06-28T17:22:55.282Z	ed23bfe	Fix Whisper HuggingFace cache detection	3	21	10	backend/app/api/settings_whisper_runtime.py backend/app/api/settings_whisper_models.py backend/tests/test_settings_whisper_runtime.py
+2026-06-28T17:26:07.742Z	f176af3	Cover Whisper HuggingFace root layout	1	15		backend/tests/test_whisper_engine_cache.py
+2026-06-28T17:29:49.933Z	4a281d5	Run FaceFusion from its install dir	2	81	5	backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py
+2026-06-28T17:45:14.845Z	a2195c3	Ignore empty Whisper cache dirs	2	35	5	backend/app/api/settings_whisper_runtime.py backend/tests/test_settings_whisper_runtime.py
+2026-06-29T14:08:24.628Z	c96ca5d	Share Whisper cache path candidates	2	10	14	backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/decoupled/qwen3.py
+2026-06-29T14:13:36.679Z	743f9fb	Route FaceFusion models through configured storage	4	74	12	.env.example backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py docker-compose.yml
+2026-06-29T14:18:08.434Z	e436cc0	Split LADA runtime cache directories	2	32	2	backend/app/pipeline/lada/runner.py backend/tests/test_lada_runner_cancel.py
+2026-06-29T14:23:09.655Z	ebb5c7e	Apply Whisper preprocessing runtime paths	3	57	4	backend/app/pipeline/whisper/preprocess.py backend/tests/test_whisper_preprocess.py backend/tests/test_core_config_storage_defaults.py
+2026-06-29T14:28:16.033Z	106df4b	Prefer bundled LADA python path	7	68	11	backend/app/core/lada_paths.py backend/app/api/settings_helpers.py backend/app/api/settings_lada.py backend/app/api/settings.py backend/app/pipeline/lada/runner.py backend/tests/test_lada_paths.py backend/tests/test_settings_api.py
+2026-06-29T14:36:06.226Z	65d39f1	Align Docker runtime paths	3	85	9	Dockerfile backend/app/core/lada_paths.py backend/tests/test_lada_paths.py
+2026-06-29T14:38:18.073Z	81e3e41	Move optional Whisper models to model volume	3	12	12	docker-compose.yml .env.example DOCKER.md
+2026-06-29T15:22:40.894Z	a79d3f8	Add Python headers to Docker builders	1	2	2	Dockerfile
+2026-06-30T07:48:22.131Z	217a5e8	Embed FaceFusion runtime in NOOR	191	18721	73	backend/app/core/facefusion_paths.py backend/app/pipeline/facefusion/source backend/app/api/settings.py backend/app/api/settings_response.py backend/app/core/config.py backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py backend/tests/test_settings_response.py frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T07:54:44.626Z	70f5263	Keep FaceFusion runtime data outside source	7	27	6	backend/app/pipeline/facefusion/runner.py backend/app/pipeline/facefusion/source/facefusion/execution.py backend/tests/test_facefusion_runner.py backend/tests/test_facefusion_embedded_source.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T08:18:27.034Z	1c48f3b	Add controlled FaceFusion source upgrades	5	437	12	backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_facefusion_upgrade.py backend/tests/test_facefusion_upgrade.py frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T08:25:34.288Z	ac9f681	Show FaceFusion runtime versions	4	142	2	backend/app/api/settings_facefusion_upgrade.py backend/app/api/settings_response.py backend/tests/test_facefusion_upgrade.py frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T08:35:15.679Z	0f6ed10	Track FaceFusion upstream revision	5	125		backend/app/api/settings_facefusion_upgrade.py backend/app/api/settings_response.py backend/tests/test_facefusion_upgrade.py frontend/src/views/settings/FaceFusionSettings.vue backend/app/pipeline/facefusion/source/NOOR_UPSTREAM.json
+2026-06-30T10:02:37.071Z	38272d2	Add FaceFusion preview panel	6	445	17	backend/app/main.py backend/app/api/facefusion.py backend/app/pipeline/facefusion/preview.py backend/app/pipeline/facefusion/preview_worker.py frontend/src/components/noor/LadaPanel.vue frontend/src/components/noor/panels/PanelHeader.vue
+2026-06-30T10:21:55.010Z	73b5cf4	Add FaceFusion preview frame scrubber	2	183	4	backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue
+2026-06-30T10:27:24.745Z	658c643	Move FaceFusion preview scrubber into preview	1	45	75	frontend/src/components/noor/LadaPanel.vue
+2026-06-30T11:25:38.639Z	ac81da9	Simplify FaceFusion preview controls	1	3	48	frontend/src/components/noor/LadaPanel.vue
+2026-06-30T13:39:04.629Z	019351e	Support multiple FaceFusion source images	2	196	9	backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue
+2026-06-30T14:05:32.879Z	7b58666	Improve FaceFusion source image management	2	132	57	backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue
+2026-06-30T15:23:22.208Z	41153cc	Simplify AI storage path settings	6	92	137	backend/app/api/settings.py backend/app/api/settings_directories.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py frontend/src/views/settings/StorageSettings.vue
+2026-06-30T15:33:33.491Z	3b91d67	Preserve legacy flat model storage layout	2	18	4	backend/app/api/settings_response.py backend/app/api/settings_updates.py
+2026-06-30T16:04:24.010Z	91c8a29	Show configured FaceFusion model directory	1	1	1	backend/app/core/facefusion_paths.py
+2026-06-30T16:19:18.659Z	e837849	Open crack panel from cracked media tag	1	6	2	frontend/src/components/noor/MediaCard.vue
+2026-06-30T16:58:52.545Z	344db8d	Simplify FaceFusion crack panel controls	3	305	61	backend/app/pipeline/facefusion/runner.py frontend/src/api/types.ts frontend/src/components/noor/LadaPanel.vue
+2026-06-30T17:05:44.520Z	b21d670	Add FaceFusion processor defaults settings	1	134	4	frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T17:10:53.305Z	6765960	Label FaceFusion processors with TensorRT support	2	127	30	frontend/src/components/noor/LadaPanel.vue frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T17:14:42.181Z	d8cbfa9	Correct FaceFusion processor acceleration labels	2	40	24	frontend/src/components/noor/LadaPanel.vue frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T18:27:32.854Z	f8484d8	Clarify FaceFusion acceleration recommendations	2	2	2	frontend/src/components/noor/LadaPanel.vue frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T18:38:51.281Z	5779f51	Wait for FaceFusion model downloads before validation	1	2	1	backend/app/pipeline/facefusion/source/facefusion/download.py
+2026-06-30T18:50:46.803Z	a382063	Add FaceFusion model management settings tab	3	458	3	backend/app/api/settings.py backend/app/api/settings_status_helpers.py frontend/src/views/settings/FaceFusionSettings.vue
+2026-06-30T19:06:44.206Z	71e9a62	Fallback FaceFusion preview on CUDA OOM	2	58	14	backend/app/pipeline/facefusion/preview.py frontend/src/components/noor/LadaPanel.vue
+2026-06-30T19:16:54.278Z	bdf796c	Add FaceFusion source image library	2	240	8	backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue
+2026-06-30T19:24:31.950Z	791c9ce	Improve FaceFusion preview feedback	1	44	4	frontend/src/components/noor/LadaPanel.vue
+2026-06-30T19:32:24.300Z	f5fbbc4	Add FaceFusion preview defaults	7	40	2	backend/app/core/config.py backend/app/api/settings.py backend/app/api/settings_updates.py backend/app/api/settings_response.py frontend/src/views/settings/FaceFusionSettings.vue frontend/src/components/noor/LadaPanel.vue frontend/src/api/types.ts
+2026-06-30T19:38:43.307Z	6a71cd1	Skip FaceFusion content blur in previews	2	7	2	backend/app/pipeline/facefusion/preview.py backend/app/pipeline/facefusion/preview_worker.py
+2026-06-30T20:55:34.669Z	6c51a5c	Skip FaceFusion content analysis for NOOR jobs	3	64	6	backend/app/api/settings_facefusion_upgrade.py backend/app/pipeline/facefusion/runner.py backend/app/pipeline/facefusion/source/facefusion/content_analyser.py
+2026-06-30T20:58:20.799Z	a668dcc	Preserve FaceFusion content patches on upgrade	1	25		backend/app/api/settings_facefusion_upgrade.py
+2026-06-30T21:05:30.557Z	601ff35	Record restoration output paths at job creation	1	8		backend/app/tasks/manager.py
+2026-06-30T21:59:53.917Z	08d0cfa	Add GPU memory guard before heavy jobs	3	255		backend/app/core/gpu_guard.py backend/app/core/config.py backend/app/tasks/manager.py
+2026-07-01T06:06:04.068Z	7396642	Avoid FaceFusion TensorRT memory limit crashes	2	30	13	backend/app/pipeline/facefusion/runner.py backend/app/tasks/manager.py
+2026-07-01T06:24:25.276Z	6a760cc	Let GPU guard stop model server processes	2	26	3	backend/app/core/config.py backend/app/core/gpu_guard.py
+2026-07-01T07:14:06.738Z	0135fc2	Map FaceFusion progress by processing phase	1	50	8	backend/app/pipeline/facefusion/runner.py
+2026-07-01T08:29:03.213Z	4f1b075	Move hardlinks under files section	6	167	4	frontend/src/App.vue frontend/src/components/noor/AppSidebar.vue frontend/src/router/index.ts frontend/src/i18n/zh.ts frontend/src/i18n/en.ts frontend/src/views/FilesView.vue
+2026-07-01T08:47:03.412Z	527f96d	Add media actor management tab	7	809	21	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/FilesView.vue frontend/src/views/ActorManagementView.vue
+2026-07-01T09:08:25.533Z	184a1b0	Add actor mapping file upload	4	254	1	backend/app/api/endpoints/media_library.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue
+2026-07-01T09:19:29.993Z	a551a59	Import uploaded actor mapping XML	5	241	5	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue
+2026-07-01T09:30:19.405Z	270bf67	Preview actor mapping merge candidates	5	239		backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue
+2026-07-01T12:31:58.113Z	182842d	Refine actor management around Emby actors	4	126	282	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts frontend/src/views/ActorManagementView.vue
+2026-07-01T13:40:37.448Z	1173680	Add actor mapping merge plan indicators	5	105	8	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue
+2026-07-01T14:13:49.688Z	c41eb34	Include Emby server id in actor links	3	11	4	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts
+2026-07-01T15:37:23.390Z	13621bf	Reject unsafe actor mapping aliases	5	86	5	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-01T16:04:33.604Z	22acd6d	Add actor mapping merge workflow	5	490		backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-01T16:10:12.291Z	173dc3d	Localize actor merge target names	2	17	3	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-01T16:22:14.522Z	7468e33	Clean residual actors after Emby merge	2	52		backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-01T16:37:10.441Z	9a3ea02	Select actor mapping merge target from candidates	4	87	12	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue
+2026-07-01T16:58:28.596Z	cbddf08	Use NOOR confirm for actor merges	3	13	1	frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-01T17:06:34.340Z	2e9557a	Prefer primary actor mapping names over aliases	2	49	2	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-02T08:02:30.920Z	9714bd5	Show raw Emby names in actor merge candidates	1	19	3	frontend/src/views/ActorManagementView.vue
+2026-07-02T08:12:14.887Z	bc1c865	Delete empty actor persons after merge	2	87	1	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-02T08:21:37.433Z	4b9942b	Add batch actor mapping merge action	3	124	4	frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-02T08:41:26.344Z	88ca94d	Execute actor batch merge on backend	5	157	40	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-02T08:49:49.198Z	0aaa673	Allow actor merge cleanup without movie updates	4	21	5	backend/app/api/endpoints/media_library.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-02T09:07:01.108Z	03a7421	Ignore empty non-target actor merge ghosts	2	67		backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-02T09:28:11.583Z	39ef0d8	Detect actor duplicates from tmdb and Emby aliases	2	155	6	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-02T09:45:43.745Z	40546a0	Show uncleaned empty actor duplicates before ignoring	2	76	3	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-02T10:24:01.161Z	62f01e8	Hide ignored actor merge ghosts from actor list	2	34	2	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-02T14:48:02.390Z	5880d7c	Add NOOR actor detail page	7	681	5	
+2026-07-02T15:14:46.120Z	edae012	Enhance actor detail profile actions	7	662	8	
+2026-07-02T15:44:17.799Z	383c47d	Add TMDB actor metadata fill	7	534		
+2026-07-02T16:03:14.832Z	738b99e	Allow TMDB actor apply when avatar sync fails	5	83	4	
+2026-07-02T16:19:07.356Z	59fff6f	Show richer actor profile metadata	6	237	36	
+2026-07-02T16:32:11.945Z	3504589	Expand actor social metadata display	7	223	26	
+2026-07-03T06:53:14.385Z	84208ba	Enrich actor detail links from TMDB	1	44		frontend/src/views/ActorDetailView.vue
+2026-07-03T07:02:22.773Z	d7f9d67	Stack actor external links	1	29	15	frontend/src/views/ActorDetailView.vue
+2026-07-03T07:24:54.503Z	9f62658	Refine actor detail navigation and actions	7	170	43	frontend/src/components/noor/BaseIcon.vue frontend/src/components/noor/panels/PanelHeader.vue frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorDetailView.vue frontend/src/views/ActorManagementView.vue frontend/src/views/Home.vue
+2026-07-03T07:53:41.725Z	194662f	Make Gfriends an avatar library helper	4	46	41	frontend/src/views/PluginHost.vue plugins/gfriends/frontend/page.js plugins/gfriends/frontend/style.css plugins/gfriends/plugin.json
+2026-07-03T08:37:07.361Z	3396a49	Sync actor mapping from online source	9	277	27	backend/app/api/endpoints/media_library.py backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue frontend/src/views/settings/SystemSettings.vue
+2026-07-03T08:55:17.819Z	0e9bc1b	Show rejected actor mapping matches	5	190	12	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-03T09:12:54.966Z	f3b3d22	Show all actor mapping candidates	3	42	45	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue
+2026-07-03T09:25:12.863Z	906fdc6	Verify empty actor deletion in Emby	5	105	9	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue
+2026-07-03T11:05:26.548Z	71efc49	Upload actor avatars as base64	2	4	3	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-03T15:24:37.004Z	a6fe345	Match sumire kanji variants in actor mapping	2	19	3	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-03T15:42:19.763Z	ff1c758	Prefer selected Emby actor name for merges	2	15	3	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-03T16:51:29.730Z	86ef0c6	Add actor identity name fields	7	217	15	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorDetailView.vue frontend/src/views/ActorManagementView.vue
+2026-07-03T17:03:27.578Z	e1697fa	Prefer Japanese actor names for Gfriends lookup	3	17	2	frontend/src/views/ActorDetailView.vue plugins/gfriends/backend.py backend/tests/test_gfriends_plugin.py
+2026-07-03T17:14:36.556Z	9f185ea	Refine actor identity name layout	1	43	13	frontend/src/views/ActorDetailView.vue
+2026-07-03T17:22:15.787Z	8ff00f4	Add actor TMDB ID backfill	5	395		backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue
+2026-07-03T17:27:36.542Z	ae21cd3	Show all TMDB backfill candidates	1	4	1	frontend/src/views/ActorManagementView.vue
+2026-07-03T17:38:30.426Z	f2c4b7d	Add TMDB backfill progress feedback	3	200	16	backend/app/api/endpoints/media_library.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts
+2026-07-03T17:44:02.506Z	2f90af1	Link TMDB backfill IDs to TMDB	1	9	3	frontend/src/views/ActorManagementView.vue
+2026-07-03T17:50:26.005Z	1a1e4a9	Make TMDB review candidates actionable	3	111	2	frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-03T18:03:36.683Z	2fa8905	Add actor delete diagnostics	5	377		backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorDetailView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-04T08:49:31.651Z	3bf46cc	Allow removing actor provider IDs	3	128		frontend/src/views/ActorDetailView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-04T17:01:06.216Z	f163f42	Add actor name sync by language	5	516		backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-04T17:10:18.394Z	fa8743b	Add actor name sync progress feedback	4	201	11	backend/app/api/endpoints/media_library.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-04T18:06:29.215Z	9c49a79	Use MDC-NG actor mapping source	7	99	96	backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py backend/app/api/settings_response.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue frontend/src/views/settings/SystemSettings.vue
+2026-07-04T18:22:29.378Z	2aa83bb	Derive MDC-NG actor mapping file from root path	4	21	12	backend/app/api/endpoints/media_library.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/SystemSettings.vue
+2026-07-04T18:31:11.524Z	52db4ab	Sync actor names from mapping language fields	2	128	18	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-05T15:29:31.500Z	7c44237	Import TMDB actor aliases and clean overview links	2	176	5	backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py
+2026-07-05T17:07:17.335Z	8ecd4a3	Add fallback image loading for recommendation cards	4	136	4	plugins/av-recommend/backend.py plugins/av-recommend/frontend/page.js plugins/subscription-core/backend.py plugins/subscription-core/frontend/page.js
+2026-07-06T02:26:25.974Z	61ff7f0	Remove obsolete Whisper compatibility UI remnants	4	2	941	frontend/src/components/noor/SubtitlePanel.vue frontend/src/views/settings/WhisperSettings.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts
+2026-07-06T03:21:37.156Z	cfe11d8	Fix ChickenRice direct subtitle runtime checks	2	15	6	backend/app/pipeline/whisper/orchestrator.py backend/app/tasks/manager.py
+2026-07-06T03:54:23.888Z	27f37c2	Remove legacy Whisper chains	34	107	4230	
+2026-07-06T14:53:56.034Z	20f4ce8	Remove remaining Whisper legacy UI remnants	18	20	206	backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_whisper.py backend/app/api/whisper.py backend/app/core/config.py backend/app/pipeline/whisper/__init__.py backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/japanese_post.py backend/app/pipeline/whisper/strategy.py backend/app/pipeline/whisper/types.py backend/app/tasks/job_phases.py backend/app/tasks/manager.py frontend/src/api/types.ts frontend/src/components/noor/SubtitlePanel.vue frontend/src/composables/useWhisper.ts frontend/src/composables/useWhisperProfiles.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts
+2026-07-06T15:55:29.640Z	3651e5d	Remove Whisper audio preprocessing	28	55	803	backend/app backend/tests frontend/src
+2026-07-06T16:00:09.419Z	a90811d	Preserve Whisper VAD settings	2	36		backend/app/pipeline/whisper/strategy.py backend/tests/test_whisper_strategy.py
+2026-07-06T16:27:56.331Z	ca5b962	Clarify Whisper subtitle output log	1	1	4	backend/app/pipeline/whisper/orchestrator.py
+2026-07-06T16:43:27.234Z	14a3cc3	Add experimental Whisper timing refiner	17	182		backend/app backend/tests frontend/src
+2026-07-06T16:53:56.537Z	39bcfe8	Split long subtitles in timing refiner	3	115	4	backend/app/pipeline/whisper/orchestrator.py backend/app/pipeline/whisper/timing_refiner.py backend/tests/test_whisper_timing_refiner.py
+2026-07-06T16:59:00.884Z	442c3af	Avoid duration-only subtitle splits	2	20	22	backend/app/pipeline/whisper/timing_refiner.py backend/tests/test_whisper_timing_refiner.py
+2026-07-07T09:01:11.485Z	0184022	Add Whisper runtime tier selection	17	219	10	backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_whisper.py backend/app/api/whisper.py backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/orchestrator.py backend/app/pipeline/whisper/runtime_tier.py backend/app/pipeline/whisper/strategy.py backend/app/pipeline/whisper/types.py backend/app/tasks/manager.py backend/tests/test_whisper_strategy.py frontend/src/components/noor/SubtitlePanel.vue frontend/src/composables/useWhisper.ts frontend/src/composables/useWhisperProfiles.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/WhisperSettings.vue
+2026-07-07T18:02:28.082Z	77c8bb2	Split FaceFusion into dedicated panel	5	1768	1171	frontend/src/api/types.ts frontend/src/components/noor/LadaPanel.vue frontend/src/components/noor/FaceFusionPanel.vue frontend/src/components/noor/MediaCard.vue frontend/src/views/Home.vue
+2026-07-07T18:26:39.685Z	8aed307	Refine FaceFusion full width layout	1	562	136	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T18:36:04.552Z	b7954a9	Compact FaceFusion full width settings	1	77	180	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T18:40:32.285Z	448b968	Adjust FaceFusion full width preview	1	40	1	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T18:43:58.238Z	3e5fa97	Position FaceFusion preview in full width layout	1	70	39	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T18:54:27.608Z	ebfec98	Reflow FaceFusion full width controls	1	135	91	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T18:56:59.989Z	e48baf5	Move FaceFusion processors to left column	1	20	19	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T18:59:58.605Z	fe818f1	Stack FaceFusion full width columns independently	1	64	66	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T19:02:40.320Z	eb99304	Align FaceFusion full width as left column and right workspace	1	2	2	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T19:12:32.123Z	ab1f5b2	Constrain FaceFusion processors for JAV workflow	3	131	7	backend/app/pipeline/facefusion/runner.py frontend/src/api/types.ts frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-07T19:17:50.415Z	19fdf3c	Add FaceFusion deep model picker	2	364	5	backend/app/api/facefusion.py frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T08:47:42.999Z	c3e01e2	Add FaceFusion Deep model downloads	2	328	19	backend/app/api/facefusion.py frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T08:54:24.969Z	6eb12fe	Simplify FaceFusion Deep model dialog	1	8	28	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T09:56:10.423Z	c684faa	Trim FaceFusion Deep model picker	1	35	92	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T10:45:08.040Z	8ab68b2	Fix FaceFusion model picker scrolling	1	5		frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T15:49:30.315Z	e9c884b	Expand FaceFusion mask and detector options	1	154	4	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T16:10:17.915Z	39c918e	Add FaceFusion reference face gallery	3	449	33	backend/app/api/facefusion.py backend/app/pipeline/facefusion/reference_faces_worker.py frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T16:32:30.157Z	1a1263f	Refine FaceFusion wide panel layout	1	239	233	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T16:42:58.048Z	e6e4c18	Adjust FaceFusion source gallery controls	1	73	29	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T16:48:48.560Z	4d55d88	Fix FaceFusion source gallery item layout	1	13	2	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T16:55:47.136Z	cbca699	Stabilize FaceFusion wide panel sizing	1	10	4	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T17:00:01.570Z	d686a20	Let FaceFusion preview fill wide workspace	1	1	3	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T17:51:54.574Z	b2cb29b	Clean FaceFusion task runtime resources	2	254	145	backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py
+2026-07-08T19:21:04.250Z	43acc3a	Add NOOR runtime cleanup task	5	372	1	backend/app/api/plugins.py backend/app/main.py backend/app/api/runtime_cleanup.py backend/app/core/runtime_cleanup.py backend/tests/test_runtime_cleanup.py
+2026-07-08T19:21:47.006Z	1a02e32	Add NOOR runtime cleanup task	5	379	1	backend/tests/test_runtime_cleanup.py
+2026-07-08T21:05:50.474Z	f1e73d0	Stabilize FaceFusion wide lower layout	1	13	1	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-08T21:11:41.864Z	a50ad40	Stabilize FaceFusion wide lower layout	1	21	1	frontend/src/components/noor/FaceFusionPanel.vue
+2026-07-09T13:01:09.418Z	a7d7d19	Allow file path selector to wrap long paths	1	13	1	frontend/src/components/noor/panels/FilePathSelector.vue
+2026-07-10T08:59:39.803Z	b2aa1f6	Refine FaceFusion media badge behavior	9	142	9	backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py frontend/src/components/noor/MediaCard.vue frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/Home.vue frontend/src/views/settings/FaceFusionSettings.vue
+2026-07-10T09:20:40.905Z	4dd6c51	Aggregate FaceFusion variant badge state	4	9		backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py frontend/src/api/types.ts frontend/src/components/noor/MediaCard.vue
+2026-07-10T09:48:55.947Z	c3b736f	Separate uncensored media tagging from cracked titles	5	14	8	backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py backend/app/api/endpoints/media_library_item_detail.py backend/app/core/models.py frontend/src/api/types.ts
+2026-07-14T09:37:30.550Z	2decd18	Exclude ignored ghost actors from merge candidates	1	19	3	backend/app/api/endpoints/media_library.py
+2026-07-31T18:45:44.920Z	bc3fc99	feat(facefusion): upgrade embedded runtime to 3.8.0	173	5954	1612	
+2026-07-31T18:57:28.130Z	301d3d8	feat(facefusion): expose face tracker score	9	28		backend/app/core/config.py backend/app/api/settings.py backend/app/api/settings_updates.py backend/app/api/settings_response.py backend/app/api/facefusion.py backend/app/pipeline/facefusion/runner.py frontend/src/api/types.ts frontend/src/views/settings/FaceFusionSettings.vue frontend/src/components/noor/FaceFusionPanel.vue
+2026-08-04T16:53:03.964Z	2225f1e	feat(javdb): add recent series directory	3	175	4	plugins/javdb/backend.py plugins/javdb/frontend/page.js plugins/javdb/frontend/style.css

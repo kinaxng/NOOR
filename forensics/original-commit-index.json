@@ -1,0 +1,3502 @@
+[
+  {
+    "timestamp": "2026-06-22T07:00:02.287Z",
+    "commit": "dd000a8",
+    "subject": "Checkpoint NOOR feature updates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 710,
+    "insertions": 19348,
+    "deletions": 4352,
+    "call_type": "function_call",
+    "call_id": "call_r3JvRx5mMab0nouUff5mE8vw",
+    "command": "git commit -m \"Checkpoint NOOR feature updates\""
+  },
+  {
+    "timestamp": "2026-06-24T08:17:06.441Z",
+    "commit": "41117b0",
+    "subject": "Add recommendation subscriptions and inline details",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/av-recommend/frontend/page.js",
+      "plugins/av-recommend/frontend/style.css"
+    ],
+    "files_changed": 2,
+    "insertions": 349,
+    "deletions": 8,
+    "call_type": "function_call",
+    "call_id": "call_h2y82B6vM9j29DRM5vIJbqmA",
+    "command": "git add plugins/av-recommend/frontend/page.js plugins/av-recommend/frontend/style.css && git commit -m \"Add recommendation subscriptions and inline details\""
+  },
+  {
+    "timestamp": "2026-06-24T08:26:50.756Z",
+    "commit": "6ab498a",
+    "subject": "Refine recommendation detail panel layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/av-recommend/frontend/page.js",
+      "plugins/av-recommend/frontend/style.css"
+    ],
+    "files_changed": 2,
+    "insertions": 68,
+    "deletions": 10,
+    "call_type": "function_call",
+    "call_id": "call_R1I7TFv8klCy3MxI3X2TUSGc",
+    "command": "git add plugins/av-recommend/frontend/page.js plugins/av-recommend/frontend/style.css && git commit -m \"Refine recommendation detail panel layout\""
+  },
+  {
+    "timestamp": "2026-06-24T08:32:20.502Z",
+    "commit": "6a80f72",
+    "subject": "Fix recommendation plugin icon assets",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/av-recommend"
+    ],
+    "files_changed": 3,
+    "insertions": 14,
+    "deletions": 7,
+    "call_type": "function_call",
+    "call_id": "call_sKhpgRmeSrvv6dh6FimPdT3N",
+    "command": "git add -A plugins/av-recommend && git commit -m \"Fix recommendation plugin icon assets\""
+  },
+  {
+    "timestamp": "2026-06-24T08:53:25.136Z",
+    "commit": "fc08fd6",
+    "subject": "Parse local media NFO in item details",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library_item_detail.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 156,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_yOnKho2CxDIwpBlaTFBv6HgA",
+    "command": "git add backend/app/api/endpoints/media_library_item_detail.py backend/tests/test_media_library_api.py && git commit -m \"Parse local media NFO in item details\""
+  },
+  {
+    "timestamp": "2026-06-24T16:39:33.211Z",
+    "commit": "d6441c3",
+    "subject": "Add Emby media library webhook sync",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/app/api/endpoints/media_library_helpers.py",
+      "frontend/src/views/Home.vue",
+      "frontend/src/views/settings/SystemSettings.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 222,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_CqPJW32Sa4fVlHJWME0ntyhu",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py frontend/src/views/Home.vue frontend/src/views/settings/SystemSettings.vue && git commit -m \"Add Emby media library webhook sync\""
+  },
+  {
+    "timestamp": "2026-06-24T16:45:34.662Z",
+    "commit": "6547cf2",
+    "subject": "Clarify Emby webhook setup",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/settings/SystemSettings.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 19,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_UrdQWPdpK21AGaTDN7HbXUHj",
+    "command": "git add frontend/src/views/settings/SystemSettings.vue && git commit -m \"Clarify Emby webhook setup\" && git status --short && git log --oneline -3"
+  },
+  {
+    "timestamp": "2026-06-24T16:54:55.960Z",
+    "commit": "f9ca871",
+    "subject": "Improve Emby webhook test logging",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "frontend/src/views/settings/SystemSettings.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 20,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_FbeI0YX8yEG80azYNkGeiL10",
+    "command": "git add backend/app/api/endpoints/media_library.py frontend/src/views/settings/SystemSettings.vue && git commit -m \"Improve Emby webhook test logging\" && git status --short && git log --oneline -4"
+  },
+  {
+    "timestamp": "2026-06-24T16:59:23.157Z",
+    "commit": "a5cf7ba",
+    "subject": "Refine webhook guide and source IP",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "frontend/src/views/settings/SystemSettings.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 16,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_PQcXTxtkEqGLl52j5xZZELtO",
+    "command": "git add backend/app/api/endpoints/media_library.py frontend/src/views/settings/SystemSettings.vue && git commit -m \"Refine webhook guide and source IP\" && git status --short && git log --oneline -4"
+  },
+  {
+    "timestamp": "2026-06-24T18:41:30.474Z",
+    "commit": "3226a05",
+    "subject": "Support qBittorrent 5.2 control API",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/qbittorrent/backend.py",
+      "plugins/qbittorrent/frontend/page.js"
+    ],
+    "files_changed": 2,
+    "insertions": 88,
+    "deletions": 17,
+    "call_type": "function_call",
+    "call_id": "call_5Vh8IBuqLTyk9wvqecABIQVp",
+    "command": "git add plugins/qbittorrent/backend.py plugins/qbittorrent/frontend/page.js && git commit -m \"Support qBittorrent 5.2 control API\""
+  },
+  {
+    "timestamp": "2026-06-24T18:45:51.887Z",
+    "commit": "fd44ab3",
+    "subject": "Support qBittorrent API key auth",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/qbittorrent/backend.py",
+      "plugins/qbittorrent/frontend/page.js",
+      "plugins/qbittorrent/plugin.json"
+    ],
+    "files_changed": 3,
+    "insertions": 25,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_VXcRhNGxBagpIJleMMnno41f",
+    "command": "git add plugins/qbittorrent/backend.py plugins/qbittorrent/frontend/page.js plugins/qbittorrent/plugin.json && git commit -m \"Support qBittorrent API key auth\""
+  },
+  {
+    "timestamp": "2026-06-24T18:48:40.217Z",
+    "commit": "c0dc3b8",
+    "subject": "Keep qBittorrent password auth compatible",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/qbittorrent/backend.py"
+    ],
+    "files_changed": 1,
+    "insertions": 4,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_kYCGbet4e4y8SJb10jzuWTcy",
+    "command": "git add plugins/qbittorrent/backend.py && git commit -m \"Keep qBittorrent password auth compatible\""
+  },
+  {
+    "timestamp": "2026-06-24T19:28:58.150Z",
+    "commit": "d4c6188",
+    "subject": "Clarify Xunlei NAS auth failures",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/xunlei-remote/backend.py"
+    ],
+    "files_changed": 1,
+    "insertions": 12,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_tiF6aLYowkbmV9FSWasQhfsq",
+    "command": "git add plugins/xunlei-remote/backend.py && git commit -m \"Clarify Xunlei NAS auth failures\""
+  },
+  {
+    "timestamp": "2026-06-25T14:51:16.374Z",
+    "commit": "ab6d2b0",
+    "subject": "Guard Xunlei retries when quota is exhausted",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/xunlei-remote/backend.py",
+      "plugins/xunlei-remote/frontend/page.js"
+    ],
+    "files_changed": 2,
+    "insertions": 13,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_d0qCm6NDKv5ZVLJ9xLZrXnzD",
+    "command": "git add plugins/xunlei-remote/backend.py plugins/xunlei-remote/frontend/page.js && git commit -m \"Guard Xunlei retries when quota is exhausted\""
+  },
+  {
+    "timestamp": "2026-06-25T15:18:41.741Z",
+    "commit": "15f6ac8",
+    "subject": "Add Xunlei residual task restore",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/xunlei-remote/backend.py",
+      "plugins/xunlei-remote/frontend/page.js",
+      "plugins/xunlei-remote/frontend/style.css",
+      "plugins/xunlei-remote/plugin.json"
+    ],
+    "files_changed": 4,
+    "insertions": 280,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_nBKB70DuY9fjNTraVYwbBSoZ",
+    "command": "git add plugins/xunlei-remote/backend.py plugins/xunlei-remote/frontend/page.js plugins/xunlei-remote/frontend/style.css plugins/xunlei-remote/plugin.json && git commit -m \"Add Xunlei residual task restore\""
+  },
+  {
+    "timestamp": "2026-06-25T15:38:56.501Z",
+    "commit": "1feffc1",
+    "subject": "Change Xunlei residual handling to search and delete",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/xunlei-remote/backend.py",
+      "plugins/xunlei-remote/frontend/page.js",
+      "plugins/xunlei-remote/frontend/style.css"
+    ],
+    "files_changed": 3,
+    "insertions": 41,
+    "deletions": 40,
+    "call_type": "function_call",
+    "call_id": "call_9XoCEaAyohPA7w9tEDdxxEqf",
+    "command": "git add plugins/xunlei-remote/backend.py plugins/xunlei-remote/frontend/page.js plugins/xunlei-remote/frontend/style.css && git commit -m \"Change Xunlei residual handling to search and delete\""
+  },
+  {
+    "timestamp": "2026-06-25T15:47:17.928Z",
+    "commit": "7d9120d",
+    "subject": "Simplify Xunlei residual cleanup flow",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/xunlei-remote/frontend/page.js",
+      "plugins/xunlei-remote/frontend/style.css"
+    ],
+    "files_changed": 2,
+    "insertions": 6,
+    "deletions": 20,
+    "call_type": "function_call",
+    "call_id": "call_TjZo0a5uTO3rk50y1Dbt7zZf",
+    "command": "git add plugins/xunlei-remote/frontend/page.js plugins/xunlei-remote/frontend/style.css && git commit -m \"Simplify Xunlei residual cleanup flow\""
+  },
+  {
+    "timestamp": "2026-06-25T16:52:05.509Z",
+    "commit": "806de25",
+    "subject": "Add FaceFusion crack processing integration",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/jobs.py",
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "backend/app/core/models.py",
+      "backend/app/tasks/job_phases.py",
+      "backend/app/tasks/manager.py",
+      "backend/app/tasks/manager_helpers.py",
+      "backend/app/pipeline/facefusion",
+      "frontend/src/api/types.ts",
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/composables/useJobPresentation.ts",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/LadaSettings.vue"
+    ],
+    "files_changed": 17,
+    "insertions": 836,
+    "deletions": 10,
+    "call_type": "function_call",
+    "call_id": "call_ayVU11htofmJnxde76KkxN7Y",
+    "command": "git add backend/app/api/jobs.py backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/core/models.py backend/app/tasks/job_phases.py backend/app/tasks/manager.py backend/app/tasks/manager_helpers.py backend/app/pipeline/facefusion frontend/src/api/types.ts frontend/src/components/noor/LadaPanel.vue frontend/src/composables/useJobPresentation.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/LadaSettings.vue && git commit -m \"Add FaceFusion crack processing integration\""
+  },
+  {
+    "timestamp": "2026-06-25T17:12:00.052Z",
+    "commit": "7219ca2",
+    "subject": "Split FaceFusion settings into dedicated tab",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "backend/app/pipeline/facefusion/runner.py",
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/LadaSettings.vue",
+      "frontend/src/views/settings/SettingsIndex.vue",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 11,
+    "insertions": 611,
+    "deletions": 168,
+    "call_type": "function_call",
+    "call_id": "call_pPPOGcNm5d8ZyTqwsHej8zn5",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/pipeline/facefusion/runner.py frontend/src/components/noor/LadaPanel.vue frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/LadaSettings.vue frontend/src/views/settings/SettingsIndex.vue frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Split FaceFusion settings into dedicated tab\""
+  },
+  {
+    "timestamp": "2026-06-25T17:19:10.673Z",
+    "commit": "3955550",
+    "subject": "Use tabbed layout for FaceFusion settings",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 89,
+    "deletions": 11,
+    "call_type": "function_call",
+    "call_id": "call_N4V80zdbHJAfgcQtDLQP2Qd1",
+    "command": "git add frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Use tabbed layout for FaceFusion settings\""
+  },
+  {
+    "timestamp": "2026-06-26T07:36:28.853Z",
+    "commit": "7c23a4f",
+    "subject": "Refine FaceFusion settings controls",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "backend/app/pipeline/facefusion/runner.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 6,
+    "insertions": 503,
+    "deletions": 22,
+    "call_type": "function_call",
+    "call_id": "call_gdbjYiptCy2VREWH9rXpFv5G",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/pipeline/facefusion/runner.py frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Refine FaceFusion settings controls\""
+  },
+  {
+    "timestamp": "2026-06-26T07:58:49.982Z",
+    "commit": "714dc60",
+    "subject": "Restyle FaceFusion inner tabs",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 76,
+    "deletions": 40,
+    "call_type": "function_call",
+    "call_id": "call_wszlxTdrJKWOmDzURywEwOEn",
+    "command": "git add frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Restyle FaceFusion inner tabs\""
+  },
+  {
+    "timestamp": "2026-06-26T08:10:25.445Z",
+    "commit": "aeae407",
+    "subject": "Polish FaceFusion inner tab layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 54,
+    "deletions": 30,
+    "call_type": "function_call",
+    "call_id": "call_FQ6nTHrLqzh0dcL9GMIrtCvR",
+    "command": "git add frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Polish FaceFusion inner tab layout\""
+  },
+  {
+    "timestamp": "2026-06-26T08:16:43.303Z",
+    "commit": "1220755",
+    "subject": "Keep active tabs visible on mobile",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/ui/Tabs.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 7,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_5umRvW0ZEtpHy2fOn7tjxQnQ",
+    "command": "git add frontend/src/components/ui/Tabs.vue && git commit -m \"Keep active tabs visible on mobile\""
+  },
+  {
+    "timestamp": "2026-06-26T09:51:49.992Z",
+    "commit": "17602ad",
+    "subject": "Organize AI runtime storage paths",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_directories.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "backend/app/core/runtime_paths.py",
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/app/pipeline/lada/runner.py",
+      "backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py",
+      "backend/app/pipeline/whisper/decoupled/qwen3.py",
+      "backend/app/pipeline/whisper/engine.py",
+      "backend/app/pipeline/whisper/orchestrator.py",
+      "backend/app/pipeline/whisper/preprocess.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/StorageSettings.vue"
+    ],
+    "files_changed": 16,
+    "insertions": 390,
+    "deletions": 68,
+    "call_type": "function_call",
+    "call_id": "call_mPQnEr0uN1X1WZvJfdpSGhK7",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_directories.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/app/core/runtime_paths.py backend/app/pipeline/facefusion/runner.py backend/app/pipeline/lada/runner.py backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py backend/app/pipeline/whisper/decoupled/qwen3.py backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/orchestrator.py backend/app/pipeline/whisper/preprocess.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/StorageSettings.vue && git diff --cached --stat && git commit -m \"Organize AI runtime storage paths\""
+  },
+  {
+    "timestamp": "2026-06-26T10:00:16.130Z",
+    "commit": "0458364",
+    "subject": "Tighten AI runtime path tests",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".gitignore",
+      "backend/app/api/settings.py",
+      "backend/app/pipeline/whisper/enhancer.py",
+      "backend/app/pipeline/whisper/orchestrator.py",
+      "backend/tests/test_lada_runner_cancel.py",
+      "backend/tests/test_settings_updates.py"
+    ],
+    "files_changed": 6,
+    "insertions": 29,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_w9tqwsqEfDant1sXMCPEnXkV",
+    "command": "git add .gitignore backend/app/api/settings.py backend/app/pipeline/whisper/enhancer.py backend/app/pipeline/whisper/orchestrator.py backend/tests/test_lada_runner_cancel.py backend/tests/test_settings_updates.py && git diff --cached --stat && git commit -m \"Tighten AI runtime path tests\""
+  },
+  {
+    "timestamp": "2026-06-26T10:07:56.254Z",
+    "commit": "d9f5a73",
+    "subject": "Derive AI storage defaults from data dir",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_directories.py",
+      "backend/app/api/settings_helpers.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "backend/tests/test_core_config_storage_defaults.py",
+      "backend/tests/test_settings_updates.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/StorageSettings.vue"
+    ],
+    "files_changed": 11,
+    "insertions": 161,
+    "deletions": 29,
+    "call_type": "function_call",
+    "call_id": "call_QsOfjmdkBbZ3ywJ5u32LhrTQ",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_directories.py backend/app/api/settings_helpers.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py backend/tests/test_core_config_storage_defaults.py backend/tests/test_settings_updates.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/StorageSettings.vue && git diff --cached --stat && git commit -m \"Derive AI storage defaults from data dir\""
+  },
+  {
+    "timestamp": "2026-06-26T14:47:33.072Z",
+    "commit": "7f76e42",
+    "subject": "Restrict Whisper model deletion to configured storage",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_whisper_models.py",
+      "backend/tests/test_settings_whisper_models.py"
+    ],
+    "files_changed": 2,
+    "insertions": 29,
+    "deletions": 35,
+    "call_type": "function_call",
+    "call_id": "call_wi9M0ADWLT1nalBlXYXT99aw",
+    "command": "git add backend/app/api/settings_whisper_models.py backend/tests/test_settings_whisper_models.py && git diff --cached --stat && git commit -m \"Restrict Whisper model deletion to configured storage\""
+  },
+  {
+    "timestamp": "2026-06-26T14:50:34.719Z",
+    "commit": "17e8059",
+    "subject": "Clarify FaceFusion native model storage",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_response.py",
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/tests/test_settings_response.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 22,
+    "deletions": 9,
+    "call_type": "function_call",
+    "call_id": "call_jlI2m0RZ4deEIj5YKu4gfa2V",
+    "command": "git add backend/app/api/settings_response.py backend/app/pipeline/facefusion/runner.py backend/tests/test_settings_response.py frontend/src/views/settings/FaceFusionSettings.vue && git diff --cached --stat && git commit -m \"Clarify FaceFusion native model storage\""
+  },
+  {
+    "timestamp": "2026-06-26T15:13:44.957Z",
+    "commit": "d5826f0",
+    "subject": "Route plugin data through runtime storage",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/runtime_paths.py",
+      "backend/app/plugins/store.py",
+      "backend/app/api/local_library.py",
+      "backend/app/api/endpoints/media_library_helpers.py",
+      "plugins/gfriends/backend.py",
+      "plugins/avdb/backend.py",
+      "plugins/mteam-plugin/backend.py",
+      "plugins/subscription-core/backend.py",
+      "plugins/av-recommend/backend.py",
+      "backend/tests/test_core_config_storage_defaults.py",
+      "backend/tests/test_env_backed_library_configs.py",
+      "backend/tests/test_plugin_store_paths.py"
+    ],
+    "files_changed": 12,
+    "insertions": 147,
+    "deletions": 61,
+    "call_type": "function_call",
+    "call_id": "call_HaaJ5v29mpBvrunQ3dJIVHoz",
+    "command": "git add backend/app/core/runtime_paths.py backend/app/plugins/store.py backend/app/api/local_library.py backend/app/api/endpoints/media_library_helpers.py plugins/gfriends/backend.py plugins/avdb/backend.py plugins/mteam-plugin/backend.py plugins/subscription-core/backend.py plugins/av-recommend/backend.py backend/tests/test_core_config_storage_defaults.py backend/tests/test_env_backed_library_configs.py backend/tests/test_plugin_store_paths.py && git commit -m \"Route plugin data through runtime storage\""
+  },
+  {
+    "timestamp": "2026-06-26T15:16:37.834Z",
+    "commit": "9716085",
+    "subject": "Store task runtime files under data dir",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/tasks/manager_helpers.py",
+      "backend/app/api/settings_status_helpers.py",
+      "backend/tests/test_settings_status_helpers.py",
+      "backend/tests/test_task_runtime_paths.py"
+    ],
+    "files_changed": 4,
+    "insertions": 38,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_6BYY1tVFhRvnMZGKNV464q1l",
+    "command": "git add backend/app/tasks/manager_helpers.py backend/app/api/settings_status_helpers.py backend/tests/test_settings_status_helpers.py backend/tests/test_task_runtime_paths.py && git commit -m \"Store task runtime files under data dir\""
+  },
+  {
+    "timestamp": "2026-06-26T15:21:32.893Z",
+    "commit": "2ceba68",
+    "subject": "Move default database into data dir",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".gitignore",
+      "backend/app/core/config.py",
+      "backend/app/core/database.py",
+      "backend/app/core/database_paths.py",
+      "backend/tests/test_core_config_storage_defaults.py",
+      "backend/tests/test_database_paths.py"
+    ],
+    "files_changed": 6,
+    "insertions": 157,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_Eg6zvQMbGtUbqL7Uv8uPCEaI",
+    "command": "git add .gitignore backend/app/core/config.py backend/app/core/database.py backend/app/core/database_paths.py backend/tests/test_core_config_storage_defaults.py backend/tests/test_database_paths.py && git commit -m \"Move default database into data dir\""
+  },
+  {
+    "timestamp": "2026-06-26T15:23:58.915Z",
+    "commit": "c2b5111",
+    "subject": "Show database path in storage settings",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_response.py",
+      "backend/tests/test_settings_response.py",
+      "frontend/src/views/settings/StorageSettings.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/style.css"
+    ],
+    "files_changed": 6,
+    "insertions": 31,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_mDbdad2KlZVEQG82BU36JJ9f",
+    "command": "git add backend/app/api/settings_response.py backend/tests/test_settings_response.py frontend/src/views/settings/StorageSettings.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts frontend/src/style.css && git commit -m \"Show database path in storage settings\""
+  },
+  {
+    "timestamp": "2026-06-26T15:27:49.058Z",
+    "commit": "9d4f3ce",
+    "subject": "Align docker storage with data dir",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".env.example",
+      "docker-compose.yml"
+    ],
+    "files_changed": 2,
+    "insertions": 33,
+    "deletions": 11,
+    "call_type": "function_call",
+    "call_id": "call_PIpgoYn7HpOSe7WlVuEXbxCO",
+    "command": "git add .env.example docker-compose.yml && git commit -m \"Align docker storage with data dir\""
+  },
+  {
+    "timestamp": "2026-06-26T15:29:59.115Z",
+    "commit": "914b6bd",
+    "subject": "Default docker runtime paths to data dir",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "Dockerfile"
+    ],
+    "files_changed": 1,
+    "insertions": 20,
+    "deletions": 18,
+    "call_type": "function_call",
+    "call_id": "call_kyh8lx1PtaqYImntYGHdJzv5",
+    "command": "git add Dockerfile && git commit -m \"Default docker runtime paths to data dir\""
+  },
+  {
+    "timestamp": "2026-06-26T15:34:18.950Z",
+    "commit": "cdee066",
+    "subject": "Drop deprecated transformers cache env",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "Dockerfile",
+      "docker-compose.yml",
+      "backend/app/core/runtime_paths.py",
+      "backend/tests/test_core_config_storage_defaults.py"
+    ],
+    "files_changed": 4,
+    "insertions": 23,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_M3bq2dO5HFN4FJMMiQLqXj5Z",
+    "command": "git add Dockerfile docker-compose.yml backend/app/core/runtime_paths.py backend/tests/test_core_config_storage_defaults.py && git commit -m \"Drop deprecated transformers cache env\""
+  },
+  {
+    "timestamp": "2026-06-26T18:32:02.829Z",
+    "commit": "458b503",
+    "subject": "Report resolved storage settings",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_response.py",
+      "backend/tests/test_settings_response.py"
+    ],
+    "files_changed": 2,
+    "insertions": 75,
+    "deletions": 19,
+    "call_type": "function_call",
+    "call_id": "call_x2zviFr70ybTTnQKpK0OVTUV",
+    "command": "git add backend/app/api/settings_response.py backend/tests/test_settings_response.py && git commit -m \"Report resolved storage settings\""
+  },
+  {
+    "timestamp": "2026-06-26T18:33:33.984Z",
+    "commit": "a34b737",
+    "subject": "Document docker data dir behavior",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "README.md",
+      "docs/DEV_DOCKER_ALIGNMENT.md"
+    ],
+    "files_changed": 2,
+    "insertions": 12,
+    "deletions": 10,
+    "call_type": "function_call",
+    "call_id": "call_5QKhHToRphkWwRtdEirVPS0W",
+    "command": "git add README.md docs/DEV_DOCKER_ALIGNMENT.md && git commit -m \"Document docker data dir behavior\""
+  },
+  {
+    "timestamp": "2026-06-28T15:20:10.551Z",
+    "commit": "353934d",
+    "subject": "Remove legacy whisper cache default",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/config.py",
+      "backend/app/api/settings.py"
+    ],
+    "files_changed": 2,
+    "insertions": 1,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_TmuILpbTiCth8A0jmSIHhPUP",
+    "command": "git add backend/app/core/config.py backend/app/api/settings.py && git commit -m \"Remove legacy whisper cache default\""
+  },
+  {
+    "timestamp": "2026-06-28T15:22:37.288Z",
+    "commit": "45fdd54",
+    "subject": "Update docker data directory guide",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "DOCKER.md"
+    ],
+    "files_changed": 1,
+    "insertions": 25,
+    "deletions": 26,
+    "call_type": "function_call",
+    "call_id": "call_QixrovQHWjL05rVm6JqxhkjT",
+    "command": "git add DOCKER.md && git commit -m \"Update docker data directory guide\""
+  },
+  {
+    "timestamp": "2026-06-28T15:24:03.884Z",
+    "commit": "92a5398",
+    "subject": "Normalize docker temp cache env",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".env.example",
+      "docker-compose.yml"
+    ],
+    "files_changed": 2,
+    "insertions": 2,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_BfgcQbC3amrGCbkIl24hij2h",
+    "command": "git add .env.example docker-compose.yml && git commit -m \"Normalize docker temp cache env\""
+  },
+  {
+    "timestamp": "2026-06-28T15:56:45.025Z",
+    "commit": "9693636",
+    "subject": "Exclude runtime data from docker build",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".dockerignore"
+    ],
+    "files_changed": 1,
+    "insertions": 1,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_TAvEUajxGIJmLb3KQ8GG7BmQ",
+    "command": "git add .dockerignore && git commit -m \"Exclude runtime data from docker build\""
+  },
+  {
+    "timestamp": "2026-06-28T15:57:58.670Z",
+    "commit": "1a482d1",
+    "subject": "Ignore remaining runtime artifacts in docker build",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".dockerignore"
+    ],
+    "files_changed": 1,
+    "insertions": 6,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_bcQiFNoEC5mSsRXn5HxT9cWK",
+    "command": "git add .dockerignore && git commit -m \"Ignore remaining runtime artifacts in docker build\""
+  },
+  {
+    "timestamp": "2026-06-28T16:01:19.958Z",
+    "commit": "584273a",
+    "subject": "Ignore tracked runtime data names",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".gitignore"
+    ],
+    "files_changed": 1,
+    "insertions": 4,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_oAgj2eXySIeuLGvMWzqsZONf",
+    "command": "git add .gitignore && git commit -m \"Ignore tracked runtime data names\""
+  },
+  {
+    "timestamp": "2026-06-28T16:03:31.078Z",
+    "commit": "ddbf4c0",
+    "subject": "Move hardlink groups into runtime data",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library_hardlinks.py",
+      "backend/tests/test_media_library_hardlinks.py"
+    ],
+    "files_changed": 2,
+    "insertions": 50,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_67QkjbsOic9L0CAHdbmPCRbO",
+    "command": "git add backend/app/api/endpoints/media_library_hardlinks.py backend/tests/test_media_library_hardlinks.py && git commit -m \"Move hardlink groups into runtime data\""
+  },
+  {
+    "timestamp": "2026-06-28T16:33:59.169Z",
+    "commit": "1376fb8",
+    "subject": "Move subtitle index into runtime data",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/local_library.py",
+      "backend/tests/test_env_backed_library_configs.py"
+    ],
+    "files_changed": 2,
+    "insertions": 31,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_M2lsPu4fcvCNzhVTKQ9y2pqV",
+    "command": "git add backend/app/api/local_library.py backend/tests/test_env_backed_library_configs.py && git commit -m \"Move subtitle index into runtime data\""
+  },
+  {
+    "timestamp": "2026-06-28T16:34:28.934Z",
+    "commit": "efd8da9",
+    "subject": "Stop tracking runtime data files",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 3,
+    "insertions": null,
+    "deletions": 755,
+    "call_type": "function_call",
+    "call_id": "call_PfUMswBYyYZNgP3N4r0C3aMR",
+    "command": "git commit -m \"Stop tracking runtime data files\""
+  },
+  {
+    "timestamp": "2026-06-28T16:43:03.251Z",
+    "commit": "45cda56",
+    "subject": "Split FaceFusion runtime cache dirs",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/tests/test_facefusion_runner.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts"
+    ],
+    "files_changed": 4,
+    "insertions": 29,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_Qv7fQ4FQQhdFP3981LIM3vvs",
+    "command": "git add backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts && git commit -m \"Split FaceFusion runtime cache dirs\""
+  },
+  {
+    "timestamp": "2026-06-28T16:44:12.060Z",
+    "commit": "33a2708",
+    "subject": "Derive Reazon defaults from data dir",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/config.py",
+      "backend/tests/test_core_config_storage_defaults.py"
+    ],
+    "files_changed": 2,
+    "insertions": 7,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_cQOoCXYvXp32ZL6I5HlLvprO",
+    "command": "git add backend/app/core/config.py backend/tests/test_core_config_storage_defaults.py && git commit -m \"Derive Reazon defaults from data dir\""
+  },
+  {
+    "timestamp": "2026-06-28T16:52:53.354Z",
+    "commit": "4575fd3",
+    "subject": "Use generic storage path examples",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".env.example",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/StorageSettings.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 42,
+    "deletions": 39,
+    "call_type": "function_call",
+    "call_id": "call_xqcZev2Opgi2MYWMeG4yU90O",
+    "command": "git add .env.example frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/StorageSettings.vue && git commit -m \"Use generic storage path examples\""
+  },
+  {
+    "timestamp": "2026-06-28T16:54:07.304Z",
+    "commit": "f0917d6",
+    "subject": "Align Docker Whisper model directory",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".env.example",
+      "docker-compose.yml",
+      "DOCKER.md",
+      "README.md"
+    ],
+    "files_changed": 4,
+    "insertions": 4,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_HtXxidw6LxzmZG7LnW6lFPs7",
+    "command": "git add .env.example docker-compose.yml DOCKER.md README.md && git commit -m \"Align Docker Whisper model directory\""
+  },
+  {
+    "timestamp": "2026-06-28T16:57:56.217Z",
+    "commit": "0450ee5",
+    "subject": "Use generic Docker media root defaults",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".env.example",
+      "docker-compose.yml",
+      "DOCKER.md"
+    ],
+    "files_changed": 3,
+    "insertions": 8,
+    "deletions": 8,
+    "call_type": "function_call",
+    "call_id": "call_FU63E9yo6Dxn50EDU7dSmjZf",
+    "command": "git add .env.example docker-compose.yml DOCKER.md && git commit -m \"Use generic Docker media root defaults\""
+  },
+  {
+    "timestamp": "2026-06-28T17:00:20.842Z",
+    "commit": "07f0fdd",
+    "subject": "Ignore legacy backend app data",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".gitignore",
+      ".dockerignore"
+    ],
+    "files_changed": 2,
+    "insertions": 2,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_dquKtVyA8oSVr53aG9xvS9AB",
+    "command": "git add .gitignore .dockerignore && git commit -m \"Ignore legacy backend app data\""
+  },
+  {
+    "timestamp": "2026-06-28T17:05:10.077Z",
+    "commit": "0965d3b",
+    "subject": "Stop tracking plugin config data",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 1,
+    "insertions": null,
+    "deletions": 131,
+    "call_type": "function_call",
+    "call_id": "call_Mijgm7cf3zCSY0nEc2jlK5zh",
+    "command": "git commit -m \"Stop tracking plugin config data\""
+  },
+  {
+    "timestamp": "2026-06-28T17:07:10.893Z",
+    "commit": "72d45aa",
+    "subject": "Share default data dir constant",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/runtime_paths.py",
+      "backend/tests/test_core_config_storage_defaults.py"
+    ],
+    "files_changed": 2,
+    "insertions": 7,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_FyWE9vC79R0ymWm1aTp6HaEb",
+    "command": "git add backend/app/core/runtime_paths.py backend/tests/test_core_config_storage_defaults.py && git commit -m \"Share default data dir constant\""
+  },
+  {
+    "timestamp": "2026-06-28T17:18:59.356Z",
+    "commit": "2ecda9d",
+    "subject": "Migrate legacy subtitle indexes",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/local_library.py",
+      "backend/tests/test_env_backed_library_configs.py"
+    ],
+    "files_changed": 2,
+    "insertions": 59,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_zcye9QymzrdtypXKKIRQf0KR",
+    "command": "git add backend/app/api/local_library.py backend/tests/test_env_backed_library_configs.py && git commit -m \"Migrate legacy subtitle indexes\""
+  },
+  {
+    "timestamp": "2026-06-28T17:22:55.282Z",
+    "commit": "ed23bfe",
+    "subject": "Fix Whisper HuggingFace cache detection",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_whisper_runtime.py",
+      "backend/app/api/settings_whisper_models.py",
+      "backend/tests/test_settings_whisper_runtime.py"
+    ],
+    "files_changed": 3,
+    "insertions": 21,
+    "deletions": 10,
+    "call_type": "function_call",
+    "call_id": "call_P88qOJ9MhixHqbCcSDre65Gh",
+    "command": "git add backend/app/api/settings_whisper_runtime.py backend/app/api/settings_whisper_models.py backend/tests/test_settings_whisper_runtime.py && git commit -m \"Fix Whisper HuggingFace cache detection\""
+  },
+  {
+    "timestamp": "2026-06-28T17:26:07.742Z",
+    "commit": "f176af3",
+    "subject": "Cover Whisper HuggingFace root layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/tests/test_whisper_engine_cache.py"
+    ],
+    "files_changed": 1,
+    "insertions": 15,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_gJwtxuTv7qrTHFnx5h4oTTy5",
+    "command": "git add backend/tests/test_whisper_engine_cache.py && git commit -m \"Cover Whisper HuggingFace root layout\""
+  },
+  {
+    "timestamp": "2026-06-28T17:29:49.933Z",
+    "commit": "4a281d5",
+    "subject": "Run FaceFusion from its install dir",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/tests/test_facefusion_runner.py"
+    ],
+    "files_changed": 2,
+    "insertions": 81,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_JbdCCP9X2BcfsCrWa8JCNbAs",
+    "command": "git add backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py && git commit -m \"Run FaceFusion from its install dir\""
+  },
+  {
+    "timestamp": "2026-06-28T17:45:14.845Z",
+    "commit": "a2195c3",
+    "subject": "Ignore empty Whisper cache dirs",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_whisper_runtime.py",
+      "backend/tests/test_settings_whisper_runtime.py"
+    ],
+    "files_changed": 2,
+    "insertions": 35,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_aqUf4TzSBKOl570mzaC7lqXK",
+    "command": "git add backend/app/api/settings_whisper_runtime.py backend/tests/test_settings_whisper_runtime.py && git commit -m \"Ignore empty Whisper cache dirs\""
+  },
+  {
+    "timestamp": "2026-06-29T14:08:24.628Z",
+    "commit": "c96ca5d",
+    "subject": "Share Whisper cache path candidates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/whisper/engine.py",
+      "backend/app/pipeline/whisper/decoupled/qwen3.py"
+    ],
+    "files_changed": 2,
+    "insertions": 10,
+    "deletions": 14,
+    "call_type": "function_call",
+    "call_id": "call_Ogb0M1FToe2fO5EMgZB7Z5xd",
+    "command": "git add backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/decoupled/qwen3.py && git commit -m \"Share Whisper cache path candidates\""
+  },
+  {
+    "timestamp": "2026-06-29T14:13:36.679Z",
+    "commit": "743f9fb",
+    "subject": "Route FaceFusion models through configured storage",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      ".env.example",
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/tests/test_facefusion_runner.py",
+      "docker-compose.yml"
+    ],
+    "files_changed": 4,
+    "insertions": 74,
+    "deletions": 12,
+    "call_type": "function_call",
+    "call_id": "call_vyLIAXd2w6XGmQAcNhLGReCP",
+    "command": "git add .env.example backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py docker-compose.yml && git commit -m \"Route FaceFusion models through configured storage\""
+  },
+  {
+    "timestamp": "2026-06-29T14:18:08.434Z",
+    "commit": "e436cc0",
+    "subject": "Split LADA runtime cache directories",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/lada/runner.py",
+      "backend/tests/test_lada_runner_cancel.py"
+    ],
+    "files_changed": 2,
+    "insertions": 32,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_L0HVYEJwjFLfd79uXqwGS6L8",
+    "command": "git add backend/app/pipeline/lada/runner.py backend/tests/test_lada_runner_cancel.py && git commit -m \"Split LADA runtime cache directories\""
+  },
+  {
+    "timestamp": "2026-06-29T14:23:09.655Z",
+    "commit": "ebb5c7e",
+    "subject": "Apply Whisper preprocessing runtime paths",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/whisper/preprocess.py",
+      "backend/tests/test_whisper_preprocess.py",
+      "backend/tests/test_core_config_storage_defaults.py"
+    ],
+    "files_changed": 3,
+    "insertions": 57,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_Snk1EyEcr2a5lAzj8XJnFyfY",
+    "command": "git add backend/app/pipeline/whisper/preprocess.py backend/tests/test_whisper_preprocess.py backend/tests/test_core_config_storage_defaults.py && git commit -m \"Apply Whisper preprocessing runtime paths\""
+  },
+  {
+    "timestamp": "2026-06-29T14:28:16.033Z",
+    "commit": "106df4b",
+    "subject": "Prefer bundled LADA python path",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/lada_paths.py",
+      "backend/app/api/settings_helpers.py",
+      "backend/app/api/settings_lada.py",
+      "backend/app/api/settings.py",
+      "backend/app/pipeline/lada/runner.py",
+      "backend/tests/test_lada_paths.py",
+      "backend/tests/test_settings_api.py"
+    ],
+    "files_changed": 7,
+    "insertions": 68,
+    "deletions": 11,
+    "call_type": "function_call",
+    "call_id": "call_J0sL7vafHPo6cfSIFY1jmjdj",
+    "command": "git add backend/app/core/lada_paths.py backend/app/api/settings_helpers.py backend/app/api/settings_lada.py backend/app/api/settings.py backend/app/pipeline/lada/runner.py backend/tests/test_lada_paths.py backend/tests/test_settings_api.py && git commit -m \"Prefer bundled LADA python path\""
+  },
+  {
+    "timestamp": "2026-06-29T14:36:06.226Z",
+    "commit": "65d39f1",
+    "subject": "Align Docker runtime paths",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "Dockerfile",
+      "backend/app/core/lada_paths.py",
+      "backend/tests/test_lada_paths.py"
+    ],
+    "files_changed": 3,
+    "insertions": 85,
+    "deletions": 9,
+    "call_type": "function_call",
+    "call_id": "call_WdlmMiolnIZksmJOrx3wxwL8",
+    "command": "git add Dockerfile backend/app/core/lada_paths.py backend/tests/test_lada_paths.py && git commit -m \"Align Docker runtime paths\""
+  },
+  {
+    "timestamp": "2026-06-29T14:38:18.073Z",
+    "commit": "81e3e41",
+    "subject": "Move optional Whisper models to model volume",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "docker-compose.yml",
+      ".env.example",
+      "DOCKER.md"
+    ],
+    "files_changed": 3,
+    "insertions": 12,
+    "deletions": 12,
+    "call_type": "function_call",
+    "call_id": "call_xErQLzGMElGkAh5b2bs9G9bY",
+    "command": "git add docker-compose.yml .env.example DOCKER.md && git commit -m \"Move optional Whisper models to model volume\""
+  },
+  {
+    "timestamp": "2026-06-29T15:22:40.894Z",
+    "commit": "a79d3f8",
+    "subject": "Add Python headers to Docker builders",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "Dockerfile"
+    ],
+    "files_changed": 1,
+    "insertions": 2,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_cYmCUZStVKyiQyhOks6SSkRC",
+    "command": "git add Dockerfile && git commit -m \"Add Python headers to Docker builders\""
+  },
+  {
+    "timestamp": "2026-06-30T07:48:22.131Z",
+    "commit": "217a5e8",
+    "subject": "Embed FaceFusion runtime in NOOR",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/facefusion_paths.py",
+      "backend/app/pipeline/facefusion/source",
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/core/config.py",
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/tests/test_facefusion_runner.py",
+      "backend/tests/test_settings_response.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 191,
+    "insertions": 18721,
+    "deletions": 73,
+    "call_type": "function_call",
+    "call_id": "call_gA5ZqpPRrSHwF5QA0G9Nj5CA",
+    "command": "git add backend/app/core/facefusion_paths.py backend/app/pipeline/facefusion/source backend/app/api/settings.py backend/app/api/settings_response.py backend/app/core/config.py backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py backend/tests/test_settings_response.py frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Embed FaceFusion runtime in NOOR\""
+  },
+  {
+    "timestamp": "2026-06-30T07:54:44.626Z",
+    "commit": "70f5263",
+    "subject": "Keep FaceFusion runtime data outside source",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/app/pipeline/facefusion/source/facefusion/execution.py",
+      "backend/tests/test_facefusion_runner.py",
+      "backend/tests/test_facefusion_embedded_source.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 7,
+    "insertions": 27,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_0t8xUTVBKnuRYROt8HWcDVSz",
+    "command": "git add backend/app/pipeline/facefusion/runner.py backend/app/pipeline/facefusion/source/facefusion/execution.py backend/tests/test_facefusion_runner.py backend/tests/test_facefusion_embedded_source.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Keep FaceFusion runtime data outside source\""
+  },
+  {
+    "timestamp": "2026-06-30T08:18:27.034Z",
+    "commit": "1c48f3b",
+    "subject": "Add controlled FaceFusion source upgrades",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_facefusion_upgrade.py",
+      "backend/tests/test_facefusion_upgrade.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 5,
+    "insertions": 437,
+    "deletions": 12,
+    "call_type": "function_call",
+    "call_id": "call_FcbNWGqSCYIsXahOtUtAnAXW",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_facefusion_upgrade.py backend/tests/test_facefusion_upgrade.py frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Add controlled FaceFusion source upgrades\""
+  },
+  {
+    "timestamp": "2026-06-30T08:25:34.288Z",
+    "commit": "ac9f681",
+    "subject": "Show FaceFusion runtime versions",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_facefusion_upgrade.py",
+      "backend/app/api/settings_response.py",
+      "backend/tests/test_facefusion_upgrade.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 142,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_FvLbJ7VOvlUb2nYy3wmaqJhP",
+    "command": "git add backend/app/api/settings_facefusion_upgrade.py backend/app/api/settings_response.py backend/tests/test_facefusion_upgrade.py frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Show FaceFusion runtime versions\""
+  },
+  {
+    "timestamp": "2026-06-30T08:35:15.679Z",
+    "commit": "0f6ed10",
+    "subject": "Track FaceFusion upstream revision",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_facefusion_upgrade.py",
+      "backend/app/api/settings_response.py",
+      "backend/tests/test_facefusion_upgrade.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue",
+      "backend/app/pipeline/facefusion/source/NOOR_UPSTREAM.json"
+    ],
+    "files_changed": 5,
+    "insertions": 125,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_sTbct9MSKJwDM0LVHURixgiC",
+    "command": "git add backend/app/api/settings_facefusion_upgrade.py backend/app/api/settings_response.py backend/tests/test_facefusion_upgrade.py frontend/src/views/settings/FaceFusionSettings.vue backend/app/pipeline/facefusion/source/NOOR_UPSTREAM.json && git commit -m \"Track FaceFusion upstream revision\""
+  },
+  {
+    "timestamp": "2026-06-30T10:02:37.071Z",
+    "commit": "38272d2",
+    "subject": "Add FaceFusion preview panel",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/main.py",
+      "backend/app/api/facefusion.py",
+      "backend/app/pipeline/facefusion/preview.py",
+      "backend/app/pipeline/facefusion/preview_worker.py",
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/components/noor/panels/PanelHeader.vue"
+    ],
+    "files_changed": 6,
+    "insertions": 445,
+    "deletions": 17,
+    "call_type": "function_call",
+    "call_id": "call_n5QXyfYpEdA06hVPEXXcJewV",
+    "command": "git add backend/app/main.py backend/app/api/facefusion.py backend/app/pipeline/facefusion/preview.py backend/app/pipeline/facefusion/preview_worker.py frontend/src/components/noor/LadaPanel.vue frontend/src/components/noor/panels/PanelHeader.vue && git commit -m \"Add FaceFusion preview panel\""
+  },
+  {
+    "timestamp": "2026-06-30T10:21:55.010Z",
+    "commit": "73b5cf4",
+    "subject": "Add FaceFusion preview frame scrubber",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/facefusion.py",
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 183,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_hHMDxrjiPrGFRNNo00IsxJwB",
+    "command": "git add backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue && git commit -m \"Add FaceFusion preview frame scrubber\""
+  },
+  {
+    "timestamp": "2026-06-30T10:27:24.745Z",
+    "commit": "658c643",
+    "subject": "Move FaceFusion preview scrubber into preview",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 45,
+    "deletions": 75,
+    "call_type": "function_call",
+    "call_id": "call_A0wGbdIGqINfDSj3FYAEzJ53",
+    "command": "git add frontend/src/components/noor/LadaPanel.vue && git commit -m \"Move FaceFusion preview scrubber into preview\""
+  },
+  {
+    "timestamp": "2026-06-30T11:25:38.639Z",
+    "commit": "ac81da9",
+    "subject": "Simplify FaceFusion preview controls",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 3,
+    "deletions": 48,
+    "call_type": "function_call",
+    "call_id": "call_MQCv4oCU04UpiU8MpDLV3heo",
+    "command": "git add frontend/src/components/noor/LadaPanel.vue && git commit -m \"Simplify FaceFusion preview controls\""
+  },
+  {
+    "timestamp": "2026-06-30T13:39:04.629Z",
+    "commit": "019351e",
+    "subject": "Support multiple FaceFusion source images",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/facefusion.py",
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 196,
+    "deletions": 9,
+    "call_type": "function_call",
+    "call_id": "call_53D0A5vahKnQkL3oGcACUD30",
+    "command": "git add backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue && git commit -m \"Support multiple FaceFusion source images\""
+  },
+  {
+    "timestamp": "2026-06-30T14:05:32.879Z",
+    "commit": "7b58666",
+    "subject": "Improve FaceFusion source image management",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/facefusion.py",
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 132,
+    "deletions": 57,
+    "call_type": "function_call",
+    "call_id": "call_SJGkWYQD7fY8OhRuSsd6N99w",
+    "command": "git add backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue && git commit -m \"Improve FaceFusion source image management\""
+  },
+  {
+    "timestamp": "2026-06-30T15:23:22.208Z",
+    "commit": "41153cc",
+    "subject": "Simplify AI storage path settings",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_directories.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "frontend/src/views/settings/StorageSettings.vue"
+    ],
+    "files_changed": 6,
+    "insertions": 92,
+    "deletions": 137,
+    "call_type": "function_call",
+    "call_id": "call_hmvMTpH31TX7T4C89SoR5iGd",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_directories.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py frontend/src/views/settings/StorageSettings.vue && git commit -m \"Simplify AI storage path settings\""
+  },
+  {
+    "timestamp": "2026-06-30T15:33:33.491Z",
+    "commit": "3b91d67",
+    "subject": "Preserve legacy flat model storage layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py"
+    ],
+    "files_changed": 2,
+    "insertions": 18,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_DZJLFWwdgdODoIUVMDxJolF9",
+    "command": "git add backend/app/api/settings_response.py backend/app/api/settings_updates.py && git commit -m \"Preserve legacy flat model storage layout\""
+  },
+  {
+    "timestamp": "2026-06-30T16:04:24.010Z",
+    "commit": "91c8a29",
+    "subject": "Show configured FaceFusion model directory",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/facefusion_paths.py"
+    ],
+    "files_changed": 1,
+    "insertions": 1,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_eMo0xwGdpxbQgVJio0Zn8adJ",
+    "command": "git add backend/app/core/facefusion_paths.py && git commit -m \"Show configured FaceFusion model directory\""
+  },
+  {
+    "timestamp": "2026-06-30T16:19:18.659Z",
+    "commit": "e837849",
+    "subject": "Open crack panel from cracked media tag",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/MediaCard.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 6,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_MzAIZQF6HDTZ5Mh8uKBGXZwy",
+    "command": "git add frontend/src/components/noor/MediaCard.vue && git commit -m \"Open crack panel from cracked media tag\""
+  },
+  {
+    "timestamp": "2026-06-30T16:58:52.545Z",
+    "commit": "344db8d",
+    "subject": "Simplify FaceFusion crack panel controls",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 3,
+    "insertions": 305,
+    "deletions": 61,
+    "call_type": "function_call",
+    "call_id": "call_T81zcFq4xaGVuJJwDmdoBR5v",
+    "command": "git add backend/app/pipeline/facefusion/runner.py frontend/src/api/types.ts frontend/src/components/noor/LadaPanel.vue && git commit -m \"Simplify FaceFusion crack panel controls\""
+  },
+  {
+    "timestamp": "2026-06-30T17:05:44.520Z",
+    "commit": "b21d670",
+    "subject": "Add FaceFusion processor defaults settings",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 134,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_brCmVBGfe2h0JMafkGbDShr2",
+    "command": "git add frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Add FaceFusion processor defaults settings\""
+  },
+  {
+    "timestamp": "2026-06-30T17:10:53.305Z",
+    "commit": "6765960",
+    "subject": "Label FaceFusion processors with TensorRT support",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 127,
+    "deletions": 30,
+    "call_type": "function_call",
+    "call_id": "call_Gpi91BO5Mk7JFSX3eJWzvScv",
+    "command": "git add frontend/src/components/noor/LadaPanel.vue frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Label FaceFusion processors with TensorRT support\""
+  },
+  {
+    "timestamp": "2026-06-30T17:14:42.181Z",
+    "commit": "d8cbfa9",
+    "subject": "Correct FaceFusion processor acceleration labels",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 40,
+    "deletions": 24,
+    "call_type": "function_call",
+    "call_id": "call_sVMn4oYnOZWuvmajiE0QgsUJ",
+    "command": "git add frontend/src/components/noor/LadaPanel.vue frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Correct FaceFusion processor acceleration labels\""
+  },
+  {
+    "timestamp": "2026-06-30T18:27:32.854Z",
+    "commit": "f8484d8",
+    "subject": "Clarify FaceFusion acceleration recommendations",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 2,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_PwsRXNZ8n2e2Akbstyxq0N6y",
+    "command": "git add frontend/src/components/noor/LadaPanel.vue frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Clarify FaceFusion acceleration recommendations\""
+  },
+  {
+    "timestamp": "2026-06-30T18:38:51.281Z",
+    "commit": "5779f51",
+    "subject": "Wait for FaceFusion model downloads before validation",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/source/facefusion/download.py"
+    ],
+    "files_changed": 1,
+    "insertions": 2,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_7SaXMCEPP3rFR5lvQUZ6STqr",
+    "command": "git add backend/app/pipeline/facefusion/source/facefusion/download.py && git commit -m \"Wait for FaceFusion model downloads before validation\""
+  },
+  {
+    "timestamp": "2026-06-30T18:50:46.803Z",
+    "commit": "a382063",
+    "subject": "Add FaceFusion model management settings tab",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_status_helpers.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 3,
+    "insertions": 458,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_Sf87GZNrd7RseSnriUv09JNP",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_status_helpers.py frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Add FaceFusion model management settings tab\""
+  },
+  {
+    "timestamp": "2026-06-30T19:06:44.206Z",
+    "commit": "71e9a62",
+    "subject": "Fallback FaceFusion preview on CUDA OOM",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/preview.py",
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 58,
+    "deletions": 14,
+    "call_type": "function_call",
+    "call_id": "call_7xAVbZXqAaCLTVpf2TfdnGHz",
+    "command": "git add backend/app/pipeline/facefusion/preview.py frontend/src/components/noor/LadaPanel.vue && git commit -m \"Fallback FaceFusion preview on CUDA OOM\""
+  },
+  {
+    "timestamp": "2026-06-30T19:16:54.278Z",
+    "commit": "bdf796c",
+    "subject": "Add FaceFusion source image library",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/facefusion.py",
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 240,
+    "deletions": 8,
+    "call_type": "function_call",
+    "call_id": "call_ps8h1ohRe9iDB0YZgjo6rAs0",
+    "command": "git add backend/app/api/facefusion.py frontend/src/components/noor/LadaPanel.vue && git commit -m \"Add FaceFusion source image library\""
+  },
+  {
+    "timestamp": "2026-06-30T19:24:31.950Z",
+    "commit": "791c9ce",
+    "subject": "Improve FaceFusion preview feedback",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/LadaPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 44,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_9jATiiDrOR99742pNj6daznL",
+    "command": "git add frontend/src/components/noor/LadaPanel.vue && git commit -m \"Improve FaceFusion preview feedback\""
+  },
+  {
+    "timestamp": "2026-06-30T19:32:24.300Z",
+    "commit": "f5fbbc4",
+    "subject": "Add FaceFusion preview defaults",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/config.py",
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/api/settings_response.py",
+      "frontend/src/views/settings/FaceFusionSettings.vue",
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/api/types.ts"
+    ],
+    "files_changed": 7,
+    "insertions": 40,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_UVNooT7EQV2zG2ppjWIsTFpu",
+    "command": "git add backend/app/core/config.py backend/app/api/settings.py backend/app/api/settings_updates.py backend/app/api/settings_response.py frontend/src/views/settings/FaceFusionSettings.vue frontend/src/components/noor/LadaPanel.vue frontend/src/api/types.ts && git commit -m \"Add FaceFusion preview defaults\""
+  },
+  {
+    "timestamp": "2026-06-30T19:38:43.307Z",
+    "commit": "6a71cd1",
+    "subject": "Skip FaceFusion content blur in previews",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/preview.py",
+      "backend/app/pipeline/facefusion/preview_worker.py"
+    ],
+    "files_changed": 2,
+    "insertions": 7,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_wvBgabLSauoWvEY3Cn92MOX0",
+    "command": "git add backend/app/pipeline/facefusion/preview.py backend/app/pipeline/facefusion/preview_worker.py && git commit -m \"Skip FaceFusion content blur in previews\""
+  },
+  {
+    "timestamp": "2026-06-30T20:55:34.669Z",
+    "commit": "6c51a5c",
+    "subject": "Skip FaceFusion content analysis for NOOR jobs",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_facefusion_upgrade.py",
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/app/pipeline/facefusion/source/facefusion/content_analyser.py"
+    ],
+    "files_changed": 3,
+    "insertions": 64,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_AFH9fLijmuFqJVEV53fVJEUt",
+    "command": "git add backend/app/api/settings_facefusion_upgrade.py backend/app/pipeline/facefusion/runner.py backend/app/pipeline/facefusion/source/facefusion/content_analyser.py && git commit -m \"Skip FaceFusion content analysis for NOOR jobs\""
+  },
+  {
+    "timestamp": "2026-06-30T20:58:20.799Z",
+    "commit": "a668dcc",
+    "subject": "Preserve FaceFusion content patches on upgrade",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings_facefusion_upgrade.py"
+    ],
+    "files_changed": 1,
+    "insertions": 25,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_qwUY1u3Mz2wiSJpWusndpGAm",
+    "command": "git diff --check && git add backend/app/api/settings_facefusion_upgrade.py && git commit -m \"Preserve FaceFusion content patches on upgrade\""
+  },
+  {
+    "timestamp": "2026-06-30T21:05:30.557Z",
+    "commit": "601ff35",
+    "subject": "Record restoration output paths at job creation",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/tasks/manager.py"
+    ],
+    "files_changed": 1,
+    "insertions": 8,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_pUZyfotBBJwvAhp507rGXCfG",
+    "command": "git diff --check && git add backend/app/tasks/manager.py && git commit -m \"Record restoration output paths at job creation\""
+  },
+  {
+    "timestamp": "2026-06-30T21:59:53.917Z",
+    "commit": "08d0cfa",
+    "subject": "Add GPU memory guard before heavy jobs",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/gpu_guard.py",
+      "backend/app/core/config.py",
+      "backend/app/tasks/manager.py"
+    ],
+    "files_changed": 3,
+    "insertions": 255,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_ohKuDHUcXa1O8L33oSP9Z5r2",
+    "command": "git add backend/app/core/gpu_guard.py backend/app/core/config.py backend/app/tasks/manager.py && git commit -m \"Add GPU memory guard before heavy jobs\""
+  },
+  {
+    "timestamp": "2026-07-01T06:06:04.068Z",
+    "commit": "7396642",
+    "subject": "Avoid FaceFusion TensorRT memory limit crashes",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/app/tasks/manager.py"
+    ],
+    "files_changed": 2,
+    "insertions": 30,
+    "deletions": 13,
+    "call_type": "function_call",
+    "call_id": "call_w4LIPnCxZGn2ARmauaXaoNlL",
+    "command": "git diff --check && git status --short && git add backend/app/pipeline/facefusion/runner.py backend/app/tasks/manager.py && git commit -m \"Avoid FaceFusion TensorRT memory limit crashes\""
+  },
+  {
+    "timestamp": "2026-07-01T06:24:25.276Z",
+    "commit": "6a760cc",
+    "subject": "Let GPU guard stop model server processes",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/config.py",
+      "backend/app/core/gpu_guard.py"
+    ],
+    "files_changed": 2,
+    "insertions": 26,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_jMgqndnY6mFWxPl2xu76wR6h",
+    "command": "git diff --check && git status --short && git add backend/app/core/config.py backend/app/core/gpu_guard.py && git commit -m \"Let GPU guard stop model server processes\""
+  },
+  {
+    "timestamp": "2026-07-01T07:14:06.738Z",
+    "commit": "0135fc2",
+    "subject": "Map FaceFusion progress by processing phase",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py"
+    ],
+    "files_changed": 1,
+    "insertions": 50,
+    "deletions": 8,
+    "call_type": "function_call",
+    "call_id": "call_AQbHjR9fwpM1CqDTHWFbLcXF",
+    "command": "PYTHONPATH=backend /home/kinax/.venvs/noor-backend/bin/python - <<'PY'\nfrom app.pipeline.facefusion.runner import _classify_output_line, _overall_for_phase\nassert _classify_output_line('提取中: 100%') == 'extract'\nassert _classify_output_line('处理中:   4%') == 'process'\nassert _overall_for_phase('process', 4)[0] == 23\nprint('ok')\nPY\ngit status --short && git add backend/app/pipeline/facefusion/runner.py && git commit -m \"Map FaceFusion progress by processing phase\""
+  },
+  {
+    "timestamp": "2026-07-01T08:29:03.213Z",
+    "commit": "4f1b075",
+    "subject": "Move hardlinks under files section",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/App.vue",
+      "frontend/src/components/noor/AppSidebar.vue",
+      "frontend/src/router/index.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/views/FilesView.vue"
+    ],
+    "files_changed": 6,
+    "insertions": 167,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_o58FTzLxXvk7NnaQuvUlF6E8",
+    "command": "git add frontend/src/App.vue frontend/src/components/noor/AppSidebar.vue frontend/src/router/index.ts frontend/src/i18n/zh.ts frontend/src/i18n/en.ts frontend/src/views/FilesView.vue && git commit -m \"Move hardlinks under files section\""
+  },
+  {
+    "timestamp": "2026-07-01T08:47:03.412Z",
+    "commit": "527f96d",
+    "subject": "Add media actor management tab",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/FilesView.vue",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 7,
+    "insertions": 809,
+    "deletions": 21,
+    "call_type": "function_call",
+    "call_id": "call_5k3eWCd0yAqITbYnf4C4Kt6h",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/FilesView.vue frontend/src/views/ActorManagementView.vue && git commit -m \"Add media actor management tab\""
+  },
+  {
+    "timestamp": "2026-07-01T09:08:25.533Z",
+    "commit": "184a1b0",
+    "subject": "Add actor mapping file upload",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 254,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_09dx8wRpxUsiF1BitLJBaoEI",
+    "command": "git add backend/app/api/endpoints/media_library.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Add actor mapping file upload\""
+  },
+  {
+    "timestamp": "2026-07-01T09:19:29.993Z",
+    "commit": "a551a59",
+    "subject": "Import uploaded actor mapping XML",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 5,
+    "insertions": 241,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_iGWEC5auzuhBobGtZYQDs3dK",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Import uploaded actor mapping XML\""
+  },
+  {
+    "timestamp": "2026-07-01T09:30:19.405Z",
+    "commit": "270bf67",
+    "subject": "Preview actor mapping merge candidates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 5,
+    "insertions": 239,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_8ouNXwLoyzbgWzgxu3QkixGF",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Preview actor mapping merge candidates\""
+  },
+  {
+    "timestamp": "2026-07-01T12:31:58.113Z",
+    "commit": "182842d",
+    "subject": "Refine actor management around Emby actors",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 126,
+    "deletions": 282,
+    "call_type": "function_call",
+    "call_id": "call_uUosNUJT9Wf3pHGrZctIhpW1",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Refine actor management around Emby actors\""
+  },
+  {
+    "timestamp": "2026-07-01T13:40:37.448Z",
+    "commit": "1173680",
+    "subject": "Add actor mapping merge plan indicators",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 5,
+    "insertions": 105,
+    "deletions": 8,
+    "call_type": "function_call",
+    "call_id": "call_tmCXdiHX33RFuHBcSkzbJ5YA",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Add actor mapping merge plan indicators\""
+  },
+  {
+    "timestamp": "2026-07-01T14:13:49.688Z",
+    "commit": "c41eb34",
+    "subject": "Include Emby server id in actor links",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/api/types.ts"
+    ],
+    "files_changed": 3,
+    "insertions": 11,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_C5DwUFu2B3upJCcpwRO29xLG",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts && git commit -m \"Include Emby server id in actor links\""
+  },
+  {
+    "timestamp": "2026-07-01T15:37:23.390Z",
+    "commit": "13621bf",
+    "subject": "Reject unsafe actor mapping aliases",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 5,
+    "insertions": 86,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_Xokx1vn2Jw1xDVKbjLcz7TMr",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Reject unsafe actor mapping aliases\""
+  },
+  {
+    "timestamp": "2026-07-01T16:04:33.604Z",
+    "commit": "22acd6d",
+    "subject": "Add actor mapping merge workflow",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 5,
+    "insertions": 490,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_09SdbDh0ezsmefPRhQEaQ2Q6",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Add actor mapping merge workflow\""
+  },
+  {
+    "timestamp": "2026-07-01T16:10:12.291Z",
+    "commit": "173dc3d",
+    "subject": "Localize actor merge target names",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 17,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_btGkUabRcHXQSyuy93b0uOz9",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Localize actor merge target names\" && git status --short && git log -1 --oneline"
+  },
+  {
+    "timestamp": "2026-07-01T16:22:14.522Z",
+    "commit": "7468e33",
+    "subject": "Clean residual actors after Emby merge",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 52,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_xi4i5x7NSlurLKioIU3u2nCO",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Clean residual actors after Emby merge\""
+  },
+  {
+    "timestamp": "2026-07-01T16:37:10.441Z",
+    "commit": "9a3ea02",
+    "subject": "Select actor mapping merge target from candidates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 87,
+    "deletions": 12,
+    "call_type": "function_call",
+    "call_id": "call_0YKHV5p3Lgi2muJtF34jGYip",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Select actor mapping merge target from candidates\""
+  },
+  {
+    "timestamp": "2026-07-01T16:58:28.596Z",
+    "commit": "cbddf08",
+    "subject": "Use NOOR confirm for actor merges",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 3,
+    "insertions": 13,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_KonFGE7XCmznuN2Umh8M7Y0v",
+    "command": "git status --short && git add frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Use NOOR confirm for actor merges\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-01T17:06:34.340Z",
+    "commit": "2e9557a",
+    "subject": "Prefer primary actor mapping names over aliases",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 49,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_7Humf41kp3POpdmW9LNoVExu",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Prefer primary actor mapping names over aliases\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T08:02:30.920Z",
+    "commit": "9714bd5",
+    "subject": "Show raw Emby names in actor merge candidates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 19,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_kFhxDJXgKdyrJlC4xpZdVANc",
+    "command": "git status --short && git add frontend/src/views/ActorManagementView.vue && git commit -m \"Show raw Emby names in actor merge candidates\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T08:12:14.887Z",
+    "commit": "bc1c865",
+    "subject": "Delete empty actor persons after merge",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 87,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_j2ZOrTPTZHPyxMIkmLyFy2M6",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Delete empty actor persons after merge\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T08:21:37.433Z",
+    "commit": "4b9942b",
+    "subject": "Add batch actor mapping merge action",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 3,
+    "insertions": 124,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_G3rNvSy0aUYYlmYDoXQ8oSu8",
+    "command": "git status --short && git add frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Add batch actor mapping merge action\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T08:41:26.344Z",
+    "commit": "88ca94d",
+    "subject": "Execute actor batch merge on backend",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 5,
+    "insertions": 157,
+    "deletions": 40,
+    "call_type": "function_call",
+    "call_id": "call_OMv60d8xtDMjJrvZuKsbJ6xx",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Execute actor batch merge on backend\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T08:49:49.198Z",
+    "commit": "0aaa673",
+    "subject": "Allow actor merge cleanup without movie updates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 4,
+    "insertions": 21,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_sBNNUMGOwWnso5IpT0sn1wyy",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Allow actor merge cleanup without movie updates\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T09:07:01.108Z",
+    "commit": "03a7421",
+    "subject": "Ignore empty non-target actor merge ghosts",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 67,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_mBjkNqGR8nW1ceK5bvbDxRUU",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Ignore empty non-target actor merge ghosts\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T09:28:11.583Z",
+    "commit": "39ef0d8",
+    "subject": "Detect actor duplicates from tmdb and Emby aliases",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 155,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_iRd5CK88dlBCU9URkE7usooM",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Detect actor duplicates from tmdb and Emby aliases\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T09:45:43.745Z",
+    "commit": "40546a0",
+    "subject": "Show uncleaned empty actor duplicates before ignoring",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 76,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_UXsJaJit4QjOZkC4njoa76u4",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Show uncleaned empty actor duplicates before ignoring\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T10:24:01.161Z",
+    "commit": "62f01e8",
+    "subject": "Hide ignored actor merge ghosts from actor list",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 34,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_V4So5yDy0DI105uSgXzmyI6P",
+    "command": "git status --short && git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Hide ignored actor merge ghosts from actor list\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-02T14:48:02.390Z",
+    "commit": "5880d7c",
+    "subject": "Add NOOR actor detail page",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 7,
+    "insertions": 681,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_ZalrNaHrUQwf59qna2BCWiRj",
+    "command": "git commit -m \"Add NOOR actor detail page\""
+  },
+  {
+    "timestamp": "2026-07-02T15:14:46.120Z",
+    "commit": "edae012",
+    "subject": "Enhance actor detail profile actions",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 7,
+    "insertions": 662,
+    "deletions": 8,
+    "call_type": "function_call",
+    "call_id": "call_0mqamP8iZR5QauKdUsNRLo4H",
+    "command": "git commit -m \"Enhance actor detail profile actions\""
+  },
+  {
+    "timestamp": "2026-07-02T15:44:17.799Z",
+    "commit": "383c47d",
+    "subject": "Add TMDB actor metadata fill",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 7,
+    "insertions": 534,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_h7nskSl2rCTApAlfG8NwI4oA",
+    "command": "git commit -m \"Add TMDB actor metadata fill\""
+  },
+  {
+    "timestamp": "2026-07-02T16:03:14.832Z",
+    "commit": "738b99e",
+    "subject": "Allow TMDB actor apply when avatar sync fails",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 5,
+    "insertions": 83,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_MjUBdjxyQDQT3HxO1xNhI2bA",
+    "command": "git commit -m \"Allow TMDB actor apply when avatar sync fails\""
+  },
+  {
+    "timestamp": "2026-07-02T16:19:07.356Z",
+    "commit": "59fff6f",
+    "subject": "Show richer actor profile metadata",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 6,
+    "insertions": 237,
+    "deletions": 36,
+    "call_type": "function_call",
+    "call_id": "call_PdZHvEV57ANoN572CPs3eYwW",
+    "command": "git commit -m \"Show richer actor profile metadata\""
+  },
+  {
+    "timestamp": "2026-07-02T16:32:11.945Z",
+    "commit": "3504589",
+    "subject": "Expand actor social metadata display",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 7,
+    "insertions": 223,
+    "deletions": 26,
+    "call_type": "function_call",
+    "call_id": "call_3jguBYWvSEcqkFhFC0XSXDlI",
+    "command": "git commit -m \"Expand actor social metadata display\""
+  },
+  {
+    "timestamp": "2026-07-03T06:53:14.385Z",
+    "commit": "84208ba",
+    "subject": "Enrich actor detail links from TMDB",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorDetailView.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 44,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_uKZTLTqJv0vTExlgu7KYGFBa",
+    "command": "git add frontend/src/views/ActorDetailView.vue && git commit -m \"Enrich actor detail links from TMDB\""
+  },
+  {
+    "timestamp": "2026-07-03T07:02:22.773Z",
+    "commit": "d7f9d67",
+    "subject": "Stack actor external links",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorDetailView.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 29,
+    "deletions": 15,
+    "call_type": "function_call",
+    "call_id": "call_Xb23Nv8FciXcQ1xPfq31lVw0",
+    "command": "git add frontend/src/views/ActorDetailView.vue && git commit -m \"Stack actor external links\""
+  },
+  {
+    "timestamp": "2026-07-03T07:24:54.503Z",
+    "commit": "9f62658",
+    "subject": "Refine actor detail navigation and actions",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/BaseIcon.vue",
+      "frontend/src/components/noor/panels/PanelHeader.vue",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorDetailView.vue",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/views/Home.vue"
+    ],
+    "files_changed": 7,
+    "insertions": 170,
+    "deletions": 43,
+    "call_type": "function_call",
+    "call_id": "call_6myYNlGqdJrzHM2rZrRDUkbl",
+    "command": "git add frontend/src/components/noor/BaseIcon.vue frontend/src/components/noor/panels/PanelHeader.vue frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorDetailView.vue frontend/src/views/ActorManagementView.vue frontend/src/views/Home.vue && git commit -m \"Refine actor detail navigation and actions\""
+  },
+  {
+    "timestamp": "2026-07-03T07:53:41.725Z",
+    "commit": "194662f",
+    "subject": "Make Gfriends an avatar library helper",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/PluginHost.vue",
+      "plugins/gfriends/frontend/page.js",
+      "plugins/gfriends/frontend/style.css",
+      "plugins/gfriends/plugin.json"
+    ],
+    "files_changed": 4,
+    "insertions": 46,
+    "deletions": 41,
+    "call_type": "function_call",
+    "call_id": "call_l6w8Hnqk43vGJtXZP6otWAx4",
+    "command": "git add frontend/src/views/PluginHost.vue plugins/gfriends/frontend/page.js plugins/gfriends/frontend/style.css plugins/gfriends/plugin.json && git commit -m \"Make Gfriends an avatar library helper\""
+  },
+  {
+    "timestamp": "2026-07-03T08:37:07.361Z",
+    "commit": "3396a49",
+    "subject": "Sync actor mapping from online source",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/views/settings/SystemSettings.vue"
+    ],
+    "files_changed": 9,
+    "insertions": 277,
+    "deletions": 27,
+    "call_type": "function_call",
+    "call_id": "call_bHOpMkVrz2QY1q5FoOnZ8MNf",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue frontend/src/views/settings/SystemSettings.vue && git commit -m \"Sync actor mapping from online source\""
+  },
+  {
+    "timestamp": "2026-07-03T08:55:17.819Z",
+    "commit": "0e9bc1b",
+    "subject": "Show rejected actor mapping matches",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 5,
+    "insertions": 190,
+    "deletions": 12,
+    "call_type": "function_call",
+    "call_id": "call_9Rbjp6YBEozPsSqd9Ooip3Ez",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Show rejected actor mapping matches\""
+  },
+  {
+    "timestamp": "2026-07-03T09:12:54.966Z",
+    "commit": "f3b3d22",
+    "subject": "Show all actor mapping candidates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 3,
+    "insertions": 42,
+    "deletions": 45,
+    "call_type": "function_call",
+    "call_id": "call_XBObI6zUiYRT5QNqfdKc5bmd",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue && git commit -m \"Show all actor mapping candidates\""
+  },
+  {
+    "timestamp": "2026-07-03T09:25:12.863Z",
+    "commit": "906fdc6",
+    "subject": "Verify empty actor deletion in Emby",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 5,
+    "insertions": 105,
+    "deletions": 9,
+    "call_type": "function_call",
+    "call_id": "call_9rDXGKiUmvzJugr1BuhxS8Dr",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Verify empty actor deletion in Emby\""
+  },
+  {
+    "timestamp": "2026-07-03T11:05:26.548Z",
+    "commit": "71efc49",
+    "subject": "Upload actor avatars as base64",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 4,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_jr5quAEG3Qdhh9ENfblWWKIW",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Upload actor avatars as base64\""
+  },
+  {
+    "timestamp": "2026-07-03T15:24:37.004Z",
+    "commit": "a6fe345",
+    "subject": "Match sumire kanji variants in actor mapping",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 19,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_11zT0mCsAhR71ZSZ8vcQcAnc",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Match sumire kanji variants in actor mapping\""
+  },
+  {
+    "timestamp": "2026-07-03T15:42:19.763Z",
+    "commit": "ff1c758",
+    "subject": "Prefer selected Emby actor name for merges",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 15,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_C5AKTf4XhxxOj19L1l9eZgNP",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Prefer selected Emby actor name for merges\""
+  },
+  {
+    "timestamp": "2026-07-03T16:51:29.730Z",
+    "commit": "86ef0c6",
+    "subject": "Add actor identity name fields",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorDetailView.vue",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 7,
+    "insertions": 217,
+    "deletions": 15,
+    "call_type": "function_call",
+    "call_id": "call_kXVx6LP3NfzrMiOVutxR5eiw",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/api/types.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorDetailView.vue frontend/src/views/ActorManagementView.vue && git commit -m \"Add actor identity name fields\""
+  },
+  {
+    "timestamp": "2026-07-03T17:03:27.578Z",
+    "commit": "e1697fa",
+    "subject": "Prefer Japanese actor names for Gfriends lookup",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorDetailView.vue",
+      "plugins/gfriends/backend.py",
+      "backend/tests/test_gfriends_plugin.py"
+    ],
+    "files_changed": 3,
+    "insertions": 17,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_W7g9vYXDftsQGTat9G35ID0b",
+    "command": "git add frontend/src/views/ActorDetailView.vue plugins/gfriends/backend.py backend/tests/test_gfriends_plugin.py && git commit -m \"Prefer Japanese actor names for Gfriends lookup\""
+  },
+  {
+    "timestamp": "2026-07-03T17:14:36.556Z",
+    "commit": "9f185ea",
+    "subject": "Refine actor identity name layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorDetailView.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 43,
+    "deletions": 13,
+    "call_type": "function_call",
+    "call_id": "call_aY1jlU4LagbNQk0TeRQWQvxO",
+    "command": "git add frontend/src/views/ActorDetailView.vue && git commit -m \"Refine actor identity name layout\""
+  },
+  {
+    "timestamp": "2026-07-03T17:22:15.787Z",
+    "commit": "8ff00f4",
+    "subject": "Add actor TMDB ID backfill",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 5,
+    "insertions": 395,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_cyvmw4aZcVqnGw6hkWW8kkN2",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue && git commit -m \"Add actor TMDB ID backfill\""
+  },
+  {
+    "timestamp": "2026-07-03T17:27:36.542Z",
+    "commit": "ae21cd3",
+    "subject": "Show all TMDB backfill candidates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 4,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_cvXN0UzYjk0fbMd8AybUXzzL",
+    "command": "git add frontend/src/views/ActorManagementView.vue && git commit -m \"Show all TMDB backfill candidates\""
+  },
+  {
+    "timestamp": "2026-07-03T17:38:30.426Z",
+    "commit": "f2c4b7d",
+    "subject": "Add TMDB backfill progress feedback",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts"
+    ],
+    "files_changed": 3,
+    "insertions": 200,
+    "deletions": 16,
+    "call_type": "function_call",
+    "call_id": "call_x2iO1HA05vqYGck2JyF2zsqu",
+    "command": "git add backend/app/api/endpoints/media_library.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts && git commit -m \"Add TMDB backfill progress feedback\""
+  },
+  {
+    "timestamp": "2026-07-03T17:44:02.506Z",
+    "commit": "2f90af1",
+    "subject": "Link TMDB backfill IDs to TMDB",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorManagementView.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 9,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_7ijnyZmEesuvouEwQ7JIHRTu",
+    "command": "git add frontend/src/views/ActorManagementView.vue && git commit -m \"Link TMDB backfill IDs to TMDB\""
+  },
+  {
+    "timestamp": "2026-07-03T17:50:26.005Z",
+    "commit": "1a1e4a9",
+    "subject": "Make TMDB review candidates actionable",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 3,
+    "insertions": 111,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_qUz39FukNqm11l81SUQoZEKe",
+    "command": "git add frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Make TMDB review candidates actionable\""
+  },
+  {
+    "timestamp": "2026-07-03T18:03:36.683Z",
+    "commit": "2fa8905",
+    "subject": "Add actor delete diagnostics",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/views/ActorDetailView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 5,
+    "insertions": 377,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_Y2i91hkWUEya36t5TIODDPHw",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorDetailView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Add actor delete diagnostics\""
+  },
+  {
+    "timestamp": "2026-07-04T08:49:31.651Z",
+    "commit": "3bf46cc",
+    "subject": "Allow removing actor provider IDs",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/views/ActorDetailView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 3,
+    "insertions": 128,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_u9GwH4vwlrfaLbXWDQPmJbNV",
+    "command": "git add frontend/src/views/ActorDetailView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Allow removing actor provider IDs\""
+  },
+  {
+    "timestamp": "2026-07-04T17:01:06.216Z",
+    "commit": "f163f42",
+    "subject": "Add actor name sync by language",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 5,
+    "insertions": 516,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_UKQVAFuRJxRjl992Un6WqfQO",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Add actor name sync by language\""
+  },
+  {
+    "timestamp": "2026-07-04T17:10:18.394Z",
+    "commit": "fa8743b",
+    "subject": "Add actor name sync progress feedback",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 4,
+    "insertions": 201,
+    "deletions": 11,
+    "call_type": "function_call",
+    "call_id": "call_pS2eKXeeV8Gl52a4lrmL737K",
+    "command": "git add backend/app/api/endpoints/media_library.py frontend/src/views/ActorManagementView.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Add actor name sync progress feedback\""
+  },
+  {
+    "timestamp": "2026-07-04T18:06:29.215Z",
+    "commit": "9c49a79",
+    "subject": "Use MDC-NG actor mapping source",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/app/api/endpoints/media_library_helpers.py",
+      "backend/app/api/settings_response.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/ActorManagementView.vue",
+      "frontend/src/views/settings/SystemSettings.vue"
+    ],
+    "files_changed": 7,
+    "insertions": 99,
+    "deletions": 96,
+    "call_type": "function_call",
+    "call_id": "call_VCfp9lB7dMNeRvun1cidvXUL",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py backend/app/api/settings_response.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/ActorManagementView.vue frontend/src/views/settings/SystemSettings.vue && git commit -m \"Use MDC-NG actor mapping source\""
+  },
+  {
+    "timestamp": "2026-07-04T18:22:29.378Z",
+    "commit": "2aa83bb",
+    "subject": "Derive MDC-NG actor mapping file from root path",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/SystemSettings.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 21,
+    "deletions": 12,
+    "call_type": "function_call",
+    "call_id": "call_ikdP1wPTEHMsgnZkixcSzJgg",
+    "command": "git add backend/app/api/endpoints/media_library.py frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/SystemSettings.vue && git commit -m \"Derive MDC-NG actor mapping file from root path\""
+  },
+  {
+    "timestamp": "2026-07-04T18:31:11.524Z",
+    "commit": "52db4ab",
+    "subject": "Sync actor names from mapping language fields",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 128,
+    "deletions": 18,
+    "call_type": "function_call",
+    "call_id": "call_fdM6jCGfgGWP5S475OuIU5pd",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Sync actor names from mapping language fields\""
+  },
+  {
+    "timestamp": "2026-07-05T15:29:31.500Z",
+    "commit": "7c44237",
+    "subject": "Import TMDB actor aliases and clean overview links",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/tests/test_media_library_api.py"
+    ],
+    "files_changed": 2,
+    "insertions": 176,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_VUej6kIpfzZPba4psLE5jqVa",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/tests/test_media_library_api.py && git commit -m \"Import TMDB actor aliases and clean overview links\""
+  },
+  {
+    "timestamp": "2026-07-05T17:07:17.335Z",
+    "commit": "8ecd4a3",
+    "subject": "Add fallback image loading for recommendation cards",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/av-recommend/backend.py",
+      "plugins/av-recommend/frontend/page.js",
+      "plugins/subscription-core/backend.py",
+      "plugins/subscription-core/frontend/page.js"
+    ],
+    "files_changed": 4,
+    "insertions": 136,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_zloqGG6oWjOIchJ02ftXd49s",
+    "command": "git add plugins/av-recommend/backend.py plugins/av-recommend/frontend/page.js plugins/subscription-core/backend.py plugins/subscription-core/frontend/page.js && git commit -m \"Add fallback image loading for recommendation cards\""
+  },
+  {
+    "timestamp": "2026-07-06T02:26:25.974Z",
+    "commit": "61ff7f0",
+    "subject": "Remove obsolete Whisper compatibility UI remnants",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/SubtitlePanel.vue",
+      "frontend/src/views/settings/WhisperSettings.vue",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/i18n/en.ts"
+    ],
+    "files_changed": 4,
+    "insertions": 2,
+    "deletions": 941,
+    "call_type": "function_call",
+    "call_id": "call_TNEwlk7C0G4HsVzTj6wst5L7",
+    "command": "git add frontend/src/components/noor/SubtitlePanel.vue frontend/src/views/settings/WhisperSettings.vue frontend/src/i18n/zh.ts frontend/src/i18n/en.ts && git commit -m \"Remove obsolete Whisper compatibility UI remnants\""
+  },
+  {
+    "timestamp": "2026-07-06T03:21:37.156Z",
+    "commit": "cfe11d8",
+    "subject": "Fix ChickenRice direct subtitle runtime checks",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/whisper/orchestrator.py",
+      "backend/app/tasks/manager.py"
+    ],
+    "files_changed": 2,
+    "insertions": 15,
+    "deletions": 6,
+    "call_type": "function_call",
+    "call_id": "call_cymjpwLfkKXW2duiEe6GNFii",
+    "command": "git add backend/app/pipeline/whisper/orchestrator.py backend/app/tasks/manager.py && git commit -m \"Fix ChickenRice direct subtitle runtime checks\""
+  },
+  {
+    "timestamp": "2026-07-06T03:54:23.888Z",
+    "commit": "27f37c2",
+    "subject": "Remove legacy Whisper chains",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 34,
+    "insertions": 107,
+    "deletions": 4230,
+    "call_type": "function_call",
+    "call_id": "call_9mLoVfHohX6w8v5L7AaMnZnZ",
+    "command": "git commit -m \"Remove legacy Whisper chains\""
+  },
+  {
+    "timestamp": "2026-07-06T14:53:56.034Z",
+    "commit": "20f4ce8",
+    "subject": "Remove remaining Whisper legacy UI remnants",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_whisper.py",
+      "backend/app/api/whisper.py",
+      "backend/app/core/config.py",
+      "backend/app/pipeline/whisper/__init__.py",
+      "backend/app/pipeline/whisper/engine.py",
+      "backend/app/pipeline/whisper/japanese_post.py",
+      "backend/app/pipeline/whisper/strategy.py",
+      "backend/app/pipeline/whisper/types.py",
+      "backend/app/tasks/job_phases.py",
+      "backend/app/tasks/manager.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/components/noor/SubtitlePanel.vue",
+      "frontend/src/composables/useWhisper.ts",
+      "frontend/src/composables/useWhisperProfiles.ts",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts"
+    ],
+    "files_changed": 18,
+    "insertions": 20,
+    "deletions": 206,
+    "call_type": "function_call",
+    "call_id": "call_SWRfO2gQDMm9XIbqneQl77xb",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_whisper.py backend/app/api/whisper.py backend/app/core/config.py backend/app/pipeline/whisper/__init__.py backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/japanese_post.py backend/app/pipeline/whisper/strategy.py backend/app/pipeline/whisper/types.py backend/app/tasks/job_phases.py backend/app/tasks/manager.py frontend/src/api/types.ts frontend/src/components/noor/SubtitlePanel.vue frontend/src/composables/useWhisper.ts frontend/src/composables/useWhisperProfiles.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts && git commit -m \"Remove remaining Whisper legacy UI remnants\""
+  },
+  {
+    "timestamp": "2026-07-06T15:55:29.640Z",
+    "commit": "3651e5d",
+    "subject": "Remove Whisper audio preprocessing",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app",
+      "backend/tests",
+      "frontend/src"
+    ],
+    "files_changed": 28,
+    "insertions": 55,
+    "deletions": 803,
+    "call_type": "function_call",
+    "call_id": "call_GDVF7FfOYDqxNUnEuATTcAQN",
+    "command": "git add backend/app backend/tests frontend/src && git commit -m \"Remove Whisper audio preprocessing\""
+  },
+  {
+    "timestamp": "2026-07-06T16:00:09.419Z",
+    "commit": "a90811d",
+    "subject": "Preserve Whisper VAD settings",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/whisper/strategy.py",
+      "backend/tests/test_whisper_strategy.py"
+    ],
+    "files_changed": 2,
+    "insertions": 36,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_aP9VgEq7kUAzTbfV2ZWzL7PU",
+    "command": "git add backend/app/pipeline/whisper/strategy.py backend/tests/test_whisper_strategy.py && git commit -m \"Preserve Whisper VAD settings\""
+  },
+  {
+    "timestamp": "2026-07-06T16:27:56.331Z",
+    "commit": "ca5b962",
+    "subject": "Clarify Whisper subtitle output log",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/whisper/orchestrator.py"
+    ],
+    "files_changed": 1,
+    "insertions": 1,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_WQdwbodgRu8L7S8yTaqzJMHc",
+    "command": "git add backend/app/pipeline/whisper/orchestrator.py && git commit -m \"Clarify Whisper subtitle output log\""
+  },
+  {
+    "timestamp": "2026-07-06T16:43:27.234Z",
+    "commit": "14a3cc3",
+    "subject": "Add experimental Whisper timing refiner",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app",
+      "backend/tests",
+      "frontend/src"
+    ],
+    "files_changed": 17,
+    "insertions": 182,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_CqjIXADEQNoLbK57WlsPv4YF",
+    "command": "git add backend/app backend/tests frontend/src && git commit -m \"Add experimental Whisper timing refiner\""
+  },
+  {
+    "timestamp": "2026-07-06T16:53:56.537Z",
+    "commit": "39bcfe8",
+    "subject": "Split long subtitles in timing refiner",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/whisper/orchestrator.py",
+      "backend/app/pipeline/whisper/timing_refiner.py",
+      "backend/tests/test_whisper_timing_refiner.py"
+    ],
+    "files_changed": 3,
+    "insertions": 115,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_s9O9etZnvrxYta01tP2KxYjJ",
+    "command": "git add backend/app/pipeline/whisper/orchestrator.py backend/app/pipeline/whisper/timing_refiner.py backend/tests/test_whisper_timing_refiner.py && git commit -m \"Split long subtitles in timing refiner\""
+  },
+  {
+    "timestamp": "2026-07-06T16:59:00.884Z",
+    "commit": "442c3af",
+    "subject": "Avoid duration-only subtitle splits",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/whisper/timing_refiner.py",
+      "backend/tests/test_whisper_timing_refiner.py"
+    ],
+    "files_changed": 2,
+    "insertions": 20,
+    "deletions": 22,
+    "call_type": "function_call",
+    "call_id": "call_5YcBUjIe1dxLrtvRP78XoWQJ",
+    "command": "git add backend/app/pipeline/whisper/timing_refiner.py backend/tests/test_whisper_timing_refiner.py && git commit -m \"Avoid duration-only subtitle splits\""
+  },
+  {
+    "timestamp": "2026-07-07T09:01:11.485Z",
+    "commit": "0184022",
+    "subject": "Add Whisper runtime tier selection",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_whisper.py",
+      "backend/app/api/whisper.py",
+      "backend/app/pipeline/whisper/engine.py",
+      "backend/app/pipeline/whisper/orchestrator.py",
+      "backend/app/pipeline/whisper/runtime_tier.py",
+      "backend/app/pipeline/whisper/strategy.py",
+      "backend/app/pipeline/whisper/types.py",
+      "backend/app/tasks/manager.py",
+      "backend/tests/test_whisper_strategy.py",
+      "frontend/src/components/noor/SubtitlePanel.vue",
+      "frontend/src/composables/useWhisper.ts",
+      "frontend/src/composables/useWhisperProfiles.ts",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/settings/WhisperSettings.vue"
+    ],
+    "files_changed": 17,
+    "insertions": 219,
+    "deletions": 10,
+    "call_type": "function_call",
+    "call_id": "call_BFcmgZxDrmBhI5GUITopblfD",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_whisper.py backend/app/api/whisper.py backend/app/pipeline/whisper/engine.py backend/app/pipeline/whisper/orchestrator.py backend/app/pipeline/whisper/runtime_tier.py backend/app/pipeline/whisper/strategy.py backend/app/pipeline/whisper/types.py backend/app/tasks/manager.py backend/tests/test_whisper_strategy.py frontend/src/components/noor/SubtitlePanel.vue frontend/src/composables/useWhisper.ts frontend/src/composables/useWhisperProfiles.ts frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/settings/WhisperSettings.vue\ngit commit -m \"Add Whisper runtime tier selection\""
+  },
+  {
+    "timestamp": "2026-07-07T18:02:28.082Z",
+    "commit": "77c8bb2",
+    "subject": "Split FaceFusion into dedicated panel",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/api/types.ts",
+      "frontend/src/components/noor/LadaPanel.vue",
+      "frontend/src/components/noor/FaceFusionPanel.vue",
+      "frontend/src/components/noor/MediaCard.vue",
+      "frontend/src/views/Home.vue"
+    ],
+    "files_changed": 5,
+    "insertions": 1768,
+    "deletions": 1171,
+    "call_type": "function_call",
+    "call_id": "call_uGCupdjTe12E2EHHqmGlXiex",
+    "command": "git add frontend/src/api/types.ts frontend/src/components/noor/LadaPanel.vue frontend/src/components/noor/FaceFusionPanel.vue frontend/src/components/noor/MediaCard.vue frontend/src/views/Home.vue\ngit commit -m \"Split FaceFusion into dedicated panel\""
+  },
+  {
+    "timestamp": "2026-07-07T18:26:39.685Z",
+    "commit": "8aed307",
+    "subject": "Refine FaceFusion full width layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 562,
+    "deletions": 136,
+    "call_type": "function_call",
+    "call_id": "call_JCtOpejwNTlUuHVq0m1z0jy5",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue\ngit commit -m \"Refine FaceFusion full width layout\""
+  },
+  {
+    "timestamp": "2026-07-07T18:36:04.552Z",
+    "commit": "b7954a9",
+    "subject": "Compact FaceFusion full width settings",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 77,
+    "deletions": 180,
+    "call_type": "function_call",
+    "call_id": "call_07vb87Tp7f33yNUR3z3WyTFC",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue\ngit commit -m \"Compact FaceFusion full width settings\""
+  },
+  {
+    "timestamp": "2026-07-07T18:40:32.285Z",
+    "commit": "448b968",
+    "subject": "Adjust FaceFusion full width preview",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 40,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_J0DZCxWxVlPVfipbVtGC8kpg",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Adjust FaceFusion full width preview\""
+  },
+  {
+    "timestamp": "2026-07-07T18:43:58.238Z",
+    "commit": "3e5fa97",
+    "subject": "Position FaceFusion preview in full width layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 70,
+    "deletions": 39,
+    "call_type": "function_call",
+    "call_id": "call_xySi4TQuKh74VBToHRNFOicq",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Position FaceFusion preview in full width layout\""
+  },
+  {
+    "timestamp": "2026-07-07T18:54:27.608Z",
+    "commit": "ebfec98",
+    "subject": "Reflow FaceFusion full width controls",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 135,
+    "deletions": 91,
+    "call_type": "function_call",
+    "call_id": "call_jhmHKAMrdXbdnysow9DNoevh",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Reflow FaceFusion full width controls\""
+  },
+  {
+    "timestamp": "2026-07-07T18:56:59.989Z",
+    "commit": "e48baf5",
+    "subject": "Move FaceFusion processors to left column",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 20,
+    "deletions": 19,
+    "call_type": "function_call",
+    "call_id": "call_IIrv6jT0QDeRcg0QlC2kwSFd",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Move FaceFusion processors to left column\""
+  },
+  {
+    "timestamp": "2026-07-07T18:59:58.605Z",
+    "commit": "fe818f1",
+    "subject": "Stack FaceFusion full width columns independently",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 64,
+    "deletions": 66,
+    "call_type": "function_call",
+    "call_id": "call_3SsvqpYFHigb93upv1oRhuIT",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Stack FaceFusion full width columns independently\""
+  },
+  {
+    "timestamp": "2026-07-07T19:02:40.320Z",
+    "commit": "eb99304",
+    "subject": "Align FaceFusion full width as left column and right workspace",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 2,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_wWACzmab9jALU95a5OTnBljx",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Align FaceFusion full width as left column and right workspace\""
+  },
+  {
+    "timestamp": "2026-07-07T19:12:32.123Z",
+    "commit": "ab1f5b2",
+    "subject": "Constrain FaceFusion processors for JAV workflow",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 3,
+    "insertions": 131,
+    "deletions": 7,
+    "call_type": "function_call",
+    "call_id": "call_NDRPQdvFweRnT2IaNRUtDpla",
+    "command": "git add backend/app/pipeline/facefusion/runner.py frontend/src/api/types.ts frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Constrain FaceFusion processors for JAV workflow\""
+  },
+  {
+    "timestamp": "2026-07-07T19:17:50.415Z",
+    "commit": "19fdf3c",
+    "subject": "Add FaceFusion deep model picker",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/facefusion.py",
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 364,
+    "deletions": 5,
+    "call_type": "function_call",
+    "call_id": "call_ukNuCVsjfJoa2yuUxsaGH34y",
+    "command": "git add backend/app/api/facefusion.py frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Add FaceFusion deep model picker\""
+  },
+  {
+    "timestamp": "2026-07-08T08:47:42.999Z",
+    "commit": "c3e01e2",
+    "subject": "Add FaceFusion Deep model downloads",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/facefusion.py",
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 2,
+    "insertions": 328,
+    "deletions": 19,
+    "call_type": "function_call",
+    "call_id": "call_8dryNY64bvucPzDsZFIexN92",
+    "command": "git add backend/app/api/facefusion.py frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Add FaceFusion Deep model downloads\""
+  },
+  {
+    "timestamp": "2026-07-08T08:54:24.969Z",
+    "commit": "6eb12fe",
+    "subject": "Simplify FaceFusion Deep model dialog",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 8,
+    "deletions": 28,
+    "call_type": "function_call",
+    "call_id": "call_j50Al6sWu30Az933oP5GkiRi",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Simplify FaceFusion Deep model dialog\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-08T09:56:10.423Z",
+    "commit": "c684faa",
+    "subject": "Trim FaceFusion Deep model picker",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 35,
+    "deletions": 92,
+    "call_type": "function_call",
+    "call_id": "call_cDKUpBYFTpPpRe0fyFPs5cKz",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Trim FaceFusion Deep model picker\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-08T10:45:08.040Z",
+    "commit": "8ab68b2",
+    "subject": "Fix FaceFusion model picker scrolling",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 5,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_09CKlu4HAbIFaddcikVf8UAt",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Fix FaceFusion model picker scrolling\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-08T15:49:30.315Z",
+    "commit": "e9c884b",
+    "subject": "Expand FaceFusion mask and detector options",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 154,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_v3E4vx76RJmXfphGoEUgrIBO",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Expand FaceFusion mask and detector options\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-08T16:10:17.915Z",
+    "commit": "39c918e",
+    "subject": "Add FaceFusion reference face gallery",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/facefusion.py",
+      "backend/app/pipeline/facefusion/reference_faces_worker.py",
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 3,
+    "insertions": 449,
+    "deletions": 33,
+    "call_type": "function_call",
+    "call_id": "call_oQPTSGxIp5j2IgpLeqSaLfcR",
+    "command": "git add backend/app/api/facefusion.py backend/app/pipeline/facefusion/reference_faces_worker.py frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Add FaceFusion reference face gallery\" && git status --short"
+  },
+  {
+    "timestamp": "2026-07-08T16:32:30.157Z",
+    "commit": "1a1263f",
+    "subject": "Refine FaceFusion wide panel layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 239,
+    "deletions": 233,
+    "call_type": "function_call",
+    "call_id": "call_XDYO6ZikjskzVd4WuRtxDA2L",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Refine FaceFusion wide panel layout\""
+  },
+  {
+    "timestamp": "2026-07-08T16:42:58.048Z",
+    "commit": "e6e4c18",
+    "subject": "Adjust FaceFusion source gallery controls",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 73,
+    "deletions": 29,
+    "call_type": "function_call",
+    "call_id": "call_qxGOfp4BCo0IY0YWJk5KqAEb",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Adjust FaceFusion source gallery controls\""
+  },
+  {
+    "timestamp": "2026-07-08T16:48:48.560Z",
+    "commit": "4d55d88",
+    "subject": "Fix FaceFusion source gallery item layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 13,
+    "deletions": 2,
+    "call_type": "function_call",
+    "call_id": "call_21HzP8EMfLfZCqyXs4wDnPkf",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Fix FaceFusion source gallery item layout\""
+  },
+  {
+    "timestamp": "2026-07-08T16:55:47.136Z",
+    "commit": "cbca699",
+    "subject": "Stabilize FaceFusion wide panel sizing",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 10,
+    "deletions": 4,
+    "call_type": "function_call",
+    "call_id": "call_t2sHWhpBBkPmgHWJvYs09cMJ",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Stabilize FaceFusion wide panel sizing\""
+  },
+  {
+    "timestamp": "2026-07-08T17:00:01.570Z",
+    "commit": "d686a20",
+    "subject": "Let FaceFusion preview fill wide workspace",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 1,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_9SWe6VVK61juS9prOVd7ViOP",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Let FaceFusion preview fill wide workspace\""
+  },
+  {
+    "timestamp": "2026-07-08T17:51:54.574Z",
+    "commit": "b2cb29b",
+    "subject": "Clean FaceFusion task runtime resources",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/pipeline/facefusion/runner.py",
+      "backend/tests/test_facefusion_runner.py"
+    ],
+    "files_changed": 2,
+    "insertions": 254,
+    "deletions": 145,
+    "call_type": "function_call",
+    "call_id": "call_pgmvJTcgZcoKO0fYOTSzIcq1",
+    "command": "git add backend/app/pipeline/facefusion/runner.py backend/tests/test_facefusion_runner.py && git commit -m \"Clean FaceFusion task runtime resources\""
+  },
+  {
+    "timestamp": "2026-07-08T19:21:04.250Z",
+    "commit": "43acc3a",
+    "subject": "Add NOOR runtime cleanup task",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/plugins.py",
+      "backend/app/main.py",
+      "backend/app/api/runtime_cleanup.py",
+      "backend/app/core/runtime_cleanup.py",
+      "backend/tests/test_runtime_cleanup.py"
+    ],
+    "files_changed": 5,
+    "insertions": 372,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_4s8zjPbVvfa19IkhIBpLqv6L",
+    "command": "git add backend/app/api/plugins.py backend/app/main.py backend/app/api/runtime_cleanup.py backend/app/core/runtime_cleanup.py backend/tests/test_runtime_cleanup.py && git commit -m \"Add NOOR runtime cleanup task\""
+  },
+  {
+    "timestamp": "2026-07-08T19:21:47.006Z",
+    "commit": "1a02e32",
+    "subject": "Add NOOR runtime cleanup task",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/tests/test_runtime_cleanup.py"
+    ],
+    "files_changed": 5,
+    "insertions": 379,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_zYvYdgJQK3rzi724MHOVVgTl",
+    "command": "git add backend/tests/test_runtime_cleanup.py && git commit --amend --no-edit"
+  },
+  {
+    "timestamp": "2026-07-08T21:05:50.474Z",
+    "commit": "f1e73d0",
+    "subject": "Stabilize FaceFusion wide lower layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 13,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_FIXH60SO5TxV9QnE6wYLBRo2",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \"Stabilize FaceFusion wide lower layout\""
+  },
+  {
+    "timestamp": "2026-07-08T21:11:41.864Z",
+    "commit": "a50ad40",
+    "subject": "Stabilize FaceFusion wide lower layout",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 21,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_1PAmx1oUnvAipFkfDSeIsDl0",
+    "command": "git add frontend/src/components/noor/FaceFusionPanel.vue && git commit --amend --no-edit"
+  },
+  {
+    "timestamp": "2026-07-09T13:01:09.418Z",
+    "commit": "a7d7d19",
+    "subject": "Allow file path selector to wrap long paths",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "frontend/src/components/noor/panels/FilePathSelector.vue"
+    ],
+    "files_changed": 1,
+    "insertions": 13,
+    "deletions": 1,
+    "call_type": "function_call",
+    "call_id": "call_qa655oLyhitOZXUQospOYjfW",
+    "command": "git add frontend/src/components/noor/panels/FilePathSelector.vue && git commit -m \"Allow file path selector to wrap long paths\""
+  },
+  {
+    "timestamp": "2026-07-10T08:59:39.803Z",
+    "commit": "b2aa1f6",
+    "subject": "Refine FaceFusion media badge behavior",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/core/config.py",
+      "frontend/src/components/noor/MediaCard.vue",
+      "frontend/src/i18n/en.ts",
+      "frontend/src/i18n/zh.ts",
+      "frontend/src/views/Home.vue",
+      "frontend/src/views/settings/FaceFusionSettings.vue"
+    ],
+    "files_changed": 9,
+    "insertions": 142,
+    "deletions": 9,
+    "call_type": "function_call",
+    "call_id": "call_vWz0oPBrbV08UxFlIb2yYHF3",
+    "command": "git add backend/app/api/settings.py backend/app/api/settings_response.py backend/app/api/settings_updates.py backend/app/core/config.py frontend/src/components/noor/MediaCard.vue frontend/src/i18n/en.ts frontend/src/i18n/zh.ts frontend/src/views/Home.vue frontend/src/views/settings/FaceFusionSettings.vue && git commit -m \"Refine FaceFusion media badge behavior\""
+  },
+  {
+    "timestamp": "2026-07-10T09:20:40.905Z",
+    "commit": "4dd6c51",
+    "subject": "Aggregate FaceFusion variant badge state",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/app/api/endpoints/media_library_helpers.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/components/noor/MediaCard.vue"
+    ],
+    "files_changed": 4,
+    "insertions": 9,
+    "deletions": null,
+    "call_type": "function_call",
+    "call_id": "call_34CI6GTatmlhdsrMrvWyH2N1",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py frontend/src/api/types.ts frontend/src/components/noor/MediaCard.vue && git commit -m \"Aggregate FaceFusion variant badge state\""
+  },
+  {
+    "timestamp": "2026-07-10T09:48:55.947Z",
+    "commit": "c3b736f",
+    "subject": "Separate uncensored media tagging from cracked titles",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py",
+      "backend/app/api/endpoints/media_library_helpers.py",
+      "backend/app/api/endpoints/media_library_item_detail.py",
+      "backend/app/core/models.py",
+      "frontend/src/api/types.ts"
+    ],
+    "files_changed": 5,
+    "insertions": 14,
+    "deletions": 8,
+    "call_type": "function_call",
+    "call_id": "call_KHXRf7yi6lKF0eIHj8dAC3UC",
+    "command": "git add backend/app/api/endpoints/media_library.py backend/app/api/endpoints/media_library_helpers.py backend/app/api/endpoints/media_library_item_detail.py backend/app/core/models.py frontend/src/api/types.ts && git commit -m \"Separate uncensored media tagging from cracked titles\""
+  },
+  {
+    "timestamp": "2026-07-14T09:37:30.550Z",
+    "commit": "2decd18",
+    "subject": "Exclude ignored ghost actors from merge candidates",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/api/endpoints/media_library.py"
+    ],
+    "files_changed": 1,
+    "insertions": 19,
+    "deletions": 3,
+    "call_type": "function_call",
+    "call_id": "call_zj69gjiM7KotmDNLHM1qfbPE",
+    "command": "git add backend/app/api/endpoints/media_library.py && git commit -m \"Exclude ignored ghost actors from merge candidates\""
+  },
+  {
+    "timestamp": "2026-07-31T18:45:44.920Z",
+    "commit": "bc3fc99",
+    "subject": "feat(facefusion): upgrade embedded runtime to 3.8.0",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [],
+    "files_changed": 173,
+    "insertions": 5954,
+    "deletions": 1612,
+    "call_type": "custom_tool_call",
+    "call_id": "call_ctcVq5ZCu9fSpiKxnRvWjjwH",
+    "command": "const r = await tools.exec_command({cmd:\"set -e\\ngit add backend/app/api/settings_facefusion_upgrade.py backend/app/pipeline/facefusion/source\\ngit commit -m 'feat(facefusion): upgrade embedded runtime to 3.8.0'\\ngit status --short\\ngit log -1 --oneline\",\"workdir\":\"/home/kinax/noor\",\"yield_time_ms\":30000,\"max_output_tokens\":10000});\ntext(r.output);"
+  },
+  {
+    "timestamp": "2026-07-31T18:57:28.130Z",
+    "commit": "301d3d8",
+    "subject": "feat(facefusion): expose face tracker score",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "backend/app/core/config.py",
+      "backend/app/api/settings.py",
+      "backend/app/api/settings_updates.py",
+      "backend/app/api/settings_response.py",
+      "backend/app/api/facefusion.py",
+      "backend/app/pipeline/facefusion/runner.py",
+      "frontend/src/api/types.ts",
+      "frontend/src/views/settings/FaceFusionSettings.vue",
+      "frontend/src/components/noor/FaceFusionPanel.vue"
+    ],
+    "files_changed": 9,
+    "insertions": 28,
+    "deletions": null,
+    "call_type": "custom_tool_call",
+    "call_id": "call_WnNaGt3iYonOw5phdRjYfqkm",
+    "command": "const r = await tools.exec_command({\"cmd\":\"git add backend/app/core/config.py backend/app/api/settings.py backend/app/api/settings_updates.py backend/app/api/settings_response.py backend/app/api/facefusion.py backend/app/pipeline/facefusion/runner.py frontend/src/api/types.ts frontend/src/views/settings/FaceFusionSettings.vue frontend/src/components/noor/FaceFusionPanel.vue && git commit -m \\\"feat(facefusion): expose face tracker score\\\" && git status --short\",\"workdir\":\"/home/kinax/noor\",\"yield_time_ms\":30000,\"max_output_tokens\":20000});\ntext(r.output);"
+  },
+  {
+    "timestamp": "2026-08-04T16:53:03.964Z",
+    "commit": "2225f1e",
+    "subject": "feat(javdb): add recent series directory",
+    "workdir": "/home/kinax/noor",
+    "staged_paths": [
+      "plugins/javdb/backend.py",
+      "plugins/javdb/frontend/page.js",
+      "plugins/javdb/frontend/style.css"
+    ],
+    "files_changed": 3,
+    "insertions": 175,
+    "deletions": 4,
+    "call_type": "custom_tool_call",
+    "call_id": "call_juk296PajH8jL5Eep9yMY23v",
+    "command": "const r = await tools.exec_command({\"cmd\":\"git add plugins/javdb/backend.py plugins/javdb/frontend/page.js plugins/javdb/frontend/style.css && git commit -m \\\"feat(javdb): add recent series directory\\\" && git status --short\",\"workdir\":\"/home/kinax/noor\",\"yield_time_ms\":30000,\"max_output_tokens\":20000}); text(r.output);"
+  }
+]
