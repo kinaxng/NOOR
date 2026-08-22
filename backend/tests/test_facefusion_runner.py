@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from app.core.facefusion_defaults import FaceFusionSettings
 from app.pipeline.facefusion import runner
 from app.pipeline.facefusion.runner import (
     _build_env,
@@ -24,6 +25,38 @@ def test_facefusion_env_splits_runtime_cache_dirs(tmp_path):
     assert (cache_dir / "xdg").is_dir()
     assert (cache_dir / "onnxruntime" / "tensorrt").is_dir()
     assert (cache_dir / "cuda").is_dir()
+
+
+def test_facefusion_command_exposes_configured_model_dir(monkeypatch, tmp_path):
+    source_dir = tmp_path / "facefusion"
+    (source_dir / "facefusion").mkdir(parents=True)
+    (source_dir / "facefusion.py").write_text("", encoding="utf-8")
+    model_dir = tmp_path / "models"
+    cache_dir = tmp_path / "cache"
+    temp_dir = tmp_path / "temp"
+    settings = SimpleNamespace(
+        facefusion_dir=str(source_dir),
+        facefusion_python_path="",
+        facefusion_model_dir=str(model_dir),
+        facefusion_cache_dir=str(cache_dir),
+        facefusion_temp_dir=str(temp_dir),
+        facefusion_processors="face_swapper",
+        facefusion_execution_providers="cuda",
+        facefusion_device_ids="0",
+    )
+    monkeypatch.setattr(runner, "get_settings", lambda: settings)
+    monkeypatch.setattr(runner, "facefusion_settings", lambda value: FaceFusionSettings(value, {}))
+    monkeypatch.setattr(runner, "_resolve_model_dir", lambda source, configured: (str(model_dir), "configured_override"))
+
+    _cmd, _cwd, env, resolved_model_dir, mode, _cache, _source_mode = runner._build_command(
+        "/input.mp4",
+        "/output.mp4",
+        {"source_paths": ["/face.jpg"]},
+    )
+
+    assert resolved_model_dir == str(model_dir)
+    assert mode == "configured_override"
+    assert env["FACEFUSION_MODEL_DIR"] == str(model_dir)
 
 
 def test_facefusion_task_runtime_uses_isolated_temp_dir(monkeypatch, tmp_path):

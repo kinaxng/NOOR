@@ -55,3 +55,36 @@ def test_non_legacy_external_facefusion_dir_still_overrides(tmp_path):
 
     assert resolved.mode == "external"
     assert resolved.source_dir == source_dir
+
+
+def test_configured_model_dir_overrides_nonempty_native_assets(tmp_path):
+    source_dir = _make_source(tmp_path / "embedded")
+    native_model_dir = source_dir / ".assets" / "models"
+    native_model_dir.mkdir(parents=True)
+    stale_model = native_model_dir / "stale.onnx"
+    stale_model.write_bytes(b"stale")
+    configured_model_dir = tmp_path / "models"
+
+    resolved, mode = facefusion_paths.resolve_facefusion_model_dir(
+        source_dir,
+        str(configured_model_dir),
+    )
+
+    assert resolved == str(configured_model_dir)
+    assert mode == "configured_override"
+    assert stale_model.read_bytes() == b"stale"
+    assert not native_model_dir.is_symlink()
+
+
+def test_facefusion_python_env_exposes_configured_model_dir(tmp_path):
+    source_dir = tmp_path / "source"
+    model_dir = tmp_path / "models"
+
+    env = facefusion_paths.build_facefusion_python_env(
+        source_dir,
+        {"PYTHONPATH": "/existing"},
+        model_dir=str(model_dir),
+    )
+
+    assert env["FACEFUSION_MODEL_DIR"] == str(model_dir)
+    assert env["PYTHONPATH"].split(":") == [str(source_dir), "/existing"]

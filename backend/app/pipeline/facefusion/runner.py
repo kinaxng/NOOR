@@ -333,7 +333,7 @@ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tup
     env = build_facefusion_python_env(source.source_dir, _build_env(
         facefusion_cache_dir=facefusion_cache_dir,
         facefusion_temp_dir=facefusion_temp_dir,
-    ))
+    ), model_dir=model_dir)
     return cmd, str(source.source_dir), env, model_dir, model_dir_mode, facefusion_cache_dir, source.mode
 
 

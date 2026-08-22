@@ -74,13 +74,19 @@ def resolve_facefusion_python(source_dir: Path, configured_python: str) -> str:
     return sys.executable
 
 
-def build_facefusion_python_env(source_dir: Path, base_env: dict[str, str] | None = None) -> dict[str, str]:
+def build_facefusion_python_env(
+    source_dir: Path,
+    base_env: dict[str, str] | None = None,
+    model_dir: str | None = None,
+) -> dict[str, str]:
     env = dict(base_env or os.environ)
     existing = env.get("PYTHONPATH", "")
     entries = [str(source_dir)]
     if existing:
         entries.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(entries)
+    if model_dir:
+        env["FACEFUSION_MODEL_DIR"] = str(Path(model_dir).expanduser())
     return env
 
 
@@ -113,7 +119,10 @@ def resolve_facefusion_model_dir(source_dir: Path | str, configured_model_dir: s
         native_model_dir.symlink_to(configured_path, target_is_directory=True)
         return str(configured_path), "configured_symlink"
 
-    return str(native_model_dir), "native_assets_existing"
+    # Embedded FaceFusion resolves model assets through FACEFUSION_MODEL_DIR.
+    # Keep any legacy files untouched, but never let them override NOOR's
+    # configured model storage.
+    return str(configured_path), "configured_override"
 
 
 def inspect_facefusion_model_dir(source_dir: Path | str, configured_model_dir: str | None) -> tuple[str, str]:
@@ -134,6 +143,6 @@ def inspect_facefusion_model_dir(source_dir: Path | str, configured_model_dir: s
     if native_model_dir.exists():
         if native_model_dir.is_dir() and not any(native_model_dir.iterdir()):
             return str(configured_path), "configured_pending_symlink"
-        return str(native_model_dir), "native_assets_existing"
+        return str(configured_path), "configured_override"
 
     return str(configured_path), "configured_pending_symlink"

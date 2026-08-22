@@ -343,7 +343,7 @@ def _build_reference_face_cli_args(input_path: str, job_settings: dict[str, Any]
     )
     facefusion_cache_dir = str(Path(job_settings.get("facefusion_cache_dir") or settings.facefusion_cache_dir or _preview_root().parent))
     facefusion_temp_dir = str(Path(job_settings.get("facefusion_temp_dir") or settings.facefusion_temp_dir or _preview_root().parent / "temp"))
-    resolve_facefusion_model_dir(
+    model_dir, _model_dir_mode = resolve_facefusion_model_dir(
         source.source_dir,
         job_settings.get("facefusion_model_dir") or getattr(settings, "facefusion_model_dir", ""),
     )
@@ -402,7 +402,7 @@ def _build_reference_face_cli_args(input_path: str, job_settings: dict[str, Any]
     env = build_facefusion_python_env(source.source_dir, _build_env(
         facefusion_cache_dir=facefusion_cache_dir,
         facefusion_temp_dir=facefusion_temp_dir,
-    ))
+    ), model_dir=model_dir)
     return [python_path, *cli_args], str(source.source_dir), env
 
 

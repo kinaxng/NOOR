@@ -401,7 +401,7 @@ def _facefusion_model_context() -> tuple[str, str, dict[str, str], str, str]:
     source = resolve_facefusion_source(settings.facefusion_dir)
     python_path = resolve_facefusion_python(source.source_dir, settings.facefusion_python_path)
     model_dir, link_mode = resolve_facefusion_model_dir(source.source_dir, settings.facefusion_model_dir)
-    env = build_facefusion_python_env(source.source_dir, os.environ.copy())
+    env = build_facefusion_python_env(source.source_dir, os.environ.copy(), model_dir=model_dir)
     return python_path, str(source.source_dir), env, model_dir, link_mode
 
 
