@@ -80,6 +80,49 @@ def test_actor_mapping_matches_reports_reviewable_non_candidates(monkeypatch):
     assert {item["rejected_reason"] for item in result["rejected_matches"]} == {"single_mapped_actor", "unmatched_emby_actor"}
 
 
+def test_actor_mapping_matches_excludes_persisted_ghost_from_candidates(monkeypatch, tmp_path):
+    record = {
+        "id": "m1",
+        "jp": "吉岡ひより",
+        "zh_cn": "吉冈日和",
+        "zh_tw": "吉岡日和",
+        "names": ["吉岡ひより", "吉冈日和"],
+        "tmdb_id": "2669350",
+        "verified": True,
+    }
+
+    async def fake_list_actors(config, **kwargs):
+        return [
+            {"id": "active", "name": "吉冈日和", "sort_name": "吉岡ひより", "tmdb_id": "2669350", "image_url": "avatar"},
+            {"id": "ghost", "name": "吉岡ひより", "sort_name": "吉岡ひより", "tmdb_id": "2669350", "image_url": "avatar"},
+        ], 2
+
+    monkeypatch.setattr(actors, "_require_config", lambda: {})
+    monkeypatch.setattr(actors, "_list_actors", fake_list_actors)
+    monkeypatch.setattr(actors, "_mapping_records", lambda config: [record])
+    monkeypatch.setattr(actors, "_mapping_index", lambda config: {actors._normalize_name(name): record for name in record["names"]})
+    monkeypatch.setattr(actors, "_actor_merge_ignored_ghosts_path", lambda: tmp_path / "ignored.json")
+    actors._save_actor_merge_ignored_ghosts({"ghost"})
+
+    result = actors.asyncio.run(actors.actor_mapping_matches(only_candidates=True, lang="zh-CN"))
+
+    assert result["groups"] == []
+    assert result["active_actors"] == 1
+    ignored = [item for item in result["rejected_matches"] if item["rejected_reason"] == "ignored_person"]
+    assert [item["id"] for item in ignored] == ["ghost"]
+
+
+def test_actor_merge_ignored_ghost_storage_accepts_legacy_list(monkeypatch, tmp_path):
+    path = tmp_path / "ignored.json"
+    path.write_text('["12", "34"]', encoding="utf-8")
+    monkeypatch.setattr(actors, "_actor_merge_ignored_ghosts_path", lambda: path)
+
+    assert actors._load_actor_merge_ignored_ghosts() == {"12", "34"}
+
+    actors._save_actor_merge_ignored_ghosts({"34", "56"})
+    assert actors._load_actor_merge_ignored_ghosts() == {"34", "56"}
+
+
 def test_actor_delete_diagnostics_reports_related_items_and_provider_ids(monkeypatch, tmp_path):
     monkeypatch.setattr(actors, "_profile_overrides_path", lambda: tmp_path / "actor_profile_overrides.json")
 

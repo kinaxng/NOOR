@@ -186,6 +186,31 @@ def _profile_overrides_path() -> Path:
     return path
 
 
+def _actor_merge_ignored_ghosts_path() -> Path:
+    path = data_path() / "actor_merge_ignored_ghosts.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _load_actor_merge_ignored_ghosts() -> set[str]:
+    payload = _load_json(_actor_merge_ignored_ghosts_path(), {})
+    if isinstance(payload, list):
+        return {str(item) for item in payload if str(item).strip()}
+    if isinstance(payload, dict):
+        return {str(item) for item in payload.get("actor_ids", []) if str(item).strip()}
+    return set()
+
+
+def _save_actor_merge_ignored_ghosts(actor_ids: set[str]) -> None:
+    _save_json(
+        _actor_merge_ignored_ghosts_path(),
+        {
+            "actor_ids": sorted(actor_ids),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
 def _load_profile_overrides() -> dict[str, dict[str, Any]]:
     payload = _load_json(_profile_overrides_path(), {})
     return payload if isinstance(payload, dict) else {}
@@ -701,13 +726,29 @@ async def actor_mapping_matches(
     )
     records = _mapping_records(config)
     index = _mapping_index(config)
+    ignored_ghost_ids = _load_actor_merge_ignored_ghosts()
+    active_actors = [
+        actor for actor in actors
+        if str(actor.get("id") or "").strip() not in ignored_ghost_ids
+    ]
     grouped: dict[str, dict[str, Any]] = {}
     unmatched: list[dict[str, Any]] = []
     rejected_matches: list[dict[str, Any]] = []
     for actor in actors:
+        actor_id = str(actor.get("id") or "").strip()
         record = index.get(_normalize_name(actor.get("name"))) or index.get(_normalize_name(actor.get("sort_name")))
         if not record:
             unmatched.append(actor)
+            continue
+        if actor_id in ignored_ghost_ids:
+            rejected = dict(actor)
+            rejected.update({
+                "rejected_reason": "ignored_person",
+                "rejected_mapping_id": str(record.get("id") or ""),
+                "rejected_mapping_name": _mapping_display_name(record, lang),
+                "rejected_mapping_tmdb_id": str(record.get("tmdb_id") or ""),
+            })
+            rejected_matches.append(rejected)
             continue
         group = grouped.setdefault(str(record.get("id") or _normalize_name(_mapping_display_name(record, lang))), {
             "mapping_id": str(record.get("id") or ""),
@@ -748,6 +789,16 @@ async def actor_mapping_matches(
             })
             rejected_matches.append(actor)
     for actor in unmatched:
+        if str(actor.get("id") or "").strip() in ignored_ghost_ids:
+            rejected = dict(actor)
+            rejected.update({
+                "rejected_reason": "ignored_person",
+                "rejected_mapping_id": "",
+                "rejected_mapping_name": "",
+                "rejected_mapping_tmdb_id": "",
+            })
+            rejected_matches.append(rejected)
+            continue
         if actor.get("tmdb_id") or actor.get("image_url") or actor.get("sort_name"):
             rejected = dict(actor)
             rejected.update({
@@ -769,6 +820,7 @@ async def actor_mapping_matches(
         "rejected_matches": rejected_matches,
         "mapping_records": len(records),
         "total_actors": total,
+        "active_actors": len(active_actors),
     }
 
 
@@ -1093,6 +1145,10 @@ async def _execute_merge(config: dict[str, Any], req: ActorMappingMergeRequest, 
                 deleted.append(actor_id)
             except Exception as exc:
                 delete_failed.append({"id": actor_id, "error": str(exc)})
+    if deleted:
+        ignored_ghost_ids = _load_actor_merge_ignored_ghosts()
+        ignored_ghost_ids.update(str(actor_id) for actor_id in deleted)
+        _save_actor_merge_ignored_ghosts(ignored_ghost_ids)
     return {
         "ok": True,
         "updated_count": len(updated),
@@ -1313,6 +1369,9 @@ async def delete_actor(actor_id: str):
     overrides = _load_profile_overrides()
     overrides.pop(str(actor_id), None)
     _save_profile_overrides(overrides)
+    ignored_ghost_ids = _load_actor_merge_ignored_ghosts()
+    ignored_ghost_ids.add(str(actor_id))
+    _save_actor_merge_ignored_ghosts(ignored_ghost_ids)
     return {"ok": True, "actor_id": actor_id, "diagnostics_before": diagnostics_before}
 
 
