@@ -101,6 +101,7 @@ const systemMemoryLimit = ref(0)
 const logLevel = ref('info')
 const downloadProviders = ref('github huggingface')
 const haltOnError = ref(false)
+const badgeAlwaysVisible = ref(false)
 const previewMode = ref('default')
 const previewResolution = ref('768x768')
 const processors = ref('')
@@ -249,6 +250,7 @@ async function loadSettings() {
       logLevel.value = data.facefusion_defaults.log_level || 'info'
       downloadProviders.value = data.facefusion_defaults.download_providers || 'github huggingface'
       haltOnError.value = data.facefusion_defaults.halt_on_error ?? false
+      badgeAlwaysVisible.value = data.facefusion_defaults.badge_always_visible ?? false
       previewMode.value = data.facefusion_defaults.preview_mode || 'default'
       previewResolution.value = data.facefusion_defaults.preview_resolution || '768x768'
       processors.value = data.facefusion_defaults.processors || ''
@@ -409,6 +411,7 @@ async function saveDefaults() {
       log_level: logLevel.value,
       download_providers: downloadProviders.value,
       halt_on_error: haltOnError.value,
+      badge_always_visible: badgeAlwaysVisible.value,
       preview_mode: previewMode.value,
       preview_resolution: previewResolution.value,
       processors: processors.value,
@@ -740,6 +743,14 @@ async function saveDefaults() {
                 {{ provider }}
               </button>
             </div>
+          </FieldRow>
+
+          <FieldRow label="媒体库换脸标签" description="开启后媒体库作品卡片固定显示换脸标签；关闭时仅鼠标指向作品卡片时显示。">
+            <label class="facefusion-switch">
+              <input v-model="badgeAlwaysVisible" type="checkbox" />
+              <span></span>
+              <strong>{{ badgeAlwaysVisible ? '固定显示' : '悬停显示' }}</strong>
+            </label>
           </FieldRow>
 
           <FieldRow label="预览模式" description="媒体库 FaceFusion 面板的默认预览展示方式">
@@ -1536,6 +1547,58 @@ async function saveDefaults() {
   border-color: rgba(80, 220, 140, 0.28);
   background: rgba(80, 220, 140, 0.1);
   color: #8be0a9;
+}
+
+.facefusion-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+.facefusion-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.facefusion-switch span {
+  position: relative;
+  width: 2.6rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.facefusion-switch span::after {
+  content: '';
+  position: absolute;
+  top: 0.18rem;
+  left: 0.18rem;
+  width: 0.94rem;
+  height: 0.94rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  transition: transform 0.16s ease, background 0.16s ease;
+}
+
+.facefusion-switch input:checked + span {
+  border-color: rgba(0, 117, 255, 0.58);
+  background: rgba(0, 117, 255, 0.24);
+}
+
+.facefusion-switch input:checked + span::after {
+  transform: translateX(1.18rem);
+  background: #fff;
+}
+
+.facefusion-switch strong {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 750;
 }
 
 .processor-options {
