@@ -25,6 +25,9 @@ const loading = ref(false)
 const saving = ref(false)
 const editMode = ref(false)
 const deleting = ref(false)
+const deleteDiagnosticsLoading = ref(false)
+const deleteDiagnosticsOpen = ref(false)
+const deleteDiagnostics = ref<any | null>(null)
 const overviewExpanded = ref(false)
 const uploadingAvatar = ref(false)
 const tmdbLoading = ref(false)
@@ -300,6 +303,32 @@ function openExternal(url?: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
+function deleteErrorMessage(error: any) {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail?.message) return detail.message
+  return error?.message || t('files.actors.deleteFailed')
+}
+
+async function openDeleteDiagnostics(seed?: any) {
+  if (!actorId.value || deleteDiagnosticsLoading.value) return
+  if (seed) {
+    deleteDiagnostics.value = seed
+    deleteDiagnosticsOpen.value = true
+    return
+  }
+  deleteDiagnosticsLoading.value = true
+  deleteDiagnosticsOpen.value = true
+  try {
+    const resp = await api.get(`/media-library/actor/${encodeURIComponent(actorId.value)}/delete-diagnostics`)
+    deleteDiagnostics.value = resp.data || null
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.deleteDiagnosticFailed'))
+  } finally {
+    deleteDiagnosticsLoading.value = false
+  }
+}
+
 async function deleteActor() {
   if (!actorId.value || deleting.value) return
   const ok = await confirm({
@@ -315,7 +344,11 @@ async function deleteActor() {
     toast.success(t('files.actors.deleteSuccess'))
     goBack()
   } catch (error: any) {
-    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.deleteFailed'))
+    const detail = error?.response?.data?.detail
+    toast.error(deleteErrorMessage(error))
+    if (detail?.diagnostics_after || detail?.diagnostics_before) {
+      await openDeleteDiagnostics(detail.diagnostics_after || detail.diagnostics_before)
+    }
   } finally {
     deleting.value = false
   }
@@ -501,6 +534,9 @@ onMounted(() => {
             </VuiButton>
             <button v-else type="button" class="actor-icon-button" :title="t('common.edit')" :aria-label="t('common.edit')" @click="saveActor">
               <BaseIcon name="edit" class="w-4 h-4" />
+            </button>
+            <button v-if="editMode" type="button" class="actor-icon-button" :disabled="deleteDiagnosticsLoading" :title="t('files.actors.deleteDiagnostic')" :aria-label="t('files.actors.deleteDiagnostic')" @click="openDeleteDiagnostics()">
+              <BaseIcon :name="deleteDiagnosticsLoading ? 'loading' : 'info'" class="w-4 h-4" />
             </button>
             <VuiButton v-if="editMode" variant="outlined" color="secondary" size="small" :disabled="deleting" customClass="actor-action-button actor-action-button--danger" @click="deleteActor">
               {{ t('common.delete') }}
@@ -731,6 +767,48 @@ onMounted(() => {
           </VuiButton>
         </div>
       </template>
+    </BaseModal>
+
+    <BaseModal v-if="deleteDiagnosticsOpen" :title="t('files.actors.deleteDiagnosticTitle')" size="lg" @close="deleteDiagnosticsOpen = false">
+      <div v-if="deleteDiagnosticsLoading" class="actor-empty">
+        <BaseIcon name="loading" class="w-5 h-5" />
+      </div>
+      <div v-else-if="deleteDiagnostics" class="delete-diagnostics">
+        <div class="delete-diagnostics__summary">
+          <strong>{{ deleteDiagnostics.name || displayName || actorId }}</strong>
+          <span>{{ t('files.actors.deleteDiagnosticSummary', { total: deleteDiagnostics.related_total || 0, canDelete: deleteDiagnostics.can_clean_delete ? t('common.yes') : t('common.no') }) }}</span>
+        </div>
+
+        <div class="delete-diagnostics__grid">
+          <article>
+            <span>{{ deleteDiagnostics.person_exists ? t('files.actors.deleteDiagnosticPersonExists') : t('files.actors.deleteDiagnosticPersonMissing') }}</span>
+            <strong>{{ deleteDiagnostics.sort_name || '-' }}</strong>
+          </article>
+          <article>
+            <span>{{ t('files.actors.providerIds') }}</span>
+            <strong v-if="Object.keys(deleteDiagnostics.provider_ids || {}).length">
+              <template v-for="(value, key) in deleteDiagnostics.provider_ids" :key="key">{{ key }}: {{ value }} </template>
+            </strong>
+            <strong v-else>-</strong>
+          </article>
+        </div>
+
+        <div v-if="deleteDiagnostics.blockers?.length" class="delete-diagnostics__blockers">
+          <span>{{ t('files.actors.deleteDiagnosticBlockers') }}</span>
+          <em v-for="blocker in deleteDiagnostics.blockers" :key="blocker">
+            {{ blocker === 'related_items' ? t('files.actors.deleteDiagnosticBlockerRelated') : blocker === 'can_delete_false' ? t('files.actors.deleteDiagnosticBlockerCanDelete') : blocker }}
+          </em>
+        </div>
+
+        <div v-if="deleteDiagnostics.related_sample?.length" class="delete-diagnostics__items">
+          <article v-for="item in deleteDiagnostics.related_sample" :key="item.id">
+            <strong>{{ item.name || item.id }}</strong>
+            <span>{{ item.type || '-' }}</span>
+            <p>{{ item.path || '-' }}</p>
+          </article>
+        </div>
+      </div>
+      <div v-else class="actor-empty">{{ t('files.actors.deleteDiagnosticFailed') }}</div>
     </BaseModal>
   </div>
 </template>
@@ -1217,6 +1295,96 @@ onMounted(() => {
   color: var(--color-text-primary);
 }
 
+.delete-diagnostics {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.delete-diagnostics__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.delete-diagnostics__summary strong {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+}
+
+.delete-diagnostics__summary span,
+.delete-diagnostics__grid span,
+.delete-diagnostics__blockers span,
+.delete-diagnostics__items span,
+.delete-diagnostics__items p {
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+
+.delete-diagnostics__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.delete-diagnostics__grid article,
+.delete-diagnostics__items article {
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.delete-diagnostics__grid strong,
+.delete-diagnostics__items strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.delete-diagnostics__blockers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.delete-diagnostics__blockers em {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--color-danger, #ff4d6d) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-danger, #ff4d6d) 14%, transparent);
+  color: var(--color-danger, #ff6b81);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.delete-diagnostics__items {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 18rem;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.delete-diagnostics__items p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .actor-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -1238,7 +1406,8 @@ onMounted(() => {
     width: min(300px, 100%);
   }
 
-  .actor-form {
+  .actor-form,
+  .delete-diagnostics__grid {
     grid-template-columns: 1fr;
   }
 

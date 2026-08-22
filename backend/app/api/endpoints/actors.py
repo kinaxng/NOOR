@@ -926,6 +926,95 @@ async def _related_movies(client: httpx.AsyncClient, config: dict[str, Any], act
     return [item for item in response.json().get("Items") or [] if isinstance(item, dict)]
 
 
+async def _related_items_for_delete(client: httpx.AsyncClient, config: dict[str, Any], actor_id: str) -> tuple[int, list[dict[str, Any]]]:
+    response = await client.get(
+        f"{_base_url(config)}/emby/Items",
+        headers=_headers(config),
+        params={
+            "PersonIds": actor_id,
+            "Recursive": "true",
+            "Fields": "Path,ProviderIds,People,ImageTags",
+            "StartIndex": 0,
+            "Limit": 25,
+        },
+    )
+    response.raise_for_status()
+    payload = response.json()
+    items = [item for item in payload.get("Items") or [] if isinstance(item, dict)]
+    return int(payload.get("TotalRecordCount") or len(items)), [
+        {
+            "id": str(item.get("Id") or ""),
+            "name": str(item.get("Name") or ""),
+            "type": str(item.get("Type") or item.get("MediaType") or ""),
+            "path": str(item.get("Path") or ""),
+            "provider_ids": item.get("ProviderIds") or {},
+        }
+        for item in items
+    ]
+
+
+async def _raw_actor_for_delete(client: httpx.AsyncClient, config: dict[str, Any], actor_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    user_id = str(config.get("user_id") or "").strip()
+    paths = []
+    if user_id:
+        paths.append(f"/emby/Users/{quote(user_id)}/Items/{quote(actor_id)}")
+    paths.append(f"/emby/Items/{quote(actor_id)}")
+    last_error: dict[str, Any] | None = None
+    for path in paths:
+        response = await client.get(
+            f"{_base_url(config)}{path}",
+            headers=_headers(config),
+            params={"Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName,CanDelete,Path"},
+        )
+        if response.status_code == 404:
+            last_error = {"status_code": 404, "body": response.text[:1000], "path": path}
+            continue
+        if response.is_error:
+            return None, {"status_code": response.status_code, "body": response.text[:1000], "path": path}
+        return response.json(), None
+    return None, last_error
+
+
+async def _actor_delete_diagnostics(config: dict[str, Any], actor_id: str) -> dict[str, Any]:
+    overrides = _load_profile_overrides()
+    async with httpx.AsyncClient(timeout=45, trust_env=False) as client:
+        raw, person_error = await _raw_actor_for_delete(client, config, actor_id)
+        try:
+            related_total, related_items = await _related_items_for_delete(client, config, actor_id)
+            related_error = None
+        except Exception as exc:
+            related_total = 0
+            related_items = []
+            related_error = str(exc)
+
+    provider_ids = raw.get("ProviderIds") if isinstance(raw, dict) else {}
+    can_delete_flag = raw.get("CanDelete") if isinstance(raw, dict) else None
+    blockers: list[str] = []
+    if related_error:
+        blockers.append("related_query_failed")
+    if related_total > 0:
+        blockers.append("related_items")
+    if can_delete_flag is False:
+        blockers.append("can_delete_false")
+    person_exists = raw is not None
+    return {
+        "ok": True,
+        "actor_id": actor_id,
+        "person_exists": person_exists,
+        "person_error": person_error,
+        "name": str(raw.get("Name") or "") if isinstance(raw, dict) else "",
+        "sort_name": str(raw.get("SortName") or "") if isinstance(raw, dict) else "",
+        "can_delete_flag": can_delete_flag,
+        "provider_ids": provider_ids or {},
+        "related_total": related_total,
+        "related_sample": related_items,
+        "related_error": related_error,
+        "noor_override_exists": str(actor_id) in overrides,
+        "blockers": blockers,
+        "can_clean_delete": person_exists and not blockers,
+    }
+
+
 async def _merge_plan(config: dict[str, Any], mapping_id: str, target_actor_id: str | None, target_name: str | None, lang: str) -> dict[str, Any]:
     group = await _mapping_group(config, mapping_id, lang, target_actor_id)
     target_id = str(target_actor_id or group.get("target_actor_id") or group["actors"][0]["id"])
@@ -1040,6 +1129,11 @@ async def execute_actor_mapping_batch(req: ActorMappingMergeBatchRequest, lang: 
         "failures": failures,
         "results": results,
     }
+
+
+@router.get("/actor/{actor_id}/delete-diagnostics")
+async def actor_delete_diagnostics(actor_id: str):
+    return await _actor_delete_diagnostics(_require_config(), actor_id)
 
 
 @router.get("/actor/{actor_id}")
@@ -1201,13 +1295,25 @@ async def set_actor_avatar_from_url(actor_id: str, req: ActorAvatarUrlRequest, l
 @router.delete("/actor/{actor_id}")
 async def delete_actor(actor_id: str):
     config = _require_config()
+    diagnostics_before = await _actor_delete_diagnostics(config, actor_id)
     async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
         response = await client.delete(f"{_base_url(config)}/emby/Items/{quote(actor_id)}", headers=_headers(config))
-        response.raise_for_status()
+        if response.is_error:
+            diagnostics_after = await _actor_delete_diagnostics(config, actor_id)
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "message": f"Emby 删除演员失败: HTTP {response.status_code}",
+                    "status_code": response.status_code,
+                    "body": response.text[:1000],
+                    "diagnostics_before": diagnostics_before,
+                    "diagnostics_after": diagnostics_after,
+                },
+            )
     overrides = _load_profile_overrides()
     overrides.pop(str(actor_id), None)
     _save_profile_overrides(overrides)
-    return {"ok": True, "actor_id": actor_id}
+    return {"ok": True, "actor_id": actor_id, "diagnostics_before": diagnostics_before}
 
 
 async def _tmdb_person(config: dict[str, Any], actor: dict[str, Any], lang: str) -> dict[str, Any]:

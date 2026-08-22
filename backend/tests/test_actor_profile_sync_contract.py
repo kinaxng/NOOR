@@ -78,3 +78,79 @@ def test_actor_mapping_matches_reports_reviewable_non_candidates(monkeypatch):
     assert result["groups"] == []
     assert result["rejected_actors"] == 2
     assert {item["rejected_reason"] for item in result["rejected_matches"]} == {"single_mapped_actor", "unmatched_emby_actor"}
+
+
+def test_actor_delete_diagnostics_reports_related_items_and_provider_ids(monkeypatch, tmp_path):
+    monkeypatch.setattr(actors, "_profile_overrides_path", lambda: tmp_path / "actor_profile_overrides.json")
+
+    class Response:
+        def __init__(self, status_code=200, payload=None, text=""):
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = text
+            self.is_error = status_code >= 400
+
+        def json(self):
+            return self._payload
+
+        def raise_for_status(self):
+            if self.is_error:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, **kwargs):
+            if "/emby/Items/123" in url:
+                return Response(payload={"Id": "123", "Name": "旧演员", "SortName": "旧演员", "CanDelete": False, "ProviderIds": {"Tmdb": "345"}})
+            return Response(payload={"TotalRecordCount": 1, "Items": [{"Id": "m1", "Name": "影片", "Type": "Movie", "Path": "/data/av/m1.mp4", "ProviderIds": {"Javdb": "ABC-001"}}]})
+
+    monkeypatch.setattr(actors.httpx, "AsyncClient", lambda *args, **kwargs: Client())
+
+    result = actors.asyncio.run(actors._actor_delete_diagnostics({"server_url": "http://emby.test", "api_key": "k"}, "123"))
+
+    assert result["person_exists"] is True
+    assert result["provider_ids"] == {"Tmdb": "345"}
+    assert result["related_total"] == 1
+    assert result["related_sample"][0]["name"] == "影片"
+    assert result["can_clean_delete"] is False
+    assert set(result["blockers"]) == {"related_items", "can_delete_false"}
+
+
+def test_actor_delete_failure_includes_diagnostics(monkeypatch, tmp_path):
+    monkeypatch.setattr(actors, "_require_config", lambda: {"server_url": "http://emby.test", "api_key": "k"})
+    monkeypatch.setattr(actors, "_profile_overrides_path", lambda: tmp_path / "actor_profile_overrides.json")
+
+    async def fake_diagnostics(config, actor_id):
+        return {"ok": True, "actor_id": actor_id, "person_exists": True, "related_total": 0, "blockers": []}
+
+    class Response:
+        status_code = 500
+        text = "locked"
+        is_error = True
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def delete(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(actors, "_actor_delete_diagnostics", fake_diagnostics)
+    monkeypatch.setattr(actors.httpx, "AsyncClient", lambda *args, **kwargs: Client())
+
+    with pytest.raises(HTTPException) as exc:
+        actors.asyncio.run(actors.delete_actor("123"))
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail["status_code"] == 500
+    assert exc.value.detail["body"] == "locked"
+    assert exc.value.detail["diagnostics_before"]["actor_id"] == "123"
+    assert exc.value.detail["diagnostics_after"]["actor_id"] == "123"
