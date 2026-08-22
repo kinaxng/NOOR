@@ -1,0 +1,1612 @@
+{
+  "cutoff": "2026-08-09T17:05:00Z",
+  "targets": {
+    "backend/app/api/endpoints/media_library.py": {
+      "functions": [
+        "__init__",
+        "_actor_emby_aliases",
+        "_actor_group_source_ids",
+        "_actor_group_target_name",
+        "_actor_identity_names",
+        "_actor_mapping_download_attempts",
+        "_actor_mapping_name_index",
+        "_actor_mapping_online_state_path",
+        "_actor_mapping_primary_names",
+        "_actor_mapping_record_for_name_sync",
+        "_actor_mapping_store_path",
+        "_actor_mapping_tmdb_index",
+        "_actor_mapping_upload_dir",
+        "_actor_mapping_upload_info",
+        "_actor_mapping_warning_reason",
+        "_actor_mappings_path",
+        "_actor_merge_apply_people",
+        "_actor_merge_backup_dir",
+        "_actor_merge_ignored_ghosts_path",
+        "_actor_merge_remove_source_people",
+        "_actor_merge_score",
+        "_actor_metadata_diff",
+        "_actor_profile_overrides_path",
+        "_actor_target_name_for_lang",
+        "_actor_web_url",
+        "_allowed_scan_roots",
+        "_analyze_actor_mapping_upload",
+        "_apply_actor_name_sync",
+        "_apply_actor_profile_override",
+        "_apply_actor_tmdb_backfill",
+        "_apply_actor_tmdb_metadata",
+        "_apply_filter_and_paginate",
+        "_assert_safe_path",
+        "_build_actor_mapping_merge_plan",
+        "_build_env_updates_from_config",
+        "_build_hardlink_groups",
+        "_bump_sync_state",
+        "_clear_actor_mapping_records",
+        "_collect_chain_delete_targets",
+        "_configured_mdc_ng_actor_mapping_path",
+        "_configured_mdc_ng_root_path",
+        "_decode_mapping_text",
+        "_deduplicate_items",
+        "_delete_actor_profile",
+        "_delete_plan_from_hardlink_entry",
+        "_delete_plan_from_inode_chain",
+        "_detect_duplicate_actors",
+        "_diagnose_actor_delete",
+        "_directory_matches_target_videos",
+        "_download_actor_mapping_xml",
+        "_emby_delete_item",
+        "_emby_get_json",
+        "_emby_item_exists",
+        "_emby_item_for_update",
+        "_emby_related_movies_for_actor",
+        "_enrich_actor_display_names",
+        "_enrich_hardlink_groups",
+        "_ensure_webhook_token",
+        "_env_backed_config",
+        "_execute_actor_mapping_merge",
+        "_execute_actor_mapping_merge_batch",
+        "_execute_delete_targets",
+        "_external_urls_from_provider_ids",
+        "_extract_code_from_path",
+        "_fetch_emby_item_info",
+        "_find_actor_mapping_group",
+        "_find_inode_chain_for_path",
+        "_get_actor_profile",
+        "_get_item",
+        "_get_main_nfo",
+        "_get_siblings",
+        "_hardlink_groups_last_scanned_at",
+        "_hardlink_groups_path",
+        "_is_under_roots",
+        "_iso_from_ts",
+        "_item_matches_filter",
+        "_item_matches_query",
+        "_item_variant_penalty",
+        "_iter_file_range",
+        "_iter_upstream",
+        "_latest_actor_mapping_upload_path",
+        "_list_actors",
+        "_list_items",
+        "_list_libraries",
+        "_load_actor_mapping_online_state",
+        "_load_actor_mapping_records",
+        "_load_actor_mapping_status",
+        "_load_actor_mappings",
+        "_load_actor_merge_ignored_ghosts",
+        "_load_actor_profile_overrides",
+        "_load_hardlink_groups",
+        "_localized_mapping_name",
+        "_mapping_match_record",
+        "_maybe_schedule_actor_mapping_auto_update",
+        "_media_item_delete_plan",
+        "_media_server_info",
+        "_merge_group_metadata",
+        "_normalize_actor_key",
+        "_normalize_actor_mapping",
+        "_normalize_code_token",
+        "_normalize_mapping_record",
+        "_overview_external_urls",
+        "_paginate_filter",
+        "_parent_is_code_bucket",
+        "_parse_actor_mapping_xml",
+        "_parse_person",
+        "_parse_range_header",
+        "_parse_scan_groups",
+        "_path_matches_hardlink_entry",
+        "_person_image_url",
+        "_pick_group_representative",
+        "_preview_actor_mapping_matches",
+        "_preview_actor_name_sync",
+        "_preview_actor_tmdb_backfill",
+        "_preview_actor_tmdb_metadata",
+        "_preview_delete_targets",
+        "_provider_id",
+        "_remove_file_and_sibling_nfo",
+        "_request_source_ip",
+        "_safe_upload_filename",
+        "_save_actor_avatar_override_url",
+        "_save_actor_mapping_online_state",
+        "_save_actor_mapping_records",
+        "_save_actor_mappings",
+        "_save_actor_merge_ignored_ghosts",
+        "_save_actor_profile_overrides",
+        "_save_hardlink_groups",
+        "_scan_groups_to_env",
+        "_scan_inodes",
+        "_scan_single_group",
+        "_set_actor_avatar_bytes",
+        "_set_actor_avatar_from_url",
+        "_setup_logging_handler",
+        "_should_reject_actor_mapping_match",
+        "_split_actor_names",
+        "_split_mapping_keywords",
+        "_sync_actor_mapping_from_mdc_ng",
+        "_sync_actor_mapping_online",
+        "_sync_state_payload",
+        "_test_connection",
+        "_tmdb_credentials",
+        "_tmdb_external_urls",
+        "_tmdb_gender_label",
+        "_tmdb_get_json",
+        "_tmdb_headers",
+        "_tmdb_lang_candidates",
+        "_tmdb_person_payload",
+        "_tmdb_pick_biography",
+        "_tmdb_profile_url",
+        "_tmdb_request_params",
+        "_translation_name_map",
+        "_update_actor_profile",
+        "_validate_actor_mapping_xml_path",
+        "add_log",
+        "apply_actor_name_sync",
+        "apply_actor_tmdb_backfill",
+        "apply_actor_tmdb_metadata",
+        "clear_actor_mapping",
+        "config_path",
+        "delete_actor_profile",
+        "delete_hardlink_file",
+        "delete_hardlink_group",
+        "delete_media_item_chain",
+        "delete_source_chain",
+        "diagnose_actor_delete",
+        "emby_webhook",
+        "env_source_dir",
+        "execute_actor_mapping_merge",
+        "execute_actor_mapping_merge_batch",
+        "fake_list_actors",
+        "fake_related_movies",
+        "get_actor_mapping_matches",
+        "get_actor_mapping_merge_plan",
+        "get_actor_mapping_status",
+        "get_actor_movies",
+        "get_actor_profile",
+        "get_actor_tmdb_backfill_progress",
+        "get_actors",
+        "get_config",
+        "get_duplicate_actors",
+        "get_hardlink_groups",
+        "get_instance",
+        "get_item",
+        "get_items",
+        "get_latest_actor_mapping_upload",
+        "get_libraries",
+        "get_status",
+        "get_sync_state",
+        "headers",
+        "import_latest_actor_mapping",
+        "invalidate_cache",
+        "load_config",
+        "local_media_root",
+        "map_path",
+        "parse_item",
+        "parse_tags",
+        "preview_actor_name_sync",
+        "preview_actor_tmdb_backfill",
+        "preview_actor_tmdb_metadata",
+        "preview_hardlink_file",
+        "responder",
+        "save_config",
+        "scan_hardlinks",
+        "server_url",
+        "set_actor_avatar_from_url",
+        "sort_key",
+        "stream_emby_item",
+        "sync_online_actor_mapping",
+        "test_actor_mapping_name_index_prefers_primary_name_over_other_alias",
+        "test_connection",
+        "test_detect_duplicate_actors_groups_normalized_names",
+        "test_list_actors_parses_emby_persons",
+        "test_parse_person_reads_provider_ids_case_insensitively",
+        "test_preview_actor_mapping_filters_empty_non_target_person_ghosts",
+        "test_preview_actor_mapping_matches_groups_aliases",
+        "test_preview_actor_mapping_rejects_unverified_alias_tmdb_conflict",
+        "test_preview_actor_tmdb_metadata_returns_diffs",
+        "test_set_actor_avatar_bytes_uploads_primary_image_and_sets_override",
+        "update_actor_profile",
+        "upload_actor_avatar",
+        "upload_actor_mapping"
+      ],
+      "routes": [
+        "DELETE /actor/{actor_id}",
+        "DELETE /actors/mapping",
+        "GET /actor/{actor_id}",
+        "GET /actor/{actor_id}/delete-diagnostics",
+        "GET /actor/{actor_id}/movies",
+        "GET /actors",
+        "GET /actors/duplicates",
+        "GET /actors/mapping/latest-upload",
+        "GET /actors/mapping/matches",
+        "GET /actors/mapping/merge-plan",
+        "GET /actors/mapping/status",
+        "GET /actors/name-sync/preview",
+        "GET /actors/tmdb-backfill/preview",
+        "GET /actors/tmdb-backfill/progress/{progress_key}",
+        "GET /config",
+        "GET /hardlinks/groups",
+        "GET /hardlinks/preview-file",
+        "GET /item/{item_id}",
+        "GET /items",
+        "GET /libraries",
+        "GET /stream/{item_id}",
+        "GET /sync-state",
+        "POST /actor/{actor_id}",
+        "POST /actor/{actor_id}/avatar",
+        "POST /actor/{actor_id}/avatar-url",
+        "POST /actor/{actor_id}/metadata/tmdb-apply",
+        "POST /actor/{actor_id}/metadata/tmdb-preview",
+        "POST /actors/mapping/import-latest",
+        "POST /actors/mapping/merge-batch",
+        "POST /actors/mapping/merge-execute",
+        "POST /actors/mapping/sync-online",
+        "POST /actors/mapping/upload",
+        "POST /actors/name-sync/apply",
+        "POST /actors/tmdb-backfill/apply",
+        "POST /cache/invalidate",
+        "POST /config",
+        "POST /hardlinks/delete-group",
+        "POST /hardlinks/delete-hardlink",
+        "POST /hardlinks/delete-source-chain",
+        "POST /hardlinks/scan",
+        "POST /items/delete-chain",
+        "POST /test",
+        "POST /webhook/emby"
+      ],
+      "evidence": {
+        "functions": {
+          "_allowed_scan_roots": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_is_under_roots": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_assert_safe_path": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_remove_file_and_sibling_nfo": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_normalize_code_token": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_directory_matches_target_videos": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_parent_is_code_bucket": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_collect_chain_delete_targets": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_execute_delete_targets": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "scan_hardlinks": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "delete_hardlink_file": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "delete_source_chain": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "delete_hardlink_group": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "_preview_delete_targets": {
+            "timestamp": "2026-07-05T15:23:49.942Z",
+            "source": "command_output"
+          },
+          "_test_connection": {
+            "timestamp": "2026-07-01T08:37:29.390Z",
+            "source": "command_output"
+          },
+          "_list_libraries": {
+            "timestamp": "2026-07-01T08:37:29.390Z",
+            "source": "command_output"
+          },
+          "_item_variant_penalty": {
+            "timestamp": "2026-07-10T09:46:09.477Z",
+            "source": "command_output"
+          },
+          "_merge_group_metadata": {
+            "timestamp": "2026-07-10T09:46:09.477Z",
+            "source": "command_output"
+          },
+          "_paginate_filter": {
+            "timestamp": "2026-07-10T09:46:19.156Z",
+            "source": "command_output"
+          },
+          "get_item": {
+            "timestamp": "2026-07-02T08:36:43.851Z",
+            "source": "patch"
+          },
+          "get_hardlink_groups": {
+            "timestamp": "2026-07-01T09:03:38.894Z",
+            "source": "command_output"
+          },
+          "_parse_range_header": {
+            "timestamp": "2026-07-01T09:03:38.894Z",
+            "source": "command_output"
+          },
+          "_iter_file_range": {
+            "timestamp": "2026-06-24T08:50:18.543Z",
+            "source": "command_output"
+          },
+          "stream_emby_item": {
+            "timestamp": "2026-06-24T08:50:18.543Z",
+            "source": "command_output"
+          },
+          "_iter_upstream": {
+            "timestamp": "2026-06-11T16:36:13.936Z",
+            "source": "command_output"
+          },
+          "preview_hardlink_file": {
+            "timestamp": "2026-06-11T16:36:13.936Z",
+            "source": "command_output"
+          },
+          "_list_items": {
+            "timestamp": "2026-07-10T09:19:02.205Z",
+            "source": "command_output"
+          },
+          "_item_matches_query": {
+            "timestamp": "2026-07-05T18:48:30.928Z",
+            "source": "command_output"
+          },
+          "get_items": {
+            "timestamp": "2026-07-10T09:19:02.205Z",
+            "source": "command_output"
+          },
+          "_delete_plan_from_hardlink_entry": {
+            "timestamp": "2026-07-05T15:23:49.942Z",
+            "source": "command_output"
+          },
+          "_media_item_delete_plan": {
+            "timestamp": "2026-07-05T15:23:49.942Z",
+            "source": "command_output"
+          },
+          "_get_siblings": {
+            "timestamp": "2026-07-10T09:46:19.156Z",
+            "source": "command_output"
+          },
+          "_get_main_nfo": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "_get_item": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "_hardlink_groups_path": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "_hardlink_groups_last_scanned_at": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "_scan_inodes": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "_scan_single_group": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "_fetch_emby_item_info": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "_extract_code_from_path": {
+            "timestamp": "2026-07-05T18:48:30.928Z",
+            "source": "command_output"
+          },
+          "_build_hardlink_groups": {
+            "timestamp": "2026-07-05T18:48:30.928Z",
+            "source": "command_output"
+          },
+          "_save_hardlink_groups": {
+            "timestamp": "2026-07-05T18:48:30.928Z",
+            "source": "command_output"
+          },
+          "_load_hardlink_groups": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "_enrich_hardlink_groups": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "_item_matches_filter": {
+            "timestamp": "2026-07-10T09:46:19.156Z",
+            "source": "command_output"
+          },
+          "delete_media_item_chain": {
+            "timestamp": "2026-07-02T08:36:24.472Z",
+            "source": "command_output"
+          },
+          "config_path": {
+            "timestamp": "2026-06-24T16:37:18.284Z",
+            "source": "command_output"
+          },
+          "_parse_scan_groups": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "_scan_groups_to_env": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "_env_backed_config": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "_build_env_updates_from_config": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "load_config": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "save_config": {
+            "timestamp": "2026-07-04T18:03:20.319Z",
+            "source": "patch"
+          },
+          "get_config": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "headers": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "server_url": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "env_source_dir": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "local_media_root": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "map_path": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "parse_tags": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "parse_item": {
+            "timestamp": "2026-06-24T08:50:43.812Z",
+            "source": "command_output"
+          },
+          "_deduplicate_items": {
+            "timestamp": "2026-07-10T09:14:44.510Z",
+            "source": "command_output"
+          },
+          "_apply_filter_and_paginate": {
+            "timestamp": "2026-07-10T09:46:19.156Z",
+            "source": "command_output"
+          },
+          "_path_matches_hardlink_entry": {
+            "timestamp": "2026-07-05T15:23:49.942Z",
+            "source": "command_output"
+          },
+          "_find_inode_chain_for_path": {
+            "timestamp": "2026-07-05T15:23:49.942Z",
+            "source": "command_output"
+          },
+          "_delete_plan_from_inode_chain": {
+            "timestamp": "2026-07-05T15:23:49.942Z",
+            "source": "command_output"
+          },
+          "_pick_group_representative": {
+            "timestamp": "2026-07-10T09:46:09.477Z",
+            "source": "command_output"
+          },
+          "sort_key": {
+            "timestamp": "2026-07-10T09:46:09.477Z",
+            "source": "command_output"
+          },
+          "get_status": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "test_connection": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "get_libraries": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "get_sync_state": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "invalidate_cache": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "emby_webhook": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "__init__": {
+            "timestamp": "2026-06-24T16:50:37.714Z",
+            "source": "command_output"
+          },
+          "get_instance": {
+            "timestamp": "2026-06-24T16:50:37.714Z",
+            "source": "command_output"
+          },
+          "_setup_logging_handler": {
+            "timestamp": "2026-06-24T16:50:37.714Z",
+            "source": "command_output"
+          },
+          "add_log": {
+            "timestamp": "2026-06-24T16:50:37.714Z",
+            "source": "command_output"
+          },
+          "_ensure_webhook_token": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_bump_sync_state": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_iso_from_ts": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_sync_state_payload": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_request_source_ip": {
+            "timestamp": "2026-07-05T15:23:49.937Z",
+            "source": "command_output"
+          },
+          "_normalize_actor_key": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_split_actor_names": {
+            "timestamp": "2026-07-01T08:54:35.960Z",
+            "source": "command_output"
+          },
+          "_actor_mappings_path": {
+            "timestamp": "2026-07-01T08:54:35.960Z",
+            "source": "command_output"
+          },
+          "_load_actor_mappings": {
+            "timestamp": "2026-07-01T08:54:35.960Z",
+            "source": "command_output"
+          },
+          "_save_actor_mappings": {
+            "timestamp": "2026-07-01T08:54:35.960Z",
+            "source": "command_output"
+          },
+          "_normalize_actor_mapping": {
+            "timestamp": "2026-07-01T08:54:35.960Z",
+            "source": "command_output"
+          },
+          "get_duplicate_actors": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_upload_dir": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_safe_upload_filename": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_decode_mapping_text": {
+            "timestamp": "2026-07-01T08:58:17.951Z",
+            "source": "patch"
+          },
+          "_analyze_actor_mapping_upload": {
+            "timestamp": "2026-07-01T08:58:17.951Z",
+            "source": "patch"
+          },
+          "_person_image_url": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_parse_person": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_actor_web_url": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_upload_info": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "upload_actor_mapping": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "get_latest_actor_mapping_upload": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_store_path": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_latest_actor_mapping_upload_path": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_split_mapping_keywords": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_normalize_mapping_record": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_parse_actor_mapping_xml": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_save_actor_mapping_records": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_load_actor_mapping_status": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_list_actors": {
+            "timestamp": "2026-07-04T16:52:48.601Z",
+            "source": "command_output"
+          },
+          "_detect_duplicate_actors": {
+            "timestamp": "2026-07-14T09:35:39.975Z",
+            "source": "command_output"
+          },
+          "import_latest_actor_mapping": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "_load_actor_mapping_records": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_preview_actor_mapping_matches": {
+            "timestamp": "2026-07-14T09:35:39.975Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_name_index": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "get_actors": {
+            "timestamp": "2026-07-10T09:46:19.156Z",
+            "source": "command_output"
+          },
+          "_localized_mapping_name": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_enrich_actor_display_names": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "get_actor_mapping_matches": {
+            "timestamp": "2026-07-14T09:35:39.976Z",
+            "source": "command_output"
+          },
+          "_actor_merge_score": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_should_reject_actor_mapping_match": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "get_actor_mapping_status": {
+            "timestamp": "2026-07-04T18:03:20.319Z",
+            "source": "patch"
+          },
+          "_actor_merge_apply_people": {
+            "timestamp": "2026-07-05T16:14:16.530Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_primary_names": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_mapping_match_record": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_actor_group_target_name": {
+            "timestamp": "2026-07-04T17:05:55.952Z",
+            "source": "command_output"
+          },
+          "_actor_group_source_ids": {
+            "timestamp": "2026-07-04T16:54:13.330Z",
+            "source": "command_output"
+          },
+          "_find_actor_mapping_group": {
+            "timestamp": "2026-07-04T16:54:13.330Z",
+            "source": "command_output"
+          },
+          "_emby_get_json": {
+            "timestamp": "2026-07-04T16:54:13.330Z",
+            "source": "command_output"
+          },
+          "test_preview_actor_mapping_matches_groups_aliases": {
+            "timestamp": "2026-07-02T08:08:44.680Z",
+            "source": "command_output"
+          },
+          "fake_list_actors": {
+            "timestamp": "2026-07-02T09:39:52.759Z",
+            "source": "command_output"
+          },
+          "test_preview_actor_mapping_rejects_unverified_alias_tmdb_conflict": {
+            "timestamp": "2026-07-02T09:39:52.759Z",
+            "source": "command_output"
+          },
+          "test_detect_duplicate_actors_groups_normalized_names": {
+            "timestamp": "2026-07-01T16:07:12.157Z",
+            "source": "command_output"
+          },
+          "_build_actor_mapping_merge_plan": {
+            "timestamp": "2026-07-05T16:14:16.530Z",
+            "source": "command_output"
+          },
+          "_emby_related_movies_for_actor": {
+            "timestamp": "2026-07-04T16:54:13.330Z",
+            "source": "command_output"
+          },
+          "_emby_item_for_update": {
+            "timestamp": "2026-07-04T16:54:13.330Z",
+            "source": "command_output"
+          },
+          "_actor_merge_remove_source_people": {
+            "timestamp": "2026-07-05T16:14:16.530Z",
+            "source": "command_output"
+          },
+          "_execute_actor_mapping_merge": {
+            "timestamp": "2026-07-05T16:14:16.530Z",
+            "source": "command_output"
+          },
+          "get_actor_mapping_merge_plan": {
+            "timestamp": "2026-07-04T17:06:44.017Z",
+            "source": "command_output"
+          },
+          "execute_actor_mapping_merge": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "test_list_actors_parses_emby_persons": {
+            "timestamp": "2026-07-02T08:08:44.680Z",
+            "source": "command_output"
+          },
+          "responder": {
+            "timestamp": "2026-07-03T11:03:02.270Z",
+            "source": "command_output"
+          },
+          "fake_related_movies": {
+            "timestamp": "2026-07-02T09:39:52.759Z",
+            "source": "command_output"
+          },
+          "test_preview_actor_mapping_filters_empty_non_target_person_ghosts": {
+            "timestamp": "2026-07-02T09:39:52.759Z",
+            "source": "command_output"
+          },
+          "_actor_merge_backup_dir": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_actor_merge_ignored_ghosts_path": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_provider_id": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "get_actor_movies": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "get_actor_profile": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "update_actor_profile": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "_actor_emby_aliases": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_apply_actor_profile_override": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_load_actor_merge_ignored_ghosts": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_save_actor_merge_ignored_ghosts": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_actor_profile_overrides_path": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_load_actor_profile_overrides": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_save_actor_profile_overrides": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_emby_delete_item": {
+            "timestamp": "2026-07-04T16:54:13.330Z",
+            "source": "command_output"
+          },
+          "_get_actor_profile": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "set_actor_avatar_from_url": {
+            "timestamp": "2026-07-03T11:00:25.089Z",
+            "source": "command_output"
+          },
+          "delete_actor_profile": {
+            "timestamp": "2026-07-05T16:11:08.825Z",
+            "source": "command_output"
+          },
+          "_apply_actor_tmdb_metadata": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_set_actor_avatar_bytes": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_set_actor_avatar_from_url": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_tmdb_person_payload": {
+            "timestamp": "2026-07-05T15:24:17.052Z",
+            "source": "command_output"
+          },
+          "_actor_metadata_diff": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_preview_actor_tmdb_metadata": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_media_server_info": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_update_actor_profile": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_save_actor_avatar_override_url": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_delete_actor_profile": {
+            "timestamp": "2026-07-14T08:34:33.659Z",
+            "source": "command_output"
+          },
+          "_tmdb_pick_biography": {
+            "timestamp": "2026-07-05T15:28:41.104Z",
+            "source": "patch"
+          },
+          "_tmdb_external_urls": {
+            "timestamp": "2026-07-05T15:25:05.269Z",
+            "source": "patch"
+          },
+          "_external_urls_from_provider_ids": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "upload_actor_avatar": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "preview_actor_tmdb_metadata": {
+            "timestamp": "2026-07-03T17:58:16.660Z",
+            "source": "command_output"
+          },
+          "apply_actor_tmdb_metadata": {
+            "timestamp": "2026-07-03T17:59:45.838Z",
+            "source": "patch"
+          },
+          "execute_actor_mapping_merge_batch": {
+            "timestamp": "2026-07-03T08:24:39.575Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_download_attempts": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_maybe_schedule_actor_mapping_auto_update": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_execute_actor_mapping_merge_batch": {
+            "timestamp": "2026-07-03T09:19:15.029Z",
+            "source": "command_output"
+          },
+          "sync_online_actor_mapping": {
+            "timestamp": "2026-07-04T18:03:20.319Z",
+            "source": "patch"
+          },
+          "clear_actor_mapping": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "test_set_actor_avatar_bytes_uploads_primary_image_and_sets_override": {
+            "timestamp": "2026-07-03T11:03:02.270Z",
+            "source": "command_output"
+          },
+          "test_preview_actor_tmdb_metadata_returns_diffs": {
+            "timestamp": "2026-07-03T11:03:02.270Z",
+            "source": "command_output"
+          },
+          "test_actor_mapping_name_index_prefers_primary_name_over_other_alias": {
+            "timestamp": "2026-07-03T15:17:00.800Z",
+            "source": "command_output"
+          },
+          "test_parse_person_reads_provider_ids_case_insensitively": {
+            "timestamp": "2026-07-03T15:17:00.800Z",
+            "source": "command_output"
+          },
+          "_tmdb_credentials": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_tmdb_request_params": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_tmdb_headers": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_tmdb_lang_candidates": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_tmdb_get_json": {
+            "timestamp": "2026-07-03T17:13:44.698Z",
+            "source": "command_output"
+          },
+          "_tmdb_profile_url": {
+            "timestamp": "2026-07-05T15:24:17.052Z",
+            "source": "command_output"
+          },
+          "_tmdb_gender_label": {
+            "timestamp": "2026-07-05T15:25:05.269Z",
+            "source": "patch"
+          },
+          "_apply_actor_tmdb_backfill": {
+            "timestamp": "2026-07-04T16:53:57.976Z",
+            "source": "patch"
+          },
+          "preview_actor_tmdb_backfill": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "apply_actor_tmdb_backfill": {
+            "timestamp": "2026-07-04T17:06:35.114Z",
+            "source": "command_output"
+          },
+          "_preview_actor_tmdb_backfill": {
+            "timestamp": "2026-07-14T09:35:39.975Z",
+            "source": "command_output"
+          },
+          "_emby_item_exists": {
+            "timestamp": "2026-07-03T17:59:27.056Z",
+            "source": "patch"
+          },
+          "get_actor_tmdb_backfill_progress": {
+            "timestamp": "2026-07-04T17:06:35.114Z",
+            "source": "command_output"
+          },
+          "_apply_actor_name_sync": {
+            "timestamp": "2026-07-04T18:28:02.934Z",
+            "source": "command_output"
+          },
+          "preview_actor_name_sync": {
+            "timestamp": "2026-07-04T17:06:35.114Z",
+            "source": "command_output"
+          },
+          "apply_actor_name_sync": {
+            "timestamp": "2026-07-04T17:06:44.017Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_online_state_path": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_load_actor_mapping_online_state": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_save_actor_mapping_online_state": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_clear_actor_mapping_records": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_download_actor_mapping_xml": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_sync_actor_mapping_online": {
+            "timestamp": "2026-07-04T18:01:01.375Z",
+            "source": "command_output"
+          },
+          "_actor_identity_names": {
+            "timestamp": "2026-07-14T08:34:33.255Z",
+            "source": "command_output"
+          },
+          "_actor_target_name_for_lang": {
+            "timestamp": "2026-07-14T08:34:33.660Z",
+            "source": "command_output"
+          },
+          "_preview_actor_name_sync": {
+            "timestamp": "2026-07-14T08:34:33.660Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_tmdb_index": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_warning_reason": {
+            "timestamp": "2026-07-04T18:28:17.678Z",
+            "source": "command_output"
+          },
+          "_overview_external_urls": {
+            "timestamp": "2026-07-05T15:27:05.160Z",
+            "source": "patch"
+          },
+          "_translation_name_map": {
+            "timestamp": "2026-07-05T15:27:05.160Z",
+            "source": "patch"
+          },
+          "diagnose_actor_delete": {
+            "timestamp": "2026-07-05T16:11:08.825Z",
+            "source": "command_output"
+          },
+          "_diagnose_actor_delete": {
+            "timestamp": "2026-07-05T16:11:08.825Z",
+            "source": "command_output"
+          },
+          "_actor_mapping_record_for_name_sync": {
+            "timestamp": "2026-07-14T08:34:33.660Z",
+            "source": "command_output"
+          },
+          "_configured_mdc_ng_root_path": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_configured_mdc_ng_actor_mapping_path": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_validate_actor_mapping_xml_path": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          },
+          "_sync_actor_mapping_from_mdc_ng": {
+            "timestamp": "2026-07-14T08:35:00.133Z",
+            "source": "command_output"
+          }
+        },
+        "routes": {
+          "POST /hardlinks/scan": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "POST /hardlinks/delete-hardlink": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "POST /hardlinks/delete-source-chain": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "POST /hardlinks/delete-group": {
+            "timestamp": "2026-06-11T16:35:52.457Z",
+            "source": "command_output"
+          },
+          "GET /item/{item_id}": {
+            "timestamp": "2026-07-02T08:36:43.851Z",
+            "source": "patch"
+          },
+          "GET /hardlinks/groups": {
+            "timestamp": "2026-07-01T09:03:38.894Z",
+            "source": "command_output"
+          },
+          "GET /stream/{item_id}": {
+            "timestamp": "2026-06-24T08:50:18.543Z",
+            "source": "command_output"
+          },
+          "GET /hardlinks/preview-file": {
+            "timestamp": "2026-06-11T16:36:13.936Z",
+            "source": "command_output"
+          },
+          "GET /items": {
+            "timestamp": "2026-07-10T09:19:02.205Z",
+            "source": "command_output"
+          },
+          "POST /items/delete-chain": {
+            "timestamp": "2026-07-02T08:36:24.472Z",
+            "source": "command_output"
+          },
+          "GET /config": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "POST /config": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "POST /test": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "GET /libraries": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "GET /sync-state": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "POST /cache/invalidate": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "POST /webhook/emby": {
+            "timestamp": "2026-07-04T18:01:08.781Z",
+            "source": "command_output"
+          },
+          "GET /actors/duplicates": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "POST /actors/mapping/upload": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "GET /actors/mapping/latest-upload": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "POST /actors/mapping/import-latest": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "GET /actors": {
+            "timestamp": "2026-07-10T09:46:19.156Z",
+            "source": "command_output"
+          },
+          "GET /actors/mapping/matches": {
+            "timestamp": "2026-07-14T09:35:39.976Z",
+            "source": "command_output"
+          },
+          "GET /actors/mapping/status": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "GET /actors/mapping/merge-plan": {
+            "timestamp": "2026-07-04T17:06:58.207Z",
+            "source": "patch"
+          },
+          "POST /actors/mapping/merge-execute": {
+            "timestamp": "2026-07-03T09:23:10.528Z",
+            "source": "command_output"
+          },
+          "GET /actor/{actor_id}/movies": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "GET /actor/{actor_id}": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "POST /actor/{actor_id}": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "POST /actor/{actor_id}/avatar-url": {
+            "timestamp": "2026-07-03T11:00:25.089Z",
+            "source": "command_output"
+          },
+          "DELETE /actor/{actor_id}": {
+            "timestamp": "2026-07-05T16:11:08.825Z",
+            "source": "command_output"
+          },
+          "POST /actor/{actor_id}/avatar": {
+            "timestamp": "2026-07-04T16:53:01.397Z",
+            "source": "command_output"
+          },
+          "POST /actor/{actor_id}/metadata/tmdb-preview": {
+            "timestamp": "2026-07-03T17:58:16.660Z",
+            "source": "command_output"
+          },
+          "POST /actor/{actor_id}/metadata/tmdb-apply": {
+            "timestamp": "2026-07-03T17:59:45.838Z",
+            "source": "patch"
+          },
+          "POST /actors/mapping/merge-batch": {
+            "timestamp": "2026-07-03T08:24:39.575Z",
+            "source": "command_output"
+          },
+          "POST /actors/mapping/sync-online": {
+            "timestamp": "2026-07-04T18:03:20.319Z",
+            "source": "patch"
+          },
+          "DELETE /actors/mapping": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "GET /actors/tmdb-backfill/preview": {
+            "timestamp": "2026-07-04T18:01:08.831Z",
+            "source": "command_output"
+          },
+          "POST /actors/tmdb-backfill/apply": {
+            "timestamp": "2026-07-03T17:36:31.736Z",
+            "source": "patch"
+          },
+          "GET /actors/tmdb-backfill/progress/{progress_key}": {
+            "timestamp": "2026-07-04T17:06:35.114Z",
+            "source": "command_output"
+          },
+          "GET /actors/name-sync/preview": {
+            "timestamp": "2026-07-04T17:06:35.114Z",
+            "source": "command_output"
+          },
+          "POST /actors/name-sync/apply": {
+            "timestamp": "2026-07-04T17:06:44.017Z",
+            "source": "command_output"
+          },
+          "GET /actor/{actor_id}/delete-diagnostics": {
+            "timestamp": "2026-07-05T16:11:08.825Z",
+            "source": "command_output"
+          }
+        }
+      }
+    },
+    "frontend/src/views/FilesView.vue": {
+      "functions": [
+        "switchTab"
+      ],
+      "routes": [],
+      "evidence": {
+        "functions": {
+          "switchTab": {
+            "timestamp": "2026-07-01T08:28:09.073Z",
+            "source": "patch"
+          }
+        },
+        "routes": {}
+      }
+    },
+    "frontend/src/views/ActorManagementView.vue": {
+      "functions": [
+        "actor",
+        "actorDisplayAlias",
+        "actorHasConflict",
+        "actorInitial",
+        "actorName",
+        "actorRawName",
+        "batchConflictCount",
+        "batchMergeableGroups",
+        "changedPeopleLabel",
+        "deleteFailedSummary",
+        "handleCoverClick",
+        "handleCoverContextMenu",
+        "handleCrackBadgeClick",
+        "handleDeleteClick",
+        "mappingGroupName",
+        "mergePlanActionable",
+        "mergePlanEmptyActorCount",
+        "openActor",
+        "openEmby",
+        "openMappingPicker",
+        "poll",
+        "rejectedReasonLabel",
+        "selectMergeTarget",
+        "selectedMergeTargetId",
+        "selectedMergeTargetName",
+        "setSort",
+        "startTmdbBackfillProgressPolling",
+        "stopTmdbBackfillProgressPolling",
+        "tmdbBackfillReviewKey",
+        "toggleImageMode"
+      ],
+      "routes": [],
+      "evidence": {
+        "functions": {
+          "actorInitial": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "setSort": {
+            "timestamp": "2026-07-04T16:55:17.394Z",
+            "source": "command_output"
+          },
+          "openEmby": {
+            "timestamp": "2026-07-02T08:34:08.148Z",
+            "source": "command_output"
+          },
+          "openMappingPicker": {
+            "timestamp": "2026-07-03T08:29:35.828Z",
+            "source": "patch"
+          },
+          "actorName": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "mappingGroupName": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "actorHasConflict": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "changedPeopleLabel": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "selectedMergeTargetId": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "selectMergeTarget": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "selectedMergeTargetName": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "actor": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "actorRawName": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "actorDisplayAlias": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "batchMergeableGroups": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "batchConflictCount": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "handleCoverContextMenu": {
+            "timestamp": "2026-07-02T14:15:23.876Z",
+            "source": "command_output"
+          },
+          "handleCoverClick": {
+            "timestamp": "2026-07-02T14:15:23.876Z",
+            "source": "command_output"
+          },
+          "handleDeleteClick": {
+            "timestamp": "2026-07-02T14:15:23.876Z",
+            "source": "command_output"
+          },
+          "handleCrackBadgeClick": {
+            "timestamp": "2026-07-02T14:15:23.876Z",
+            "source": "command_output"
+          },
+          "toggleImageMode": {
+            "timestamp": "2026-07-02T14:29:27.770Z",
+            "source": "command_output"
+          },
+          "openActor": {
+            "timestamp": "2026-07-04T16:56:48.449Z",
+            "source": "command_output"
+          },
+          "mergePlanActionable": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "mergePlanEmptyActorCount": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "rejectedReasonLabel": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "deleteFailedSummary": {
+            "timestamp": "2026-07-04T16:52:48.559Z",
+            "source": "command_output"
+          },
+          "stopTmdbBackfillProgressPolling": {
+            "timestamp": "2026-07-04T16:55:51.507Z",
+            "source": "patch"
+          },
+          "startTmdbBackfillProgressPolling": {
+            "timestamp": "2026-07-04T16:55:17.394Z",
+            "source": "command_output"
+          },
+          "poll": {
+            "timestamp": "2026-07-04T16:55:17.394Z",
+            "source": "command_output"
+          },
+          "tmdbBackfillReviewKey": {
+            "timestamp": "2026-07-04T16:55:17.394Z",
+            "source": "command_output"
+          }
+        },
+        "routes": {}
+      }
+    },
+    "frontend/src/views/ActorDetailView.vue": {
+      "functions": [
+        "_asset_base_url",
+        "_cache_days",
+        "_filetree_url",
+        "_index_ttl_seconds",
+        "_name_candidates",
+        "_normalize_name",
+        "_timeout",
+        "actorAge",
+        "actorInitial",
+        "birthdayLabel",
+        "cancelEdit",
+        "chooseAvatarFile",
+        "goBack",
+        "mergeMissingActorMetadata",
+        "normalizeDate",
+        "openExternal",
+        "openMovie",
+        "syncForm"
+      ],
+      "routes": [],
+      "evidence": {
+        "functions": {
+          "actorInitial": {
+            "timestamp": "2026-07-04T08:47:02.388Z",
+            "source": "command_output"
+          },
+          "syncForm": {
+            "timestamp": "2026-07-04T08:47:02.388Z",
+            "source": "command_output"
+          },
+          "openMovie": {
+            "timestamp": "2026-07-03T18:01:31.860Z",
+            "source": "patch"
+          },
+          "cancelEdit": {
+            "timestamp": "2026-07-04T08:47:54.873Z",
+            "source": "patch"
+          },
+          "openExternal": {
+            "timestamp": "2026-07-03T18:01:31.860Z",
+            "source": "patch"
+          },
+          "chooseAvatarFile": {
+            "timestamp": "2026-07-03T18:00:06.898Z",
+            "source": "patch"
+          },
+          "normalizeDate": {
+            "timestamp": "2026-07-03T17:58:16.560Z",
+            "source": "command_output"
+          },
+          "actorAge": {
+            "timestamp": "2026-07-03T17:58:16.560Z",
+            "source": "command_output"
+          },
+          "birthdayLabel": {
+            "timestamp": "2026-07-03T17:58:16.560Z",
+            "source": "command_output"
+          },
+          "mergeMissingActorMetadata": {
+            "timestamp": "2026-07-03T17:58:16.560Z",
+            "source": "command_output"
+          },
+          "goBack": {
+            "timestamp": "2026-07-03T17:58:16.560Z",
+            "source": "command_output"
+          },
+          "_timeout": {
+            "timestamp": "2026-07-03T17:00:49.025Z",
+            "source": "command_output"
+          },
+          "_filetree_url": {
+            "timestamp": "2026-07-03T17:00:49.025Z",
+            "source": "command_output"
+          },
+          "_asset_base_url": {
+            "timestamp": "2026-07-03T17:00:49.025Z",
+            "source": "command_output"
+          },
+          "_cache_days": {
+            "timestamp": "2026-07-03T17:00:49.025Z",
+            "source": "command_output"
+          },
+          "_index_ttl_seconds": {
+            "timestamp": "2026-07-03T17:00:49.025Z",
+            "source": "command_output"
+          },
+          "_normalize_name": {
+            "timestamp": "2026-07-03T17:00:49.025Z",
+            "source": "command_output"
+          },
+          "_name_candidates": {
+            "timestamp": "2026-07-03T17:00:49.025Z",
+            "source": "command_output"
+          }
+        },
+        "routes": {}
+      }
+    }
+  }
+}
