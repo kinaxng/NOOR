@@ -16,12 +16,14 @@ LATEST_PAGE_CACHE_TTL = 600
 VIDEO_DETAIL_CACHE_TTL = 1800
 FILTER_PAGE_CACHE_TTL = 300
 ACTOR_OPTIONS_CACHE_TTL = 21600
+SERIES_OPTIONS_CACHE_TTL = 900
 DETAIL_ENRICH_CONCURRENCY = 8
 LATEST_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 LATEST_PAGE_CACHE: dict[tuple[str, str, str, str, int, int], dict[str, Any]] = {}
 VIDEO_DETAIL_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 FILTER_PAGE_CACHE: dict[tuple[str, str, str, str, int, int], dict[str, Any]] = {}
 ACTOR_OPTIONS_CACHE: dict[tuple[str], dict[str, Any]] = {}
+SERIES_OPTIONS_CACHE: dict[tuple[str], dict[str, Any]] = {}
 
 
 class JavDBUpstreamError(RuntimeError):
@@ -832,6 +834,77 @@ async def _related_movies(config: dict[str, Any], payload: dict[str, Any]) -> di
     return {"ok": True, "items": items, "total": total, "raw": data}
 
 
+def _series_entries(value: Any) -> list[dict[str, str]]:
+    """Normalize the optional series field returned by a JavDB movie detail."""
+    entries = value if isinstance(value, list) else [value]
+    normalized: list[dict[str, str]] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            name = str(entry.get("name") or entry.get("label") or "").strip()
+            external_id = str(entry.get("external_id") or entry.get("id") or "").strip()
+        else:
+            name = str(entry or "").strip()
+            external_id = ""
+        if name:
+            normalized.append({"id": external_id or name, "name": name})
+    return normalized
+
+
+async def _series_options(config: dict[str, Any]) -> dict[str, Any]:
+    """Build a bounded series directory from recent movie details."""
+    cache_key = (_base(config),)
+    cached = _cache_get(SERIES_OPTIONS_CACHE, cache_key, SERIES_OPTIONS_CACHE_TTL)
+    if cached is not None:
+        return dict(cached)
+
+    recent = await _latest_page_items(config, "all", "update", 1, scan_limit=48)
+    semaphore = asyncio.Semaphore(DETAIL_ENRICH_CONCURRENCY)
+
+    async def load_detail(item: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        code = str(item.get("code") or item.get("number") or "").strip()
+        if not code:
+            return item, {}
+        try:
+            async with semaphore:
+                return item, await _video(config, code)
+        except Exception:
+            return item, {}
+
+    rows = await asyncio.gather(*(load_detail(item) for item in recent))
+    grouped: dict[str, dict[str, Any]] = {}
+    for item, detail in rows:
+        for series in _series_entries(detail.get("series")):
+            key = str(series["id"]).lower()
+            current = grouped.setdefault(key, {
+                "id": series["id"],
+                "name": series["name"],
+                "recent_work_count": 0,
+                "latest_release_date": "",
+                "cover_url": "",
+            })
+            current["recent_work_count"] += 1
+            release_date = str(item.get("release_date") or detail.get("release_date") or detail.get("date") or "")
+            if release_date >= str(current["latest_release_date"]):
+                current["latest_release_date"] = release_date
+                current["cover_url"] = str(item.get("cover_url") or detail.get("cover_url") or "")
+
+    items = sorted(
+        grouped.values(),
+        key=lambda item: (
+            str(item.get("latest_release_date") or ""),
+            int(item.get("recent_work_count") or 0),
+            str(item.get("name") or ""),
+        ),
+        reverse=True,
+    )
+    return _cache_set(SERIES_OPTIONS_CACHE, cache_key, {
+        "ok": True,
+        "items": items,
+        "total": len(items),
+        "sample_size": len(recent),
+    })
+
+
 async def _list_action(config: dict[str, Any], action: str, payload: dict[str, Any]) -> dict[str, Any]:
     page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))
     if action == "rankings":
@@ -1179,6 +1252,8 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
             str(item.get("name_zht") or item.get("name") or "").casefold(),
         ))
         return _cache_set(ACTOR_OPTIONS_CACHE, cache_key, {"ok": True, "items": items, "total": len(items)})
+    if action == "series_options":
+        return await _series_options(config)
     if action == "actor_movies":
         actor_id = str(payload.get("actor_id") or payload.get("id") or "")
         page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))

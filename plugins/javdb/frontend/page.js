@@ -192,6 +192,8 @@ export async function mount(root, sdk) {
     videosSort: 'created',
     videosOrder: 'desc',
     actorSearch: '',
+    seriesSearch: '',
+    seriesSampleSize: 0,
     videoCategories: [],
     videoActors: [],
     videoActorsLoaded: false,
@@ -249,6 +251,7 @@ export async function mount(root, sdk) {
     { value: 'latest', label: '最近更新', path: 'latest' },
     { value: 'rankings', label: '榜单', path: 'rankings' },
     { value: 'actors', label: '演员', path: 'actors' },
+    { value: 'series', label: '系列', path: 'series' },
     { value: 'videos', label: '查看记录', path: 'videos' },
   ]
 
@@ -277,7 +280,7 @@ export async function mount(root, sdk) {
   if (initialTab) state.tab = initialTab
   const initialRelation = currentRouteRelation()
   if (initialRelation) {
-    state.tab = initialTab || (initialRelation.relType === 'actor' ? 'actors' : 'rankings')
+    state.tab = initialTab || (initialRelation.relType === 'actor' ? 'actors' : initialRelation.relType === 'series' ? 'series' : 'rankings')
     state.relation = initialRelation
   }
 
@@ -360,6 +363,10 @@ export async function mount(root, sdk) {
     return state.tab === 'actors' && !state.relation
   }
 
+  function isSeriesDirectoryFrame() {
+    return state.tab === 'series' && !state.relation
+  }
+
   function rerenderCurrentList() {
     renderFilters()
     renderGrid()
@@ -386,7 +393,7 @@ export async function mount(root, sdk) {
   }
 
   function estimatePageSize() {
-    if (isActorRankingFrame() || isActorDirectoryFrame()) {
+    if (isActorRankingFrame() || isActorDirectoryFrame() || isSeriesDirectoryFrame()) {
       const width = grid.clientWidth || root.clientWidth || window.innerWidth
       const cardWidth = 236
       const cols = Math.max(1, Math.floor((width + 16) / cardWidth))
@@ -418,6 +425,7 @@ export async function mount(root, sdk) {
     state.videosSort = 'created'
     state.videosOrder = 'desc'
     state.actorSearch = ''
+    state.seriesSearch = ''
     state.rankingMode = 'top250'
     state.rankingType = 0
     state.rankingPeriod = 'daily'
@@ -431,6 +439,14 @@ export async function mount(root, sdk) {
   }
 
   function setRelation(relType, relId, label, options = {}) {
+    if (relType === 'actor' && state.tab !== 'actors') {
+      state.tab = 'actors'
+      renderTabs()
+    }
+    if (relType === 'series' && state.tab !== 'series') {
+      state.tab = 'series'
+      renderTabs()
+    }
     state.relation = { relType, relId, label }
     state.relationActorMeta = options.meta || null
     state.relationActorSelectedFilters = []
@@ -619,6 +635,11 @@ export async function mount(root, sdk) {
       else if (state.relationActorSort === 'magnets_desc') sorted.sort((a, b) => Number(b.magnets_count || 0) - Number(a.magnets_count || 0))
       else if (state.relationActorSort === 'title_asc') sorted.sort((a, b) => titleOf(a).localeCompare(titleOf(b), 'zh-CN'))
       return sorted
+    }
+    if (isSeriesDirectoryFrame()) {
+      const keyword = state.seriesSearch.trim().toLowerCase()
+      return state.items.filter(item => !keyword || [item.name, item.id]
+        .filter(Boolean).join(' ').toLowerCase().includes(keyword))
     }
     if (state.tab === 'latest') {
       return state.items.filter(item => {
@@ -1074,6 +1095,27 @@ export async function mount(root, sdk) {
       pushRow([
         buildPanelSection('搜索', input ? [input] : []),
       ])
+    } else if (state.tab === 'series') {
+      const input = sdk.ui?.input
+        ? sdk.ui.input({
+            value: state.seriesSearch,
+            placeholder: '搜索近期索引到的系列',
+            className: 'javdb-actor-search',
+            onInput: value => {
+              state.seriesSearch = String(value || '')
+              state.page = 1
+              rerenderCurrentList()
+            },
+          })
+        : null
+      pushRow([
+        buildPanelSection('搜索', input ? [input] : []),
+        buildPanelSection('数据', [
+          sdk.ui.badge
+            ? sdk.ui.badge({ label: `近期 ${state.seriesSampleSize || 0} 部作品索引`, tone: 'info' })
+            : chip(`近期 ${state.seriesSampleSize || 0} 部作品索引`, true, () => {}),
+        ]),
+      ])
     } else if (state.tab === 'videos') {
       pushRow([
         buildPanelSection('筛选方式', videosFilterOptions.map(([value, label]) => sdk.ui.chip({
@@ -1208,6 +1250,7 @@ export async function mount(root, sdk) {
           state.tab === 'rankings'
             ? (state.rankingMode === 'actors' ? 'actors' : state.rankingMode === 'top250' ? 'top250' : 'rankings')
             : state.tab === 'actors' ? 'actor_options'
+            : state.tab === 'series' ? 'series_options'
             : state.tab
         )
       const payload = {
@@ -1241,6 +1284,7 @@ export async function mount(root, sdk) {
       if (seq !== loadSeq) return
       state.items = res.data.items || []
       state.total = Number(res.data.total || state.items.length)
+      state.seriesSampleSize = state.tab === 'series' ? Number(res.data.sample_size || 0) : 0
       state.hasLoadedOnce = true
       if (state.items.length && (state.relation?.relType === 'actor' || (state.tab === 'latest' && remoteLatestFilter !== 'all'))) {
         await enrichWorkItems(state.items)
@@ -1302,6 +1346,7 @@ export async function mount(root, sdk) {
   function renderGrid() {
     grid.innerHTML = ''
     grid.classList.toggle('javdb-grid--actors', isActorRankingFrame() || isActorDirectoryFrame())
+    grid.classList.toggle('javdb-grid--series', isSeriesDirectoryFrame())
     grid.classList.toggle('is-refreshing', state.loading && state.items.length > 0)
     const items = filteredItems()
 
@@ -1311,7 +1356,7 @@ export async function mount(root, sdk) {
     }
 
     if (!items.length) {
-      grid.appendChild(sdk.ui.emptyState({ text: '暂无符合条件的作品' }))
+      grid.appendChild(sdk.ui.emptyState({ text: isSeriesDirectoryFrame() ? '近期索引中没有可用系列' : '暂无符合条件的作品' }))
       return
     }
 
@@ -1339,6 +1384,27 @@ export async function mount(root, sdk) {
         if (item.uncensored) badgeRow.appendChild(sdk.ui.badge({ label: '无码', tone: 'info' }))
         actorCard.appendChild(badgeRow)
         grid.appendChild(actorCard)
+        return
+      }
+      if (isSeriesDirectoryFrame()) {
+        const seriesCard = el('button', 'javdb-series-card')
+        seriesCard.type = 'button'
+        seriesCard.onclick = () => setRelation('series', item.id, item.name)
+        const cover = el('div', 'javdb-series-card__cover')
+        if (item.cover_url) {
+          const image = el('img', 'javdb-series-card__image')
+          image.src = item.cover_url
+          image.alt = item.name || '系列'
+          image.loading = 'lazy'
+          cover.appendChild(image)
+        } else {
+          cover.appendChild(el('span', 'javdb-series-card__fallback', '系列'))
+        }
+        const body = el('div', 'javdb-series-card__body')
+        body.appendChild(el('strong', 'javdb-series-card__title', item.name || '-'))
+        body.appendChild(el('span', 'javdb-series-card__meta', `近期 ${Number(item.recent_work_count || 0)} 部 · ${formatReleaseDate(item.latest_release_date) || '日期未知'}`))
+        seriesCard.append(cover, body)
+        grid.appendChild(seriesCard)
         return
       }
       const badges = []
