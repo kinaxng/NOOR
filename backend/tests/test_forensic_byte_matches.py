@@ -3,6 +3,11 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -24,9 +29,9 @@ def _resolve_current_path(root: Path, rel: str) -> Path:
     return root / rel
 
 
+@pytest.mark.skipif(not (ROOT / "forensics").exists(), reason="recovery evidence is kept in noor-restored")
 def test_byte_level_match_manifest_matches_current_tree() -> None:
-    root = Path(__file__).resolve().parents[2]
-    manifest = root / "forensics" / "current-byte-level-matches.tsv"
+    manifest = ROOT / "forensics" / "current-byte-level-matches.tsv"
     lines = [
         line
         for line in manifest.read_text(encoding="utf-8").splitlines()
@@ -37,6 +42,6 @@ def test_byte_level_match_manifest_matches_current_tree() -> None:
     for line in lines[1:]:
         rel, expected, evidence = line.split("\t", 2)
         assert evidence
-        current = _resolve_current_path(root, rel)
+        current = _resolve_current_path(ROOT, rel)
         assert current.exists(), f"missing current file for {rel}"
         assert _sha256(current) == expected, f"byte match is stale: {rel}"

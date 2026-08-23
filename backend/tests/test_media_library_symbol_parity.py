@@ -4,6 +4,11 @@ import ast
 import inspect
 from pathlib import Path
 
+import pytest
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
 
 def _top_level_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -39,13 +44,13 @@ def _top_level_functions(path: Path) -> set[str]:
     }
 
 
+@pytest.mark.skipif(not (ROOT / "forensics").exists(), reason="recovery evidence is kept in noor-restored")
 def test_media_library_split_keeps_all_original_public_symbols() -> None:
-    root = Path(__file__).resolve().parents[2]
-    original = _top_level_names(root / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
+    original = _top_level_names(ROOT / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
     current: set[str] = set()
-    for module_path in (root / "backend" / "app" / "api" / "endpoints").glob("media_library*.py"):
+    for module_path in (ROOT / "backend" / "app" / "api" / "endpoints").glob("media_library*.py"):
         current.update(_top_level_names(module_path))
-    current.update(_top_level_names(root / "backend" / "app" / "api" / "endpoints" / "actors.py"))
+    current.update(_top_level_names(ROOT / "backend" / "app" / "api" / "endpoints" / "actors.py"))
 
     public_original = {name for name in original if not name.startswith("_")}
     # A standard-library import name that is not needed by the split modules.
@@ -54,27 +59,27 @@ def test_media_library_split_keeps_all_original_public_symbols() -> None:
     assert public_original <= current
 
 
+@pytest.mark.skipif(not (ROOT / "forensics").exists(), reason="recovery evidence is kept in noor-restored")
 def test_media_library_module_exposes_original_public_functions() -> None:
-    root = Path(__file__).resolve().parents[2]
-    original = _top_level_functions(root / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
+    original = _top_level_functions(ROOT / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
     from app.api.endpoints import media_library
 
     missing = sorted(name for name in original if not name.startswith("_") and not hasattr(media_library, name))
     assert missing == []
 
 
+@pytest.mark.skipif(not (ROOT / "forensics").exists(), reason="recovery evidence is kept in noor-restored")
 def test_media_library_module_exposes_all_original_functions() -> None:
-    root = Path(__file__).resolve().parents[2]
-    original = _top_level_functions(root / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
+    original = _top_level_functions(ROOT / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
     from app.api.endpoints import media_library
 
     missing = sorted(name for name in original if not hasattr(media_library, name))
     assert missing == []
 
 
+@pytest.mark.skipif(not (ROOT / "forensics").exists(), reason="recovery evidence is kept in noor-restored")
 def test_media_library_module_exposes_all_original_top_level_names() -> None:
-    root = Path(__file__).resolve().parents[2]
-    original = _top_level_names(root / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
+    original = _top_level_names(ROOT / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
     from app.api.endpoints import media_library
 
     missing = sorted(name for name in original if name != "base64" and not hasattr(media_library, name))

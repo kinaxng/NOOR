@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -124,7 +125,8 @@ def test_subtitle_index_migrates_strongest_legacy_database(monkeypatch: pytest.M
 
 
 def test_lada_model_weights_fallback_uses_noor_data_dir():
-    assert settings_helpers.get_lada_model_weights_dir_from_env({}) == "/home/kinax/noor-restored/data/models/lada"
+    expected_default = str(Path(__file__).resolve().parents[2] / "data" / "models" / "lada")
+    assert settings_helpers.get_lada_model_weights_dir_from_env({}) == expected_default
     assert settings_helpers.get_lada_model_weights_dir_from_env({"NOOR_DATA_DIR": "/noor-data"}) == "/noor-data/models/lada"
     assert settings_helpers.get_lada_model_weights_dir_from_env({"LADA_MODEL_WEIGHTS_DIR": "/external/lada"}) == "/external/lada"
 
