@@ -25,6 +25,8 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Expanded byte-level original-source matches from the pre-takeover backup: stable backend/frontend config, tooling, docs, and UI files that were unchanged in the original commit index now have 53 verified rows in `forensics/current-byte-level-matches.tsv`. `test_forensic_byte_matches.py` still rechecks every row against the current tree.
+- Verification after the evidence expansion: recovery-workspace backend full `pytest` passes with `283 passed, 1 warning`, frontend production build passes, and plugin validation remains all `NOOR_PLUGIN_OK`.
 - Restored the subscription center original card workflow: source/quality metadata, expanded candidate comparison, edit mode, and old-version acknowledgment are back.
 - Recommendation center now returns `type: recommendation` and renders maker/series/director as clean names when DBOnline returns Python-style dict strings. Latest mode pulls 最新更新 plus 日榜/周榜/月榜 and keeps only those latest source tags on cards. Full candidate-pool background scans also enrich up to `detail_limit` candidates with actors, categories, maker/series/director, covers, subtitles, cracked signals, and magnet metadata.
 - Restored missing scoped styles in `SystemSettings.vue` and `StorageSettings.vue` from original Vite cache evidence: library chips, Webhook box/guide, settings toggle, field rows, directory picker, scan groups, and save/action buttons now use the NOOR visual system again.
