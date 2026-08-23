@@ -485,3 +485,7 @@ Notes:
   FaceFusion badge/tracker settings, plugin routing/avatar/control-panel SDK,
   LADA job navigation/progress, and the Chicken Rice single-chain Whisper UI.
   It also asserts retired Whisper multi-chain markers do not return.
+- Final convergence recheck: the last four pre-delete commits are present
+  (ignored ghost actors, FaceFusion 3.8.0, face tracker score, JavDB recent
+  series directory), all 53 byte-level evidence matches still validate, and the
+  restored runtime smoke passes every main route without HTTP or console errors.
