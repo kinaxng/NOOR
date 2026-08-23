@@ -226,6 +226,14 @@
   `whisper/merge.py`、`enhancer.py`、`preprocess.py`、旧 decoupled 链是最终版有意
   删除或收敛后的历史路径。
 
+- 恢复原版插件图标：`mdc-ng-manual` 的 `frontend/icons/service.svg` 与
+  `sidebar.svg`、`av-graph` 的 `frontend/icons/service.svg` 已按历史 rollout
+  路径补回，插件清单声明与静态资源均通过 HTTP 200 校验。
+- 从预接管备份恢复 `frontend/public/img/body-background.png`，前端生产构建不再出现
+  该静态资源未解析警告。
+- 将 `data/av_recommend/` 与 `data/subscription_core/` 加入 `.gitignore`，并从 Git
+  索引移除候选池/订阅状态运行数据，磁盘文件保留。
+
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。

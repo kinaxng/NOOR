@@ -385,3 +385,7 @@ the recovered bytecode modules remain unchanged.
 The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
 outside cache directories remain versioned as forensic evidence.
+
+- Restored original plugin icon assets: MDC-NG `frontend/icons/{service,sidebar}.svg` and AV graph `frontend/icons/service.svg`; all plugin manifest icons and frontend entries now resolve through the backend with HTTP 200.
+- Restored `frontend/public/img/body-background.png` from the pre-takeover backup. The production build no longer reports the unresolved `/img/body-background.png` warning.
+- Removed `data/av_recommend/candidate_pool.json` and `data/subscription_core/subscriptions.json` from the Git index while keeping the files on disk. `.gitignore` now covers both runtime directories.
