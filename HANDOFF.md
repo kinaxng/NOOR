@@ -64,11 +64,10 @@ Last updated: 2026-08-24 Asia/Shanghai
 Backend restart:
 
 ```bash
-old=$(pgrep -f '^/home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9899' || true)
-[ -n "$old" ] && kill $old && sleep 1
-cd /home/kinax/noor-restored/backend
-nohup /home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9899 --forwarded-allow-ips='*' > /tmp/noor-backend-9899.log 2>&1 &
-sleep 2
+tmux kill-session -t noor-backend-9899 2>/dev/null || true
+tmux new-session -d -s noor-backend-9899 -c /home/kinax/noor-restored/backend \
+  "/home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9899 --forwarded-allow-ips='*'"
+sleep 3
 curl -s http://127.0.0.1:9899/api/health
 ```
 
