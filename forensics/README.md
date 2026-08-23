@@ -55,3 +55,10 @@ application.
   rollout patches. It contains 188 functions and 43 original media-library
   routes. Four XML/online mapping routes were intentionally replaced later by
   the MDC-NG mapping workflow.
+
+`raw-vite-sourcemaps/` stores 120 original Vue/TS/JS files recovered from inline
+Vite source maps found in the raw ext4 image. Each filename starts with the first
+twelve characters of `sha1(<image-offset>)`; `all-sourcemap-hits.txt` preserves
+the raw image offsets and `extract-vite-all.log` records every parse result.
+These are disk-recovered `sourcesContent`, not reconstructed files. The extractor
+is `extract_vite_sourcemaps.py`.

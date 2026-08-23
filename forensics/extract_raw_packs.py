@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
+import signal
 import struct
 import subprocess
 import zlib
@@ -64,10 +65,14 @@ def pack_length(f, offset: int) -> int:
         decompressor = zlib.decompressobj()
         output = b""
         consumed = 0
+        read_bytes = 0
         while len(output) < size or not decompressor.eof:
             chunk = f.read(1 << 20)
             if not chunk:
                 raise EOFError(f"zlib eof obj {obj} size {size} got {len(output)}")
+            read_bytes += len(chunk)
+            if read_bytes > 64 * 1024 * 1024:
+                raise ValueError(f"object {obj} compressed data exceeds 64MiB")
             output += decompressor.decompress(chunk)
             if decompressor.unused_data:
                 consumed = len(chunk) - len(decompressor.unused_data)
@@ -95,7 +100,11 @@ def main() -> None:
             original_prefixes.append(line.split("\t")[0])
 
     offsets = sorted(
-        {int(line) for line in pathlib.Path(args.scan_log).read_text().split() if line.strip().isdigit()}
+        {
+            int(line)
+            for line in pathlib.Path(args.scan_log).read_text().splitlines()
+            if line.strip().isdigit()
+        }
     )
     print(f"offsets {len(offsets)}", flush=True)
     with open(args.raw, "rb") as raw_file:
@@ -104,6 +113,7 @@ def main() -> None:
             if pack_path.exists() and pack_path.with_suffix(".idx").exists():
                 print(f"SKIP {offset}", flush=True)
                 continue
+            signal.alarm(120)
             try:
                 meta = pack_meta(raw_file, offset)
                 if meta is None:
@@ -149,6 +159,8 @@ def main() -> None:
                 )
             except Exception as exc:
                 print(f"FAIL {offset} {exc!r}", flush=True)
+            finally:
+                signal.alarm(0)
     print("EXTRACT_DONE", flush=True)
 
 

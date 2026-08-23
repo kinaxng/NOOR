@@ -256,6 +256,11 @@ the recovered bytecode modules remain unchanged.
   byte-level evidence, including the May component tree, `GlobalSearch.vue`,
   early `ResourceSearch.vue`, and late `Home.vue` / `AppSidebar.vue` /
   `FaceFusionPanel.vue` versions.
+- Inline Vite source maps in the raw ext4 image were scanned independently and
+  extracted with `forensics/extract_vite_sourcemaps.py`. The 120 recovered
+  `sourcesContent` files are archived under `forensics/raw-vite-sourcemaps/`
+  with the original image offsets and parse log. The current `Home.vue` is
+  byte-identical to the latest recovered disk copy.
 - The task history page was restored from original May source plus the June/July
   rollout patches. It now includes the original expandable report card: task
   duration, score, metadata, diagnostics summary, and `/jobs/{id}/logs` tail.
