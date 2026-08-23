@@ -535,3 +535,18 @@
 - 保留用户明确要求的通用 `hardlink_source_actions` 插件动作与
   `/files/hardlinks?q=` 路由搜索参数，不回退到旧 MDC 专有动作。
 - 验证：前端生产构建通过。
+
+## HANDOFF 与最终行为复核（2026-08-24）
+
+- 根目录 `HANDOFF.md` 已恢复，并适配为恢复工作区路径与 9899 后端端口；
+  原始证据继续保留在 `forensics/original-handoff.md` 和
+  `forensics/recovered-sources/original-read-snapshots/`。
+- 无头 Chromium 复核以下最终路由均正常渲染：
+  `/library`、`/files/actors`、`/jobs/background`、
+  `/settings/facefusion`、`/plugins/av-recommend`。
+- 当前 OpenAPI 的 `/api/media-library/actor*` / `/actors*` 路由与原版
+  `media_library.early-replayed.py` 清单一致，覆盖映射、重名、合并、批量合并、
+  TMDB 补全、名称同步、头像和删除诊断。
+- 重新扫描当前源码与全部 Vite 缓存 / source map / 读取快照后，没有发现
+  尚未登记的字节级匹配；`forensics/current-byte-level-matches.tsv` 保持 44 行。
+- 文件级审计仍为 131 `verified`、0 `pending`、0 `missing`、6 `intentional`。
