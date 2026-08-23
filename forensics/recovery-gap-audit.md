@@ -415,3 +415,12 @@
 - 中文补齐 `settings.whisper.segmenter.*` 6 个 Whisper 分段器选项文案；
   英文补齐 `jobs.cancelled`、`jobs.emptyCancelled` 2 个任务状态文案。
 - 中英文 `zh.ts` / `en.ts` 键集现已完全一致，前端生产构建通过。
+
+## BaseToast 原版恢复（2026-08-23）
+
+- `frontend/src/components/noor/BaseToast.vue` 已切回
+  `forensics/frontend-snapshots/vite-cache-chromium/latest/src/components/noor/BaseToast.vue`，
+  与原版 2026-04-12 读取快照字节一致。
+- 移除此前重建中新增的硬编码中文标题、duration 计时条和 271 行重设计；
+  原版是通用 i18n 消息 toast，不绑定中文文案。
+- 验证：`vue-tsc && vite build` 通过。
