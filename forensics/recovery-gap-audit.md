@@ -680,6 +680,13 @@
 - 最终全路由无头浏览器复核：主路由与全部插件路由均无 4xx/5xx、无 console error。
 - JavDB 演员目录在 mount 时读取一次 `/plugins` 判断 Gfriends 是否启用；禁用时不再对每个演员卡片调用 `resolve`。Puppeteer 实测 Gfriends resolve 请求从 9 次降为 0 次，演员列表仍正常加载。
 
+## 下载器运行配置恢复（2026-08-24）
+
+- 从原版读取快照恢复 qBittorrent 配置并启用：`http://192.168.31.10:8089`、v5.2.3、Cookie 认证可连通。
+- 订阅中心不再卡在“没有已启用的兼容下载器”；待订阅 `CJOD-528` 已实际推送到 qBittorrent，任务进入下载状态。
+- 新增 `forensics/restore_plugin_downloader_config.py`，从取证快照重建 qBittorrent/迅雷基础配置和订阅默认保存路径，脚本不内联凭据。
+- 运行数据文件继续被 `.gitignore` 忽略，不会把本地令牌/密码带入 Git 提交。
+
 ## 资源下载解析收敛（2026-08-24）
 
 - `PluginRuntime.resolve_resource_download()` 不再直接信任旧缓存或第三方插件返回的精简资源：
