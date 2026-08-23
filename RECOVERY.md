@@ -200,6 +200,12 @@ the recovered bytecode modules remain unchanged.
 
 - 已恢复 App 启动时系统封面模糊同步：前端读取 `GET /settings/ui`，后端恢复对应读取路由。
 
+- 2026-08-23 新增字节级前端证据恢复：`composables/useTheme.ts`、`main.ts` 按原始
+  Vite source map 恢复；`components/noor/SubtitlePreview.vue` 与 4 月预接管原始
+  工作树字节一致；`components/ui/FilterPanel.vue` 与早期会话补丁回放字节一致。
+  `forensics/current-byte-level-matches.tsv` 已更新到 31 个字节级匹配文件，
+  新增回放证据已归档到 `forensics/recovered-sources/`。
+
 ## Validated Recovery Progress (2026-08-11)
 
 - The isolated frontend and backend are running at `http://192.168.31.3:5173/` and

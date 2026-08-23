@@ -26,3 +26,7 @@ views/Dashboard.vue	1d96280e0cb06b424d1e2d9f80e2e17b579b3c918e731d785a98206a4020
 views/History.vue	23fafe5b07e61cf3de003fd949ef4ba1d3b9927fa9e9b51e6059cd6f293e8cdc	vite-cache-chromium:views/History.vue
 views/Home.vue	e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd	raw-vite-sourcemaps:89ad8dbfc20f-Home.vue; raw-vite-sourcemaps:f45e3e5c6fbf-Home.vue; raw-vite-sourcemaps:a283058d6f7a-Home.vue; vite-cache-devtools:views/Home.vue
 views/settings/LadaSettings.vue	fb45f9fc965131dff3da089300d8943a73c14bc3bfb6d1063d52baa4f95764e8	vite-cache-chromium:views/settings/LadaSettings.vue
+composables/useTheme.ts	3531c1a51ec5b7ee7ffe9596d9dccfd6937decd72cd8acf3414510e6303bddc6	raw-vite-sourcemaps:6efa558bbf0c-useTheme.ts
+main.ts	320dd7e47c8a9b912393ae6374e46fcda00a38e8903734c0b4a4eba1f656a88f	raw-vite-sourcemaps:de962be17590-main.ts
+components/noor/SubtitlePreview.vue	653002845abac09705718fd795421bdcfa4436232fc4698c544c2c6d3c62dbe4	early-apr12:noor-original-apr12/noor/frontend/src/components/noor/SubtitlePreview.vue
+components/ui/FilterPanel.vue	a99502f341fa508482a9e89afa4684bfe45cb4c65ee2439ba508f15cff4b0b7d	early-session-replay:2026-04-12-rollout:FilterPanel.vue

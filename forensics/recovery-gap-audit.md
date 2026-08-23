@@ -83,8 +83,20 @@
   VAD/timing refiner、NOOR 环境依赖来源与旧链路移除；`MediaDetailPanel.vue`
   已覆盖 Emby stream 优先/本地 hardlink 回退和标签去重；`App.vue` 已覆盖全局
   搜索、封面模糊快捷键、前端诊断日志与启动时 `/settings/ui` 全局模糊同步。
+- 本轮新增 4 个字节级恢复点：`composables/useTheme.ts` 与 `main.ts` 按原始 Vite
+  source map 恢复（含原版注释/导入），`components/noor/SubtitlePreview.vue` 与
+  4 月预接管原始工作树完全一致，`components/ui/FilterPanel.vue` 与早期会话补丁
+  回放结果完全一致。
+- `FilterPanel.vue` 的早期会话回放结果已归档为
+  `forensics/recovered-sources/FilterPanel.vue.early-replayed.vue`，
+  `SubtitlePreview.vue` 的 4 月原始文件已归档为
+  `forensics/recovered-sources/SubtitlePreview.vue.early-apr12.vue`，
+  并加入 `forensics/recovered-sources/SHA256SUMS`。
+- 恢复后前端 `npm run build` 通过，后端 `pytest` 仍为 216 项通过；`useTheme.ts`
+  和 `main.ts` 恢复原版后不触发 `vue-tsc` 未使用变量错误。
+
 - 字节级匹配扫描：新增 `forensics/current-byte-level-matches.tsv`，当前
-  27 个前端文件已与 Vite source map 或浏览器缓存证据完全一致；其中
+  31 个前端文件已与 Vite source map、浏览器缓存或早期会话证据完全一致；其中
   `JobCard`、`JobChainPanel`、`MediaCard`、`VuiProgress`、`History`、
   `LadaSettings` 本次按证据补回仅有的空行/换行差异，已恢复字节级一致。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立

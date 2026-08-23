@@ -48,7 +48,7 @@
 | `backend/app/core/runtime_paths.py` | 4 | verified | 72d45aa Share default data dir constant | 616866a Preserve recovered NOOR backend artifacts |
 | `backend/app/pipeline/whisper/engine.py` | 4 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/tests/test_settings_response.py` | 4 | verified | 217a5e8 Embed FaceFusion runtime in NOOR | 558869c Restore settings contract and media library API tests |
-| `frontend/src/components/noor/MediaCard.vue` | 4 | verified | 4dd6c51 Aggregate FaceFusion variant badge state | 84bb8a7 Recover original media card and tabs |
+| `frontend/src/components/noor/MediaCard.vue` | 4 | verified | 4dd6c51 Aggregate FaceFusion variant badge state | b53b875 Restore byte-level frontend matches from cache evidence |
 | `frontend/src/views/Home.vue` | 4 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 3e4cdc0 Recover original media library view |
 | `plugins/xunlei-remote/backend.py` | 4 | verified | 1feffc1 Change Xunlei residual handling to search and delete | ef1f76c Recover Xunlei download path management |
 | `plugins/xunlei-remote/frontend/page.js` | 4 | verified | 7d9120d Simplify Xunlei residual cleanup flow | 5ced5cf Recover Xunlei remote management frontend |
@@ -89,12 +89,12 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 64e9a8e Fix storage directory picker writeback for AI roots |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | b53b875 Restore byte-level frontend matches from cache evidence |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
 | `frontend/src/views/FilesView.vue` | 2 | verified | 527f96d Add media actor management tab | 2a7fe62 Restore exact historical actor workspace sources |
-| `frontend/src/views/settings/LadaSettings.vue` | 2 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | 6ff12d0 Recover original routed application shell |
+| `frontend/src/views/settings/LadaSettings.vue` | 2 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | b53b875 Restore byte-level frontend matches from cache evidence |
 | `frontend/src/views/settings/WhisperSettings.vue` | 2 | verified | 0184022 Add Whisper runtime tier selection | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/av-recommend/backend.py` | 2 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/av-recommend/frontend/style.css` | 2 | verified | 6ab498a Refine recommendation detail panel layout | 2129a70 Restore recommendation cover fallback chain |

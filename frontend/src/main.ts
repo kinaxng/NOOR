@@ -9,6 +9,7 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 
+// Initialize theme from localStorage before mounting
 useTheme()
 
 app.mount('#app')
