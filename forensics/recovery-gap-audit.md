@@ -72,6 +72,11 @@
 
 ## 第二遍证据复核（2026-08-24）
 
+- 扩展 `forensics/smoke_restored_pages.js`：覆盖设置页全部子页
+  （system/storage/lada/facefusion/whisper/local-library/plugins）、
+  文件硬链接页、AV 图谱、Gfriends、MDC-NG、M-Team、迅雷远程及无独立入口的
+  AVDB 页面；当前运行无 HTTP 4xx/5xx、无 console error。
+
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
   `original-path-inventory.tsv`：未发现可新增登记的字节级匹配，
   `forensics/current-byte-level-matches.tsv` 仍是当前全部字节级证据集合。
