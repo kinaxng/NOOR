@@ -242,6 +242,9 @@ the recovered bytecode modules remain unchanged.
 - Recommendation and subscription plugin pages keep the final latest/full recommendation
   modes, merged candidate-pool stats (`total+today`), subscribe actions, inline detail
   panels, and fallback cover loading after refresh.
+- The recovered settings contract, Whisper single-chain modules, and FaceFusion
+  runner/API modules were marked verified against the preserved bytecode, final
+  parameter defaults, and current test coverage.
 
 ## Recovery Consistency (2026-08-23)
 

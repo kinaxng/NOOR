@@ -52,6 +52,8 @@
   控制；迅雷远程残留处理为 `.xltd/.xtld` 删除后按番号跳转搜索页。
 - 推荐/订阅插件已核对最终行为：推荐中心为 `latest`/`full` 两种模式，
   候选池显示 `总数+今日增量`，卡片支持订阅、详情面板和刷新后封面回退。
+- 后端高置信模块已登记为 verified：设置契约/更新、FaceFusion runner/API、
+  Whisper engine/orchestrator/strategy/runtime tier，以及对应测试。
 
 ## 本轮一致性收敛（2026-08-23）
 
