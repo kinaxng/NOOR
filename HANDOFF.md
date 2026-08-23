@@ -2,11 +2,30 @@
 
 Last updated: 2026-06-10 Asia/Shanghai
 
+## Recovery Note (2026-08-23)
+
+- The original `/home/kinax/noor` source tree was deleted. The isolated recovery
+  workspace is `/home/kinax/noor-restored`; do not treat the current
+  `/home/kinax/noor` directory as the source of truth.
+- The recovered frontend runs at `http://192.168.31.3:5173/` and the recovered
+  backend currently listens on `127.0.0.1:9899`.
+- Original-handoff evidence is archived at
+  `/home/kinax/noor-restored/forensics/original-handoff.md`.
+- Disk/browser source-map evidence is archived under
+  `/home/kinax/noor-restored/forensics/raw-vite-sourcemaps/` and
+  `/home/kinax/noor-restored/forensics/frontend-snapshots/`.
+- The original Git pack was not recovered from the raw disk image. Current source
+  is a mix of byte-level source-map evidence, early pre-takeover backup, rollout
+  replay, preserved bytecode contracts, and verified reconstruction. The gap
+  audit is in `/home/kinax/noor-restored/forensics/recovery-gap-audit.md`.
+- Do not restore retired subscription/wash recommendation modes, online actor
+  mapping upload, or the old Whisper multi-chain source.
+
 ## Hard Rules
 
-- Repo: `/home/kinax/noor`
+- Recovery workspace: `/home/kinax/noor-restored`
 - Frontend dev server: Vite on `5173`
-- Backend dev server: FastAPI/Uvicorn on `9898`
+- Recovered backend dev server: FastAPI/Uvicorn on `9899`
 - Do **not** touch Docker backend on `19898`.
 - Do **not** recursively search `/home/kinax`, `$HOME`, `/`, `/home/kinax/Videos`, or `/home/kinax/Music`.
 - NFS mounts under home:
@@ -14,7 +33,7 @@ Last updated: 2026-06-10 Asia/Shanghai
   - `/home/kinax/Music`
 - Safe code search pattern:
   ```bash
-  cd /home/kinax/noor
+  cd /home/kinax/noor-restored
   grep -R -n "pattern" backend frontend plugins \
     --exclude-dir=node_modules \
     --exclude-dir=dist \
@@ -29,12 +48,12 @@ Last updated: 2026-06-10 Asia/Shanghai
 Backend restart:
 
 ```bash
-old=$(pgrep -f '^/home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 9898' || true)
+old=$(pgrep -f '^/home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9899' || true)
 [ -n "$old" ] && kill $old && sleep 1
-cd /home/kinax/noor/backend
-nohup /home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 9898 --forwarded-allow-ips='*' > /tmp/noor-backend-9898.log 2>&1 &
+cd /home/kinax/noor-restored/backend
+nohup /home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9899 --forwarded-allow-ips='*' > /tmp/noor-backend-9899.log 2>&1 &
 sleep 2
-curl -s http://127.0.0.1:9898/api/health
+curl -s http://127.0.0.1:9899/api/health
 ```
 
 Frontend usually runs on `5173`; check before restarting:
@@ -356,12 +375,12 @@ Recommended next implementation order:
 ## Good First Commands in a Fresh Context
 
 ```bash
-cd /home/kinax/noor
+cd /home/kinax/noor-restored
 cat HANDOFF.md
 cat AGENTS.md
 git status --short | sed -n '1,120p'
 ps -eo pid,ppid,etime,stat,comm,args | grep -E 'uvicorn app.main:app|vite|npm run dev|pnpm run dev' | grep -v grep
-curl -s http://127.0.0.1:9898/api/health
+curl -s http://127.0.0.1:9899/api/health
 ```
 
 ## Latest Gfriends Validation
