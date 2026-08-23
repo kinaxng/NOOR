@@ -59,7 +59,6 @@ const navItems = computed(() => {
 })
 
 const activeNavName = computed(() => {
-  if (route.name === 'actor-detail' || route.path.startsWith('/actors/')) return t('files.actors.title')
   if (route.path.startsWith('/plugins/')) {
     const plugin = enabledPagePlugins.value.find(p => route.path === p.route || route.path.startsWith(`${p.route}/`))
     return plugin?.contributions?.sidebar?.label || plugin?.name || '插件'
@@ -306,9 +305,8 @@ onMounted(() => {
         <div class="flex items-center gap-3">
           <!-- Hamburger (mobile only) -->
           <button
-            class="navbar-icon-btn lg:hidden"
+            class="navbar-icon-btn hidden lg:hidden"
             @click="mobileSidebarOpen = true"
-            title="打开导航"
           >
             <BaseIcon name="menu" class="w-4 h-4" />
           </button>
@@ -441,12 +439,13 @@ onMounted(() => {
 }
 
 .navbar-search-trigger {
-  min-width: 10rem;
+  width: 2.375rem;
   height: 2.375rem;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: .5rem;
-  padding: 0 .72rem;
+  padding: 0;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: var(--radius-md);
   background: rgba(255,255,255,.05);
@@ -462,8 +461,10 @@ onMounted(() => {
   flex: 1;
   text-align: left;
   font-size: .78rem;
+  display: none;
 }
 .navbar-search-trigger__kbd {
+  display: none;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: .42rem;
   padding: .08rem .32rem;
@@ -471,17 +472,17 @@ onMounted(() => {
   font-size: .62rem;
 }
 @media (min-width: 768px) {
-  .navbar-search-trigger { display: inline-flex; }
-}
-@media (max-width: 767px) {
   .navbar-search-trigger {
-    min-width: 2.375rem;
-    width: 2.375rem;
-    padding: 0;
-    justify-content: center;
+    width: auto;
+    min-width: 10rem;
+    justify-content: flex-start;
+    padding: 0 .72rem;
   }
+
   .navbar-search-trigger__text,
-  .navbar-search-trigger__kbd { display: none; }
+  .navbar-search-trigger__kbd {
+    display: inline-flex;
+  }
 }
 
 .navbar-icon-btn {

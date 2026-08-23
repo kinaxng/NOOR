@@ -2,6 +2,20 @@
 
 更新时间：2026-08-23
 
+## 原版证据复核修正（2026-08-23）
+
+- 演员删除诊断属于原版最终功能，不是恢复期自造：
+  `GET /actor/{actor_id}/delete-diagnostics` 同时出现在
+  `forensics/recovered-sources/media_library.early-replayed.py`、
+  `media_library.final-replayed.py`、`forensics/original-symbol-index.json` 和
+  `2a7fe62` 历史演员工作区源码中。`ActorDetailView.vue` 的删除诊断 UI、
+  i18n 键、后端 `diagnose_actor_delete` 兼容入口及相关测试均已保留。
+- `RecommendedDiagnostics` / `RecommendedDiagnosticsSegment` 在原版读取快照和
+  Vite 缓存快照中都有证据，已恢复 `frontend/src/api/types.ts`，避免与
+  恢复后的 `History.vue` / 任务历史类型契约脱节。
+- 当前验证：`frontend` 生产构建通过；后端全量 `pytest` 238 项通过
+  （命令需带 `PYTHONPATH=backend`）。
+
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。
 
@@ -36,7 +50,7 @@
   FF/LADA/字幕/详情/删除面板入口、Emby webhook 同步与移动端响应式样式。
 - 演员管理/详情页：与 `2a7fe62` 中按历史工作区源码恢复的版本一致。
 - 媒体库页面：Emby 数据可读，549 位演员、作品列表、破解/中字/流出/无码标签可用。
-- 前端构建通过，后端 `pytest` 216 项通过；`compileall` 无语法错误。
+- 前端构建通过，后端 `pytest` 238 项通过；`compileall` 无语法错误。
 - `StorageSettings.vue`：已恢复为最终“两个大头目录”形态，只编辑模型根目录、
   运行时根目录、NOOR 数据目录和数据库只读路径；子模块缓存/临时目录输入已移除。
 - `SystemSettings.vue`：MDC-NG 路径、演员映射自动更新、Emby 连接与 webhook
