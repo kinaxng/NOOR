@@ -44,7 +44,7 @@
 | `backend/tests/test_facefusion_runner.py` | 6 | verified | b2cb29b Clean FaceFusion task runtime resources | 24f438b Restore configured FaceFusion model routing |
 | `backend/app/api/endpoints/media_library_helpers.py` | 5 | verified | c3b736f Separate uncensored media tagging from cracked titles | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/settings_facefusion_upgrade.py` | 5 | verified | a668dcc Preserve FaceFusion content patches on upgrade | b3dd5ac Restore FaceFusion upstream revision tracking |
-| `frontend/src/views/settings/StorageSettings.vue` | 5 | verified | 41153cc Simplify AI storage path settings | d8f7414 Restore final AI storage settings and verify settings panels |
+| `frontend/src/views/settings/StorageSettings.vue` | 5 | verified | 41153cc Simplify AI storage path settings | 64e9a8e Fix storage directory picker writeback for AI roots |
 | `backend/app/core/runtime_paths.py` | 4 | verified | 72d45aa Share default data dir constant | 616866a Preserve recovered NOOR backend artifacts |
 | `backend/app/pipeline/whisper/engine.py` | 4 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/tests/test_settings_response.py` | 4 | verified | 217a5e8 Embed FaceFusion runtime in NOOR | 558869c Restore settings contract and media library API tests |
@@ -89,7 +89,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 94df91e Restore final Jobs view from original session replay |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 64e9a8e Fix storage directory picker writeback for AI roots |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
