@@ -16,7 +16,7 @@
 
 | 路径 | 原版提交数 | 状态 | 原版最后提交 | 当前最后提交 |
 | --- | ---: | --- | --- | --- |
-| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | cba9c12 Restore media library detail and Emby proxy-safe calls |
+| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | e76dc33 Complete media library legacy symbol compatibility |
 | `backend/app/pipeline/whisper/decoupled/qwen3.py` | 2 | intentional | c96ca5d Share Whisper cache path candidates | - |
 | `backend/app/pipeline/whisper/preprocess.py` | 2 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
 | `backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py` | 1 | intentional | 17602ad Organize AI runtime storage paths | - |
@@ -64,7 +64,7 @@
 | `plugins/av-recommend/frontend/page.js` | 3 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/qbittorrent/backend.py` | 3 | verified | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | verified | 7d9120d Simplify Xunlei residual cleanup flow | ba4a75e Restore final UI details and plugin runtime data paths |
-| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | cba9c12 Restore media library detail and Emby proxy-safe calls |
+| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | e76dc33 Complete media library legacy symbol compatibility |
 | `backend/app/api/endpoints/media_library_item_detail.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | cba9c12 Restore media library detail and Emby proxy-safe calls |
 | `backend/app/api/settings_helpers.py` | 2 | verified | 106df4b Prefer bundled LADA python path | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/settings_status_helpers.py` | 2 | verified | a382063 Add FaceFusion model management settings tab | 76ea151 Restore final LADA runtime and settings helpers |
@@ -82,7 +82,7 @@
 | `backend/app/pipeline/whisper/types.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/tasks/job_phases.py` | 2 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 18410b1 Restore Whisper line-retry and session diff evidence |
 | `backend/app/tasks/manager_helpers.py` | 2 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | cba9c12 Restore media library detail and Emby proxy-safe calls |
+| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | e76dc33 Complete media library legacy symbol compatibility |
 | `backend/tests/test_lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 6ba66c2 Recover original session reads and storage env contracts |
 | `backend/tests/test_lada_runner_cancel.py` | 2 | verified | e436cc0 Split LADA runtime cache directories | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_runtime_cleanup.py` | 2 | verified | 1a02e32 Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
@@ -97,7 +97,7 @@
 | `frontend/src/views/FilesView.vue` | 2 | verified | 527f96d Add media actor management tab | 2a7fe62 Restore exact historical actor workspace sources |
 | `frontend/src/views/settings/LadaSettings.vue` | 2 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | b53b875 Restore byte-level frontend matches from cache evidence |
 | `frontend/src/views/settings/WhisperSettings.vue` | 2 | verified | 0184022 Add Whisper runtime tier selection | ba4a75e Restore final UI details and plugin runtime data paths |
-| `plugins/av-recommend/backend.py` | 2 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 6ba66c2 Recover original session reads and storage env contracts |
+| `plugins/av-recommend/backend.py` | 2 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 6b26253 Stop using recovery media library fallback in core paths |
 | `plugins/av-recommend/frontend/style.css` | 2 | verified | 6ab498a Refine recommendation detail panel layout | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/gfriends/backend.py` | 2 | verified | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
 | `plugins/qbittorrent/frontend/page.js` | 2 | verified | fd44ab3 Support qBittorrent API key auth | 2ccee44 Return empty state for disabled plugin reads |
@@ -141,7 +141,7 @@
 | `frontend/src/style.css` | 1 | verified | c2b5111 Show database path in storage settings | 6ba66c2 Recover original session reads and storage env contracts |
 | `frontend/src/views/PluginHost.vue` | 1 | verified | 194662f Make Gfriends an avatar library helper | 2b366a1 Skip plugin pages without frontend entry |
 | `frontend/src/views/settings/SettingsIndex.vue` | 1 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | 8296a65 Restore local subtitle library settings |
-| `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | 1d7bc41 Clean recovered plugin versions and retired whisper config |
+| `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | 6b26253 Stop using recovery media library fallback in core paths |
 | `plugins/avdb/backend.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/gfriends/frontend/page.js` | 1 | verified | 194662f Make Gfriends an avatar library helper | 2ccee44 Return empty state for disabled plugin reads |
 | `plugins/gfriends/frontend/style.css` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
