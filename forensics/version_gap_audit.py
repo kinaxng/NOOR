@@ -23,6 +23,8 @@ VERIFIED = {
     "backend/app/api/endpoints/media_library_helpers.py",
     "backend/tests/test_facefusion_upgrade.py",
     "plugins/qbittorrent/plugin.json",
+    "plugins/av-recommend",
+    "plugins/subscription-core/frontend/page.js",
     "plugins/xunlei-remote/backend.py",
     "plugins/xunlei-remote/frontend/page.js",
     "plugins/xunlei-remote/plugin.json",

@@ -117,7 +117,6 @@
 | `frontend/src/style.css` | 1 | pending | c2b5111 Show database path in storage settings | 6ff12d0 Recover original routed application shell |
 | `frontend/src/views/PluginHost.vue` | 1 | pending | 194662f Make Gfriends an avatar library helper | 8e11c67 Restore plugin pill select controls |
 | `frontend/src/views/settings/SettingsIndex.vue` | 1 | pending | 7219ca2 Split FaceFusion settings into dedicated tab | 8296a65 Restore local subtitle library settings |
-| `plugins/av-recommend` | 1 | pending | 6a80f72 Fix recommendation plugin icon assets | c734bb5 Restore recommendation center icons |
 | `plugins/avdb/backend.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | 219325a Restore configurable AVDB provider |
 | `plugins/gfriends/frontend/page.js` | 1 | pending | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
 | `plugins/gfriends/frontend/style.css` | 1 | pending | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
@@ -126,7 +125,6 @@
 | `plugins/javdb/frontend/page.js` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
 | `plugins/javdb/frontend/style.css` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
 | `plugins/mteam-plugin/backend.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | cd825be Recover complete M-Team integration |
-| `plugins/subscription-core/frontend/page.js` | 1 | pending | 8ecd4a3 Add fallback image loading for recommendation cards | 587ea15 Restore subscription cover persistence |
 | `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | b29c8d6 Restore media library legacy helper compatibility |
 | `backend/app/pipeline/whisper/decoupled/qwen3.py` | 2 | intentional | c96ca5d Share Whisper cache path candidates | - |
 | `backend/app/pipeline/whisper/preprocess.py` | 2 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
@@ -150,5 +148,7 @@
 | `plugins/xunlei-remote/frontend/page.js` | 4 | verified | 7d9120d Simplify Xunlei residual cleanup flow | 5ced5cf Recover Xunlei remote management frontend |
 | `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | 0ab32de Verify FaceFusion upgrade content patch |
 | `frontend/src/components/noor/SubtitlePanel.vue` | 3 | verified | 0184022 Add Whisper runtime tier selection | ad7302e Recover plugin-based subtitle providers |
+| `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | c734bb5 Restore recommendation center icons |
 | `plugins/qbittorrent/plugin.json` | 1 | verified | fd44ab3 Support qBittorrent API key auth | 81940de Restore original plugin service icons |
+| `plugins/subscription-core/frontend/page.js` | 1 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 587ea15 Restore subscription cover persistence |
 | `plugins/xunlei-remote/plugin.json` | 1 | verified | 15f6ac8 Add Xunlei residual task restore | 81940de Restore original plugin service icons |

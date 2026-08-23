@@ -239,6 +239,9 @@ the recovered bytecode modules remain unchanged.
 - qBittorrent and Xunlei Remote plugin contracts were verified against final rollout:
   qBittorrent supports 5.2+ Bearer API-key auth and start/stop control, while Xunlei
   residual cleanup is the simplified delete-then-search flow for `.xltd/.xtld` files.
+- Recommendation and subscription plugin pages keep the final latest/full recommendation
+  modes, merged candidate-pool stats (`total+today`), subscribe actions, inline detail
+  panels, and fallback cover loading after refresh.
 
 ## Recovery Consistency (2026-08-23)
 
