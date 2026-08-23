@@ -333,14 +333,16 @@ the recovered bytecode modules remain unchanged.
   comparison also found no missing behavior after accounting for intentional moves
   such as downloader dialog helpers and local subtitle settings.
 
-## Hardlink Source Actions Recovery (2026-08-23)
+## HardlinkView Original Action Recovery (2026-08-24)
 
-- `HardlinkView.vue` now loads `hardlink_source_actions` contributions from all
-  enabled plugins, tests plugins that declare `requires_test`, and renders each
-  contributed action on hardlink source rows. Source actions are submitted through
-  `/plugins/{pluginId}/actions/{action}` with `{ payload: { source_paths } }`.
-- The hardlinks page also applies `/files/hardlinks?q=` on mount and reacts to route
-  query changes, restoring search deep links without reloading to a different page.
+- `HardlinkView.vue` now matches the 2026-08-23 original read evidence again:
+  it checks only the `mdc-ng-manual` plugin, calls `/plugins/mdc-ng-manual/test`,
+  and submits source reorg through `/plugins/mdc-ng-manual/actions/create`.
+  The recovery-time generic `hardlink_source_actions` loader was removed.
+- `/files/hardlinks?q=` route query handling was removed because the original
+  final HardlinkView snapshot does not contain it.
+- Kept the confirmed final fix that removes the duplicated
+  `summary.total_groups` value in the summary card.
 
 ## Media Library Legacy Compatibility (2026-08-23)
 

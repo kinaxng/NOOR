@@ -30,7 +30,8 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Restored missing scoped styles in `SystemSettings.vue` and `StorageSettings.vue` from original Vite cache evidence: library chips, Webhook box/guide, settings toggle, field rows, directory picker, scan groups, and save/action buttons now use the NOOR visual system again.
 - JAVDB actor panels now keep 快速筛选 and 年份/排序 in the same capsule row with a visible divider, matching the requested DBOnline-style compact control bar. Browser smoke also now exercises subscription edit/compare/cancel and JAVDB actor relation deep-link refresh.
 - Recommendation exclusion is now locked by a regression test: both live Emby codes and subscription codes are removed before scoring, and a real latest-mode response returns no subscribed `CJOD-528` item.
-- Verification: frontend production build passes; backend full pytest passes with `263 passed, 6 skipped`; restored-page smoke reports no HTTP errors and no console errors.
+- Reverted `HardlinkView.vue` to the original MDC-NG direct action path from the 2026-08-23 read evidence. The recovery-time generic `hardlink_source_actions` loader and `/files/hardlinks?q=` route handling were removed; the confirmed duplicate `summary.total_groups` fix is kept, and `test_hardlink_view_source_evidence.py` locks the final source shape.
+- Verification: frontend production build passes; backend full pytest passes with `264 passed, 6 skipped`; restored-page smoke reports no HTTP errors and no console errors.
 
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Restored repo-level `AGENTS.md` with the NOOR recovery search boundaries and runtime commands.
