@@ -26,6 +26,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Restored repo-level `AGENTS.md` with the NOOR recovery search boundaries and runtime commands.
 - Added `backend/tests/test_forensic_byte_matches.py` so every row in `forensics/current-byte-level-matches.tsv` is re-verified against the current tree during backend tests.
+- Browser smoke coverage now also opens the M-Team `添加片单` modal and the qBittorrent `qB 设置` / `新建分类` SDK modals. The restored-page run reports `HTTP_ERRORS []` and `CONSOLE_ERRORS []`.
 - Stopped hidden sidebar widget polling. The desktop and mobile sidebars no longer mount the widget-system renderer simultaneously, and plugin widgets pause when the browser tab is hidden. System metrics sampling is also throttled for 1 second on the backend.
 - Unified recommendation resource quality features: resource enrichment now separates real uncensored resources from cracked/leak signals, exposes `has_uncensored`, and returns a consistent `resource_summary.quality_score`.
 - Converged plugin API calls in `av-recommend`, `mteam-plugin`, and `subscription-core` frontends onto `sdk.api.plugin()` with a raw fetch fallback; plugin validation no longer reports `PLUGIN_API_SHOULD_USE_SDK`.

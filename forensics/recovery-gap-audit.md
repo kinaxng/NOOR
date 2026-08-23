@@ -37,8 +37,9 @@
   由 `app.api.endpoints.media_library` 解析；新增全函数名与顶层符号回归测试。
 - 新增可复跑浏览器冒烟 `forensics/smoke_restored_pages.js`：覆盖首页、媒体库详情、
   任务/历史/设置/文件/演员、JavDB 演员路由、推荐中心、订阅中心、qBittorrent 与
-  资源搜索；当前运行无 HTTP 4xx/5xx、无 console 错误。Emby webhook 也再次验证，
-  系统日志显示 `Emby · 127.0.0.1` 真实来源，并正确记录事件类型。
+  资源搜索；当前运行无 HTTP 4xx/5xx、无 console 错误。冒烟还验证 M-Team 的
+  `添加片单` 与 qBittorrent 的 `qB 设置` / `新建分类` 均打开共享 NOOR SDK modal。
+  Emby webhook 也再次验证，系统日志显示 `Emby · 127.0.0.1` 真实来源，并正确记录事件类型。
 - 修复侧边栏插件轮询重复挂载：桌面/移动两套侧栏原本都会挂载
   `widget-system` 的 `renderSidebarWidget`，隐藏侧栏仍持续调用
   `/plugins/widget-system/actions/metrics`。现在按 `min-width: 1024px`
