@@ -613,6 +613,16 @@
     SSE 和插件后台任务不使用该事件总线。
   - `frontend/src/stores/emby.ts`：早期 `Home.vue` source map 里的 Emby store；
     当前媒体库使用 `mediaLibrary.ts` 与 `api/media-library*` 契约。
-  - `frontend/src/views/Settings.vue`：旧单文件设置页，主体来源为
+- `frontend/src/views/Settings.vue`：旧单文件设置页，主体来源为
     `lada-webui` 早期 source map；当前已组件化为 `settings/SettingsIndex.vue`
     及对应分 tab 设置页。
+
+## FaceFusionPanel 源脸图片库多选恢复（2026-08-24）
+
+- 比对 2026-07-08 最终原版快照时发现 `FaceFusionPanel.vue` 缺少
+  `selectedLibraryImageIds` / `addSelectedLibraryImages`，导致图片库只能
+  单张加入/移除，不能像原版一样多选后批量“使用选中”。
+- 已按原版恢复多选状态、批量加入源脸、已使用图片禁用再次选择、删除缓存图时
+  同步清理选中状态；默认面板与全宽面板的图片库都保留删除按钮，并增加原版
+  `is-active` 选中样式。
+- 验证：`vue-tsc && vite build` 通过；后端全量 `pytest` 仍为 `239 passed`。

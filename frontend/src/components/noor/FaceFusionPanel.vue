@@ -45,6 +45,7 @@ const uploadedSourceImages = ref<Array<{ id: string; name: string; path: string;
 const sourceLibraryOpen = ref(false)
 const sourceLibraryLoading = ref(false)
 const sourceLibraryImages = ref<Array<{ id: string; name: string; path: string; preview_url: string; updated_at?: number }>>([])
+const selectedLibraryImageIds = ref<string[]>([])
 const referenceFaces = ref<Array<{ id: string; position: number; preview_url: string; detector_score?: number; gender?: string; age?: number; race?: string }>>([])
 const referenceFacesLoading = ref(false)
 const referenceFacesError = ref('')
@@ -624,20 +625,28 @@ function isSourceSelected(path: string) {
   return uploadedSourceImages.value.some(item => item.path === path)
 }
 
-function toggleLibraryImage(image: { id: string; name: string; path: string; preview_url: string }) {
+function toggleLibraryImage(image: { id: string; path: string }) {
   if (isSourceSelected(image.path)) {
-    uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== image.path)
-  } else {
-    uploadedSourceImages.value = uniqueSourceImages([
-      ...uploadedSourceImages.value,
-      {
-        id: image.id,
-        name: image.name,
-        path: image.path,
-        preview_url: image.preview_url,
-      },
-    ])
+    return
   }
+  selectedLibraryImageIds.value = selectedLibraryImageIds.value.includes(image.id)
+    ? selectedLibraryImageIds.value.filter(id => id !== image.id)
+    : [...selectedLibraryImageIds.value, image.id]
+}
+
+function addSelectedLibraryImages() {
+  const selected = sourceLibraryImages.value.filter(item => selectedLibraryImageIds.value.includes(item.id) && !isSourceSelected(item.path))
+  if (!selected.length) return
+  uploadedSourceImages.value = uniqueSourceImages([
+    ...uploadedSourceImages.value,
+    ...selected.map(item => ({
+      id: item.id,
+      name: item.name,
+      path: item.path,
+      preview_url: item.preview_url,
+    })),
+  ])
+  selectedLibraryImageIds.value = []
   if (previewUrl.value) previewStale.value = true
 }
 
@@ -645,6 +654,7 @@ async function deleteLibraryImage(image: { id: string; path: string }) {
   try {
     await api.delete(`/facefusion/source-images/${encodeURIComponent(image.id)}`)
     sourceLibraryImages.value = sourceLibraryImages.value.filter(item => item.id !== image.id)
+    selectedLibraryImageIds.value = selectedLibraryImageIds.value.filter(id => id !== image.id)
     uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== image.path)
     if (previewUrl.value) previewStale.value = true
     toast.success('图片已删除')
@@ -1287,7 +1297,12 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
                           <div v-if="sourceLibraryOpen" class="facefusion-source-library">
                             <div class="facefusion-source-library__head">
                               <span>{{ sourceLibraryLoading ? '读取中' : `图片库 · ${sourceLibraryImages.length}` }}</span>
-                              <small>点击图片即可加入或移除</small>
+                              <div>
+                                <button type="button" class="facefusion-source-library__tool" :disabled="sourceLibraryLoading" @click="loadSourceImageLibrary">刷新</button>
+                                <button type="button" class="facefusion-source-library__tool facefusion-source-library__tool--primary" :disabled="!selectedLibraryImageIds.length" @click="addSelectedLibraryImages">
+                                  使用选中 {{ selectedLibraryImageIds.length || '' }}
+                                </button>
+                              </div>
                             </div>
                             <div v-if="!sourceLibraryLoading && !sourceLibraryImages.length" class="facefusion-source-library__empty">暂无缓存图片</div>
                             <div v-else class="facefusion-source-library__grid">
@@ -1295,11 +1310,11 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
                                 v-for="image in sourceLibraryImages"
                                 :key="image.id"
                                 class="facefusion-source-library__item"
-                                :class="{ 'is-used': isSourceSelected(image.path) }"
+                                :class="{ 'is-active': selectedLibraryImageIds.includes(image.id), 'is-used': isSourceSelected(image.path) }"
                               >
-                                <button type="button" class="facefusion-source-library__use" @click="toggleLibraryImage(image)">
+                                <button type="button" class="facefusion-source-library__use" :disabled="isSourceSelected(image.path)" @click="toggleLibraryImage(image)">
                                   <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
-                                  <span>{{ isSourceSelected(image.path) ? '移除' : '使用' }}</span>
+                                  <span>{{ isSourceSelected(image.path) ? '已使用' : selectedLibraryImageIds.includes(image.id) ? '已选择' : '选择' }}</span>
                                 </button>
                                 <button type="button" class="facefusion-source-library__delete" title="删除图片" @click.stop="deleteLibraryImage(image)">×</button>
                               </div>
@@ -1461,7 +1476,12 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
                     <div v-if="sourceLibraryOpen" class="facefusion-source-library">
                       <div class="facefusion-source-library__head">
                         <span>{{ sourceLibraryLoading ? '读取中' : `图片库 · ${sourceLibraryImages.length}` }}</span>
-                        <small>点击图片即可加入或移除</small>
+                        <div>
+                          <button type="button" class="facefusion-source-library__tool" :disabled="sourceLibraryLoading" @click="loadSourceImageLibrary">刷新</button>
+                          <button type="button" class="facefusion-source-library__tool facefusion-source-library__tool--primary" :disabled="!selectedLibraryImageIds.length" @click="addSelectedLibraryImages">
+                            使用选中 {{ selectedLibraryImageIds.length || '' }}
+                          </button>
+                        </div>
                       </div>
                       <div v-if="!sourceLibraryLoading && !sourceLibraryImages.length" class="facefusion-source-library__empty">暂无缓存图片</div>
                       <div v-else class="facefusion-source-library__grid">
@@ -1469,11 +1489,11 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
                           v-for="image in sourceLibraryImages"
                           :key="image.id"
                           class="facefusion-source-library__item"
-                          :class="{ 'is-used': isSourceSelected(image.path) }"
+                          :class="{ 'is-active': selectedLibraryImageIds.includes(image.id), 'is-used': isSourceSelected(image.path) }"
                         >
-                          <button type="button" class="facefusion-source-library__use" @click="toggleLibraryImage(image)">
+                          <button type="button" class="facefusion-source-library__use" :disabled="isSourceSelected(image.path)" @click="toggleLibraryImage(image)">
                             <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
-                            <span>{{ isSourceSelected(image.path) ? '移除' : '使用' }}</span>
+                            <span>{{ isSourceSelected(image.path) ? '已使用' : selectedLibraryImageIds.includes(image.id) ? '已选择' : '选择' }}</span>
                           </button>
                           <button type="button" class="facefusion-source-library__delete" title="删除图片" @click.stop="deleteLibraryImage(image)">×</button>
                         </div>
@@ -2471,6 +2491,40 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
   font-size: 0.68rem;
 }
 
+.facefusion-source-library__head > div {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.facefusion-source-library__tool {
+  min-height: 1.7rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.facefusion-source-library__tool:hover:not(:disabled) {
+  border-color: rgba(0, 117, 255, 0.42);
+  color: var(--color-text-primary);
+}
+
+.facefusion-source-library__tool--primary {
+  border-color: rgba(0, 117, 255, 0.34);
+  background: rgba(0, 117, 255, 0.13);
+  color: #bfdbfe;
+}
+
+.facefusion-source-library__tool:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
 .facefusion-source-library__empty {
   color: var(--color-text-muted);
   font-size: 0.75rem;
@@ -2567,8 +2621,21 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
   box-shadow: 0 0 0 2px rgba(0, 117, 255, 0.22);
 }
 
+.facefusion-source-library__item.is-active {
+  border-color: rgba(34, 197, 94, 0.72);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.22);
+}
+
 .facefusion-source-library__item.is-used .facefusion-source-library__use span {
   background: rgba(0, 117, 255, 0.82);
+}
+
+.facefusion-source-library__item.is-active .facefusion-source-library__use span {
+  background: rgba(22, 101, 52, 0.84);
+}
+
+.facefusion-source-library__use:disabled {
+  cursor: default;
 }
 
 .facefusion-choice-chips {
