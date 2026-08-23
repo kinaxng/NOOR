@@ -25,6 +25,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Restored the subscription center original card workflow: source/quality metadata, expanded candidate comparison, edit mode, and old-version acknowledgment are back.
 
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Restored repo-level `AGENTS.md` with the NOOR recovery search boundaries and runtime commands.
