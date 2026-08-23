@@ -1509,6 +1509,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         "magnets_count": magnets_count,
         "has_cnsub": bool(item.get("has_cnsub")),
         "is_cracked": bool(item.get("is_cracked")),
+        "is_uncensored": bool(item.get("is_uncensored") or item.get("uncensored")),
         "best_resource_size_mb": size_mb,
         "reasons": reasons[:5],
         "source_tags": list(item.get("source_tags") or []),
@@ -1533,7 +1534,8 @@ def _resource_features(resource: dict[str, Any]) -> dict[str, bool]:
     ])
     return {
         "has_subtitle": bool(features.get("has_subtitle") or re.search(r"中字|中文字幕|中文|字幕|sub", text, re.I)),
-        "is_cracked": bool(features.get("is_cracked") or features.get("new_model_uncensored_crack") or re.search(r"破解|无码破解|uncensored|crack|leak|流出", text, re.I)),
+        "is_cracked": bool(features.get("is_cracked") or features.get("new_model_uncensored_crack") or re.search(r"破解|uncensored\s*(?:crack|leak)|crack|leak|流出", text, re.I)),
+        "is_uncensored": bool(features.get("is_uncensored") or re.search(r"无码|無碼|無修正|uncensored", text, re.I)),
         "is_private_tracker": bool(features.get("is_private_tracker") or requirements.get("accepts_private_tracker")),
     }
 
@@ -1588,6 +1590,7 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
         best_size = 0
         has_subtitle = bool(item.get("has_cnsub"))
         is_cracked = bool(item.get("is_cracked"))
+        has_uncensored = bool(item.get("is_uncensored") or item.get("uncensored"))
         has_private = False
         has_public = False
         compatible_downloaders: set[str] = set()
@@ -1600,6 +1603,7 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
             feats = _resource_features(res)
             has_subtitle = has_subtitle or feats["has_subtitle"]
             is_cracked = is_cracked or feats["is_cracked"]
+            has_uncensored = has_uncensored or feats["is_uncensored"]
             has_private = has_private or feats["is_private_tracker"]
             has_public = has_public or not feats["is_private_tracker"]
             for downloader_id in res.get("compatible_downloaders") or []:
@@ -1613,6 +1617,7 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
             "total_size_bytes": total_size,
             "has_private": has_private,
             "has_public": has_public,
+            "has_uncensored": has_uncensored,
             "compatible_downloaders": sorted(compatible_downloaders),
         }
         # Resource availability is actionability, not taste. Keep it a small
@@ -1626,10 +1631,15 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
             score_boost += 5
             item["is_cracked"] = True
             item.setdefault("reasons", []).append("资源确认：破解")
+        if has_uncensored and not item.get("is_uncensored"):
+            score_boost += 1
+            item["is_uncensored"] = True
+            item.setdefault("reasons", []).append("资源确认：无码")
         if providers:
             item.setdefault("reasons", []).append("资源来源：" + " / ".join(f"{p['name']}×{p['count']}" for p in providers[:3]))
         if best_size > 0:
             item["best_resource_size_mb"] = max(float(item.get("best_resource_size_mb") or 0), best_size / 1024 / 1024)
+        item["resource_summary"]["quality_score"] = round(score_boost, 1)
         breakdown = item.get("score_breakdown") if isinstance(item.get("score_breakdown"), dict) else {}
         breakdown["resources"] = round(float(breakdown.get("resources") or 0) + score_boost, 1)
         item["score_breakdown"] = breakdown

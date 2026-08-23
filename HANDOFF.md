@@ -25,6 +25,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Stopped hidden sidebar widget polling. The desktop and mobile sidebars no longer mount the widget-system renderer simultaneously, and plugin widgets pause when the browser tab is hidden. System metrics sampling is also throttled for 1 second on the backend.
+- Unified recommendation resource quality features: resource enrichment now separates real uncensored resources from cracked/leak signals, exposes `has_uncensored`, and returns a consistent `resource_summary.quality_score`.
 - Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
 - Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.
 - Plugin host now skips standalone page loading when a plugin has no `frontend.entry`; AVDB is restored as a resource provider only and no longer triggers an assets `page.js` 404.
@@ -294,6 +295,7 @@ Current capabilities:
   - studio/label preference
   - magnet availability
   - Chinese subtitles
+  - uncensored resources
   - cracked features
   - resource size
   - recency
@@ -313,6 +315,10 @@ Current capabilities:
   - current candidate count
   - candidate pool total
   - candidate pool today increment, shown in UI as `total+today` such as `473+12`
+- Resource quality model:
+  - `_resource_features()` distinguishes `is_uncensored` from `is_cracked`
+  - item enrichment sets `is_uncensored` and `resource_summary.has_uncensored`
+  - `resource_summary.quality_score` aggregates subtitle/cracked/uncensored/source boosts
 - Subscription and wash recommendation flows were removed from this plugin UI/backend:
   - no more 订阅推荐
   - no more 洗版推荐
@@ -357,8 +363,8 @@ Recommended next implementation order:
    - add series/director if data available: done in `plugins/av-recommend/backend.py` and displayed in recommendation cards.
    - add explanations for negative/filtered-out candidates: done via recommendation response `filtered` summary and examples.
 4. Improve resource quality model:
-   - unify resource quality schema across AVDB/M-Team/JavDB
-   - score new-model uncensored/cracked/subtitle/size/source more consistently
+   - unify resource quality schema across AVDB/M-Team/JavDB: done in `plugins/av-recommend/backend.py`
+   - score new-model uncensored/cracked/subtitle/size/source more consistently: done via `is_uncensored`, `has_uncensored`, and `resource_summary.quality_score`
 5. Add recommendation settings:
    - candidate sources on/off: done as `candidate_latest_enabled` / `candidate_rankings_enabled` / `candidate_recommend_enabled` / `candidate_videos_enabled`
    - exploration ratio: done in `plugins/av-recommend/plugin.json` and backend `_apply_recommendation_controls`

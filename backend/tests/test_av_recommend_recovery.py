@@ -121,6 +121,20 @@ def test_candidate_pool_requests_respects_source_toggles():
     assert [item[0] for item in only_videos] == ["videos", "videos"]
 
 
+def test_resource_features_separate_uncensored_from_cracked():
+    backend = _load_backend()
+
+    uncensored = backend._resource_features({"title": "MIDA-669 無碼"})
+    assert uncensored["is_uncensored"] is True
+    assert uncensored["is_cracked"] is False
+
+    cracked = backend._resource_features({"title": "MIDA-669 無碼破解"})
+    assert cracked["is_cracked"] is True
+
+    leaked = backend._resource_features({"title": "MIDA-669 uncensored leak"})
+    assert leaked["is_cracked"] is True
+
+
 async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     backend = _load_backend()
 

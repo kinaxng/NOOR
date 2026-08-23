@@ -47,7 +47,7 @@
   后台时卸载插件 widget 并清理轮询/AbortController，回到前台再重新挂载，
   避免隐藏标签继续占用 CPU、网络和 `nvidia-smi`。
 - `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
-- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 260 项通过。
+- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 266 项通过。
 
 ## 原版媒体库私有函数签名补齐（2026-08-24）
 
@@ -83,6 +83,11 @@
   `candidate_latest_enabled` / `candidate_rankings_enabled` /
   `candidate_recommend_enabled` / `candidate_videos_enabled` 候选源开关。新增
   `test_av_recommend_recovery.py` 回归覆盖，后端全量测试为 264 项通过。
+- 推荐资源质量统一：`_resource_features()` 将真正无码资源与破解/流出信号分离，
+  不再把普通 `無碼` 误判为破解；资源富化后同时提供
+  `item.is_uncensored`、`resource_summary.has_uncensored` 和
+  `resource_summary.quality_score`，使 AVDB/M-Team/JavDB 资源信号进入同一评分
+  维度。新增无码/破解分离回归测试，后端全量测试为 266 项通过。
 
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
   `original-path-inventory.tsv`：未发现可新增登记的字节级匹配，
@@ -94,7 +99,7 @@
 - 再次确认运行主路径没有挂载恢复期媒体库 fallback：
   `main.py` 只注册当前原版适配器和 actor 路由，
   `media_library_recovery.py` 保留为兼容/测试证据文件但不参与 App 启动。
-- 验证：后端全量 `pytest` 260 项通过、前端生产构建通过、
+- 验证：后端全量 `pytest` 266 项通过、前端生产构建通过、
   `forensics/smoke_restored_pages.js` 无 HTTP 4xx/5xx、无 console error。
 
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
