@@ -28,6 +28,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Restored the subscription center original card workflow: source/quality metadata, expanded candidate comparison, edit mode, and old-version acknowledgment are back.
 - Recommendation center now returns `type: recommendation` and renders maker/series/director as clean names when DBOnline returns Python-style dict strings. Latest mode pulls 最新更新 plus 日榜/周榜/月榜 and keeps only those latest source tags on cards. Full candidate-pool background scans also enrich up to `detail_limit` candidates with actors, categories, maker/series/director, covers, subtitles, cracked signals, and magnet metadata.
 - Restored missing scoped styles in `SystemSettings.vue` and `StorageSettings.vue` from original Vite cache evidence: library chips, Webhook box/guide, settings toggle, field rows, directory picker, scan groups, and save/action buttons now use the NOOR visual system again.
+- JAVDB actor panels now keep 快速筛选 and 年份/排序 in the same capsule row with a visible divider, matching the requested DBOnline-style compact control bar. Browser smoke also now exercises subscription edit/compare/cancel and JAVDB actor relation deep-link refresh.
 - Verification: frontend production build passes; backend full pytest passes with `263 passed, 6 skipped`; restored-page smoke reports no HTTP errors and no console errors.
 
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.

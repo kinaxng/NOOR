@@ -1031,6 +1031,7 @@ export async function mount(root, sdk) {
       state.page = 1
       rerenderCurrentList()
     }))
+    quickItems.appendChild(el('div', 'javdb-filter-divider'))
 
     const yearOptions = [{ label: '全部年份', value: '' }, ...actorRelationYears().map(year => ({ label: year, value: year }))]
     const relationYearSelect = selectBadge('年份', state.relationActorYear, yearOptions, value => {
