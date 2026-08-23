@@ -97,6 +97,12 @@
 - 新增媒体库路由契约测试：以 `forensics/original-symbol-index.json` 中的原版
   43 条路由为基准，核对当前 `/api/media-library/*`；除用户明确改为 MDC-NG
   映射的 4 条路由外，其余路由均已恢复，并保留当前 4 条兼容路由。
+- 新增前端原始 Vite source map 证据：从 `/tmp/chromium-shared` 提取 111 个
+  5 月前端文件，从 `/tmp/cdp-v1WmoE` 提取 11 个 5 月 18 日组件，已归档到
+  `forensics/frontend-snapshots/vite-cache-*`，并生成 SHA256 校验。
+- `History.vue` 已按“5 月原版源码 + June/July rollout 补丁回放”恢复，补回
+  原版任务日志展开、评分/诊断摘要、任务元数据与日志尾部查看功能；当前文件
+  从简化的 363 行恢复为 714 行，前端生产构建通过。
 - 继续核对 LADA/设置/模型契约：`pipeline/lada/runner.py` 恢复最终 NOOR Python
   环境、LADA model/cache/temp 分离和 `--temporary-directory`；
   `settings_helpers.py` 恢复 `NOOR_DATA_DIR` 模型回退、最终 ChickenRice/VAD 模型

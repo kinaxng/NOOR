@@ -18,6 +18,13 @@ while the recovery is in progress.
 in `/tmp` on August 22, 2026. They were copied byte-for-byte before further
 recovery work because `/tmp` is not durable storage.
 
+`vite-cache-chromium/` and `vite-cache-cdp-v1/` contain original frontend source
+maps extracted from browser disk caches on 2026-08-23. The Chromium cache holds
+111 source files from the early-to-mid May 2026 frontend, and the CDP profile
+holds 11 source files from May 18, 2026 including `GlobalSearch.vue` and an
+early `ResourceSearch.vue`. Each directory includes `manifest.json` and
+`SHA256SUMS`. These are original source-map content, not reconstructed files.
+
 - `core/App.recovered-full.vue` is a complete 6,122-line Vue SFC. It builds
   successfully with the recovered frontend toolchain, but represents an older
   monolithic NOOR UI and must not replace the newer componentized frontend

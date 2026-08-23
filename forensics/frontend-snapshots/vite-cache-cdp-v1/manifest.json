@@ -1,0 +1,240 @@
+{
+  "cache_dir": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data",
+  "candidate_count": 11,
+  "selected_count": 11,
+  "candidates": [
+    {
+      "source_path": "src/components/noor/GlobalSearch.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/0f772e5b95f1e546_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "3f2d10cd9cd4887fd616e7b3c9117e07d15f284ef8cbca8f73da03f315a37a3d",
+      "content_size": 14223,
+      "line_count": 373,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/0f772e5b95f1e546_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/SidebarMetrics.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/1624128eb6e6e5ca_0",
+      "cache_mtime": 1779091673.1816285,
+      "content_sha256": "236aae2a302c86cae2f90b78fbb93af8018a2447db26298c35b5e167b7af9f8e",
+      "content_size": 4084,
+      "line_count": 159,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/1624128eb6e6e5ca_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/BaseIcon.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/31b6db7cdda676ea_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "a6d399192bdeef9b5b606bb2892d5ab418140f981a7e0b397054bb9c06c26afc",
+      "content_size": 13344,
+      "line_count": 61,
+      "complete_vue": false,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/31b6db7cdda676ea_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/AppSidebar.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/4cbb3f1a86cf5dd5_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "0a2a8de62081c453b04c717b557eb0ca3c544c565f8895f27a331aed1f47e9d2",
+      "content_size": 9716,
+      "line_count": 364,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/4cbb3f1a86cf5dd5_0-0.vue"
+    },
+    {
+      "source_path": "src/components/ui/Button/VuiButton.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/66ba0b05e007c375_0",
+      "cache_mtime": 1779091672.3776226,
+      "content_sha256": "40d4d397774a10d6e3d2512196972feac602f830559ef0ca97fa1fea7210f81c",
+      "content_size": 4538,
+      "line_count": 197,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/66ba0b05e007c375_0-0.vue"
+    },
+    {
+      "source_path": "src/views/ResourceSearch.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/68566f0d524c2f02_0",
+      "cache_mtime": 1779091672.9176266,
+      "content_sha256": "f2f1dff7f07a92a7d73136a3f0e06eab1f21319fe8fd120a9bfeea598a13362d",
+      "content_size": 23480,
+      "line_count": 434,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/68566f0d524c2f02_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/SystemLogPanel.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/938e240a5d00d9e1_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "3d431bab4cb7f4d77b89eb97bbb9c2e6535ec8c9b5442a2e40dddeba6b628f8d",
+      "content_size": 4514,
+      "line_count": 187,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/938e240a5d00d9e1_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/BaseToast.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/abf788b8b0fde532_0",
+      "cache_mtime": 1779091672.3456223,
+      "content_sha256": "73c5d04ca7c8333962118bcd7122d9fe78e0ee7752602da83e2c54cf49b6fdee",
+      "content_size": 3288,
+      "line_count": 70,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/abf788b8b0fde532_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/ConfirmDialog.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/c669f7af8ec4fec3_0",
+      "cache_mtime": 1779091672.3456223,
+      "content_sha256": "63158987e94b534d18dd1a2d904dd8d8263c4fc6be32b59ebffb5887bebdd0b0",
+      "content_size": 3779,
+      "line_count": 151,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/c669f7af8ec4fec3_0-0.vue"
+    },
+    {
+      "source_path": "src/App.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/c8f41ea69bc90f0a_0",
+      "cache_mtime": 1779091672.3296223,
+      "content_sha256": "796521e6fa336350f8799c61a1992ffb68a0c014479ef5cf19c159aec618e4f0",
+      "content_size": 11269,
+      "line_count": 376,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/c8f41ea69bc90f0a_0-0.vue"
+    },
+    {
+      "source_path": "src/components/ui/BaseModal.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/fed865d8a3c9df03_0",
+      "cache_mtime": 1779091672.3776226,
+      "content_sha256": "b560feb9cfa78a1df8d00bdb0cd05f5629d67e9302e4d144e881a0c0a4cfbfd5",
+      "content_size": 3351,
+      "line_count": 165,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/fed865d8a3c9df03_0-0.vue"
+    }
+  ],
+  "selected": [
+    {
+      "source_path": "src/App.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/c8f41ea69bc90f0a_0",
+      "cache_mtime": 1779091672.3296223,
+      "content_sha256": "796521e6fa336350f8799c61a1992ffb68a0c014479ef5cf19c159aec618e4f0",
+      "content_size": 11269,
+      "line_count": 376,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/c8f41ea69bc90f0a_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/App.vue"
+    },
+    {
+      "source_path": "src/components/noor/AppSidebar.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/4cbb3f1a86cf5dd5_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "0a2a8de62081c453b04c717b557eb0ca3c544c565f8895f27a331aed1f47e9d2",
+      "content_size": 9716,
+      "line_count": 364,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/4cbb3f1a86cf5dd5_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/noor/AppSidebar.vue"
+    },
+    {
+      "source_path": "src/components/noor/BaseIcon.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/31b6db7cdda676ea_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "a6d399192bdeef9b5b606bb2892d5ab418140f981a7e0b397054bb9c06c26afc",
+      "content_size": 13344,
+      "line_count": 61,
+      "complete_vue": false,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/31b6db7cdda676ea_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/noor/BaseIcon.vue"
+    },
+    {
+      "source_path": "src/components/noor/BaseToast.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/abf788b8b0fde532_0",
+      "cache_mtime": 1779091672.3456223,
+      "content_sha256": "73c5d04ca7c8333962118bcd7122d9fe78e0ee7752602da83e2c54cf49b6fdee",
+      "content_size": 3288,
+      "line_count": 70,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/abf788b8b0fde532_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/noor/BaseToast.vue"
+    },
+    {
+      "source_path": "src/components/noor/ConfirmDialog.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/c669f7af8ec4fec3_0",
+      "cache_mtime": 1779091672.3456223,
+      "content_sha256": "63158987e94b534d18dd1a2d904dd8d8263c4fc6be32b59ebffb5887bebdd0b0",
+      "content_size": 3779,
+      "line_count": 151,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/c669f7af8ec4fec3_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/noor/ConfirmDialog.vue"
+    },
+    {
+      "source_path": "src/components/noor/GlobalSearch.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/0f772e5b95f1e546_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "3f2d10cd9cd4887fd616e7b3c9117e07d15f284ef8cbca8f73da03f315a37a3d",
+      "content_size": 14223,
+      "line_count": 373,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/0f772e5b95f1e546_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/noor/GlobalSearch.vue"
+    },
+    {
+      "source_path": "src/components/noor/SidebarMetrics.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/1624128eb6e6e5ca_0",
+      "cache_mtime": 1779091673.1816285,
+      "content_sha256": "236aae2a302c86cae2f90b78fbb93af8018a2447db26298c35b5e167b7af9f8e",
+      "content_size": 4084,
+      "line_count": 159,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/1624128eb6e6e5ca_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/noor/SidebarMetrics.vue"
+    },
+    {
+      "source_path": "src/components/noor/SystemLogPanel.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/938e240a5d00d9e1_0",
+      "cache_mtime": 1779091672.3576224,
+      "content_sha256": "3d431bab4cb7f4d77b89eb97bbb9c2e6535ec8c9b5442a2e40dddeba6b628f8d",
+      "content_size": 4514,
+      "line_count": 187,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/938e240a5d00d9e1_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/noor/SystemLogPanel.vue"
+    },
+    {
+      "source_path": "src/components/ui/BaseModal.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/fed865d8a3c9df03_0",
+      "cache_mtime": 1779091672.3776226,
+      "content_sha256": "b560feb9cfa78a1df8d00bdb0cd05f5629d67e9302e4d144e881a0c0a4cfbfd5",
+      "content_size": 3351,
+      "line_count": 165,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/fed865d8a3c9df03_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/ui/BaseModal.vue"
+    },
+    {
+      "source_path": "src/components/ui/Button/VuiButton.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/66ba0b05e007c375_0",
+      "cache_mtime": 1779091672.3776226,
+      "content_sha256": "40d4d397774a10d6e3d2512196972feac602f830559ef0ca97fa1fea7210f81c",
+      "content_size": 4538,
+      "line_count": 197,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/66ba0b05e007c375_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/components/ui/Button/VuiButton.vue"
+    },
+    {
+      "source_path": "src/views/ResourceSearch.vue",
+      "cache_file": "/tmp/cdp-v1WmoE/Default/Cache/Cache_Data/68566f0d524c2f02_0",
+      "cache_mtime": 1779091672.9176266,
+      "content_sha256": "f2f1dff7f07a92a7d73136a3f0e06eab1f21319fe8fd120a9bfeea598a13362d",
+      "content_size": 23480,
+      "line_count": 434,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/candidates/68566f0d524c2f02_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-scan/_tmp_cdp-v1WmoE_Default_Cache_Cache_Data/latest/src/views/ResourceSearch.vue"
+    }
+  ]
+}
