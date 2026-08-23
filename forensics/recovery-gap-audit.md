@@ -241,6 +241,9 @@
   `bg-bg-*`、`border-accent-*`、`font-display` 等自定义工具类重新进入生产 CSS，
   前端生产构建通过。
 
+- 从预接管备份补回原版配置与文档：`backend/requirements.txt`、`backend/run.py`、
+  `frontend/nginx.conf` 及前端设计/一致性文档；当前环境可导入 `run.py` 且依赖项齐全。
+
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。
