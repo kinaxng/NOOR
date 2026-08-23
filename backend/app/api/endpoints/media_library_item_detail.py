@@ -426,6 +426,8 @@ async def get_item_impl(
         tags["has_chinese"] = True
     if any(sibling_tag.get("is_cracked") for sibling_tag in sibling_tags):
         tags["is_cracked"] = True
+    if any(sibling_tag.get("is_uncensored") for sibling_tag in sibling_tags):
+        tags["is_uncensored"] = True
     if any(sibling_tag.get("is_leaked") for sibling_tag in sibling_tags):
         tags["is_leaked"] = True
     if any(sibling_tag.get("release_type_key") == "leaked" for sibling_tag in sibling_tags):

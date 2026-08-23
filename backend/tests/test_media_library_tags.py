@@ -22,6 +22,14 @@ def test_parse_tags_does_not_treat_title_uncensored_crack_as_uncensored_release(
     assert tags['release_type_key'] is None
 
 
+def test_parse_tags_does_not_infer_uncensored_from_variant_filename():
+    tags = parse_tags('DLDSS-498 無碼破解.mp4', [], '/media/DLDSS-498/DLDSS-498-uncensored.mp4')
+
+    assert tags['is_cracked'] is True
+    assert tags['is_uncensored'] is False
+    assert tags['release_type_key'] is None
+
+
 def test_parse_tags_detects_uncensored_release_from_path_or_studio():
     by_path = parse_tags('HEYZO-123.mp4', [], '/media/heyzo/HEYZO-123.mp4')
     by_studio = parse_tags('ABC-123.mp4', ['Tokyo-Hot'], '/media/ABC-123/ABC-123.mp4')
@@ -49,6 +57,25 @@ def test_variant_group_promotes_facefusion_tag_from_any_sibling():
     merged = merge_group_metadata(plain, [plain, output])
 
     assert merged['tags']['has_facefusion'] is True
+
+
+def test_variant_group_promotes_uncensored_tag_from_any_sibling():
+    plain = {
+        'id': 'plain',
+        'name': 'DLDSS-498.mp4',
+        'path': '/media/DLDSS-498/DLDSS-498.mp4',
+        'tags': {'is_uncensored': False},
+    }
+    output = {
+        'id': 'output',
+        'name': 'DLDSS-498-heyzo.mp4',
+        'path': '/media/DLDSS-498/DLDSS-498-heyzo.mp4',
+        'tags': {'is_uncensored': True},
+    }
+
+    merged = merge_group_metadata(plain, [plain, output])
+
+    assert merged['tags']['is_uncensored'] is True
 
 
 def test_media_library_pagination_response_shape():

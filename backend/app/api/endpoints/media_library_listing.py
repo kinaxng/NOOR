@@ -39,6 +39,8 @@ def merge_group_metadata(representative: dict[str, Any], group: list[dict[str, A
     merged_tags = dict(representative.get("tags") or {})
     if any((item.get("tags") or {}).get("is_cracked") for item in group):
         merged_tags["is_cracked"] = True
+    if any((item.get("tags") or {}).get("is_uncensored") for item in group):
+        merged_tags["is_uncensored"] = True
     if any((item.get("tags") or {}).get("has_chinese") for item in group):
         merged_tags["has_chinese"] = True
     if any((item.get("tags") or {}).get("is_leaked") for item in group):

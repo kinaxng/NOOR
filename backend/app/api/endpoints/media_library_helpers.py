@@ -160,11 +160,13 @@ def parse_tags(name: str, studios: list[str], file_path: str | None) -> dict[str
     base = name.rsplit(".", 1)[0] if "." in name else name
     lower = base.lower()
     fp_lower = (file_path or "").lower()
+    fp_dir_lower = ""
     fp_base = ""
     fp_name = ""
     if file_path:
         fp_name = os.path.splitext(os.path.basename(file_path))[0].lower()
         fp_dir = os.path.basename(os.path.dirname(file_path)).lower()
+        fp_dir_lower = os.path.dirname(file_path).lower()
         fp_base = fp_name + " " + fp_dir
 
     has_chinese = bool(
@@ -188,7 +190,9 @@ def parse_tags(name: str, studios: list[str], file_path: str | None) -> dict[str
         or re.search(r"(^|[^a-z0-9])(facefusion|ff)(?=[^a-z0-9]|$)", fp_lower)
     )
     has_uncensored_studio = any(s.lower() in UNCENSORED_STUDIOS or any(k in s.lower() for k in UNCENSORED_STUDIOS) for s in studios)
-    has_uncensored_path = any(k in (file_path or "").lower() for k in UNCENSORED_PATH_KEYWORDS)
+    # Do not infer real uncensored works from the Emby title or filename. Phrases
+    # like "無碼破解" are common marketing/variant labels for cracked mosaics.
+    has_uncensored_path = any(k in fp_dir_lower for k in UNCENSORED_PATH_KEYWORDS)
     is_uncensored = bool(has_uncensored_studio or has_uncensored_path)
     if is_uncensored and not is_leaked and not is_cracked:
         release_type = "无码"
