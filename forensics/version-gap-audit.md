@@ -90,7 +90,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 1d7bc41 Clean recovered plugin versions and retired whisper config |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 419af5e Restore actor detail navigation context |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
@@ -131,8 +131,8 @@
 | `backend/tests/test_settings_whisper_models.py` | 1 | verified | 7f76e42 Restrict Whisper model deletion to configured storage | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_task_runtime_paths.py` | 1 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_whisper_engine_cache.py` | 1 | verified | f176af3 Cover Whisper HuggingFace root layout | 9f68a60 Recover final Whisper single-chain architecture |
-| `frontend/src/App.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | 2745f04 Restore actor detail navigation context |
-| `frontend/src/components/noor/AppSidebar.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | 2745f04 Restore actor detail navigation context |
+| `frontend/src/App.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | 419af5e Restore actor detail navigation context |
+| `frontend/src/components/noor/AppSidebar.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | 419af5e Restore actor detail navigation context |
 | `frontend/src/components/noor/BaseIcon.vue` | 1 | verified | 9f62658 Refine actor detail navigation and actions | ba4a75e Restore final UI details and plugin runtime data paths |
 | `frontend/src/components/noor/panels/FilePathSelector.vue` | 1 | verified | a7d7d19 Allow file path selector to wrap long paths | 0165575 Recover original FaceFusion panel |
 | `frontend/src/components/ui/Tabs.vue` | 1 | verified | 1220755 Keep active tabs visible on mobile | 84bb8a7 Recover original media card and tabs |

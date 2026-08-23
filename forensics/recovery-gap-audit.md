@@ -597,3 +597,22 @@
   `/files` 子页面，保证从演员管理进入详情后“文件”侧边栏保持高亮。
 - 无头 Chromium 复核 `/actors/4201`：顶部显示“演员管理”，侧边栏
   `文件` 为 active；前端生产构建通过。
+
+
+## 原版路径清单中的非最终文件分类（2026-08-24）
+
+- 最近复核 `forensics/original-path-inventory.tsv` 中 6 个看似缺失的路径后，
+  确认它们都不属于最终 NOOR 源码，不恢复也不标记为运行缺口：
+  - `ARCHITECTURE.md`：2026-04-13 早期架构文档，描述旧 Whisper 多链、
+    Emby 代理和旧任务模型，已被当前 README / RECOVERY / 运行契约取代。
+  - `Dockerfile.frontend`：早期 Docker 部署参考；用户当前要求只预留
+    Docker 设计，不恢复 Docker 运行源码。
+  - `backend/app/api/emby.py`：早期 Emby 代理模块；当前 Emby 连接、媒体库、
+    webhook 已由 settings / media-library / actor endpoints 承担。
+  - `backend/app/core/events.py`：2026-04-12 早期事件总线快照；当前任务队列、
+    SSE 和插件后台任务不使用该事件总线。
+  - `frontend/src/stores/emby.ts`：早期 `Home.vue` source map 里的 Emby store；
+    当前媒体库使用 `mediaLibrary.ts` 与 `api/media-library*` 契约。
+  - `frontend/src/views/Settings.vue`：旧单文件设置页，主体来源为
+    `lada-webui` 早期 source map；当前已组件化为 `settings/SettingsIndex.vue`
+    及对应分 tab 设置页。
