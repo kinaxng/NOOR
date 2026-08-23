@@ -66,8 +66,11 @@
 - 从活盘 `/dev/nvme0n1p2` 恢复出早期原版 `media_library.py` 源码种子，并
   用 2026-06/07 NOOR rollout 补丁回放得到
   `forensics/recovered-sources/media_library.early-replayed.py`（4400 行、
-  188 个函数、43 条媒体库路由）。该文件已通过 `ast.parse`，可作为原版
-  媒体库路由/函数的独立证据，不再只依赖会话片段。
+  188 个函数、45 条媒体库路由）。随后将 helper/item-detail/stream 契约内联为
+  `forensics/recovered-sources/media_library.final-replayed.py`：204 个函数、
+  覆盖原版 43 条路由（另含 `/stream` 与 `/sync-mdc-ng`）。剩余 29 个原版符号
+  主要是已退役 XML/在线映射函数、历史单测和旧适配器兼容函数；该文件已通过
+  `ast.parse`，可作为原版媒体库路由/函数的独立证据，不再只依赖会话片段。
 - 路由核对：回放版 43 条原版路由里，除 4 条用户明确废弃的 XML/在线映射
   路由外，全部由当前 `endpoints/media_library*.py + endpoints/actors.py`
   承接；当前另有 `/stream/{item_id}` 和 `/actors/mapping/source` 两条
