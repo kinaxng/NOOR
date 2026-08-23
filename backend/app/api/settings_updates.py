@@ -11,7 +11,7 @@ from typing import Any, Callable
 def _is_legacy_flat_model_root(path: Path) -> bool:
     return any(
         (path / name).exists()
-        for name in ("hub", "models--Systran--faster-whisper-large-v3", "audio-separator", "lada_model_weights")
+        for name in ("hub", "models--Systran--faster-whisper-large-v3", "lada_model_weights")
     )
 
 
@@ -34,13 +34,9 @@ def build_storage_env_updates(config: Any, lada_model_weights_env: str) -> dict[
     runtime_root = Path(config.runtime_root_dir or data_dir / "runtime")
     if _is_legacy_flat_model_root(model_root):
         whisper_model_dir = model_root
-        audio_separator_model_dir = model_root / "audio-separator"
-        reazon_model_dir = model_root / "reazon"
         lada_model_dir = model_root / "lada_model_weights"
     else:
         whisper_model_dir = model_root / "whisper"
-        audio_separator_model_dir = whisper_model_dir / "audio-separator"
-        reazon_model_dir = whisper_model_dir / "reazon"
         lada_model_dir = model_root / "lada"
     return {
         "SOURCE_DIR": config.source_dir,
@@ -51,9 +47,6 @@ def build_storage_env_updates(config: Any, lada_model_weights_env: str) -> dict[
         "WHISPER_MODEL_DIR": str(whisper_model_dir),
         "WHISPER_CACHE_DIR": str(runtime_root / "whisper" / "cache"),
         "WHISPER_TEMP_DIR": str(runtime_root / "whisper" / "temp"),
-        "AUDIO_SEPARATOR_MODEL_DIR": str(audio_separator_model_dir),
-        "REAZON_MODEL_DIR": str(reazon_model_dir),
-        "REAZON_NEMO_MODEL_PATH": str(reazon_model_dir / "reazonspeech-nemo-v2.nemo"),
         lada_model_weights_env: str(lada_model_dir),
         "LADA_CACHE_DIR": str(runtime_root / "lada" / "cache"),
         "LADA_TEMP_DIR": str(runtime_root / "lada" / "temp"),

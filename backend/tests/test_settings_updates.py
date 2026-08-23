@@ -51,9 +51,6 @@ def test_build_storage_env_updates_uses_model_and_runtime_roots():
         'WHISPER_MODEL_DIR': '/data/models/whisper',
         'WHISPER_CACHE_DIR': '/data/runtime/whisper/cache',
         'WHISPER_TEMP_DIR': '/data/runtime/whisper/temp',
-        'AUDIO_SEPARATOR_MODEL_DIR': '/data/models/whisper/audio-separator',
-        'REAZON_MODEL_DIR': '/data/models/whisper/reazon',
-        'REAZON_NEMO_MODEL_PATH': '/data/models/whisper/reazon/reazonspeech-nemo-v2.nemo',
         'LADA_MODEL_WEIGHTS_DIR': '/data/models/lada',
         'LADA_CACHE_DIR': '/data/runtime/lada/cache',
         'LADA_TEMP_DIR': '/data/runtime/lada/temp',
@@ -77,9 +74,6 @@ def test_build_storage_env_updates_detects_legacy_flat_model_root(tmp_path: Path
     updates = build_storage_env_updates(config, 'LADA_MODEL_WEIGHTS_DIR')
 
     assert updates['WHISPER_MODEL_DIR'] == str(tmp_path)
-    assert updates['AUDIO_SEPARATOR_MODEL_DIR'] == str(tmp_path / 'audio-separator')
-    assert updates['REAZON_MODEL_DIR'] == str(tmp_path / 'reazon')
-    assert updates['REAZON_NEMO_MODEL_PATH'] == str(tmp_path / 'reazon' / 'reazonspeech-nemo-v2.nemo')
     assert updates['LADA_MODEL_WEIGHTS_DIR'] == str(tmp_path / 'lada_model_weights')
 
 

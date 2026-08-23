@@ -43,9 +43,6 @@ class Settings(BaseSettings):
     whisper_model_dir: str = ""
     whisper_cache_dir: str = ""
     whisper_temp_dir: str = ""
-    audio_separator_model_dir: str = ""
-    reazon_model_dir: str = ""
-    reazon_nemo_model_path: str = ""
     lada_model_dir: str = Field(
         "", validation_alias="LADA_MODEL_WEIGHTS_DIR"
     )
@@ -179,9 +176,6 @@ class Settings(BaseSettings):
         fill("whisper_model_dir", model_root / "whisper")
         fill("whisper_cache_dir", runtime_root / "whisper" / "cache")
         fill("whisper_temp_dir", runtime_root / "whisper" / "temp")
-        fill("audio_separator_model_dir", model_root / "whisper" / "audio-separator")
-        fill("reazon_model_dir", model_root / "whisper" / "reazon")
-        fill("reazon_nemo_model_path", Path(self.reazon_model_dir) / "reazonspeech-nemo-v2.nemo")
         fill("lada_model_dir", model_root / "lada")
         fill("lada_cache_dir", runtime_root / "lada" / "cache")
         fill("lada_temp_dir", runtime_root / "lada" / "temp")

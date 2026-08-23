@@ -550,3 +550,24 @@
 - 重新扫描当前源码与全部 Vite 缓存 / source map / 读取快照后，没有发现
   尚未登记的字节级匹配；`forensics/current-byte-level-matches.tsv` 保持 44 行。
 - 文件级审计仍为 131 `verified`、0 `pending`、0 `missing`、6 `intentional`。
+
+## 插件版本与 Whisper 退役配置清理（2026-08-24）
+
+- 清除四个官方插件 manifest 中的恢复期版本后缀：
+  `av-recommend` 恢复为 `1.0.0`，`avdb`、`subscription-core`、
+  `transmission` 恢复为 `0.1.0`。后端 9899 重启后 `/api/plugins` 已不再返回
+  任何 `-recovered` 版本号。
+- 收敛 Whisper 已退役多链路/音频预处理配置：
+  `.env.example`、`core/config.py`、`settings_response.py`、
+  `settings_updates.py` 与 `settings_whisper.py` 均移除
+  `AUDIO_SEPARATOR_MODEL_DIR`、`REAZON_MODEL_DIR`、
+  `REAZON_NEMO_MODEL_PATH`、`WHISPER_AUDIO_PREPROCESS_*`、
+  `WHISPER_PASS1_PIPELINE`、`WHISPER_PASS2_PIPELINE`、
+  `WHISPER_CUSTOM_CONFIG` 等旧字段；当前主链字段统一为
+  `chickenrice-zh` + runtime tier + energy VAD + optional timing refiner。
+- 中英文 i18n 键集清理后仍为 919 键且完全对称；前端生产构建通过，
+  后端全量测试 `238 passed`。
+- 无头 Chromium 抽查主页与 `/plugins/javdb`，侧栏、JavDB tab、媒体卡片、
+  订阅动作与控制面板均正常渲染，DOM 中没有恢复期标记。
+- 文件级审计复跑保持 131 `verified`、0 `pending`、0 `missing`、
+  6 `intentional`。

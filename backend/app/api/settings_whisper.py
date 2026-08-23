@@ -62,7 +62,6 @@ def apply_whisper_config_updates(
         ("WHISPER_SEGMENT_MERGE_MAX_DURATION_MS", "segment_merge_max_duration_ms"),
         ("WHISPER_TIMING_REFINER", "timing_refiner"),
         ("WHISPER_MODEL", "model"),
-        ("WHISPER_PIPELINE_MODE", "pipeline_mode"),
         ("WHISPER_LANGUAGE", "language"),
         ("WHISPER_SENSITIVITY", "sensitivity"),
         ("WHISPER_TRANSLATE_TO", "translate_to"),

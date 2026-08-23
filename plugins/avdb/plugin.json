@@ -1,7 +1,7 @@
 {
   "id": "avdb",
   "name": "AVDB",
-  "version": "0.1.0-recovered",
+  "version": "0.1.0",
   "type": "source",
   "description": "通过独立 AVDB article/torrent API 搜索影片资源。",
   "capabilities": ["resource_search", "network_outbound"],
