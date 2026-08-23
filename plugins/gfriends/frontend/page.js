@@ -13,6 +13,7 @@ export async function mount(root, sdk) {
     resolving: false,
     items: [],
     error: '',
+    disabled: false,
   }
 
   const api = (action, payload = {}) => sdk.api.post(`/plugins/gfriends/actions/${action}`, { payload }).then(r => r.data)
@@ -54,6 +55,10 @@ export async function mount(root, sdk) {
 
   function renderStats() {
     statsBox.innerHTML = ''
+    if (state.disabled) {
+      statsBox.appendChild(sdk.ui.notice({ tone: 'info', text: '插件未启用，请在插件管理或设置中启用后再使用。' }))
+      return
+    }
     const stats = state.stats || {}
     const created = Number(stats.created_at || 0) ? new Date(Number(stats.created_at) * 1000).toLocaleString() : '未同步'
     statsBox.append(
@@ -97,6 +102,10 @@ export async function mount(root, sdk) {
     try {
       const res = await api('stats', { ensure: false })
       state.stats = res.index
+      if (res?.ok === false) {
+        state.disabled = true
+        state.stats = {}
+      }
       renderStats()
     } catch {}
   }
@@ -107,6 +116,12 @@ export async function mount(root, sdk) {
     try {
       const res = await api('sync', { force })
       state.stats = res.index
+      if (res?.ok === false) {
+        state.disabled = true
+        state.error = res.message || '插件未启用'
+        renderResult()
+        return
+      }
       sdk.toast.success('Gfriends 索引已更新')
       renderStats()
     } catch (error) {
@@ -126,6 +141,10 @@ export async function mount(root, sdk) {
     try {
       const aliases = state.aliases.split(/[,，、]/).map(x => x.trim()).filter(Boolean)
       const result = await api('candidates', { name: state.query, aliases, limit: 36 })
+      if (result?.ok === false) {
+        state.error = result.message || '插件未启用'
+        return
+      }
       state.items = result.items || []
       if (result?.index) state.stats = result.index
       renderStats()
@@ -139,7 +158,7 @@ export async function mount(root, sdk) {
   }
 
   await loadStats()
-  if (!state.stats?.alias_count) void syncIndex(false)
+  if (!state.disabled && !state.stats?.alias_count) void syncIndex(false)
 
   return () => {
     root.innerHTML = ''

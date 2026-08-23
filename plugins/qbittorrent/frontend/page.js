@@ -327,6 +327,7 @@ export async function mount(el, sdk = {}) {
     const r = await api(`/actions/${action}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ payload }) })
     const data = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(data.detail || `${action} failed`)
+    if (data?.ok === false) throw new Error(data.message || data.detail || `${action} failed`)
     return data
   }
 

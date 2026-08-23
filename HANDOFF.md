@@ -28,7 +28,8 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
 - Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.
 - Plugin host now skips standalone page loading when a plugin has no `frontend.entry`; AVDB is restored as a resource provider only and no longer triggers an assets `page.js` 404.
-- Verification: frontend production build passes; backend full pytest passes with `243 passed, 1 warning`; plugin validation passes with design-only warnings; Puppeteer check shows no Gfriends/TMDB 400 on JavDB actor and actor detail pages.
+- Disabled read-only plugin actions (`stats/sync/overview/device_info/tasks/about/device_config`) now return `200 ok:false` empty state instead of 400. Gfriends, MDC-NG manual, qBittorrent, and Xunlei remote pages render an unavailable state without console errors.
+- Verification: frontend production build passes; backend full pytest passes with `244 passed, 1 warning`; plugin validation passes with design-only warnings; Puppeteer check shows no Gfriends/TMDB 400 on JavDB actor and actor detail pages.
 
 # Hard Rules
 

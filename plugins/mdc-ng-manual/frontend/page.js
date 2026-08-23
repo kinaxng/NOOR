@@ -328,7 +328,7 @@ export async function mount(el, sdk = {}) {
         body: JSON.stringify({ payload: {} }),
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.detail || '加载失败')
+      if (!resp.ok || data?.ok === false) throw new Error(data?.detail || data?.message || '插件未启用')
       state.defaults = data.defaults || { target_folder: '', link_mode: 0, watch_dirs: [] }
       state.baseUrl = data.base_url || state.baseUrl
       state.jobs = Array.isArray(data.jobs) ? data.jobs : []

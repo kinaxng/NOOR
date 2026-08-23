@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api import plugins
@@ -42,6 +43,8 @@ def test_legacy_test_route_forwards_to_plugin_action(monkeypatch):
     async def fake_handle_action(plugin_id: str, action: str, payload: dict | None = None):
         return {"ok": True, "plugin_id": plugin_id, "action": action, "payload": payload}
 
+    monkeypatch.setattr(plugins.runtime, "_manifests", {"qbittorrent": {}})
+    monkeypatch.setattr(plugins.runtime, "is_enabled", lambda plugin_id: True)
     monkeypatch.setattr(plugins.runtime, "handle_action", fake_handle_action)
     response = TestClient(_app()).post("/api/plugins/qbittorrent/test")
     assert response.status_code == 200
@@ -176,3 +179,19 @@ def test_resource_resolve_download_route_requires_provider():
     )
 
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_disabled_read_action_returns_empty_state(monkeypatch):
+    from app.plugins.runtime import runtime
+
+    monkeypatch.setattr(runtime, "_manifests", {"qbittorrent": {}})
+    monkeypatch.setattr(runtime, "is_enabled", lambda plugin_id: False)
+
+    body = plugins.PluginActionPayload()
+    result = await plugins._handle_plugin_action("qbittorrent", "overview", body, None)
+
+    assert result["ok"] is False
+    assert result["disabled"] is True
+    assert result["jobs"] == []
+    assert result["stats"] == {"total": 0, "running": 0, "finished": 0, "failed": 0}

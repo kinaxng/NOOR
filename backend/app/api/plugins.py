@@ -495,21 +495,35 @@ async def _handle_plugin_action(
     should_log = not _is_noisy_plugin_action(action)
     origin = _request_hint(request)
     try:
-        if plugin_id == 'gfriends' and action in {'resolve', 'candidates'}:
-            if plugin_id not in runtime._manifests:
-                raise LookupError(plugin_id)
-            if not runtime.is_enabled(plugin_id):
-                return {
-                    'ok': False,
-                    'disabled': True,
-                    'message': 'Gfriends 插件未启用，头像辅助不可用',
-                    'items': [] if action == 'candidates' else None,
-                }
         if plugin_id == 'noor-core' and action == 'runtime-cleanup':
             min_age_hours = int((body.payload or {}).get('min_age_hours') or 6)
             result = run_runtime_cleanup(min_age_hours=min_age_hours)
             if should_log:
                 _plugin_log('info', plugin_id, f'action 完成 action={action} deleted={result.get("deleted_size")} count={result.get("deleted_count")} cost={(time.perf_counter() - start) * 1000:.0f}ms {origin}'.strip())
+            return result
+        if plugin_id not in runtime._manifests:
+            raise LookupError(plugin_id)
+        if not runtime.is_enabled(plugin_id):
+            disabled_actions = {
+                'resolve', 'candidates', 'stats', 'sync', 'overview',
+                'device_info', 'tasks', 'about', 'device_config',
+            }
+            if action not in disabled_actions:
+                raise ValueError('plugin disabled')
+            result = {'ok': False, 'disabled': True, 'message': 'plugin disabled'}
+            if action == 'candidates':
+                result['items'] = []
+            elif action in {'stats', 'sync'}:
+                result['index'] = {}
+            elif action == 'overview':
+                result['defaults'] = {'target_folder': '', 'link_mode': 0, 'watch_dirs': []}
+                result['jobs'] = []
+                result['stats'] = {'total': 0, 'running': 0, 'finished': 0, 'failed': 0}
+            elif action in {'device_info', 'tasks', 'about', 'device_config'}:
+                result['info'] = {}
+                result['tasks'] = []
+                result['about'] = None
+                result['config'] = None
             return result
         result = await runtime.handle_action(plugin_id, action, body.payload)
         if should_log:

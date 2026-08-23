@@ -28,6 +28,5 @@ async def test_disabled_gfriends_avatar_action_returns_ok_false(monkeypatch):
     assert result == {
         "ok": False,
         "disabled": True,
-        "message": "Gfriends 插件未启用，头像辅助不可用",
-        "items": None,
+        "message": "plugin disabled",
     }

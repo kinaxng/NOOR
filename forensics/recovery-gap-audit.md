@@ -663,3 +663,17 @@
   资源提供插件提示并记录 info，不再加载默认 `page.js`。
 - 验证：前端生产构建通过；Puppeteer 复核 `/plugins/avdb` 无 4xx/console error，
   页面显示无独立页面提示。
+
+## 禁用插件状态接口 400 收敛（2026-08-24）
+
+- 全插件路由无头浏览器复核发现 Gfriends、MDC-NG 手动任务、qBittorrent、
+  迅雷远程在未启用时仍请求只读状态接口，返回大量 400。
+- `plugins.py` 将禁用态只读动作统一降级为 `200 {"ok":false,"disabled":true,...}`：
+  Gfriends `stats/sync`、MDC `overview`、qB `overview`、迅雷
+  `device_info/tasks/about/device_config`；写操作仍保持禁用时失败。
+- 对应插件前端补齐 `ok:false` 判断：Gfriends 显示未启用提示，MDC/qB 显示
+  加载失败/未启用，迅雷继续按设备连接失败处理。
+- 新增 `backend/tests/test_plugin_compat_api.py` 的禁用 overview 空状态断言，
+  并调整插件 test 转发测试以显式启用 mock 插件。
+- 验证：后端全量测试 `244 passed`；插件校验仅设计/API 建议；四个插件页面
+  无 4xx、无 console error，并显示不可用状态。
