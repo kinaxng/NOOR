@@ -40,3 +40,4 @@ backend/run.py	47ee02f5c2679ae524319a2f9262c2d976620ea62d8e5a2422f1c0a96909b9bf	
 views/Jobs.vue	8e576f8a0ab8189b9b54bd82094bd719406a2af89abf94aeea761d782acf453c	recovered-sources:Jobs.vue.2026-06-13-final-replayed.vue
 views/ActorManagementView.vue	b35a89fa44dc278aad36e13218daa606901ff7fd88e5ffaac9e69679ac50181b	recovered-sources:ActorManagementView.vue.replayed.vue
 views/ResourceSearch.vue	66bae3f69e6241823c994bf8afb3341a22a381dffea334f51ea8d8aa6d60bee0	recovered-sources:ResourceSearch.vue.replayed.vue
+.env.example	a222339ba19fdb2a35d24a86d3f9c927a2d42f64bdaf328ba3d01d454b05598e	recovered-sources:original-session:2026-06-29T14:10:37.428Z:.env.example; recovered-sources:session-diffs:a4b84935ae37-.env.example.diff; recovered-sources:session-diffs:c0a77b2b5318-.env.example.diff

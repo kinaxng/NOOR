@@ -474,8 +474,10 @@
 - 通过全量读取快照哈希比对，再补上 4 个原版字节级匹配文件：
   `frontend/src/api/index.ts`、`frontend/src/composables/useJobNavigation.ts`、
   `frontend/src/composables/useToast.ts`、`backend/run.py`。
-- `current-byte-level-matches.tsv` 当前为 38 个匹配路径；前端生产构建通过，
+- `current-byte-level-matches.tsv` 当前为 42 个匹配路径；前端生产构建通过，
   后端全量 `pytest` 238 项通过。
+- `.env.example` 已作为字节级匹配路径登记，证据来源为 2026-06-29 原始会话完整
+  输出及当天 FaceFusion / Whisper 模型卷两笔 `.env.example` diff。
 
 ## PluginHost 路由化 tabs 恢复（2026-08-23）
 
