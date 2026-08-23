@@ -51,6 +51,7 @@ const collapseLabel = computed(() => {
 
 function isActivePath(path: string) {
   if (path === '/') return route.path === '/'
+  if (path === '/files' && route.path.startsWith('/actors/')) return true
   return route.path === path || route.path.startsWith(`${path}/`)
 }
 </script>

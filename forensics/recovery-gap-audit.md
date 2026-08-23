@@ -588,3 +588,12 @@
 - 全量后端测试更新为 `239 passed`；`./scripts/noor-plugin validate plugins`
   剩余仅 API SDK 建议、自定义弹窗建议和 design token 建议，不再把正式
   插件类型/能力当未知项。
+
+## 演员详情页导航状态收敛（2026-08-24）
+
+- `App.vue` 的 `activeNavName` 对 `/actors/:actorId` 返回
+  `files.actors.title`，避免演员详情页顶部误显示“设置”或旧路由名。
+- `AppSidebar.vue` 的 `isActivePath` 对 `/actors/:actorId` 视为
+  `/files` 子页面，保证从演员管理进入详情后“文件”侧边栏保持高亮。
+- 无头 Chromium 复核 `/actors/4201`：顶部显示“演员管理”，侧边栏
+  `文件` 为 active；前端生产构建通过。
