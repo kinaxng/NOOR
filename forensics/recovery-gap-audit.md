@@ -206,6 +206,10 @@
   （演员资料、重名、映射、TMDB 补全、批量合并、删除链等）和旧请求模型导出；
   `actors.py` 恢复 4 条旧映射路由。`test_actor_routes.py` 的 OpenAPI 路由一致性
   测试已更新为完整 43 条原版路由，后端全量测试仍为 216 项通过。
+- 插件前端快照核对：JavDB 当前 `page.js` 已覆盖 `served`/`coherent` 快照中的
+  全部函数入口，并保留路由化演员/系列等后续功能；推荐中心当前版本覆盖
+  `av-recommend.*` 快照函数，唯一移除的 `openJavDB` 是用户后来要求改为作品详情
+  面板时的有意变更。
 - 从原始 rollout 的 `git status` 快照提取 `forensics/original-status-inventory.tsv`，
   覆盖 617 个唯一状态行、114 个源码路径，补上 `dd000a8` 那次 710 文件 checkpoint
   未记录 `staged_paths` 的路径缺口；Docker、运行时数据与插件缓存路径按恢复策略保留

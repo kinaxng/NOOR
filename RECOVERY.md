@@ -318,6 +318,11 @@ the recovered bytecode modules remain unchanged.
   old route remains compatible without re-introducing the retired online workflow.
 - `backend/tests/test_actor_routes.py` now asserts the full original 43-route media
   library contract again. The backend suite still passes with 216 tests.
+- Final JavDB and recommendation-plugin snapshots were re-checked against the
+  current plugin pages. JavDB retains every function entry from the archived
+  `served`/`coherent` snapshots plus the later routed actor/series work; the
+  recommendation plugin only drops `openJavDB`, which was intentionally replaced
+  by the later inline work-detail panel.
 
 ## Recovery Consistency (2026-08-23)
 
