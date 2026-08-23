@@ -408,3 +408,10 @@
 - 移除的是当前重建里混入的早期 `BaseModal` 预览、固定关闭按钮和变体标签；
   这些不是最终原版证据，也不属于用户明确要求保留的新行为。
 - 验证：`vue-tsc && vite build` 通过。
+
+## i18n 键位补齐（2026-08-23）
+
+- 全前端静态 `t('...')` 键已校验，中英文使用键 617 个均无缺失。
+- 中文补齐 `settings.whisper.segmenter.*` 6 个 Whisper 分段器选项文案；
+  英文补齐 `jobs.cancelled`、`jobs.emptyCancelled` 2 个任务状态文案。
+- 中英文 `zh.ts` / `en.ts` 键集现已完全一致，前端生产构建通过。
