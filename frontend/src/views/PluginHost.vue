@@ -21,7 +21,7 @@ let dispose: null | (() => void) = null
 let styleEl: HTMLLinkElement | null = null
 let mountSeq = 0
 let sdkAbortController: AbortController | null = null
-let sdkDisposers: Array<() => void> = []
+let sdkCleanupFns: Array<() => void> = []
 
 function isLifecycleCancelMessage(value: unknown) {
   const text = String(value || '').toLowerCase()
@@ -45,14 +45,29 @@ function pluginDiagnostic(level: 'info' | 'warning' | 'error', message: string, 
   }).catch(() => {})
 }
 
+function shouldLogPluginRequest(path: string, level: 'info' | 'warning' | 'error' = 'info') {
+  if (level !== 'info') return true
+  const value = String(path || '').toLowerCase()
+  if (value.includes('/ws/overview') || value.includes('/ws/metrics')) return false
+  if (value.includes('/system/metrics')) return false
+  if (value.includes('/actions/overview') || value.includes('/actions/metrics')) return false
+  if (value.includes('/actions/status') || value.endsWith('/status')) return false
+  if (value.includes('refresh-status') || value.includes('refresh_status')) return false
+  return true
+}
+
+function errorMessage(error: any) {
+  return error?.response?.data?.detail || error?.message || String(error || 'unknown error')
+}
+
 function clearMounted() {
   mountSeq += 1
   if (sdkAbortController) {
     try { sdkAbortController.abort() } catch {}
     sdkAbortController = null
   }
-  for (const stop of sdkDisposers.splice(0)) {
-    try { stop() } catch {}
+  for (const cleanup of sdkCleanupFns.splice(0)) {
+    try { cleanup() } catch {}
   }
   if (dispose) {
     try { dispose() } catch {}
@@ -720,10 +735,10 @@ function sdkFor(id: string) {
     if (controller.signal.aborted) throw new DOMException('Plugin is unmounted.', 'AbortError')
   }
   const onUnmount = (cleanup: () => void) => {
-    sdkDisposers.push(cleanup)
+    sdkCleanupFns.push(cleanup)
     return () => {
-      const index = sdkDisposers.indexOf(cleanup)
-      if (index >= 0) sdkDisposers.splice(index, 1)
+      const index = sdkCleanupFns.indexOf(cleanup)
+      if (index >= 0) sdkCleanupFns.splice(index, 1)
     }
   }
   const pluginFetch = async (path: string, init?: RequestInit) => {
@@ -732,6 +747,36 @@ function sdkFor(id: string) {
       return await fetch(`/api/plugins/${id}${path}`, { ...(init || {}), signal: init?.signal || controller.signal })
     } catch (error: any) {
       if (!isAbortLikeError(error)) pluginDiagnostic('error', `${path}: ${error?.message || '请求失败'}`, id)
+      throw error
+    }
+  }
+  const sdkGet = async (path: string, config?: any) => {
+    ensureActive()
+    const start = performance.now()
+    try {
+      const response = await api.get(path, { ...(config || {}), signal: config?.signal || controller.signal })
+      if (shouldLogPluginRequest(path, 'info')) {
+        pluginDiagnostic('info', `sdk.api.get ${path} status=${response.status} cost=${Math.round(performance.now() - start)}ms`, id)
+      }
+      return response
+    } catch (error: any) {
+      if (controller.signal.aborted || isAbortLikeError(error)) throw error
+      pluginDiagnostic('error', `sdk.api.get ${path} failed cost=${Math.round(performance.now() - start)}ms error=${errorMessage(error)}`, id)
+      throw error
+    }
+  }
+  const sdkPost = async (path: string, data?: any, config?: any) => {
+    ensureActive()
+    const start = performance.now()
+    try {
+      const response = await api.post(path, data, { ...(config || {}), signal: config?.signal || controller.signal })
+      if (shouldLogPluginRequest(path, 'info')) {
+        pluginDiagnostic('info', `sdk.api.post ${path} status=${response.status} cost=${Math.round(performance.now() - start)}ms`, id)
+      }
+      return response
+    } catch (error: any) {
+      if (controller.signal.aborted || isAbortLikeError(error)) throw error
+      pluginDiagnostic('error', `sdk.api.post ${path} failed cost=${Math.round(performance.now() - start)}ms error=${errorMessage(error)}`, id)
       throw error
     }
   }
@@ -769,24 +814,8 @@ function sdkFor(id: string) {
     api: {
       plugin: pluginFetch,
       wsUrl: (path: string) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`,
-      get: async (path: string, config?: any) => {
-        ensureActive()
-        try {
-          return await api.get(path, { ...(config || {}), signal: config?.signal || controller.signal })
-        } catch (error: any) {
-          if (!isAbortLikeError(error)) pluginDiagnostic('error', `${path}: ${error?.response?.data?.detail || error?.message || '请求失败'}`, id)
-          throw error
-        }
-      },
-      post: async (path: string, data?: any, config?: any) => {
-        ensureActive()
-        try {
-          return await api.post(path, data, { ...(config || {}), signal: config?.signal || controller.signal })
-        } catch (error: any) {
-          if (!isAbortLikeError(error)) pluginDiagnostic('error', `${path}: ${error?.response?.data?.detail || error?.message || '请求失败'}`, id)
-          throw error
-        }
-      },
+      get: sdkGet,
+      post: sdkPost,
     },
     lifecycle: {
       signal: controller.signal,
@@ -837,24 +866,8 @@ function sdkFor(id: string) {
       open: (options: any) => openSubscriptionDialog(options),
     },
     avatar: {
-      resolve: async (options: any = {}) => {
-        const response = await pluginFetch('/actions/resolve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ payload: options }),
-        })
-        if (!response.ok) throw new Error('Gfriends resolve failed')
-        return response.json()
-      },
-      candidates: async (options: any = {}) => {
-        const response = await pluginFetch('/actions/candidates', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ payload: options }),
-        })
-        if (!response.ok) throw new Error('Gfriends candidates failed')
-        return response.json()
-      },
+      resolve: (options: any = {}) => sdkPost('/plugins/gfriends/actions/resolve', { payload: options }).then((r: any) => r.data),
+      candidates: (options: any = {}) => sdkPost('/plugins/gfriends/actions/candidates', { payload: options }).then((r: any) => r.data),
     },
     ui: {
       button: makeButton,

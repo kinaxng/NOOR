@@ -475,6 +475,8 @@
 - 同时补回原版插件宿主契约：`sdk.route` 提供 `basePath/path/fullPath/subPath`，
   路由变更由 `noor-plugin-route-change` 事件派发；`sdk.ui` 补回
   `filterPanelRow` / `controlPanelRow`。
+- `sdkCleanupFns`、`sdkGet`、`sdkPost` 已按原版命名恢复；`sdkGet`/`sdkPost`
+  保留请求耗时与失败诊断日志，`avatar.resolve/candidates` 也改走统一 `sdkPost`。
 - 无头 Chrome 实测：从 `/plugins/javdb` 点击“演员”后 URL 变为
   `/plugins/javdb/actors`，刷新后仍保持“演员”tab。
 - 继续点击演员卡片后 URL 变为 `/plugins/javdb/actor/{id}/{label}`，
