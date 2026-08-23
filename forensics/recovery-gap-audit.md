@@ -39,6 +39,8 @@
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。
    - 文件路径齐全，但部分文件内容仍是可维护重建，不是字节级原文件。
    - 例如 i18n 曾漏掉 `settings.whisper.testFailed`，本次已补回中英文键。
+   - 静态扫描 `frontend/src` 中 687 个 `t()` 引用后，补回英文缺失键
+     `dashboard.welcome.message`；当前中英文静态引用键均无缺失。
 2. 原始 `media_library.py` 是约 228 个函数、43 个路由的单模块；当前按职责拆为
    `endpoints/media_library*.py` 和 `endpoints/actors.py`。大多数功能等价，
    但函数名、路由前缀、文件结构不同。

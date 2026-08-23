@@ -931,6 +931,7 @@ export const en: Record<string, string> = {
   'settings.ui.blurHint': 'Media library covers have blur protection by default. The toolbar eye icon only saves this browser preference.',
   'settings.ui.blurEnabled': 'Enabled',
   'settings.ui.blurDisabled': 'Disabled',
+  'dashboard.welcome.message': 'Good to see you again!\nAll systems are running normally.',
   'dashboard.welcome.greeting': 'Welcome back,',
   'dashboard.welcome.voiceAssistant': 'Voice Assistant',
   'dashboard.stats.total': 'All',
