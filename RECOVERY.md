@@ -390,3 +390,4 @@ outside cache directories remain versioned as forensic evidence.
 - Restored `frontend/public/img/body-background.png` from the pre-takeover backup. The production build no longer reports the unresolved `/img/body-background.png` warning.
 - Removed `data/av_recommend/candidate_pool.json` and `data/subscription_core/subscriptions.json` from the Git index while keeping the files on disk. `.gitignore` now covers both runtime directories.
 - Restored original frontend TypeScript strictness: `tsconfig.json` now matches the pre-takeover configuration, `tsconfig.node.json` was restored, and six unused/dead frontend declarations were removed. `vue-tsc` and the production build both pass.
+- Restored the original Tailwind theme token map and the `/whisper` Vite proxy. Custom classes such as `text-accent-cyan` and `bg-bg-elevated` are generated again in the production CSS; the frontend build passes.
