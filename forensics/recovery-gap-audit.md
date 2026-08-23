@@ -244,6 +244,15 @@
 - 从预接管备份补回原版配置与文档：`backend/requirements.txt`、`backend/run.py`、
   `frontend/nginx.conf` 及前端设计/一致性文档；当前环境可导入 `run.py` 且依赖项齐全。
 
+- 恢复插件开发/CLI 文档与工具：`plugins/README.md`、`PLUGIN_DESIGN.md`、
+  `PLUGIN_DEVELOPMENT.md`、`PLUGIN_SDK.md`、`PLUGIN_CLI.md`、
+  `mteam-plugin/MTEAM_API.md`、`tools/noor_plugin/{validate,create,pack}.py` 和
+  `scripts/noor-plugin`。`validate plugins` 退出码为 0，create/pack 冒烟通过。
+- 恢复 Docker 方向文档：`README.md`、`DOCKER.md`、`docs/DEV_DOCKER_ALIGNMENT.md`；
+  仅恢复文档，不恢复或改动 Docker 运行源码。
+- M-Team 页面按最终 rollout 恢复为纯 SDK toast，去掉旧版 `alert(msg)` 兜底；
+  插件验证不再出现 `BROWSER_DIALOG_FORBIDDEN` 误报。
+
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。

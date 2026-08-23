@@ -227,3 +227,94 @@ Agent Prompt Guide
 
 6. 新增组件时：将设计 token 值（颜色、半径、阴影）定义在 style.css 的 :root 中，
    在组件中通过 var() 引用，而不是复制具体值。
+
+Global Loading, Empty and Feedback States
+-----------------------------------------
+这些约束适用于主程序页面、面板、弹窗、插件贡献页面。目标是避免“多个框叠在一起”、避免每个页面自造一套 loading / warning / toast。
+
+1. 页面首次加载
+   - 页面级 loading 使用居中轻量状态条：spinner + 一句短文案。
+   - 不要用整块大卡片占位，除非页面本身就是表格/卡片骨架且能稳定避免布局跳动。
+   - 插件宿主加载插件模块时，由 `PluginPageHost` 负责显示 loading；插件本身不要在 mount 前再画一个外层 loading 框。
+
+2. 局部加载
+   - 表格、网格、列表内容加载时，优先在内容区使用单个 inline state，不要同时显示空状态、错误状态和 loading 状态。
+   - loading / empty / error 三者互斥：同一区域同一时刻只能出现一种状态。
+   - 局部 loading 不要抢占页面主视觉，样式应比主要按钮和 tab 更弱。
+
+3. 空状态
+   - 空状态只说明“当前没有什么”和“用户可以做什么”。
+   - 空状态不使用警告色，不使用大面积边框，不堆叠多段解释。
+   - 例如：`暂无内容`、`暂无片单内容，点击 + 添加片单`。
+
+4. 错误 / 警告
+   - 可恢复错误优先 toast；页面内容区错误只保留一条简短 inline error。
+   - 阻断型错误才使用面板级 error state。
+   - 危险操作必须用 modal / preview，不用浏览器 `alert()` / `confirm()` 作为最终交互。
+
+5. Toast
+   - toast 用于动作结果反馈：保存成功、提交失败、推送完成。
+   - toast 文案必须短，不承载长日志、长路径、长异常栈。
+   - 重复快速触发的动作应避免刷屏，后续需要统一去重/合并策略。
+
+6. Skeleton
+   - Skeleton 只用于卡片网格或表格等尺寸稳定区域。
+   - Skeleton 不展示边框堆叠，不与 spinner 同时出现。
+   - 如果数据通常 1 秒内返回，优先使用单个 inline spinner，不使用 skeleton。
+
+7. 插件页面反馈
+   - 插件页面的外层加载、模块加载失败由 `PluginPageHost` 负责。
+   - 插件内部只负责业务数据加载状态，例如 RSS 正在加载、片单为空。
+   - 插件必须通过 `sdk.toast` 发成功/失败提示，不要直接使用 `alert()`。
+   - 插件内部状态组件必须复用 NOOR token：`--color-bg-surface`、`--color-border-default`、`--color-text-secondary`、`--color-brand`。
+
+
+Top action row / 顶部操作行
+-------------------------
+用于页面级 tabs 同一行右侧的状态与操作，例如：`额度受限`、`已连接`、`刷新`、`新建任务`。
+
+统一结构：左侧为一级 tabs，右侧为 actions；移动端 actions 必须排在 tabs 上方，避免主操作被横向 tabs 挤到第二视觉层级。
+
+尺寸：
+- 状态 badge、普通按钮、主按钮统一高度 30px。
+- 间距 8px，整行 gap 12px，可换行。
+
+类型与颜色：
+- `muted/default`：中性白灰，用于普通状态、次操作按钮。
+- `info`：品牌蓝，用于进行中、可点击的当前能力。
+- `success`：绿色，用于已连接、已启用、成功。
+- `warning`：琥珀，用于额度受限、未配置、需要注意但不阻断。
+- `error`：红色，用于已过期、连接失败、阻断错误。
+- `primary button`：品牌蓝，只用于当前最重要动作，例如“刷新”“新建任务”。
+
+插件应优先使用 SDK / 全局类：`.noor-plugin-topbar`、`.noor-plugin-topbar__actions`、`.noor-plugin-badge--{tone}`、`.noor-plugin-btn--primary`，不要在每个插件里重新发明高度和色板。
+
+NOOR Kit / Nuxt UI Migration Contract
+-------------------------------------
+NOOR 前端从 2026-05-01 起进入 Nuxt UI + NOOR Kit 迁移期。Nuxt UI 提供底层可访问组件，NOOR Kit 提供产品语义封装；业务页面不应直接堆叠页面私有按钮、badge、tabs 样式。
+
+统一入口：
+- Vue 主程序：`frontend/src/components/noor-kit/*`
+- 插件页面：`sdk.ui.*` DOM Lite 组件
+- 全局 token：`frontend/src/style.css` 中的 `--color-*` 与 `--ui-*` bridge
+
+第一批语义组件：
+- `NoorButton` / `sdk.ui.button()`：`primary`、`secondary/default`、`danger/error`、`ghost`、`link`
+- `NoorBadge` / `sdk.ui.badge()`：`muted`、`info`、`success`、`warning`、`danger/error`
+- `NoorTabs` / `sdk.ui.tabs()`：页面一级 tab，必须有滑动指示或等价 active 反馈
+- `NoorDialog` / `sdk.ui.modal()` / `sdk.ui.confirm()`：替代浏览器原生弹窗
+- `NoorTopActionBar` / `sdk.ui.topBar()` / `.noor-plugin-topbar`：顶部操作区唯一结构
+- `NoorInput`、`NoorSelect`、`NoorSearchBox` / `sdk.ui.input/select/search()`：输入与搜索统一入口
+- `NoorPagination` / `sdk.ui.pagination()`：分页统一入口，支持键盘 Home/End/PageUp/PageDown
+- `NoorState` / `sdk.ui.emptyState/loadingState/errorState()`：加载、空、错误态互斥
+- `NoorSubmitButton` / `sdk.ui.submitButton()`：按钮内进度，完成后保留状态直到刷新
+
+旧组件边界：
+- `VuiButton`、`VuiBadge`、`Tabs`、`VuiPagination`、`BaseModal`、`VuiSubmitButton` 暂保留兼容旧页面。
+- 新页面和新插件功能不得继续扩展这些旧组件。
+- 旧页面迁移时优先替换顶部操作区、分页、弹窗，再替换局部卡片内按钮。
+
+禁止：
+- 在单个页面或插件里重新定义按钮高度、badge 颜色、tab 动画。
+- 插件直接复制主程序 CSS 片段后改名。
+- 同一行中混用白色线框按钮、蓝色按钮、插件私有渐变按钮。

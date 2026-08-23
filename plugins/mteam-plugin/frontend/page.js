@@ -40,7 +40,7 @@ export async function mount(el, sdk = {}) {
   const fmtSize = n => { n = Number(n || 0); if (!n) return ''; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ } return `${n.toFixed(i >= 3 ? 2 : 1)} ${u[i]}` }
   const keyOf = it => String(it.guid || it.download_url || it.enclosure_url || it.link || it.title || '')
   const escapeHtml = s => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
-  const notify = (type, msg) => sdk.toast?.[type]?.(msg) || (type === 'error' ? alert(msg) : undefined)
+  const notify = (type, msg) => (sdk.toast?.[type] || sdk.toast?.info || sdk.toast?.success)?.(msg)
 
   function currentItems() {
     if (state.activeTab === 'rss') return state.rssItems

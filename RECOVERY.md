@@ -294,6 +294,21 @@ the recovered bytecode modules remain unchanged.
   same host's `pluginFetch('/actions/...')` so Gfriends avatar candidates remain
   available to actor editing without relying on the retired helper.
 
+- Restored plugin development/CLI artifacts from the original rollout:
+  `plugins/README.md`, `PLUGIN_DESIGN.md`, `PLUGIN_DEVELOPMENT.md`,
+  `PLUGIN_SDK.md`, `PLUGIN_CLI.md`, `mteam-plugin/MTEAM_API.md`,
+  `tools/noor_plugin/{validate,create,pack}.py`, and `scripts/noor-plugin`.
+  `scripts/noor-plugin create demo-plugin --type rss_source` and
+  `scripts/noor-plugin pack plugins/local-subtitle-library --force` both pass,
+  and `scripts/noor-plugin validate plugins` exits 0 with only non-fatal warnings.
+- Restored Docker-oriented docs from the June evidence:
+  `README.md`, `DOCKER.md`, and `docs/DEV_DOCKER_ALIGNMENT.md`. These document the
+  deployment direction without changing backend or Docker runtime source, matching
+  the user's instruction to keep Docker work out of this recovery step.
+- Corrected the recovered M-Team page to the final original toast helper:
+  `sdk.toast?.[type] || sdk.toast?.info || sdk.toast?.success` is used instead of the
+  older `alert(msg)` fallback, which also resolves the plugin validator false positive.
+
 ## Hardlink Source Actions Recovery (2026-08-23)
 
 - `HardlinkView.vue` now loads `hardlink_source_actions` contributions from all
