@@ -642,8 +642,6 @@ watch(() => route.query.q, () => {
       >
         <span class="summary-card__label">{{ totalLabel }}</span>
         <span class="summary-card__value">{{ summary.total_groups }}</span>
-
-        <span class="summary-card__value">{{ summary.total_groups }}</span>
       </button>
       <button
         type="button"

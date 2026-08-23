@@ -508,3 +508,12 @@
   body 独立滚动，标题为 baseline 行内布局，并补回
   `.noor-plugin-modal__title-meta` 样式。
 - 验证：前端生产构建通过。
+
+## HardlinkView 重复统计值清理（2026-08-23）
+
+- `frontend/src/views/HardlinkView.vue` 的“总组数”概览卡片中，
+  `summary.total_groups` 被重复渲染两次；已按 Vite 缓存原版证据移除
+  第二次渲染和多余空行。
+- 保留用户明确要求的通用 `hardlink_source_actions` 插件动作与
+  `/files/hardlinks?q=` 路由搜索参数，不回退到旧 MDC 专有动作。
+- 验证：前端生产构建通过。
