@@ -13,6 +13,8 @@
 - 原始符号索引：`forensics/original-symbol-index.json`
 - 前端快照：`forensics/frontend-snapshots/`
 - 恢复后端字节码：`backend/app/**/*.pyc`（只作证据，不作为运行源码）
+- 预接管完整备份：`/.1panel_clash/files/0ccfe0c069554d47be2eb71f8e92f7fd/noor-full-pre-takeover-20260412-160609.tar.gz`
+  （含 `.git`、完整源码，作为原版早期基准）
 
 ## 已验证为恢复原样的部分
 
@@ -69,7 +71,8 @@
   承接；当前另有 `/stream/{item_id}` 和 `/actors/mapping/source` 两条
   恢复期新增/保留路由。
 - 继续全盘扫描 `/dev/nvme0n1p2` 中可能残留的 Git pack，目标是匹配原版
-  commit hash；扫描仍在后台运行，尚未命中 NOOR pack。
+  commit hash；扫描仍在后台运行。同时用 4 月预接管备份和旧 464G 镜像交叉核对，
+  目前尚未命中 NOOR pack，但已确认预接管备份保留的是删除前原始早期工作树。
 
 - `backend/app/tasks/manager.py` 已恢复完整队列语义并转 `verified`：阶段/SSE、
   持久化恢复、排队与运行中取消、依赖链激活/跳过、孤儿 `running` 清理、日志落盘、
