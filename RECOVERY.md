@@ -439,8 +439,8 @@ the recovered bytecode modules remain unchanged.
 - Added `forensics/extract_session_diffs.py` and archived 477 unique unified-diff
   sections from the original June/August rollout under
   `forensics/recovered-sources/session-diffs/` with a SHA256 manifest. The script
-  also runs `git apply --reverse --check`; 63 diffs already apply reversibly to the
-  current tree, 376 require equivalence review, and 38 were truncated by the editor
+  also runs `git apply --reverse --check`; 72 diffs already apply reversibly to the
+  current tree, 367 require equivalence review, and 38 were truncated by the editor
   when originally printed and are retained only as evidence.
 - Restored the original Whisper translator line-retry behavior in
   `backend/app/pipeline/whisper/runtime.py`: batch results are normalized to the
@@ -491,8 +491,31 @@ the recovered bytecode modules remain unchanged.
   multi-chain files.
 - Added `backend/tests/test_subtitle_panel_runtime_contract.py` so the final
   Whisper runtime-tier payload cannot be removed as apparent recovery drift.
+- Added `backend/tests/test_forensic_read_snapshot_contracts.py` so backend
+  tests continue to verify that all 79 final `2026-08-23` read snapshots still
+  match the recovery tree within the documented drift window.
 - Verification: frontend production build passes; backend full pytest passes
   with `269 passed, 6 skipped`.
+
+## Session Diff, Final Commit, and Feature Contract Lock (2026-08-24)
+
+- Added `forensics/audit_session_diffs.py` to reproduce the session-diff summary
+  from `forensics/recovered-sources/session-diffs/manifest.json`:
+  `session-diff-audit.tsv` and `session-diff-audit.md` now record 520 sections,
+  477 unique diffs, 126 paths, and reverse-check status by path. `not_applied`
+  rows are intentionally treated as intermediate/refactored evidence rather than
+  missing final source.
+- Added `forensics/audit_final_commit_paths.py` and
+  `forensics/final-commit-path-audit.md`. All final commits after 2026-07-14 are
+  present: actor ghost exclusion, FaceFusion 3.8.0, FaceFusion face tracker score,
+  and JavDB recent series directory.
+- Restored `facefusion_face_tracker_score: float = 0.0` to `backend/app/core/config.py`
+  from the 2026-07-31 final commit evidence. `test_facefusion_final_contract.py`
+  locks the setting, CLI parameter, settings UI, source-library multi-select,
+  add-selected behavior, and image-library deletion cleanup.
+- Added `backend/tests/test_javdb_series_directory_contract.py` to lock series
+  normalization, bounded recent-series aggregation, the JavDB series tab, routing,
+  and series cards.
 
 
 The isolated recovery repository history records each reconstruction step. Generated
