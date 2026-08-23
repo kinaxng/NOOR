@@ -397,3 +397,14 @@
   JWT 过期、残留文件安全删除、显式保存路径 fail-closed 和插件配置字段。
 - 本轮验证：后端全量 `pytest` 237 项通过，迅雷插件 `compileall` 通过，
   插件校验仅剩已知 capability/CSS 前缀警告。
+
+## MediaDetailPanel 原版最终形态恢复（2026-08-23）
+
+- `frontend/src/components/noor/MediaDetailPanel.vue` 已切回
+  `forensics/frontend-snapshots/vite-cache-chromium/latest/src/components/noor/MediaDetailPanel.vue`，
+  SHA256 为 `fb1c04a34d4b9fb81cd26b573c76a8b80bb96e44586aeea1a011d4eb5123cc7a`。
+- 该版本与 2026-07-07 原版读取快照一致，保留原版顶栏、宽预览遮罩、
+  `detail-panel-topbar`、`preview-overlay`、播放按钮与流地址回退逻辑。
+- 移除的是当前重建里混入的早期 `BaseModal` 预览、固定关闭按钮和变体标签；
+  这些不是最终原版证据，也不属于用户明确要求保留的新行为。
+- 验证：`vue-tsc && vite build` 通过。

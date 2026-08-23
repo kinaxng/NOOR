@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import VuiButton from '../ui/Button/VuiButton.vue'
 import VuiBadge from '../ui/Badge/VuiBadge.vue'
-import BaseModal from '../ui/BaseModal.vue'
 import { useI18n } from '../../composables/useI18n'
 import type { FileTags, MediaItem, MediaItemDetail } from '../../api/types'
 import PanelHeader from './panels/PanelHeader.vue'
@@ -73,6 +72,10 @@ const overviewLabel = computed(() => {
   void i18nVersion.value
   return t('detail.overview')
 })
+const panelTitleLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.panelTitle')
+})
 const filesLabel = computed(() => {
   void i18nVersion.value
   return t('detail.files')
@@ -116,8 +119,10 @@ const previewUseLocalFallback = ref(false)
 const previewFailed = ref(false)
 
 // Merge genres from NFO and Emby, removing duplicates.
-// Filter out scraper labels, media-type placeholders, and values that repeat
-// the work code, studio, series, or actor names.
+// Filter out:
+// - labeled scraper fields like "发行: xxx"
+// - media-type style placeholders like "单体作品"
+// - tags that duplicate studio / series / code prefix
 const allGenres = computed(() => {
   if (!props.detail) return []
   const blocked = new Set<string>()
@@ -267,6 +272,10 @@ const variantRows = computed(() => {
 
 const selectedVariantPath = ref('')
 
+watch(previewVideoPath, (value) => {
+  document.body.style.overflow = value ? 'hidden' : ''
+})
+
 watch(variantRows, (rows) => {
   if (!rows.length) {
     selectedVariantPath.value = ''
@@ -315,6 +324,7 @@ function openPreview(path?: string) {
   previewVideoPath.value = targetPath
   previewStreamUrl.value = targetVariant?.streamUrl || props.detail?.stream_url || ''
 }
+
 
 function closePreview() {
   previewVideoPath.value = ''
@@ -376,8 +386,24 @@ function formatDate(dateStr: string | undefined): string {
             <!-- Scrollable wrapper -->
             <div class="flex-1 overflow-y-auto p-4 space-y-4 relative">
 
+              <div class="detail-panel-topbar">
+                <div class="detail-panel-topbar__meta">
+                  <span class="detail-panel-topbar__eyebrow">{{ panelTitleLabel }}</span>
+                </div>
+                <button
+                  @click="handleClose"
+                  :title="closeLabel"
+                  :aria-label="closeLabel"
+                  class="detail-panel-topbar__close"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
               <!-- Shared Header: backdrop + title + tagline + actors -->
-              <PanelHeader :detail="detail" :selected-variant-name="selectedVariantName" @play="openPreview" />
+              <PanelHeader :detail="detail" :selected-variant-name="selectedVariantName" :show-play="true" @play="openPreview" />
 
               <section class="ui-card detail-panel-section">
                 <div class="detail-panel-section__head">
@@ -493,28 +519,15 @@ function formatDate(dateStr: string | undefined): string {
                     <div
                       v-for="variant in variantRows"
                       :key="variant.path"
-                      class="detail-variant-card rounded-lg border border-white/6 bg-bg-elevated/80 px-3 py-2"
+                      class="detail-variant-card rounded-lg px-2.5 py-2"
                       :class="{ 'detail-variant-card--active': selectedVariant?.path === variant.path }"
                       @click="selectVariant(variant.path)"
                     >
                       <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0 flex-1">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="truncate text-xs font-medium text-text-primary">{{ variant.name }}</span>
+                          <div class="detail-variant-card__top">
+                            <span class="truncate text-xs font-medium text-white/82">{{ variant.name }}</span>
                             <span v-if="selectedVariant?.path === variant.path" class="detail-variant-card__selected">{{ t('detail.selected') }}</span>
-                            <span
-                              v-for="tag in variantTagItems(variant.tags)"
-                              :key="`${variant.path}-${tag.key}`"
-                              class="rounded-full px-2 py-0.5 text-[10px]"
-                              :class="{
-                                'border border-emerald-400/20 bg-emerald-500/10 text-emerald-200': tag.tone === 'green',
-                                'border border-sky-400/20 bg-sky-500/10 text-sky-200': tag.tone === 'blue',
-                                'border border-amber-400/20 bg-amber-500/10 text-amber-200': tag.tone === 'amber',
-                                'border border-white/15 bg-white/10 text-white/75': tag.tone === 'slate',
-                              }"
-                            >
-                              {{ tag.label }}
-                            </span>
                           </div>
                           <p
                             v-if="selectedVariant?.path === variant.path && variant.dir"
@@ -533,18 +546,6 @@ function formatDate(dateStr: string | undefined): string {
                 </div>
               </section>
 
-              <!-- Fixed Close Button -->
-              <button
-                @click="handleClose"
-                :title="closeLabel"
-                :aria-label="closeLabel"
-                class="detail-close-btn"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-
             </div>
           </template>
 
@@ -553,63 +554,138 @@ function formatDate(dateStr: string | undefined): string {
     </Transition>
   </Teleport>
 
-  <BaseModal
-    v-if="previewVideoPath"
-    :title="previewVideoName"
-    size="lg"
-    @close="closePreview"
-  >
-    <div class="preview-modal">
-      <div class="preview-modal__meta font-mono text-xs">{{ previewVideoPath }}</div>
-      <video
-        :key="previewVideoUrl"
-        class="preview-modal__player"
-        :src="previewVideoUrl"
-        controls
-        autoplay
-        preload="metadata"
-        @error="handlePreviewError"
-      />
-      <p v-if="previewFailed" class="preview-modal__error">{{ previewFailedLabel }}</p>
-      <p class="preview-modal__hint">{{ previewUnsupportedLabel }}</p>
+  <Teleport to="body">
+    <div v-if="previewVideoPath" class="preview-overlay">
+      <div class="preview-overlay__backdrop" @click="closePreview"></div>
+      <div class="preview-overlay__dialog">
+        <button
+          class="preview-overlay__close"
+          :title="closeLabel"
+          :aria-label="closeLabel"
+          @click="closePreview"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+        <div class="preview-overlay__body">
+          <video
+            :key="previewVideoUrl"
+            class="preview-modal__player"
+            :src="previewVideoUrl"
+            controls
+            autoplay
+            preload="metadata"
+            playsinline
+            @error="handlePreviewError"
+          />
+          <div class="preview-overlay__meta">
+            <span class="preview-overlay__name">{{ previewVideoName }}</span>
+            <span v-if="previewFailed" class="preview-modal__error">{{ previewFailedLabel }}</span>
+            <span v-else class="preview-modal__hint">{{ previewUnsupportedLabel }}</span>
+          </div>
+        </div>
+      </div>
     </div>
-  </BaseModal>
+  </Teleport>
 </template>
 
 <style scoped>
 
+.detail-panel-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.detail-panel-topbar__meta {
+  min-width: 0;
+}
+
+.detail-panel-topbar__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.detail-panel-topbar__close {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: none;
+  border-radius: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.detail-panel-topbar__close:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
 .detail-variant-card {
   cursor: pointer;
-  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+  border: 1px solid transparent;
+  background: var(--color-bg-surface);
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .detail-variant-card:hover {
-  border-color: rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.05);
+  background: var(--color-bg-hover);
 }
 
 .detail-variant-card--active {
-  border-color: rgba(0, 117, 255, 0.45);
-  background: rgba(0, 117, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(0, 117, 255, 0.14);
+  border-color: color-mix(in srgb, var(--color-border-focus) 38%, transparent);
+  background: color-mix(in srgb, var(--color-border-focus) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-border-focus) 14%, transparent);
+}
+
+.detail-variant-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .detail-variant-card__selected {
+  flex-shrink: 0;
   border-radius: 999px;
   padding: 0.125rem 0.5rem;
   font-size: 10px;
-  color: rgba(189, 225, 255, 0.95);
-  background: rgba(0, 117, 255, 0.18);
-  border: 1px solid rgba(0, 117, 255, 0.24);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+}
+
+.detail-variant-card--active .detail-variant-card__selected {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-border-focus) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-border-focus) 28%, transparent);
 }
 
 .detail-variant-card__dir {
-  margin-top: 0.4rem;
+  margin-top: 0.25rem;
   font-family: var(--font-mono);
-  font-size: 0.625rem;
-  line-height: 1.45;
+  font-size: 0.5625rem;
+  line-height: 1.35;
   color: var(--color-text-muted);
   word-break: break-all;
+}
+
+.detail-variant-card--active .detail-variant-card__dir {
+  color: var(--color-text-secondary);
 }
 
 .detail-panel-section {
@@ -637,10 +713,21 @@ function formatDate(dateStr: string | undefined): string {
   color: var(--color-text-secondary);
 }
 
+.detail-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.detail-action-row :deep(.vui-button) {
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+}
+
 .detail-panel-strip {
   margin-top: -0.25rem;
   border-radius: var(--radius-md);
-  background: rgba(255,255,255,0.04);
+  background: var(--color-border-subtle);
   padding: 0.625rem 0.75rem;
   font-size: 0.75rem;
   color: var(--color-text-secondary);
@@ -651,31 +738,7 @@ function formatDate(dateStr: string | undefined): string {
   flex-direction: column;
   gap: 0.5rem;
   padding-top: 0.25rem;
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
-
-.detail-close-btn {
-  position: absolute;
-  top: 0.875rem;
-  right: 0.875rem;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  background: rgba(3, 12, 29, 0.72);
-  border: 1px solid rgba(255,255,255,0.10);
-  backdrop-filter: blur(10px);
-  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
-}
-
-.detail-close-btn:hover {
-  color: var(--color-text-primary);
-  background: rgba(26, 31, 55, 0.92);
-  border-color: rgba(255,255,255,0.16);
-  transform: translateY(-1px);
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .panel-enter-active {
@@ -700,33 +763,116 @@ function formatDate(dateStr: string | undefined): string {
   transform: translateX(100%);
 }
 
-.preview-modal {
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.preview-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.preview-overlay__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(960px, calc(100vw - 2rem));
+  max-height: min(72vh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.875rem;
+  overflow: hidden;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.48);
+}
+
+.preview-overlay__close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.44);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.preview-overlay__body {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-}
-
-.preview-modal__meta {
-  color: var(--color-text-muted);
-  word-break: break-all;
+  padding: 0.75rem;
 }
 
 .preview-modal__player {
   width: 100%;
-  max-height: 70vh;
-  border-radius: var(--radius-md);
+  height: auto;
+  max-height: min(60vh, 620px);
+  min-height: 240px;
+  object-fit: contain;
   background: #000;
 }
 
-.preview-modal__hint {
+.preview-overlay__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 1.25rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.preview-overlay__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-modal__hint,
+.preview-modal__error {
   margin: 0;
-  color: var(--color-text-muted);
   font-size: 0.75rem;
 }
 
+.preview-modal__hint {
+  color: rgba(255, 255, 255, 0.54);
+}
+
 .preview-modal__error {
-  margin: 0;
-  color: var(--color-status-error);
-  font-size: 0.75rem;
+  color: #f87171;
+}
+
+@media (max-width: 720px) {
+  .preview-overlay {
+    padding: 0.5rem;
+    align-items: flex-end;
+  }
+
+  .preview-overlay__dialog {
+    width: 100%;
+    max-height: 56vh;
+    border-radius: 0.75rem;
+  }
+
+  .preview-modal__player {
+    min-height: 180px;
+    max-height: 44vh;
+  }
 }
 </style>
