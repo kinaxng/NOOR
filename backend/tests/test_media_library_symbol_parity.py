@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 
@@ -107,3 +108,33 @@ def test_media_library_module_exposes_restored_actor_helpers() -> None:
         "execute_actor_mapping_merge",
     }:
         assert hasattr(media_library, name), name
+
+
+def test_media_library_legacy_private_signatures_remain_compatible() -> None:
+    from app.api.endpoints import media_library
+
+    expected_prefixes = {
+        "_actor_mapping_name_index": ["records"],
+        "_apply_filter_and_paginate": ["items", "filter", "q", "offset", "limit"],
+        "_build_actor_mapping_merge_plan": ["config", "mapping_id", "target_name", "target_actor_id", "lang"],
+        "_enrich_hardlink_groups": ["groups"],
+        "_list_actors": ["config", "limit", "offset", "q", "sort_by", "sort_order", "lang", "include_ignored"],
+        "_localized_mapping_name": ["record", "fallback", "lang"],
+        "_merge_external_urls": ["items"],
+        "_preview_actor_name_sync": ["config", "lang", "limit"],
+        "_preview_actor_tmdb_backfill": ["config", "limit", "lang"],
+        "_provider_id": ["provider_ids", "keys"],
+        "_save_actor_mapping_records": ["records", "source_path", "stats"],
+        "_save_actor_profile_overrides": ["overrides"],
+        "_save_hardlink_groups": ["groups"],
+        "_scan_inodes": ["dir_path"],
+        "_scan_single_group": ["source_dir", "hardlink_dir"],
+        "_actor_merge_apply_people": ["item", "source_actor_ids", "target_name"],
+        "_fetch_emby_item_info": ["config", "emby_id"],
+        "_configured_mdc_ng_root_path": ["config"],
+        "_configured_mdc_ng_actor_mapping_path": ["config"],
+        "_load_actor_mapping_records": [],
+    }
+    for name, expected in expected_prefixes.items():
+        actual = list(inspect.signature(getattr(media_library, name)).parameters)
+        assert actual[: len(expected)] == expected, name

@@ -17,6 +17,10 @@ from app.api.endpoints import media_library as media
 from app.core.runtime_paths import data_path
 
 
+_actor_mapping_name_index_cache: tuple[int, dict] | None = None
+_actor_mapping_tmdb_index_cache: tuple[int, dict] | None = None
+
+
 def _provider_id(provider_ids: dict, *keys: str) -> str | None:
     if not isinstance(provider_ids, dict):
         return None
@@ -216,12 +220,55 @@ def _actor_mapping_primary_names(record: dict) -> set[str]:
     }
 
 
+def _actor_mapping_name_index(records: list[dict]) -> dict[str, dict]:
+    global _actor_mapping_name_index_cache
+    cache_key = id(records)
+    if _actor_mapping_name_index_cache and _actor_mapping_name_index_cache[0] == cache_key:
+        return _actor_mapping_name_index_cache[1]
+    index: dict[str, dict] = {}
+    primary_keys: set[str] = set()
+    for record in records:
+        primary_names = _actor_mapping_primary_names(record)
+        for name in primary_names:
+            key = _normalize_actor_key(str(name or ""))
+            if key and key not in index:
+                index[key] = {
+                    "record": record,
+                    "name": str(name or ""),
+                    "source": "primary",
+                }
+            if key:
+                primary_keys.add(key)
+    for record in records:
+        primary_names = _actor_mapping_primary_names(record)
+        for name in record.get("names") or []:
+            key = _normalize_actor_key(str(name or ""))
+            if (
+                key
+                and key not in index
+                and key not in primary_keys
+                and str(name or "") not in primary_names
+            ):
+                index[key] = {
+                    "record": record,
+                    "name": str(name or ""),
+                    "source": "alias",
+                }
+    _actor_mapping_name_index_cache = (cache_key, index)
+    return index
+
+
 def _actor_mapping_tmdb_index(records: list[dict]) -> dict[str, dict]:
+    global _actor_mapping_tmdb_index_cache
+    cache_key = id(records)
+    if _actor_mapping_tmdb_index_cache and _actor_mapping_tmdb_index_cache[0] == cache_key:
+        return _actor_mapping_tmdb_index_cache[1]
     index: dict[str, dict] = {}
     for record in records:
         tmdb_id = str(record.get("tmdb_id") or "").strip()
         if tmdb_id and tmdb_id not in index:
             index[tmdb_id] = record
+    _actor_mapping_tmdb_index_cache = (cache_key, index)
     return index
 
 
@@ -648,6 +695,79 @@ async def _diagnose_actor_delete(config: dict, actor_id: str) -> dict:
 
 async def _clear_actor_mapping_records() -> dict:
     return await actor_api.clear_actor_mapping()
+
+
+def _load_actor_mapping_records() -> list[dict]:
+    path = actor_api._mapping_store_path()
+    if not path.is_file():
+        return []
+    payload = actor_api._load_json(path, {})
+    return [item for item in payload.get("records", []) if isinstance(item, dict)]
+
+
+def _save_actor_mapping_records(records: list[dict], source_path: Path, stats: dict) -> dict:
+    return actor_api._save_mapping_records(records, source_path, stats)
+
+
+def _save_actor_profile_overrides(overrides: dict[str, dict]) -> None:
+    actor_api._save_profile_overrides(overrides)
+
+
+def _configured_mdc_ng_root_path(config: dict | None = None) -> Path | None:
+    root = actor_api._configured_mapping_root(config)
+    return Path(root) if root else None
+
+
+def _configured_mdc_ng_actor_mapping_path(config: dict | None = None) -> Path:
+    root = _configured_mdc_ng_root_path(config)
+    if root is None:
+        raise ValueError("请先在设置-EMBY 中填写 MDC-NG 路径")
+    return root / media.MDC_NG_ACTOR_MAPPING_RELATIVE_PATH
+
+
+async def _build_actor_mapping_merge_plan(
+    config: dict,
+    mapping_id: str,
+    *,
+    target_name: str | None = None,
+    target_actor_id: str | None = None,
+    lang: str | None = None,
+) -> dict:
+    return await actor_api._merge_plan(
+        config,
+        mapping_id,
+        target_name=target_name,
+        target_actor_id=target_actor_id,
+        lang=lang,
+    )
+
+
+async def _preview_actor_tmdb_backfill(
+    config: dict,
+    *,
+    limit: int = 5000,
+    lang: str | None = None,
+) -> dict:
+    candidates = await actor_api._tmdb_backfill_candidates(config, limit=limit, lang=lang)
+    return {
+        "candidates": candidates,
+        "summary": {
+            "scanned": len(candidates),
+            "candidate_count": len(candidates),
+            "high_confidence_count": sum(1 for item in candidates if item.get("confidence") == "high"),
+            "conflict_count": sum(1 for item in candidates if item.get("conflict_actors")),
+            "mapping_records": len(_load_actor_mapping_records()),
+        },
+    }
+
+
+async def _preview_actor_name_sync(
+    config: dict,
+    *,
+    lang: str | None = None,
+    limit: int = 5000,
+) -> dict:
+    return await actor_api._name_sync_candidates(config, lang=lang, limit=limit)
 
 
 async def _find_actor_mapping_group(config: dict, mapping_id: str, *, lang: str | None = None) -> dict:

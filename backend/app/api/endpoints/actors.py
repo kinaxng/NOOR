@@ -265,7 +265,9 @@ def _is_actor_name(value: str | None) -> bool:
     return not bool(re.fullmatch(r"\[(?:red|deleted|unknown)\]", name, flags=re.IGNORECASE))
 
 
-def _configured_mapping_root(config: dict[str, Any]) -> str:
+def _configured_mapping_root(config: dict[str, Any] | None = None) -> str:
+    if config is None:
+        config = media._load_config()
     saved = _mapping_settings()
     return str(
         config.get("mdc_ng_actor_mapping_path")
@@ -276,7 +278,9 @@ def _configured_mapping_root(config: dict[str, Any]) -> str:
     ).strip()
 
 
-def _mapping_path(config: dict[str, Any]) -> Path | None:
+def _mapping_path(config: dict[str, Any] | None = None) -> Path | None:
+    if config is None:
+        config = media._load_config()
     root = _configured_mapping_root(config)
     if not root:
         return None
@@ -370,8 +374,8 @@ def _load_profile_overrides() -> dict[str, dict[str, Any]]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _save_profile_overrides(payload: dict[str, dict[str, Any]]) -> None:
-    _save_json(_profile_overrides_path(), payload)
+def _save_profile_overrides(overrides: dict[str, dict[str, Any]]) -> None:
+    _save_json(_profile_overrides_path(), overrides)
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -483,11 +487,11 @@ def _parse_mapping_xml(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]
     }
 
 
-def _save_mapping_records(records: list[dict[str, Any]], source: Path, stats: dict[str, Any]) -> dict[str, Any]:
+def _save_mapping_records(records: list[dict[str, Any]], source_path: Path, stats: dict[str, Any]) -> dict[str, Any]:
     global _mapping_records_cache, _mapping_name_index_cache
     payload = {
         "version": 1,
-        "source_path": str(source),
+        "source_path": str(source_path),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "stats": stats,
         "records": records,
@@ -669,12 +673,13 @@ def _actor_matches_query(actor: dict[str, Any], query: str | None) -> bool:
 async def _list_actors(
     config: dict[str, Any],
     *,
-    limit: int,
-    offset: int,
-    query: str | None,
-    sort_by: str,
-    sort_order: str,
-    lang: str = "zh_cn",
+    limit: int = 60,
+    offset: int = 0,
+    q: str | None = None,
+    sort_by: str = "SortName",
+    sort_order: str = "Ascending",
+    lang: str | None = None,
+    include_ignored: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
     params: dict[str, Any] = {
         "IncludeItemTypes": "Person",
@@ -709,13 +714,15 @@ async def _list_actors(
                 break
 
     mapping = _mapping_index(config)
+    ignored_ghost_ids = _load_actor_merge_ignored_ghosts() if not include_ignored else set()
     actors = [
         _actor_from_emby(item, config, mapping, lang=lang)
         for item in raw_items
         if _is_actor_name(item.get("Name"))
+        and (include_ignored or str(item.get("Id") or "").strip() not in ignored_ghost_ids)
     ]
-    if query:
-        actors = [actor for actor in actors if _actor_matches_query(actor, query)]
+    if q:
+        actors = [actor for actor in actors if _actor_matches_query(actor, q)]
     valid_total = len(actors)
     return actors[max(0, offset) : max(0, offset) + limit], valid_total
 
@@ -731,7 +738,7 @@ async def get_actors(
 ):
     config = _require_config()
     try:
-        actors, total = await _list_actors(config, limit=limit, offset=offset, query=q, sort_by=sort_by, sort_order=sort_order, lang=lang)
+        actors, total = await _list_actors(config, limit=limit, offset=offset, q=q, sort_by=sort_by, sort_order=sort_order, lang=lang)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"获取 Emby 演员失败: {exc}") from exc
     return {"actors": actors, "total": total, "limit": limit, "offset": offset}
@@ -932,7 +939,7 @@ async def clear_actor_mapping():
 @router.get("/actors/duplicates")
 async def actor_duplicates(limit: int = Query(3000, ge=1, le=5000)):
     config = _require_config()
-    actors, _ = await _list_actors(config, limit=limit, offset=0, query=None, sort_by="SortName", sort_order="Ascending")
+    actors, _ = await _list_actors(config, limit=limit, offset=0, q=None, sort_by="SortName", sort_order="Ascending")
     grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     mapping = _mapping_index(config)
     for actor in actors:
@@ -964,7 +971,7 @@ async def actor_mapping_matches(
 ):
     config = _require_config()
     actors, total = await _list_actors(
-        config, limit=min(limit, 5000), offset=0, query=None,
+        config, limit=min(limit, 5000), offset=0, q=None,
         sort_by="SortName", sort_order="Ascending", lang=lang,
     )
     records = _mapping_records(config)
@@ -1067,8 +1074,8 @@ async def actor_mapping_matches(
     }
 
 
-async def _tmdb_backfill_candidates(config: dict[str, Any], lang: str) -> list[dict[str, Any]]:
-    actors, _ = await _list_actors(config, limit=5000, offset=0, query=None, sort_by="SortName", sort_order="Ascending", lang=lang)
+async def _tmdb_backfill_candidates(config: dict[str, Any], *, limit: int = 5000, lang: str | None = None) -> list[dict[str, Any]]:
+    actors, _ = await _list_actors(config, limit=max(1, min(limit, 5000)), offset=0, q=None, sort_by="SortName", sort_order="Ascending", lang=lang)
     index = _mapping_index(config)
     tmdb_owners = {str(actor.get("tmdb_id")): actor for actor in actors if actor.get("tmdb_id")}
     candidates: list[dict[str, Any]] = []
@@ -1096,7 +1103,7 @@ async def _tmdb_backfill_candidates(config: dict[str, Any], lang: str) -> list[d
 
 @router.get("/actors/tmdb-backfill/preview")
 async def preview_actor_tmdb_backfill(lang: str = "zh-CN"):
-    candidates = await _tmdb_backfill_candidates(_require_config(), lang)
+    candidates = await _tmdb_backfill_candidates(_require_config(), lang=lang)
     return {
         "ok": True,
         "candidates": candidates,
@@ -1111,7 +1118,7 @@ async def preview_actor_tmdb_backfill(lang: str = "zh-CN"):
 @router.post("/actors/tmdb-backfill/apply")
 async def apply_actor_tmdb_backfill(req: ActorTmdbBackfillRequest, lang: str = "zh-CN"):
     config = _require_config()
-    candidates = await _tmdb_backfill_candidates(config, lang)
+    candidates = await _tmdb_backfill_candidates(config, lang=lang)
     selected = set(req.actor_ids or [])
     if selected:
         candidates = [item for item in candidates if item["actor_id"] in selected]
@@ -1145,8 +1152,8 @@ async def actor_tmdb_backfill_progress(progress_key: str):
     return _tmdb_backfill_progress.get(progress_key) or {"ok": True, "status": "idle", "processed": 0, "total": 0, "applied_count": 0, "skipped_count": 0}
 
 
-async def _name_sync_candidates(config: dict[str, Any], lang: str) -> dict[str, Any]:
-    actors, total = await _list_actors(config, limit=5000, offset=0, query=None, sort_by="SortName", sort_order="Ascending", lang=lang)
+async def _name_sync_candidates(config: dict[str, Any], *, lang: str | None = None, limit: int = 5000) -> dict[str, Any]:
+    actors, total = await _list_actors(config, limit=max(1, min(limit, 5000)), offset=0, q=None, sort_by="SortName", sort_order="Ascending", lang=lang)
     index = _mapping_index(config)
     owners: dict[str, list[dict[str, Any]]] = {}
     for actor in actors:
@@ -1166,12 +1173,12 @@ async def _name_sync_candidates(config: dict[str, Any], lang: str) -> dict[str, 
 
 @router.get("/actors/name-sync/preview")
 async def preview_actor_name_sync(lang: str = "zh-CN"):
-    return {"ok": True, **await _name_sync_candidates(_require_config(), lang)}
+    return {"ok": True, **await _name_sync_candidates(_require_config(), lang=lang)}
 
 
 @router.post("/actors/name-sync/apply")
 async def apply_actor_name_sync(req: ActorNameSyncRequest, lang: str = "zh-CN"):
-    preview = await _name_sync_candidates(_require_config(), lang)
+    preview = await _name_sync_candidates(_require_config(), lang=lang)
     candidates = preview["updates"] + ([] if req.skip_conflicts else preview["conflicts"])
     selected = set(req.actor_ids or [])
     if selected:
@@ -1244,15 +1251,15 @@ def _actor_merge_apply_people(
     item: dict[str, Any],
     *,
     source_actor_ids: set[str],
-    target_actor_id: str,
     target_name: str,
+    target_actor_id: str | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     people = item.get("People") if isinstance(item.get("People"), list) else []
     has_existing_target = any(
         isinstance(person, dict)
         and str(person.get("Type") or "") == "Actor"
         and (
-            str(person.get("Id") or "") == target_actor_id
+            (bool(target_actor_id) and str(person.get("Id") or "") == target_actor_id)
             or str(person.get("Name") or "") == target_name
         )
         and str(person.get("Id") or "") not in source_actor_ids
@@ -1276,7 +1283,11 @@ def _actor_merge_apply_people(
             })
             if has_existing_target:
                 continue
-            next_person = {"Name": target_name, "Type": "Actor", "Id": target_actor_id}
+            next_person = (
+                {"Name": target_name, "Type": "Actor", "Id": target_actor_id}
+                if target_actor_id
+                else {"Name": target_name, "Type": "Actor"}
+            )
             has_existing_target = True
         dedupe_key = (str(next_person.get("Type") or ""), str(next_person.get("Id") or next_person.get("Name") or ""))
         if dedupe_key in seen:
@@ -1445,7 +1456,14 @@ async def _actor_delete_diagnostics(config: dict[str, Any], actor_id: str) -> di
     }
 
 
-async def _merge_plan(config: dict[str, Any], mapping_id: str, target_actor_id: str | None, target_name: str | None, lang: str) -> dict[str, Any]:
+async def _merge_plan(
+    config: dict[str, Any],
+    mapping_id: str,
+    *,
+    target_name: str | None = None,
+    target_actor_id: str | None = None,
+    lang: str | None = None,
+) -> dict[str, Any]:
     group = await _mapping_group(config, mapping_id, lang, target_actor_id)
     target_id = str(target_actor_id or group.get("target_actor_id") or group["actors"][0]["id"])
     target_actor = next(actor for actor in group["actors"] if str(actor["id"]) == target_id)
@@ -1475,11 +1493,11 @@ async def _merge_plan(config: dict[str, Any], mapping_id: str, target_actor_id: 
 
 @router.get("/actors/mapping/merge-plan")
 async def actor_mapping_merge_plan(mapping_id: str, target_actor_id: str | None = None, target_name: str | None = None, lang: str = "zh-CN"):
-    return {"ok": True, **await _merge_plan(_require_config(), mapping_id, target_actor_id, target_name, lang)}
+    return {"ok": True, **await _merge_plan(_require_config(), mapping_id, target_actor_id=target_actor_id, target_name=target_name, lang=lang)}
 
 
 async def _execute_merge(config: dict[str, Any], req: ActorMappingMergeRequest, lang: str) -> dict[str, Any]:
-    plan = await _merge_plan(config, req.mapping_id, req.target_actor_id, req.target_name, lang)
+    plan = await _merge_plan(config, req.mapping_id, target_actor_id=req.target_actor_id, target_name=req.target_name, lang=lang)
     if req.dry_run:
         return {"ok": True, "dry_run": True, **plan}
     source_ids = set(plan["source_actor_ids"])

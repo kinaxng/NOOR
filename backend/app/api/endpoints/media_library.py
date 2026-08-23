@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED, VIDEO_EXTS, config_path as _config_path, env_source_dir, get_config as _get_config, headers as _headers, load_config as _load_config, local_media_root, map_path as _map_path, parse_item as _parse_item, parse_tags as _parse_tags, save_config as _save_config, server_url as _server_url
 from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
-from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl as _fetch_emby_item_info, hardlink_groups_path_impl, load_hardlink_groups_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
+from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl, hardlink_groups_path_impl, load_hardlink_groups_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
 from app.api.endpoints.media_library_listing import _VARIANT_MARKER_RE, apply_filter_and_paginate as _apply_filter_and_paginate, deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, item_variant_penalty as _item_variant_penalty, merge_group_metadata as _merge_group_metadata, pick_group_representative as _pick_group_representative
 from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, delete_plan_from_hardlink_entry as _delete_plan_from_hardlink_entry, delete_plan_from_inode_chain as _delete_plan_from_inode_chain, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, find_inode_chain_for_path as _find_inode_chain_for_path, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, path_matches_hardlink_entry as _path_matches_hardlink_entry, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
 from app.api.endpoints.media_library_streaming import parse_range_header as _parse_range_header, iter_file_range as _iter_file_range
@@ -39,7 +39,6 @@ parse_item = _parse_item
 _env_source_dir = env_source_dir
 _get_config = _get_config
 extract_code_from_path_impl = _extract_code_from_path
-fetch_emby_item_info_impl = _fetch_emby_item_info
 _actor_mapping_tmdb_index_cache: tuple[int, dict] | None = None
 
 def _iso_from_ts(value:float|None)->str|None:
@@ -144,12 +143,22 @@ def _hardlink_groups_path():return hardlink_groups_path_impl(_config_path)
 def _hardlink_groups_last_scanned_at():
  try:return datetime.fromtimestamp(_hardlink_groups_path().stat().st_mtime,timezone.utc).isoformat()
  except OSError:return None
-def _scan_inodes(d):return scan_inodes_impl(d)
-def _scan_single_group(s,h):return scan_single_group_impl(s,h,scan_inodes_fn=_scan_inodes)
+def _scan_inodes(dir_path: str):return scan_inodes_impl(dir_path)
+def _scan_single_group(source_dir: str, hardlink_dir: str):return scan_single_group_impl(source_dir,hardlink_dir,scan_inodes_fn=_scan_inodes)
 async def _build_hardlink_groups():return await build_hardlink_groups_impl(_load_config(),scan_single_group_fn=_scan_single_group,extract_code_from_path_fn=extract_code_from_path_impl)
-def _save_hardlink_groups(g):save_hardlink_groups_impl(g,hardlink_groups_path_fn=_hardlink_groups_path)
+def _save_hardlink_groups(groups: list[dict]):save_hardlink_groups_impl(groups,hardlink_groups_path_fn=_hardlink_groups_path)
 def _load_hardlink_groups():return load_hardlink_groups_impl(hardlink_groups_path_fn=_hardlink_groups_path)
-def _enrich_hardlink_groups(g):return enrich_hardlink_groups_impl(g)
+def _enrich_hardlink_groups(groups: list[dict]):return enrich_hardlink_groups_impl(groups)
+
+
+def _fetch_emby_item_info(config: dict, emby_id: str | None) -> tuple[str | None, str | None]:
+    return fetch_emby_item_info_impl(
+        config,
+        emby_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+    )
 
 def _configured(config):
  if not config.get('server_url') or not config.get('api_key'):raise HTTPException(503,_ADAPTER_NOT_ACTIVATED)
@@ -491,7 +500,6 @@ _ACTOR_COMPAT_EXPORTS = {
 }
 
 _ACTOR_COMPAT_ALIASES = {
-    "_actor_mapping_name_index": "_mapping_index",
     "_actor_mapping_auto_update_task": "_mapping_auto_update_task",
     "_actor_mapping_name_index_cache": "_mapping_name_index_cache",
     "_actor_mapping_records_cache": "_mapping_records_cache",
@@ -501,19 +509,10 @@ _ACTOR_COMPAT_ALIASES = {
     "_ACTOR_TMDB_BACKFILL_PROGRESS": "_tmdb_backfill_progress",
     "_actor_profile_overrides_path": "_profile_overrides_path",
     "_apply_actor_profile_override": "_apply_profile_override",
-    "_build_actor_mapping_merge_plan": "_merge_plan",
-    "_configured_mdc_ng_actor_mapping_path": "_mapping_path",
-    "_configured_mdc_ng_root_path": "_configured_mapping_root",
     "_execute_actor_mapping_merge": "_execute_merge",
     "_get_actor_profile": "_actor_profile",
-    "_load_actor_mapping_records": "_mapping_records",
     "_load_actor_profile_overrides": "_load_profile_overrides",
-    "_localized_mapping_name": "_mapping_display_name",
     "_parse_actor_mapping_xml": "_parse_mapping_xml",
-    "_preview_actor_name_sync": "_name_sync_candidates",
-    "_preview_actor_tmdb_backfill": "_tmdb_backfill_candidates",
-    "_save_actor_mapping_records": "_save_mapping_records",
-    "_save_actor_profile_overrides": "_save_profile_overrides",
     "_sync_actor_mapping_from_mdc_ng": "_sync_mapping_from_mdc_ng",
 }
 

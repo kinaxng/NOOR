@@ -110,23 +110,23 @@ def item_matches_query(item: dict[str, Any], query: str | None) -> bool:
     return query in "\n".join(str(field) for field in fields if field).lower()
 
 
-def apply_filter_and_paginate(items: list[dict[str, Any]], filter_name: str | None, query: str | None, offset: int, limit: int) -> dict[str, Any]:
+def apply_filter_and_paginate(items: list[dict[str, Any]], filter: str | None, q: str | None, offset: int, limit: int) -> dict[str, Any]:
     filtered = []
     for item in items:
         tags = item.get("tags", {})
-        matches_filter = not filter_name
-        if filter_name:
+        matches_filter = not filter
+        if filter:
             if not tags:
                 matches_filter = False
-            elif filter_name == "cracked":
+            elif filter == "cracked":
                 matches_filter = bool(tags.get("is_cracked"))
-            elif filter_name == "chinese":
+            elif filter == "chinese":
                 matches_filter = bool(tags.get("has_chinese"))
-            elif filter_name == "leaked":
+            elif filter == "leaked":
                 matches_filter = tags.get("release_type_key") == "leaked"
-            elif filter_name == "uncensored":
+            elif filter == "uncensored":
                 matches_filter = tags.get("release_type_key") == "uncensored"
-        if matches_filter and item_matches_query(item, query):
+        if matches_filter and item_matches_query(item, q):
             filtered.append(item)
     offset = max(0, int(offset or 0))
     limit = max(1, int(limit or 1))

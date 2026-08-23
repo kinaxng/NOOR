@@ -199,6 +199,17 @@ def test_actor_merge_people_creates_selected_target_when_missing():
     assert updated["People"] == [{"Id": "target-1", "Name": "目标名", "Type": "Actor"}]
 
 
+def test_actor_merge_people_supports_legacy_signature_without_target_id():
+    updated, changed = actors._actor_merge_apply_people(
+        {"People": [{"Id": "source-1", "Name": "旧名", "Type": "Actor", "PrimaryImageTag": "old"}]},
+        source_actor_ids={"source-1"},
+        target_name="目标名",
+    )
+
+    assert changed[0]["id"] == "source-1"
+    assert updated["People"] == [{"Name": "目标名", "Type": "Actor"}]
+
+
 def test_actor_mapping_batch_discovers_candidates_and_skips_conflicts(monkeypatch):
     monkeypatch.setattr(actors, "_require_config", lambda: {"server_url": "http://emby", "api_key": "k"})
 

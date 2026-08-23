@@ -49,6 +49,27 @@
 - `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
 - 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 260 项通过。
 
+## 原版媒体库私有函数签名补齐（2026-08-24）
+
+- 对 `media_library.final-replayed.py` 做运行时签名扫描，确认当前
+  `app.api.endpoints.media_library` 已能按原版参数名和顺序调用所有原版函数。
+- `_list_actors` 恢复原版 `q`、`include_ignored` 及默认参数；忽略的
+  ghost 演员按原版语义只在非 include 模式下过滤。
+- `_apply_filter_and_paginate`、`_scan_inodes`、`_scan_single_group`、
+  `_save_hardlink_groups`、`_enrich_hardlink_groups` 恢复原版参数名。
+- `_fetch_emby_item_info` 改回原版 config/emby_id 包装，不再直接暴露
+  split implementation 的额外依赖参数。
+- 原版 `_actor_mapping_name_index`、`_load_actor_mapping_records`、
+  `_save_actor_mapping_records`、`_save_actor_profile_overrides`、
+  `_configured_mdc_ng_root_path`、`_configured_mdc_ng_actor_mapping_path`、
+  `_build_actor_mapping_merge_plan`、`_preview_actor_name_sync`、
+  `_preview_actor_tmdb_backfill` 由惰性兼容层提供原版签名，不再直接
+  alias 到签名不同的拆分函数。
+- 新增 `test_media_library_legacy_private_signatures_remain_compatible` 和
+  原版无 target_actor_id 的合并调用回归测试。
+- 验证：后端全量 `pytest` 262 项通过；前端生产构建通过；
+  `forensics/smoke_restored_pages.js` 无 HTTP 4xx/5xx、无 console error。
+
 ## 第二遍证据复核（2026-08-24）
 
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
