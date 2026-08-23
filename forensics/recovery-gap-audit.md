@@ -66,6 +66,12 @@
 - 将此前只存在于 `/tmp` 的原版前端证据复制到 `forensics/recovered-sources/`
   并生成 SHA256SUMS：ActorDetail、History、ResourceSearch、Home source-map raw、
   FaceFusionPanel source-map raw 和 Jobs 回放证据。
+- `Jobs.vue` 已按最终原版回放版本核对并转 `verified`，当前文件与
+  `forensics/recovered-sources/Jobs.vue.2026-06-13-final-replayed.vue` 字节一致；
+  其职责是任务运行/后台 Tab，不含已迁移到 `History.vue` 的诊断链路面板。
+- 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
+  `operation_id`，消除 FastAPI OpenAPI 重复操作名告警；后端全量测试仍为
+  216 项通过。
 
 - 从活盘 `/dev/nvme0n1p2` 恢复出早期原版 `media_library.py` 源码种子，并
   用 2026-06/07 NOOR rollout 补丁回放得到
@@ -187,7 +193,7 @@
    - 完整 Vue 组件树没有单一可信的“最终原文件”副本。
    - `App.recovered-full.vue` 是旧单文件 UI，不能直接替换当前组件化前端。
    - 每个组件都应按 rollout 证据逐文件核对，已核对完 `ResourceSearch`、
-     `FaceFusionSettings`、`LadaPanel`、`Home`；下一批是 i18n、
+     `FaceFusionSettings`、`LadaPanel`、`Home`、`Jobs`；下一批是 i18n、
      `ActorManagementView`、`ActorDetailView` 和 `FaceFusionPanel` 的后续修订。
 
 ## 后续恢复建议（按影响排序）

@@ -372,7 +372,7 @@ async def _fetch_items(config: dict[str, Any], *, library_id: str | None, limit:
     return items, int(payload.get("TotalRecordCount") or len(items))
 
 
-@router.post("/test")
+@router.post("/test", operation_id="recovery_test_connection")
 async def test_connection(config: dict[str, Any] | None = None):
     cfg = _config(config)
     try:
@@ -382,7 +382,7 @@ async def test_connection(config: dict[str, Any] | None = None):
         return {"ok": False, "message": f"连接失败: {exc}", "libraries": []}
 
 
-@router.get("/libraries")
+@router.get("/libraries", operation_id="recovery_get_libraries")
 async def get_libraries():
     config = _config()
     user_id = str(config.get("user_id") or "").strip()
@@ -398,7 +398,7 @@ async def get_libraries():
         return {"libraries": []}
 
 
-@router.get("/items")
+@router.get("/items", operation_id="recovery_get_items")
 async def get_items(
     library_id: str | None = None,
     limit: int = Query(50, ge=1, le=500),
@@ -424,7 +424,7 @@ async def get_items(
     }
 
 
-@router.get("/item/{item_id}")
+@router.get("/item/{item_id}", operation_id="recovery_get_item")
 async def get_item(item_id: str):
     config = _config()
     try:
