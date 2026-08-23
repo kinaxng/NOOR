@@ -102,11 +102,12 @@ function makeInput(options: any = {}) {
 }
 
 function makeSelect(options: any = {}) {
+  type SelectItem = { value: string; label: string; disabled: boolean }
   const items = (Array.isArray(options.options) ? options.options : []).map((item: any) => ({
     value: String(item?.value ?? ''),
     label: String(item?.label ?? item?.value ?? ''),
     disabled: !!item?.disabled,
-  }))
+  })) as SelectItem[]
   let current = String(options.value ?? '')
   let open = false
   let detachOutside: null | (() => void) = null
@@ -130,7 +131,7 @@ function makeSelect(options: any = {}) {
   const menu = document.createElement('div')
   menu.className = 'noor-plugin-select__menu'
   menu.hidden = true
-  const selectedItem = () => items.find((item: any) => item.value === current) || items[0] || { value: '', label: '' }
+  const selectedItem = () => items.find(item => item.value === current) || items[0] || { value: '', label: '' }
   const syncLabel = () => {
     const selected = selectedItem()
     valueNode.textContent = selected.label || ''
@@ -155,8 +156,25 @@ function makeSelect(options: any = {}) {
     })
     if (emit) options.onChange?.(current)
   }
-  const onOutside = (event: PointerEvent) => {
-    if (!wrap.contains(event.target as Node)) closeMenu()
+  const renderOptions = () => {
+    menu.innerHTML = ''
+    for (const item of items) {
+      const option = document.createElement('button')
+      option.type = 'button'
+      option.className = 'noor-plugin-select__option'
+      option.dataset.value = item.value
+      option.textContent = item.label
+      option.disabled = item.disabled
+      option.classList.toggle('is-active', item.value === current)
+      option.onclick = event => {
+        event.stopPropagation()
+        if (item.disabled) return
+        setValue(item.value)
+        closeMenu()
+        trigger.focus()
+      }
+      menu.appendChild(option)
+    }
   }
   const openMenu = () => {
     if (options.disabled || open) return
@@ -167,29 +185,15 @@ function makeSelect(options: any = {}) {
     detachOutside = () => document.removeEventListener('pointerdown', onOutside, true)
     document.addEventListener('pointerdown', onOutside, true)
   }
+  const onOutside = (event: PointerEvent) => {
+    if (!wrap.contains(event.target as Node)) closeMenu()
+  }
   const moveSelection = (direction: number) => {
-    const enabled = items.filter((item: any) => !item.disabled)
+    const enabled = items.filter((item: SelectItem) => !item.disabled)
     if (!enabled.length) return
-    const index = Math.max(0, enabled.findIndex((item: any) => item.value === current))
+    const index = Math.max(0, enabled.findIndex((item: SelectItem) => item.value === current))
     const next = enabled[(index + direction + enabled.length) % enabled.length]
     setValue(next.value)
-  }
-  for (const item of items) {
-    const option = document.createElement('button')
-    option.type = 'button'
-    option.className = 'noor-plugin-select__option'
-    option.dataset.value = item.value
-    option.textContent = item.label
-    option.disabled = item.disabled
-    option.classList.toggle('is-active', item.value === current)
-    option.onclick = event => {
-      event.stopPropagation()
-      if (item.disabled) return
-      setValue(item.value)
-      closeMenu()
-      trigger.focus()
-    }
-    menu.appendChild(option)
   }
   trigger.setAttribute('aria-haspopup', 'listbox')
   trigger.setAttribute('aria-expanded', 'false')
@@ -213,6 +217,7 @@ function makeSelect(options: any = {}) {
       open ? closeMenu() : openMenu()
     }
   }
+  renderOptions()
   syncLabel()
   wrap.append(trigger, menu)
   ;(wrap as any).__noorSetValue = (value: string) => setValue(value, false)
@@ -942,7 +947,6 @@ function sdkFor(id: string) {
       open: (options: any) => openSubscriptionDialog(options),
     },
     avatar: {
-      resolve: (options: any = {}) => sdkPost('/plugins/gfriends/actions/resolve', { payload: options }).then((r: any) => r.data),
       candidates: (options: any = {}) => sdkPost('/plugins/gfriends/actions/candidates', { payload: options }).then((r: any) => r.data),
     },
     ui: {
