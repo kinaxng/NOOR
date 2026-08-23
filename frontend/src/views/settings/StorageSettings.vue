@@ -237,6 +237,10 @@ function confirmDirPicker() {
     outputDirManuallyEdited.value = true
   } else if (dirPickerTarget.value === 'noorDataDir') {
     noorDataDir.value = path
+  } else if (dirPickerTarget.value === 'modelRootDir') {
+    modelRootDir.value = path
+  } else if (dirPickerTarget.value === 'runtimeRootDir') {
+    runtimeRootDir.value = path
   } else if (dirPickerTarget.value === 'whisperModelDir') {
     whisperModelDir.value = path
   } else if (dirPickerTarget.value === 'whisperCacheDir') {

@@ -72,6 +72,9 @@
 - `ActorManagementView.vue` 已核对为 `2a7fe62` 历史工作区源码回放版本并归档
   `forensics/recovered-sources/ActorManagementView.vue.replayed.vue`，SHA256
   与当前文件一致；演员管理页的映射、重名检测、TMDB 补全、语言批量同步入口齐全。
+- 存储设置回写修复：`StorageSettings.vue` 的“模型路径/运行时路径”目录选择在
+  `confirmDirPicker` 中补回 `modelRootDir` / `runtimeRootDir` 赋值，避免点击
+  浏览后选择结果不生效。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
   `operation_id`，消除 FastAPI OpenAPI 重复操作名告警；后端全量测试仍为
   216 项通过。
