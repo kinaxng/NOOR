@@ -29,7 +29,7 @@
 | `frontend/src/components/noor/FaceFusionPanel.vue` | 25 | verified | 301d3d8 feat(facefusion): expose face tracker score | 86c250d Restore FaceFusion tracker score |
 | `backend/app/api/settings_response.py` | 21 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
 | `frontend/src/views/settings/FaceFusionSettings.vue` | 19 | verified | 301d3d8 feat(facefusion): expose face tracker score | a994e55 Restore FaceFusion media badge setting |
-| `backend/app/api/settings.py` | 18 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
+| `backend/app/api/settings.py` | 18 | verified | 301d3d8 feat(facefusion): expose face tracker score | 3445bac Restore app startup cover blur sync |
 | `backend/app/core/config.py` | 17 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
 | `frontend/src/components/noor/LadaPanel.vue` | 17 | verified | 77c8bb2 Split FaceFusion into dedicated panel | 0ab46ad Recover original LADA panel |
 | `backend/app/pipeline/facefusion/runner.py` | 16 | verified | 301d3d8 feat(facefusion): expose face tracker score | 24f438b Restore configured FaceFusion model routing |
@@ -63,7 +63,7 @@
 | `plugins/av-recommend/frontend/page.js` | 3 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/qbittorrent/backend.py` | 3 | verified | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | verified | 7d9120d Simplify Xunlei residual cleanup flow | ba4a75e Restore final UI details and plugin runtime data paths |
-| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 3c30e8f Verify remaining rollout paths and restore job type allowlist |
+| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 3445bac Restore app startup cover blur sync |
 | `backend/app/api/endpoints/media_library_item_detail.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/settings_helpers.py` | 2 | verified | 106df4b Prefer bundled LADA python path | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/settings_status_helpers.py` | 2 | verified | a382063 Add FaceFusion model management settings tab | 76ea151 Restore final LADA runtime and settings helpers |
@@ -81,7 +81,7 @@
 | `backend/app/pipeline/whisper/types.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/tasks/job_phases.py` | 2 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 7a9f55e Restore external plugin task integration |
 | `backend/app/tasks/manager_helpers.py` | 2 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 4cd892f Lock media library route parity against original index |
+| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 3445bac Restore app startup cover blur sync |
 | `backend/tests/test_lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_lada_runner_cancel.py` | 2 | verified | e436cc0 Split LADA runtime cache directories | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_runtime_cleanup.py` | 2 | verified | 1a02e32 Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
@@ -89,7 +89,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 9aa7963 Restore task diagnostics and archive late frontend snapshots |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 3445bac Restore app startup cover blur sync |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
@@ -125,12 +125,12 @@
 | `backend/tests/test_gfriends_plugin.py` | 1 | verified | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_media_library_hardlinks.py` | 1 | verified | ddbf4c0 Move hardlink groups into runtime data | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_plugin_store_paths.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests/test_settings_api.py` | 1 | verified | 106df4b Prefer bundled LADA python path | 3c30e8f Verify remaining rollout paths and restore job type allowlist |
+| `backend/tests/test_settings_api.py` | 1 | verified | 106df4b Prefer bundled LADA python path | 3445bac Restore app startup cover blur sync |
 | `backend/tests/test_settings_status_helpers.py` | 1 | verified | 9716085 Store task runtime files under data dir | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_settings_whisper_models.py` | 1 | verified | 7f76e42 Restrict Whisper model deletion to configured storage | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_task_runtime_paths.py` | 1 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_whisper_engine_cache.py` | 1 | verified | f176af3 Cover Whisper HuggingFace root layout | 9f68a60 Recover final Whisper single-chain architecture |
-| `frontend/src/App.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | e297426 Restore actor detail navigation identity |
+| `frontend/src/App.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | 3445bac Restore app startup cover blur sync |
 | `frontend/src/components/noor/AppSidebar.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | d8b8188 Recover frontend application shell components |
 | `frontend/src/components/noor/BaseIcon.vue` | 1 | verified | 9f62658 Refine actor detail navigation and actions | ba4a75e Restore final UI details and plugin runtime data paths |
 | `frontend/src/components/noor/panels/FilePathSelector.vue` | 1 | verified | a7d7d19 Allow file path selector to wrap long paths | 0165575 Recover original FaceFusion panel |

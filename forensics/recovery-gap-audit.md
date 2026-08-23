@@ -59,6 +59,18 @@
 
 ## 本轮一致性收敛（2026-08-23）
 
+- 从活盘 `/dev/nvme0n1p2` 恢复出早期原版 `media_library.py` 源码种子，并
+  用 2026-06/07 NOOR rollout 补丁回放得到
+  `forensics/recovered-sources/media_library.early-replayed.py`（4400 行、
+  188 个函数、43 条媒体库路由）。该文件已通过 `ast.parse`，可作为原版
+  媒体库路由/函数的独立证据，不再只依赖会话片段。
+- 路由核对：回放版 43 条原版路由里，除 4 条用户明确废弃的 XML/在线映射
+  路由外，全部由当前 `endpoints/media_library*.py + endpoints/actors.py`
+  承接；当前另有 `/stream/{item_id}` 和 `/actors/mapping/source` 两条
+  恢复期新增/保留路由。
+- 继续全盘扫描 `/dev/nvme0n1p2` 中可能残留的 Git pack，目标是匹配原版
+  commit hash；扫描仍在后台运行，尚未命中 NOOR pack。
+
 - `backend/app/tasks/manager.py` 已恢复完整队列语义并转 `verified`：阶段/SSE、
   持久化恢复、排队与运行中取消、依赖链激活/跳过、孤儿 `running` 清理、日志落盘、
   GPU Guard、LADA/FaceFusion，以及 Whisper/翻译独立 worker 进程和超时强杀。
@@ -138,7 +150,9 @@
      `dashboard.welcome.message`；当前中英文静态引用键均无缺失。
 2. 原始 `media_library.py` 是约 228 个函数、43 个路由的单模块；当前按职责拆为
    `endpoints/media_library*.py` 和 `endpoints/actors.py`。大多数功能等价，
-   但函数名、路由前缀、文件结构不同。
+   但函数名、路由前缀、文件结构不同。原版路由/函数证据已存入
+   `forensics/recovered-sources/media_library.early-replayed.py`；下一步可继续
+   用该证据反查当前拆分模块里函数名差异，而非继续依赖旧估算数字。
 3. 演员映射表工作流有意从“上传 XML / 在线同步”改为“MDC-NG 路径同步”：
    - 已移除：`/actors/mapping/upload`、`/actors/mapping/sync-online`、
      `/actors/mapping/import-latest`、`/actors/mapping/latest-upload`。

@@ -19,3 +19,7 @@ data/av_recommend/title_profile.json
 data/av_recommend/feedback.json
 data/noor.db
 forensics/reconstructed-manager-20260625.py
+data/runtime/
+data/plugins_market_repos.json
+forensics/raw-*.ext4.img
+forensics/raw-mnt/

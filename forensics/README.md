@@ -42,3 +42,16 @@ and `FaceFusionPanel.vue` evidence. Each directory includes `manifest.json` and
 
 These snapshots are evidence and comparison inputs. Active implementations
 remain under `frontend/src/` and `plugins/*/frontend/`.
+
+## Recovered Source Evidence
+
+`recovered-sources/` stores source files replayed from the original Codex
+rollout history. These files are preserved for byte-for-byte comparison with
+the active recovery tree and are not automatically substituted into the
+application.
+
+- `media_library.early-replayed.py`: replayed from the recovered early
+  `media_library.py` source found on `/dev/nvme0n1p2` plus the June/July NOOR
+  rollout patches. It contains 188 functions and 43 original media-library
+  routes. Four XML/online mapping routes were intentionally replaced later by
+  the MDC-NG mapping workflow.
