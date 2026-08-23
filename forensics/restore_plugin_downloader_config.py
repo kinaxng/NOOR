@@ -39,6 +39,22 @@ def snapshot_value(path: Path, key: str) -> str:
     return match.group(1) if match else ""
 
 
+def snapshot_json_values(path: Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    values: dict[str, Any] = {}
+    pattern = re.compile(
+        r'"([A-Za-z0-9_]+)"\s*:\s*'
+        r'("(?:\\.|[^"\\])*"|\[[^\]]*\]|\{[^{}]*\}|null|true|false|-?\d+(?:\.\d+)?)'
+    )
+    for match in pattern.finditer(text):
+        key = match.group(1)
+        try:
+            values[key] = json.loads(match.group(2))
+        except json.JSONDecodeError:
+            continue
+    return values
+
+
 def main() -> None:
     config = read_json(CONFIG_FILE)
     state = read_json(STATE_FILE)
@@ -62,6 +78,7 @@ def main() -> None:
 
     xunlei = config.setdefault("xunlei-remote", {})
     if XUNLEI_SNAPSHOT.exists():
+        xunlei.update(snapshot_json_values(XUNLEI_SNAPSHOT))
         xunlei["base_url"] = snapshot_value(XUNLEI_SNAPSHOT, "base_url") or xunlei.get("base_url", "")
         xunlei["savepath"] = snapshot_value(XUNLEI_SNAPSHOT, "savepath") or xunlei.get("savepath", "")
         xunlei["insecure_skip_verify"] = True

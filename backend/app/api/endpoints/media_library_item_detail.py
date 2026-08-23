@@ -220,6 +220,9 @@ def get_main_nfo_impl(file_path: str | None) -> str | None:
         return None
     folder = os.path.dirname(file_path)
     base, _ = os.path.splitext(os.path.basename(file_path))
+    exact_candidate = os.path.join(folder, f"{base}.nfo")
+    if os.path.isfile(exact_candidate):
+        return exact_candidate
     base_code = re.sub(
         r"[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?|restored-u|u\d*|c\d*)[-_.]*",
         "",
@@ -329,7 +332,7 @@ async def get_siblings_impl(
     if not parent_id or not current_id:
         return []
     try:
-        async with httpx_module.AsyncClient(timeout=15.0) as client:
+        async with httpx_module.AsyncClient(timeout=15.0, trust_env=False) as client:
             resp = await client.get(
                 f"{server_url_fn(config)}/emby/Items",
                 headers=headers_fn(config.get("api_key", "")),
@@ -385,10 +388,10 @@ async def get_item_impl(
 ) -> dict | None:
     user_id = config.get("user_id", "")
     api_key = config.get("api_key", "")
-    fields = "MediaSources,Path,DateCreated,PremiereDate,Studios,Genres,ParentId,ImageTags,BackdropImageTags,People"
+    fields = "MediaSources,Path,DateCreated,PremiereDate,OriginalTitle,Overview,ProviderIds,Studios,Genres,ParentId,ImageTags,BackdropImageTags,People"
 
     async def _fetch(url: str):
-        async with httpx_module.AsyncClient(timeout=30.0) as client:
+        async with httpx_module.AsyncClient(timeout=30.0, trust_env=False) as client:
             return await client.get(url, headers=headers_fn(api_key), params={"Fields": fields})
 
     if user_id:
@@ -439,6 +442,11 @@ async def get_item_impl(
         for person in data.get("People", [])
         if person.get("Name") and person.get("Type") == "Actor"
     ]
+    directors = [
+        person.get("Name")
+        for person in data.get("People", [])
+        if person.get("Name") and person.get("Type") == "Director"
+    ]
 
     sibling_tags = []
     for sibling in siblings:
@@ -471,7 +479,7 @@ async def get_item_impl(
             if not sib_id:
                 continue
             try:
-                async with httpx_module.AsyncClient(timeout=10.0) as img_client:
+                async with httpx_module.AsyncClient(timeout=10.0, trust_env=False) as img_client:
                     if user_id:
                         sib_resp = await img_client.get(
                             f"{server_url_fn(config)}/emby/Users/{user_id}/Items",
@@ -533,12 +541,16 @@ async def get_item_impl(
         ),
         "date_created": data.get("DateCreated"),
         "premiered": data.get("PremiereDate"),
+        "original_title": data.get("OriginalTitle"),
+        "overview": data.get("Overview"),
+        "provider_ids": data.get("ProviderIds") or {},
         "studios": studios,
         "genres": data.get("Genres", []),
         "poster_path": poster_url,
         "backdrop_path": backdrop_url,
         "tags": tags,
         "actors": actors,
+        "directors": directors,
         "nfo": nfo,
         "siblings": siblings,
         "variant_count": len(siblings) + (1 if file_path else 0),

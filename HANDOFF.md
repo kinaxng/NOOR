@@ -33,7 +33,9 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Restored qBittorrent runtime config from original evidence and enabled the plugin. qBittorrent is reachable as v5.2.3, resource search now reports `qbittorrent` as compatible/preferred, and the pending subscription `CJOD-528` was successfully submitted to qBittorrent.
 - Added `forensics/restore_plugin_downloader_config.py` so downloader config can be restored reproducibly from the preserved original read snapshots without hardcoding credentials in the script.
 - Hardened resource download resolution: `PluginRuntime.resolve_resource_download()` now derives requirements from the resolved URL, backfills compatible enabled downloaders, and restores the preferred downloader when a provider/cache returns a stripped resource. This prevents subscription push from incorrectly reporting "没有已启用的兼容下载器" for old cached resources.
-- Verification: frontend production build passes; backend full pytest passes with `252 passed, 1 warning`; plugin validation passes with design-only warnings; Puppeteer check over main routes and all plugin routes shows no 4xx/5xx or console errors.
+- Removed the recovery override from `main.py`; media library now uses the original Emby adapter routes. Emby calls in the media library were hardened with `trust_env=False` so the host system proxy cannot turn LAN Emby requests into 502s.
+- Restored media-library NFO lookup for exact video stems such as `DVAJ-727-C.nfo`; detail responses now also expose `original_title`, `overview`, `provider_ids`, and `directors` again.
+- Verification: frontend production build passes; backend full pytest passes with `253 passed, 1 warning`; media-library libraries/items/detail, qBittorrent overview, FaceFusion preview metadata, and source image library all returned healthy responses.
 
 # Hard Rules
 

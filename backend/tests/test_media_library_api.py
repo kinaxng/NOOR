@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.api.endpoints import media_library
 from app.api.endpoints.media_library_item_detail import (
+    get_main_nfo_impl,
     get_item_impl,
     parse_nfo_file_impl,
 )
@@ -35,6 +36,17 @@ def test_parse_nfo_file_impl_reads_nested_actor_cdata(tmp_path: Path):
         {"name": "波多野結衣", "role": "主演"},
         {"name": "水卜さくら", "role": "女優"},
     ]
+
+
+def test_get_main_nfo_impl_prefers_exact_video_stem(tmp_path: Path):
+    movie_path = tmp_path / "ABC-123-C.mp4"
+    exact_nfo = tmp_path / "ABC-123-C.nfo"
+    code_nfo = tmp_path / "ABC-123.nfo"
+    exact_nfo.write_text("<movie><title>exact</title></movie>", encoding="utf-8")
+    code_nfo.write_text("<movie><title>code</title></movie>", encoding="utf-8")
+
+    assert get_main_nfo_impl(str(movie_path)) == str(exact_nfo)
+    assert get_main_nfo_impl(str(tmp_path / "ABC-123.mp4")) == str(code_nfo)
 
 
 def test_media_library_exposes_legacy_helper_names(tmp_path: Path):
@@ -84,11 +96,17 @@ async def test_get_item_impl_uses_local_nfo_and_mapped_path(tmp_path: Path):
         "ParentId": "folder-1",
         "DateCreated": "2026-01-03T00:00:00.0000000Z",
         "PremiereDate": "2026-01-02T00:00:00.0000000Z",
+        "OriginalTitle": "ABC-123 Original",
+        "Overview": "overview text",
+        "ProviderIds": {"Tmdb": "345"},
         "Studios": [{"Name": "Studio"}],
         "Genres": ["ドラマ"],
         "ImageTags": {"Primary": "poster-tag"},
         "BackdropImageTags": ["backdrop-tag"],
-        "People": [{"Name": "演员A", "Type": "Actor", "Role": "Actor"}],
+        "People": [
+            {"Name": "演员A", "Type": "Actor", "Role": "Actor"},
+            {"Name": "导演A", "Type": "Director"},
+        ],
         "MediaSources": [{
             "Type": "Default",
             "Id": "source-1",
@@ -148,6 +166,10 @@ async def test_get_item_impl_uses_local_nfo_and_mapped_path(tmp_path: Path):
     assert item["nfo"]["title"] == "ABC-123 Title"
     assert item["nfo"]["actors"] == [{"name": "波多野結衣"}]
     assert item["actors"] == [{"name": "演员A", "role": "Actor"}]
+    assert item["directors"] == ["导演A"]
+    assert item["original_title"] == "ABC-123 Original"
+    assert item["overview"] == "overview text"
+    assert item["provider_ids"] == {"Tmdb": "345"}
     assert item["variant_count"] == 1
     assert item["poster_path"] == "http://emby/emby/Items/123/Images/Primary?tag=poster-tag"
     assert item["stream_url"] == "/api/media-library/stream/123?media_source_id=source-1&container=mp4"

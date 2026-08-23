@@ -95,7 +95,7 @@ class MediaLibraryStatus(BaseModel):
 
 async def _test_connection(config:dict)->tuple[bool,str]:
  try:
-  async with httpx.AsyncClient(timeout=10.0) as client:
+  async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
    resp=await client.get(f'{_server_url(config)}/emby/System/Info',headers=_headers(config.get('api_key','')))
    if resp.status_code==401:return False,'API Key 无效或已过期'
    resp.raise_for_status();return True,f"已连接至 {resp.json().get('ServerName','Emby/Jellyfin')}"
@@ -104,7 +104,7 @@ async def _test_connection(config:dict)->tuple[bool,str]:
  except Exception as e:return False,f'连接失败: {e}'
 
 async def _list_libraries(config:dict)->list[dict]:
- async with httpx.AsyncClient(timeout=30.0) as client:
+ async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
   resp=await client.get(f'{_server_url(config)}/emby/Library/MediaFolders',headers=_headers(config.get('api_key','')));resp.raise_for_status();data=resp.json()
  result=[]
  for item in data.get('Items',[]):
@@ -115,7 +115,7 @@ async def _list_libraries(config:dict)->list[dict]:
  return result
 
 async def _list_items(config:dict,library_id:str,limit:int=50,offset:int=0,filter:Optional[str]=None,q:Optional[str]=None,force_refresh:bool=False)->tuple[list[dict],int]:
- async with httpx.AsyncClient(timeout=60.0) as client:
+ async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
   resp=await client.get(f'{_server_url(config)}/emby/Items',headers=_headers(config.get('api_key','')),params={'ParentId':library_id,'IncludeItemTypes':'Movie','Recursive':'true','Fields':'MediaSources,Path,DateCreated,Studios,ImageTags','Limit':limit,'StartIndex':offset,'SortBy':'DateCreated','SortOrder':'Descending'});resp.raise_for_status();data=resp.json()
  items=_deduplicate_items([_parse_item(i,config) for i in data.get('Items',[])])
  payload=_apply_filter_and_paginate(items,filter,q,0,len(items))

@@ -100,8 +100,8 @@
       "bytes": 1221,
       "diff_file": "session-diffs/c86eeb8a1e24-plugins__av-recommend__backend.py.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: plugins/av-recommend/backend.py:361\nerror: plugins/av-recommend/backend.py: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -255,7 +255,7 @@
       "diff_file": "session-diffs/faf7ac2d9118-plugins__javdb__frontend__style.css.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: plugins/javdb/frontend/style.css:209\nerror: plugins/javdb/frontend/style.css: patch does not apply"
+        "error": "error: patch failed: plugins/javdb/frontend/style.css:234\nerror: plugins/javdb/frontend/style.css: patch does not apply"
       }
     },
     {
@@ -288,7 +288,7 @@
       "diff_file": "session-diffs/79c4f87ae234-plugins__javdb__frontend__page.js.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: plugins/javdb/frontend/page.js:966\nerror: plugins/javdb/frontend/page.js: patch does not apply"
+        "error": "error: patch failed: plugins/javdb/frontend/page.js:978\nerror: plugins/javdb/frontend/page.js: patch does not apply"
       }
     },
     {
@@ -298,8 +298,8 @@
       "bytes": 1231,
       "diff_file": "session-diffs/22aafdb17f0a-plugins__javdb__frontend__style.css.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: plugins/javdb/frontend/style.css:231\nerror: plugins/javdb/frontend/style.css: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -331,8 +331,8 @@
       "bytes": 710,
       "diff_file": "session-diffs/d5bbca8026b5-plugins__javdb__frontend__page.js.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: plugins/javdb/frontend/page.js:909\nerror: plugins/javdb/frontend/page.js: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -607,7 +607,7 @@
       "diff_file": "session-diffs/de77e1fc330f-backend__tests__test_whisper_translator.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: backend/tests/test_whisper_translator.py: No such file or directory"
+        "error": "error: patch failed: backend/tests/test_whisper_translator.py:2\nerror: backend/tests/test_whisper_translator.py: patch does not apply"
       }
     },
     {
@@ -728,7 +728,7 @@
       "diff_file": "session-diffs/337b22c3eaa9-backend__tests__test_whisper_translator.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: backend/tests/test_whisper_translator.py: No such file or directory"
+        "error": "error: patch failed: backend/tests/test_whisper_translator.py:2\nerror: backend/tests/test_whisper_translator.py: patch does not apply"
       }
     },
     {
@@ -739,7 +739,7 @@
       "diff_file": "session-diffs/8015afde2f4c-backend__app__pipeline__whisper__runtime.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: backend/app/pipeline/whisper/runtime.py:4\nerror: backend/app/pipeline/whisper/runtime.py: patch does not apply"
+        "error": "error: patch failed: backend/app/pipeline/whisper/runtime.py:296\nerror: backend/app/pipeline/whisper/runtime.py: patch does not apply"
       }
     },
     {
@@ -772,7 +772,7 @@
       "diff_file": "session-diffs/3ce2bef23768-backend__tests__test_whisper_translator.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: backend/tests/test_whisper_translator.py: No such file or directory"
+        "error": "error: patch failed: backend/tests/test_whisper_translator.py:2\nerror: backend/tests/test_whisper_translator.py: patch does not apply"
       }
     },
     {
@@ -1068,8 +1068,8 @@
       "bytes": 1709,
       "diff_file": "session-diffs/3dc3c58b4932-plugins__xunlei-remote__backend.py.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: plugins/xunlei-remote/backend.py:282\nerror: plugins/xunlei-remote/backend.py: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -1079,8 +1079,8 @@
       "bytes": 885,
       "diff_file": "session-diffs/40064ffce51e-plugins__xunlei-remote__frontend__page.js.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: plugins/xunlei-remote/frontend/page.js:357\nerror: plugins/xunlei-remote/frontend/page.js: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -1245,7 +1245,7 @@
       "diff_file": "session-diffs/57319bc1e4a7-backend__app__tasks__job_phases.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: backend/app/tasks/job_phases.py:44\nerror: backend/app/tasks/job_phases.py: patch does not apply"
+        "error": "error: patch failed: backend/app/tasks/job_phases.py:92\nerror: backend/app/tasks/job_phases.py: patch does not apply"
       }
     },
     {
@@ -1300,7 +1300,7 @@
       "diff_file": "session-diffs/674e692dbb15-backend__app__api__settings_updates.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: backend/app/api/settings_updates.py:53\nerror: backend/app/api/settings_updates.py: patch does not apply"
+        "error": "error: patch failed: backend/app/api/settings_updates.py:39\nerror: backend/app/api/settings_updates.py: patch does not apply"
       }
     },
     {
@@ -1630,7 +1630,7 @@
       "diff_file": "session-diffs/5faceb18c8e7-backend__tests__test_core_config_storage_defaults.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: backend/tests/test_core_config_storage_defaults.py:34\nerror: backend/tests/test_core_config_storage_defaults.py: patch does not apply"
+        "error": "error: patch failed: backend/tests/test_core_config_storage_defaults.py:3\nerror: backend/tests/test_core_config_storage_defaults.py: patch does not apply"
       }
     },
     {
@@ -1816,8 +1816,8 @@
       "bytes": 523,
       "diff_file": "session-diffs/d56e213ba2bf-frontend__src__style.css.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: frontend/src/style.css:167\nerror: frontend/src/style.css: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -1839,7 +1839,7 @@
       "diff_file": "session-diffs/7a988ff08b0d-.env.example.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: .env.example: No such file or directory"
+        "error": "error: patch failed: .env.example:16\nerror: .env.example: patch does not apply"
       }
     },
     {
@@ -1883,7 +1883,7 @@
       "diff_file": "session-diffs/8f4cefc2a798-backend__tests__test_core_config_storage_defaults.py.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: backend/tests/test_core_config_storage_defaults.py:3\nerror: backend/tests/test_core_config_storage_defaults.py: patch does not apply"
+        "error": "error: patch failed: backend/tests/test_core_config_storage_defaults.py:45\nerror: backend/tests/test_core_config_storage_defaults.py: patch does not apply"
       }
     },
     {
@@ -1971,7 +1971,7 @@
       "diff_file": "session-diffs/49755d0a1635-.env.example.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: .env.example: No such file or directory"
+        "error": "error: patch failed: .env.example:17\nerror: .env.example: patch does not apply"
       }
     },
     {
@@ -2103,7 +2103,7 @@
       "diff_file": "session-diffs/dc698acf7307-.env.example.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: .env.example: No such file or directory"
+        "error": "error: patch failed: .env.example:14\nerror: .env.example: patch does not apply"
       }
     },
     {
@@ -2147,7 +2147,7 @@
       "diff_file": "session-diffs/1d71482520cc-.env.example.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: .env.example: No such file or directory"
+        "error": "error: patch failed: .env.example:33\nerror: .env.example: patch does not apply"
       }
     },
     {
@@ -2179,8 +2179,8 @@
       "bytes": 1159,
       "diff_file": "session-diffs/47c1bf9dcd1c-.env.example.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: .env.example: No such file or directory"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -2366,8 +2366,8 @@
       "bytes": 651,
       "diff_file": "session-diffs/a4b84935ae37-.env.example.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: .env.example: No such file or directory"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -2520,8 +2520,8 @@
       "bytes": 1491,
       "diff_file": "session-diffs/daaae2180326-backend__tests__test_lada_paths.py.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: backend/tests/test_lada_paths.py:7\nerror: backend/tests/test_lada_paths.py: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -2532,7 +2532,7 @@
       "diff_file": "session-diffs/c0a77b2b5318-.env.example.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: .env.example: No such file or directory"
+        "error": "error: patch failed: .env.example:37\nerror: .env.example: patch does not apply"
       }
     },
     {
@@ -3257,8 +3257,8 @@
       "bytes": 959,
       "diff_file": "session-diffs/e17ded8d2451-backend__app__api__settings_updates.py.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: backend/app/api/settings_updates.py:71\nerror: backend/app/api/settings_updates.py: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {
@@ -3268,8 +3268,8 @@
       "bytes": 616,
       "diff_file": "session-diffs/e8f9d3cf7387-backend__app__core__config.py.diff",
       "reverse_check": {
-        "returncode": 0,
-        "error": ""
+        "returncode": 1,
+        "error": "error: patch failed: backend/app/core/config.py:109\nerror: backend/app/core/config.py: patch does not apply"
       }
     },
     {
@@ -3928,8 +3928,8 @@
       "bytes": 4107,
       "diff_file": "session-diffs/dd6b8df6d187-plugins__gfriends__frontend__page.js.diff",
       "reverse_check": {
-        "returncode": 0,
-        "error": ""
+        "returncode": 1,
+        "error": "error: patch failed: plugins/gfriends/frontend/page.js:11\nerror: plugins/gfriends/frontend/page.js: patch does not apply"
       }
     },
     {
@@ -4919,7 +4919,7 @@
       "diff_file": "session-diffs/eaae7fcbb85d-frontend__src__components__noor__FaceFusionPanel.vue.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: frontend/src/components/noor/FaceFusionPanel.vue:613\nerror: frontend/src/components/noor/FaceFusionPanel.vue: patch does not apply"
+        "error": "error: patch failed: frontend/src/components/noor/FaceFusionPanel.vue:45\nerror: frontend/src/components/noor/FaceFusionPanel.vue: patch does not apply"
       }
     },
     {
@@ -4930,7 +4930,7 @@
       "diff_file": "session-diffs/8e30eea593f2-frontend__src__components__noor__FaceFusionPanel.vue.diff",
       "reverse_check": {
         "returncode": 1,
-        "error": "error: patch failed: frontend/src/components/noor/FaceFusionPanel.vue:1970\nerror: frontend/src/components/noor/FaceFusionPanel.vue: patch does not apply"
+        "error": "error: patch failed: frontend/src/components/noor/FaceFusionPanel.vue:639\nerror: frontend/src/components/noor/FaceFusionPanel.vue: patch does not apply"
       }
     },
     {
@@ -5083,8 +5083,8 @@
       "bytes": 548,
       "diff_file": "session-diffs/0fdf21fa7d5d-backend__app__core__config.py.diff",
       "reverse_check": {
-        "returncode": 1,
-        "error": "error: patch failed: backend/app/core/config.py:113\nerror: backend/app/core/config.py: patch does not apply"
+        "returncode": 0,
+        "error": ""
       }
     },
     {

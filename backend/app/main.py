@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import init_db
 from app.api import jobs, events, settings, subtitles, whisper, system, plugins, search, facefusion, runtime_cleanup, local_library
 from app.api.endpoints import media_library as media_library_router
-from app.api.endpoints import media_library_recovery as media_library_recovery_router
 from app.api.endpoints import actors as actor_router
 from app.knowledge import api as knowledge_api
 
@@ -64,7 +63,6 @@ app.include_router(search.router)
 app.include_router(facefusion.router)
 app.include_router(local_library.router)
 app.include_router(knowledge_api.router)
-app.include_router(media_library_recovery_router.router)
 app.include_router(media_library_router.router)
 app.include_router(actor_router.router)
 

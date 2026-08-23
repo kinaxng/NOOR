@@ -18,6 +18,13 @@
 
 ## 本轮收敛（2026-08-24）
 
+- 媒体库改回原版 Emby 适配路由，不再注册恢复期 `media_library_recovery` 覆盖路由；
+  对 Emby 的 `httpx` 调用统一关闭 `trust_env`，解决宿主机系统代理导致
+  `192.168.31.10:8097` 返回 502 的问题。
+- 修复 `get_main_nfo_impl`：优先读取与视频同名的 NFO（如
+  `DVAJ-727-C.mp4 -> DVAJ-727-C.nfo`），再回退番号 NFO；详情接口补回
+  `original_title`、`overview`、`provider_ids`、`directors` 字段，与恢复期
+  详情面板契约保持一致。
 - 修复侧边栏插件轮询重复挂载：桌面/移动两套侧栏原本都会挂载
   `widget-system` 的 `renderSidebarWidget`，隐藏侧栏仍持续调用
   `/plugins/widget-system/actions/metrics`。现在按 `min-width: 1024px`
@@ -26,7 +33,7 @@
   后台时卸载插件 widget 并清理轮询/AbortController，回到前台再重新挂载，
   避免隐藏标签继续占用 CPU、网络和 `nvidia-smi`。
 - `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
-- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 240 项通过。
+- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 253 项通过。
 
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。
