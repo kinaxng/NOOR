@@ -261,9 +261,13 @@ the recovered bytecode modules remain unchanged.
   layer for the separate overrides file.
 - Whisper settings now expose a storage-root contract (`model_root_dir`,
   `runtime_root_dir`, `database_url`, `database_path`) without retired Reazon fields.
-- `forensics/version-gap-audit.md` reports no missing indexed paths. 121 paths remain
+- `forensics/version-gap-audit.md` reports no missing indexed paths. 74 paths remain
   `pending` until the remaining components are verified against original rollout
   evidence; runtime and derived data remain outside the commit.
+- JavDB plugin manifest now matches the original capability contract, including
+  `dashboard_widget`; the overview page again renders the `JAVDB 推荐` widget and
+  the recommendation center reports the merged candidate-pool stats (currently
+  `1548+273`).
 - `media_library.py` now re-exports every helper name present in the preserved
   `media_library.pyc` (listing, deletion, hardlink, stream, and detail helpers),
   so split-module recovery does not break older plugin imports.

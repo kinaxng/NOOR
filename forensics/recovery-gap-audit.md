@@ -68,8 +68,12 @@
   `reazon_nemo` 等已退役链路字段。
 - 设置页存储契约改为返回 `model_root_dir`、`runtime_root_dir`、
   `database_url`、`database_path`，前端不再依赖已移除的 Reazon 字段。
-- 文件级差距清单已重新生成：当前无 `missing` 路径；121 个路径仍为
+- 文件级差距清单已重新生成：当前无 `missing` 路径；74 个路径仍为
   `pending`，需要在后续逐文件核对后转 `verified`。
+- JavDB 插件清单已按原版会话恢复：补回 `dashboard_widget`、下载器绑定、
+  `resource_search`、RSS/知识图谱等能力；浏览器验证概览页的 `JAVDB 推荐`
+  卡片恢复，`/api/plugins/dashboard/widgets?plugin_ids=javdb` 返回
+  `javdb-recommend`。
 - `media_library.py` 已补齐拆分后的旧函数名兼容层；与保留的
   `media_library.pyc` 顶层代码对象逐项比对，原版旧名字均已可导入。
 
