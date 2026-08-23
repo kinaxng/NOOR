@@ -28,6 +28,10 @@ VERIFIED = {
     "frontend/src/views/PluginManager.vue",
     "frontend/src/views/ResourceSearch.vue",
     "frontend/src/views/settings/FaceFusionSettings.vue",
+    "frontend/src/views/settings/StorageSettings.vue",
+    "frontend/src/views/settings/SystemSettings.vue",
+    "frontend/src/components/noor/MediaCard.vue",
+    "frontend/src/components/noor/SubtitlePanel.vue",
     "frontend/src/i18n/en.ts",
     "frontend/src/i18n/zh.ts",
 }

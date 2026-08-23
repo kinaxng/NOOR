@@ -32,7 +32,15 @@
   FF/LADA/字幕/详情/删除面板入口、Emby webhook 同步与移动端响应式样式。
 - 演员管理/详情页：与 `2a7fe62` 中按历史工作区源码恢复的版本一致。
 - 媒体库页面：Emby 数据可读，549 位演员、作品列表、破解/中字/流出/无码标签可用。
-- 前端构建通过，后端 `pytest` 183 项通过；`compileall` 无语法错误。
+- 前端构建通过，后端 `pytest` 184 项通过；`compileall` 无语法错误。
+- `StorageSettings.vue`：已恢复为最终“两个大头目录”形态，只编辑模型根目录、
+  运行时根目录、NOOR 数据目录和数据库只读路径；子模块缓存/临时目录输入已移除。
+- `SystemSettings.vue`：MDC-NG 路径、演员映射自动更新、Emby 连接与 webhook
+  设置已按最终会话核对。
+- `MediaCard.vue`：FaceFusion 标签已按 `has_facefusion` 聚合文件名/媒体信息，
+  默认仅在悬停显示，开启固定显示后始终可见。
+- `SubtitlePanel.vue`：已核对最终 Whisper 单链 UI，包含 runtime tier 提交，
+  不包含已退役的音频预处理/旧链路 UI。
 
 ## 本轮一致性收敛（2026-08-23）
 
@@ -82,8 +90,8 @@
 
 ## 后续恢复建议（按影响排序）
 
-1. 下一批继续用 rollout 回放核对 `i18n`、`ActorManagementView`、`ActorDetailView`
-   和 `FaceFusionPanel` 的后续修订，把 `pending` 文件逐步转为 `verified`。
+1. 下一批继续用 rollout 回放核对 `facefusion/runner.py`、`facefusion.py`、
+   `settings_facefusion_upgrade.py` 与插件恢复差异，把 `pending` 文件逐步转为 `verified`。
 2. 继续核对拆分后的 actor 路由兼容，确认历史 `/api/media-library/actors*` 调用
    都能通过当前 `endpoints/actors.py` 得到原版行为。
 3. 把 Whisper 旧链路的 `.py` 源码从历史会话/反编译中重建，或以文档形式明确退役。

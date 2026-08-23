@@ -291,10 +291,26 @@ function closeDirPicker() {
         </div>
       </div>
 
-      <!-- 模型路径 -->
+      <!-- AI 存储根目录 -->
       <div class="settings-card ui-card">
-        <h2 class="settings-card__title">{{ t('settings.storage.section.modelPaths') }}</h2>
+        <h2 class="settings-card__title">AI 存储</h2>
         <div class="settings-form">
+          <FieldRow label="模型路径" description="Whisper、LADA、FaceFusion 等模型都会按模块自动放到这个目录下。">
+            <div class="dir-input-row">
+              <input v-model="modelRootDir" type="text" placeholder="/path/to/noor/models" class="settings-input" />
+              <button @click="openDirPicker('modelRootDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
+                <BaseIcon name="folderOpen" class="w-4 h-4" />
+              </button>
+            </div>
+          </FieldRow>
+          <FieldRow label="运行时路径" description="缓存、临时文件、预览帧、任务中间文件都会按模块自动放到这个目录下。">
+            <div class="dir-input-row">
+              <input v-model="runtimeRootDir" type="text" placeholder="/path/to/noor/runtime" class="settings-input" />
+              <button @click="openDirPicker('runtimeRootDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
+                <BaseIcon name="folderOpen" class="w-4 h-4" />
+              </button>
+            </div>
+          </FieldRow>
           <FieldRow :label="t('settings.storage.noorDataDir')" :description="t('settings.storage.noorDataDirHint')">
             <div class="dir-input-row">
               <input v-model="noorDataDir" type="text" :placeholder="t('settings.storage.noorDataPlaceholder')" class="settings-input" />
@@ -305,85 +321,6 @@ function closeDirPicker() {
           </FieldRow>
           <FieldRow :label="t('settings.storage.databasePath')" :description="t('settings.storage.databasePathHint')">
             <input :value="databasePath" type="text" class="settings-input settings-input--readonly" readonly />
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.whisperModelDir')" :description="t('settings.storage.whisperModelDirHint')">
-            <div class="dir-input-row">
-              <input v-model="whisperModelDir" type="text" :placeholder="t('settings.storage.whisperPlaceholder')" class="settings-input" />
-              <button @click="openDirPicker('whisperModelDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.ladaModelDir')" :description="t('settings.storage.ladaModelDirHint')">
-            <div class="dir-input-row">
-              <input v-model="ladaModelDir" type="text" :placeholder="t('settings.storage.ladaModelPlaceholder')" class="settings-input" />
-              <button @click="openDirPicker('ladaModelDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.facefusionModelDir')" :description="t('settings.storage.facefusionModelDirHint')">
-            <div class="dir-input-row">
-              <input v-model="facefusionModelDir" type="text" :placeholder="t('settings.storage.facefusionModelPlaceholder')" class="settings-input" />
-              <button @click="openDirPicker('facefusionModelDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-        </div>
-      </div>
-
-      <!-- 运行时路径 -->
-      <div class="settings-card ui-card">
-        <h2 class="settings-card__title">{{ t('settings.storage.section.runtimePaths') }}</h2>
-        <div class="runtime-path-grid">
-          <FieldRow :label="t('settings.storage.whisperCacheDir')" :description="t('settings.storage.cacheDirHint')">
-            <div class="dir-input-row">
-              <input v-model="whisperCacheDir" type="text" class="settings-input" />
-              <button @click="openDirPicker('whisperCacheDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.whisperTempDir')" :description="t('settings.storage.tempDirHint')">
-            <div class="dir-input-row">
-              <input v-model="whisperTempDir" type="text" class="settings-input" />
-              <button @click="openDirPicker('whisperTempDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.ladaCacheDir')" :description="t('settings.storage.cacheDirHint')">
-            <div class="dir-input-row">
-              <input v-model="ladaCacheDir" type="text" class="settings-input" />
-              <button @click="openDirPicker('ladaCacheDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.ladaTempDir')" :description="t('settings.storage.tempDirHint')">
-            <div class="dir-input-row">
-              <input v-model="ladaTempDir" type="text" class="settings-input" />
-              <button @click="openDirPicker('ladaTempDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.facefusionCacheDir')" :description="t('settings.storage.facefusionCacheDirHint')">
-            <div class="dir-input-row">
-              <input v-model="facefusionCacheDir" type="text" class="settings-input" />
-              <button @click="openDirPicker('facefusionCacheDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
-          </FieldRow>
-          <FieldRow :label="t('settings.storage.facefusionTempDir')" :description="t('settings.storage.tempDirHint')">
-            <div class="dir-input-row">
-              <input v-model="facefusionTempDir" type="text" class="settings-input" />
-              <button @click="openDirPicker('facefusionTempDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
-                <BaseIcon name="folderOpen" class="w-4 h-4" />
-              </button>
-            </div>
           </FieldRow>
         </div>
       </div>

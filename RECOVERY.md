@@ -227,10 +227,16 @@ the recovered bytecode modules remain unchanged.
 - FaceFusion source-image management and frame-preview controls are restored. Opening a
   media detail reads only preview metadata; a preview is generated only after a source
   image is selected and the frame slider is released.
+- Storage settings were restored to the final "two roots" contract: model root,
+  runtime root, NOOR data dir, and database path are the editable AI storage fields;
+  per-module Whisper/LADA/FaceFusion cache and temp inputs were removed from the page.
+- System settings, media card FaceFusion badge behavior, and the subtitle/Whisper panel
+  were verified against the final rollout patches, including MDC-NG root path,
+  fixed/hover FF badge modes, has_facefusion aggregation, and runtime-tier submission.
 
 ## Recovery Consistency (2026-08-23)
 
-- Backend `compileall` is clean and the full test suite currently passes: 183 passed.
+- Backend `compileall` is clean and the full test suite currently passes: 184 passed.
 - Frontend production build passes with `npm run build`.
 - `backend/tests/test_media_library_api.py` was restored as a test module for NFO/CDATA
   parsing, local-NFO item detail, media-library 503/502 error handling, and hardlink
