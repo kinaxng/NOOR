@@ -28,7 +28,6 @@
 | `backend/tests/test_core_config_storage_defaults.py` | 7 | pending | ebb5c7e Apply Whisper preprocessing runtime paths | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/pipeline/whisper/orchestrator.py` | 6 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/tests/test_facefusion_runner.py` | 6 | pending | b2cb29b Clean FaceFusion task runtime resources | 24f438b Restore configured FaceFusion model routing |
-| `backend/app/api/settings_facefusion_upgrade.py` | 5 | pending | a668dcc Preserve FaceFusion content patches on upgrade | b3dd5ac Restore FaceFusion upstream revision tracking |
 | `backend/app/core/runtime_paths.py` | 4 | pending | 72d45aa Share default data dir constant | 616866a Preserve recovered NOOR backend artifacts |
 | `backend/app/pipeline/whisper/engine.py` | 4 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/tests/test_settings_response.py` | 4 | pending | 217a5e8 Embed FaceFusion runtime in NOOR | 558869c Restore settings contract and media library API tests |
@@ -40,7 +39,6 @@
 | `backend/app/pipeline/lada/runner.py` | 3 | pending | 106df4b Prefer bundled LADA python path | eef5d36 Recover LADA task runner |
 | `backend/app/pipeline/whisper/strategy.py` | 3 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/tests/test_env_backed_library_configs.py` | 3 | pending | 2ecda9d Migrate legacy subtitle indexes | 558869c Restore settings contract and media library API tests |
-| `backend/tests/test_facefusion_upgrade.py` | 3 | pending | 0f6ed10 Track FaceFusion upstream revision | b3dd5ac Restore FaceFusion upstream revision tracking |
 | `plugins/av-recommend/frontend/page.js` | 3 | pending | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/qbittorrent/backend.py` | 3 | pending | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | pending | 7d9120d Simplify Xunlei residual cleanup flow | 5ced5cf Recover Xunlei remote management frontend |
@@ -70,7 +68,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | pending | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | pending | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | pending | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | a26b01a Restore missing English dashboard welcome copy |
+| `frontend/src` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | d8f7414 Restore final AI storage settings and verify settings panels |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | pending | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | pending | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
@@ -148,7 +146,9 @@
 | `frontend/src/views/ActorDetailView.vue` | 8 | verified | 3bf46cc Allow removing actor provider IDs | 2a7fe62 Restore exact historical actor workspace sources |
 | `frontend/src/views/settings/SystemSettings.vue` | 7 | verified | 2aa83bb Derive MDC-NG actor mapping file from root path | a0beb88 Avoid blocking system settings on Emby libraries |
 | `backend/app/api/endpoints/media_library_helpers.py` | 5 | verified | c3b736f Separate uncensored media tagging from cracked titles | 558869c Restore settings contract and media library API tests |
-| `frontend/src/views/settings/StorageSettings.vue` | 5 | verified | 41153cc Simplify AI storage path settings | 9f68a60 Recover final Whisper single-chain architecture |
+| `backend/app/api/settings_facefusion_upgrade.py` | 5 | verified | a668dcc Preserve FaceFusion content patches on upgrade | b3dd5ac Restore FaceFusion upstream revision tracking |
+| `frontend/src/views/settings/StorageSettings.vue` | 5 | verified | 41153cc Simplify AI storage path settings | d8f7414 Restore final AI storage settings and verify settings panels |
 | `frontend/src/components/noor/MediaCard.vue` | 4 | verified | 4dd6c51 Aggregate FaceFusion variant badge state | 84bb8a7 Recover original media card and tabs |
 | `frontend/src/views/Home.vue` | 4 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 3e4cdc0 Recover original media library view |
+| `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | b3dd5ac Restore FaceFusion upstream revision tracking |
 | `frontend/src/components/noor/SubtitlePanel.vue` | 3 | verified | 0184022 Add Whisper runtime tier selection | ad7302e Recover plugin-based subtitle providers |

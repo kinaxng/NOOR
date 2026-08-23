@@ -233,10 +233,13 @@ the recovered bytecode modules remain unchanged.
 - System settings, media card FaceFusion badge behavior, and the subtitle/Whisper panel
   were verified against the final rollout patches, including MDC-NG root path,
   fixed/hover FF badge modes, has_facefusion aggregation, and runtime-tier submission.
+- FaceFusion source upgrade verification now covers both TensorRT cache routing and
+  NOOR's content-analysis skip patch, including idempotent preservation on an already
+  patched 3.8-style source.
 
 ## Recovery Consistency (2026-08-23)
 
-- Backend `compileall` is clean and the full test suite currently passes: 184 passed.
+- Backend `compileall` is clean and the full test suite currently passes: 186 passed.
 - Frontend production build passes with `npm run build`.
 - `backend/tests/test_media_library_api.py` was restored as a test module for NFO/CDATA
   parsing, local-NFO item detail, media-library 503/502 error handling, and hardlink

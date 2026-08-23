@@ -19,7 +19,9 @@ OUTPUT = ROOT / "forensics" / "version-gap-audit.md"
 
 VERIFIED = {
     "backend/app/plugins/runtime.py",
+    "backend/app/api/settings_facefusion_upgrade.py",
     "backend/app/api/endpoints/media_library_helpers.py",
+    "backend/tests/test_facefusion_upgrade.py",
     "frontend/src/components/noor/FaceFusionPanel.vue",
     "frontend/src/components/noor/LadaPanel.vue",
     "frontend/src/views/ActorDetailView.vue",

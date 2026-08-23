@@ -32,7 +32,7 @@
   FF/LADA/字幕/详情/删除面板入口、Emby webhook 同步与移动端响应式样式。
 - 演员管理/详情页：与 `2a7fe62` 中按历史工作区源码恢复的版本一致。
 - 媒体库页面：Emby 数据可读，549 位演员、作品列表、破解/中字/流出/无码标签可用。
-- 前端构建通过，后端 `pytest` 184 项通过；`compileall` 无语法错误。
+- 前端构建通过，后端 `pytest` 186 项通过；`compileall` 无语法错误。
 - `StorageSettings.vue`：已恢复为最终“两个大头目录”形态，只编辑模型根目录、
   运行时根目录、NOOR 数据目录和数据库只读路径；子模块缓存/临时目录输入已移除。
 - `SystemSettings.vue`：MDC-NG 路径、演员映射自动更新、Emby 连接与 webhook
@@ -41,6 +41,9 @@
   默认仅在悬停显示，开启固定显示后始终可见。
 - `SubtitlePanel.vue`：已核对最终 Whisper 单链 UI，包含 runtime tier 提交，
   不包含已退役的音频预处理/旧链路 UI。
+- `settings_facefusion_upgrade.py`：已核对内置 FaceFusion 的版本/运行时信息、
+  受控上游同步、NOOR 内容分析跳过补丁和 TensorRT 缓存补丁；并新增 3.8 风格
+  源码与已补丁源码的回归测试。
 
 ## 本轮一致性收敛（2026-08-23）
 

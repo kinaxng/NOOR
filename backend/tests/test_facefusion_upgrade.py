@@ -39,6 +39,83 @@ def test_facefusion_upgrade_patch_routes_tensorrt_cache_to_env(tmp_path):
     ]
 
 
+def test_facefusion_upgrade_patch_skips_content_analysis(tmp_path):
+    source_dir = tmp_path / "source"
+    package_dir = source_dir / "facefusion"
+    package_dir.mkdir(parents=True)
+    (package_dir / "execution.py").write_text(
+        "import os\nimport onnxruntime\n\n"
+        "def resolve_cache_path() -> str:\n"
+        "\treturn os.path.join('.caches', onnxruntime.get_version_string())\n",
+        encoding="utf-8",
+    )
+    (package_dir / "content_analyser.py").write_text(
+        "from functools import lru_cache\n"
+        "from facefusion.types import Fps, VisionFrame\n"
+        "from facefusion.vision import detect_video_fps, read_image\n\n"
+        "STREAM_COUNTER = 0\n\n\n"
+        "def pre_check() -> bool:\n"
+        "\treturn conditional_download_hashes({}) and conditional_download_sources({})\n\n\n"
+        "def analyse_stream(vision_frame : VisionFrame, video_fps : Fps) -> bool:\n"
+        "\tglobal STREAM_COUNTER\n\n"
+        "\tSTREAM_COUNTER = STREAM_COUNTER + 1\n"
+        "\tif STREAM_COUNTER % int(video_fps) == 0:\n"
+        "\t\treturn analyse_frame(vision_frame)\n"
+        "\treturn False\n\n\n"
+        "def analyse_frame(vision_frame : VisionFrame) -> bool:\n"
+        "\treturn detect_nsfw(vision_frame)\n\n\n"
+        "@lru_cache()\n"
+        "def analyse_image(image_path : str) -> bool:\n"
+        "\tvision_frame = read_image(image_path)\n"
+        "\treturn analyse_frame(vision_frame)\n\n\n"
+        "@lru_cache()\n"
+        "def analyse_video(video_path : str, trim_frame_start : int, trim_frame_end : int) -> bool:\n"
+        "\tvideo_fps = detect_video_fps(video_path)\n"
+        "\treturn bool(rate > 10.0)\n",
+        encoding="utf-8",
+    )
+
+    _apply_noor_facefusion_patch(source_dir)
+
+    patched = (package_dir / "content_analyser.py").read_text(encoding="utf-8")
+    assert "NOOR_FACEFUSION_SKIP_CONTENT_ANALYSIS" in patched
+    assert "if skip_content_analysis():\n\t\treturn True" in patched
+    assert patched.count("if skip_content_analysis():\n\t\treturn False") >= 2
+
+
+def test_facefusion_upgrade_patch_preserves_existing_content_patch(tmp_path):
+    source_dir = tmp_path / "source"
+    package_dir = source_dir / "facefusion"
+    package_dir.mkdir(parents=True)
+    (package_dir / "execution.py").write_text(
+        "import os\nimport onnxruntime\n\n"
+        "def resolve_cache_path() -> str:\n"
+        "\treturn os.getenv('ORT_TENSORRT_CACHE_PATH') or os.path.join('.caches', onnxruntime.get_version_string())\n",
+        encoding="utf-8",
+    )
+    original = (
+        "from functools import lru_cache\n"
+        "import os\n"
+        "from facefusion.vision import detect_video_fps, read_image\n\n"
+        "STREAM_COUNTER = 0\n\n\n"
+        "def skip_content_analysis() -> bool:\n"
+        "\treturn os.getenv('NOOR_FACEFUSION_SKIP_CONTENT_ANALYSIS') == '1'\n\n\n"
+        "def pre_check() -> bool:\n"
+        "\tif skip_content_analysis():\n"
+        "\t\treturn True\n"
+        "\treturn conditional_download_hashes({}) and conditional_download_sources({})\n\n\n"
+        "def analyse_frame(vision_frame) -> bool:\n"
+        "\tif skip_content_analysis():\n"
+        "\t\treturn False\n"
+        "\treturn detect_nsfw(vision_frame)\n"
+    )
+    (package_dir / "content_analyser.py").write_text(original, encoding="utf-8")
+
+    _apply_noor_facefusion_patch(source_dir)
+
+    assert (package_dir / "content_analyser.py").read_text(encoding="utf-8") == original
+
+
 def test_facefusion_upgrade_replace_preserves_runtime_model_link(tmp_path):
     clone_dir = tmp_path / "clone"
     source_dir = tmp_path / "source"
