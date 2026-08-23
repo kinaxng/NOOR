@@ -913,6 +913,8 @@ async function mountPlugin() {
   sdkAbortController = controller
   loading.value = true
   error.value = ''
+  const start = performance.now()
+  pluginDiagnostic('info', '插件页面开始加载', pluginId.value)
   try {
     const info = await api.get(`/plugins/${pluginId.value}/config`, { signal: controller.signal }).then(r => r.data)
     if (currentMount !== mountSeq) return
@@ -935,6 +937,7 @@ async function mountPlugin() {
       return
     }
     if (typeof ret === 'function') dispose = ret
+    pluginDiagnostic('info', `插件页面加载完成 cost=${Math.round(performance.now() - start)}ms`, pluginId.value)
   } catch (e: any) {
     if (!isAbortLikeError(e) && currentMount === mountSeq) {
       error.value = e?.response?.data?.detail || e?.message || '插件加载失败'

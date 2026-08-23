@@ -477,6 +477,8 @@
   `filterPanelRow` / `controlPanelRow`。
 - `sdkCleanupFns`、`sdkGet`、`sdkPost` 已按原版命名恢复；`sdkGet`/`sdkPost`
   保留请求耗时与失败诊断日志，`avatar.resolve/candidates` 也改走统一 `sdkPost`。
+- `mountPlugin` 恢复“插件页面开始加载/加载完成”诊断日志，耗时记录与系统日志
+  面板一致。
 - 无头 Chrome 实测：从 `/plugins/javdb` 点击“演员”后 URL 变为
   `/plugins/javdb/actors`，刷新后仍保持“演员”tab。
 - 继续点击演员卡片后 URL 变为 `/plugins/javdb/actor/{id}/{label}`，
