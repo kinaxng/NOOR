@@ -133,3 +133,29 @@ def test_whisper_settings_final_chickenrice_contract() -> None:
     )
     for marker in retired_markers:
         assert marker not in source, f"retired Whisper multi-chain marker leaked: {marker}"
+
+
+def test_final_window_home_media_card_and_panel_markers() -> None:
+    home = _read("frontend/src/views/Home.vue")
+    media_card = _read("frontend/src/components/noor/MediaCard.vue")
+    panel = _read("frontend/src/components/noor/FaceFusionPanel.vue")
+    types = _read("frontend/src/api/types.ts")
+
+    assert "const facefusionBadgeAlwaysVisible = ref(false)" in home
+    assert "api.get('/settings/facefusion/preferences')" in home
+    assert ":facefusion-badge-always-visible=\"facefusionBadgeAlwaysVisible\"" in home
+
+    assert "facefusionBadgeAlwaysVisible?: boolean" in media_card
+    assert "if (props.item.tags?.has_facefusion) return true" in media_card
+    assert "'media-card--pin-facefusion': facefusionBadgeAlwaysVisible" in media_card
+    assert "tag-facefusion--active" in media_card
+
+    assert "has_facefusion?: boolean" in types
+
+    assert "const referenceFaces = ref<" in panel
+    assert "const referenceFacesLoading = ref(false)" in panel
+    assert "const deepModelDialogOpen = ref(false)" in panel
+    assert "function addSelectedLibraryImages()" in panel
+    assert "function toggleLibraryImage(image: { id: string; path: string })" in panel
+    assert ".facefusion-native-grid" in panel
+    assert "grid-template-columns: minmax(26rem, 0.9fr) minmax(44rem, 1.35fr)" in panel
