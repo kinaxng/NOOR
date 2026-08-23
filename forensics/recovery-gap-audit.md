@@ -90,8 +90,9 @@
   维度。新增无码/破解分离回归测试，后端全量测试为 266 项通过。
 
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
-  `original-path-inventory.tsv`：未发现可新增登记的字节级匹配，
-  `forensics/current-byte-level-matches.tsv` 仍是当前全部字节级证据集合。
+  `original-path-inventory.tsv`：补登记 `backend/app/pipeline/lada/source/pyproject.toml`
+  与 2026-04-25 原始 `backend/app/pipeline/lada/pyproject.toml` 读取快照的字节级
+  一致；`forensics/current-byte-level-matches.tsv` 更新为 45 行。
 - 将 `forensics/extracted-packs-work/` 中恢复出的 4 个 Git pack 解码并核对
   提交标题：全部属于 ngx_brotli、OpenClaw/memory-lancedb skill、个人主页
   workflow 等无关仓库，与 NOOR 原版提交索引不一致；结论归档为
@@ -638,8 +639,9 @@
 - 当前 OpenAPI 的 `/api/media-library/actor*` / `/actors*` 路由与原版
   `media_library.early-replayed.py` 清单一致，覆盖映射、重名、合并、批量合并、
   TMDB 补全、名称同步、头像和删除诊断。
-- 重新扫描当前源码与全部 Vite 缓存 / source map / 读取快照后，没有发现
-  尚未登记的字节级匹配；`forensics/current-byte-level-matches.tsv` 保持 44 行。
+- 重新扫描当前源码与全部 Vite 缓存 / source map / 读取快照后，补登记
+  LADA `pyproject.toml` 字节级匹配；`forensics/current-byte-level-matches.tsv`
+  保持 45 行。
 - 文件级审计仍为 131 `verified`、0 `pending`、0 `missing`、6 `intentional`。
 
 ## 插件版本与 Whisper 退役配置清理（2026-08-24）
