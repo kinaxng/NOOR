@@ -189,6 +189,17 @@
   `GET /api/settings/ui`，返回 `{"ui": {"cover_blur_enabled": bool}}`，
   与设置页 PUT 契约一致。新增 `test_settings_api.py` 两条读取契约测试。
 
+- 从原始 rollout 的 `git status` 快照提取 `forensics/original-status-inventory.tsv`，
+  覆盖 617 个唯一状态行、114 个源码路径，补上 `dd000a8` 那次 710 文件 checkpoint
+  未记录 `staged_paths` 的路径缺口；Docker、运行时数据与插件缓存路径按恢复策略保留
+  在清单中但不作为本地源码恢复目标。
+- 清单核对后，真正的源码/测试缺失项都已确认不是最终版缺口：`SidebarMetrics.vue`、
+  `SystemMetricsCard.vue`、`useSidebarMetrics.ts` 是已被组件化插件槽位取代的旧实现；
+  `test_core_config.py`、`test_knowledge_core.py`、`test_settings_lada_upgrade.py`、
+  `test_whisper_api.py`、`test_whisper_frontend_profile_sync.py` 对应职责已由
+  `test_core_config_storage_defaults.py`、`test_knowledge_codes.py`、
+  `test_settings_lada_recovery.py`、当前 Whisper 契约测试覆盖。
+
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。

@@ -206,6 +206,11 @@ the recovered bytecode modules remain unchanged.
   `forensics/current-byte-level-matches.tsv` 已更新到 31 个字节级匹配文件，
   新增回放证据已归档到 `forensics/recovered-sources/`。
 
+- 2026-08-23 新增原始 `git status` 路径清单
+  `forensics/original-status-inventory.tsv`，补上了原版 710 文件 checkpoint 的路径
+  记录缺口；清单中的旧组件和旧测试名已逐一核销为更名/退役项，当前恢复树不因此产生
+  新的源码缺失。
+
 ## Validated Recovery Progress (2026-08-11)
 
 - The isolated frontend and backend are running at `http://192.168.31.3:5173/` and
