@@ -19,10 +19,20 @@ def is_allowed_directory_path(path: str, settings: Any) -> bool:
             return True
 
         for allowed in (
-            settings.source_dir,
-            settings.output_dir,
-            settings.whisper_model_dir or "",
-            settings.lada_model_dir or "",
+            getattr(settings, "source_dir", ""),
+            getattr(settings, "output_dir", ""),
+            getattr(settings, "noor_data_dir", ""),
+            getattr(settings, "model_root_dir", ""),
+            getattr(settings, "runtime_root_dir", ""),
+            getattr(settings, "whisper_model_dir", ""),
+            getattr(settings, "whisper_cache_dir", ""),
+            getattr(settings, "whisper_temp_dir", ""),
+            getattr(settings, "lada_model_dir", ""),
+            getattr(settings, "lada_cache_dir", ""),
+            getattr(settings, "lada_temp_dir", ""),
+            getattr(settings, "facefusion_model_dir", ""),
+            getattr(settings, "facefusion_cache_dir", ""),
+            getattr(settings, "facefusion_temp_dir", ""),
         ):
             if not allowed:
                 continue

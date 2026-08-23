@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -13,6 +14,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.settings_helpers import read_env_file, set_env_values
+from app.core.config import PROJECT_ROOT
 from app.core.runtime_paths import data_path
 
 
@@ -51,9 +53,38 @@ def _save_config(config: dict) -> None:
 
 
 def _index_db_path() -> Path:
-    path = data_path("subtitle_index.db")
+    path = data_path("runtime", "subtitle_library", "subtitle_index.db")
     path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        candidates = [candidate for candidate in _legacy_index_db_candidates() if candidate.resolve() != path.resolve()]
+        legacy_path = max(candidates, key=_subtitle_index_count, default=None)
+        if legacy_path and _subtitle_index_count(legacy_path) > 0:
+            shutil.copy2(legacy_path, path)
     return path
+
+
+def _subtitle_index_count(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    try:
+        conn = sqlite3.connect(path)
+        try:
+            tables = {row[0] for row in conn.execute("select name from sqlite_master where type='table'")}
+            if "subtitle_index" not in tables:
+                return 0
+            return int(conn.execute("select count(*) from subtitle_index").fetchone()[0])
+        finally:
+            conn.close()
+    except Exception:
+        return 0
+
+
+def _legacy_index_db_candidates() -> list[Path]:
+    return [
+        data_path("subtitle_index.db"),
+        PROJECT_ROOT / "backend" / "data" / "subtitle_index.db",
+        PROJECT_ROOT / "backend" / "app" / "data" / "subtitle_index.db",
+    ]
 
 
 def _get_library_paths(config: dict) -> list[str]:

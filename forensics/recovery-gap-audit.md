@@ -72,7 +72,7 @@
   `reazon_nemo` 等已退役链路字段。
 - 设置页存储契约改为返回 `model_root_dir`、`runtime_root_dir`、
   `database_url`、`database_path`，前端不再依赖已移除的 Reazon 字段。
-- 文件级差距清单已重新生成：当前无 `missing` 路径；71 个路径仍为
+- 文件级差距清单已重新生成：当前无 `missing` 路径；53 个路径仍为
   `pending`，需要在后续逐文件核对后转 `verified`。
 - JavDB 插件清单已按原版会话恢复：补回 `dashboard_widget`、下载器绑定、
   `resource_search`、RSS/知识图谱等能力；浏览器验证概览页的 `JAVDB 推荐`
@@ -80,6 +80,19 @@
   `javdb-recommend`。
 - `media_library.py` 已补齐拆分后的旧函数名兼容层；与保留的
   `media_library.pyc` 顶层代码对象逐项比对，原版旧名字均已可导入。
+- 继续按 rollout 回放核对运行时/路径模块：`runtime_cleanup`、`runtime_paths`、
+  `database_paths`、`gpu_guard`、`lada_paths`、`timing_refiner`、
+  `settings_whisper_models`、`settings_whisper_runtime` 已转 `verified`。
+  GPU Guard 新增回归测试，覆盖 NOOR 自身进程保护和仅清理 NOOR/模型服务进程。
+- 恢复 `settings_directories.py` 最终允许目录列表：除媒体目录外，重新接受
+  `noor_data_dir`、`model_root_dir`、`runtime_root_dir` 以及 Whisper/LADA/FaceFusion
+  的 model/cache/temp 根目录。
+- 恢复 `local_library.py` 最终索引迁移：索引主路径改为
+  `runtime/subtitle_library/subtitle_index.db`，并会从三个历史位置复制最强旧索引；
+  原 `data/subtitle_index.db` 不再是运行路径。
+- 任务/事件 API 新增契约测试：覆盖任务列表/详情/取消/删除/清理以及 SSE
+  connected/done 序列；后端全量测试更新为 203 项通过。文件级差距清单当前为
+  77 个 `verified`、53 个 `pending`、0 个 `missing`。
 
 ## 明确差距
 

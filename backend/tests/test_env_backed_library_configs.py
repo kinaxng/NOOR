@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 
 import pytest
 
@@ -99,5 +100,24 @@ def test_legacy_library_files_use_noor_data_dir(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setattr(local_library, "data_path", lambda *parts: tmp_path.joinpath(*parts))
 
     assert media_library_helpers.config_path() == tmp_path / "media_library_config.json"
-    assert local_library._index_db_path() == tmp_path / "subtitle_index.db"
+    assert local_library._index_db_path() == tmp_path / "runtime" / "subtitle_library" / "subtitle_index.db"
     assert tmp_path.exists()
+
+
+def test_subtitle_index_migrates_strongest_legacy_database(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    legacy = tmp_path / "subtitle_index.db"
+    conn = sqlite3.connect(legacy)
+    try:
+        conn.execute("create table subtitle_index (id integer primary key, base_name text, full_path text, ext text, updated_at real)")
+        conn.execute("insert into subtitle_index (base_name, full_path, ext, updated_at) values ('DASS-927', '/legacy/DASS-927.srt', 'srt', 1)")
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(local_library, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+
+    target = local_library._index_db_path()
+
+    assert target == tmp_path / "runtime" / "subtitle_library" / "subtitle_index.db"
+    assert target.is_file()
+    assert local_library._subtitle_index_count(target) == 1
+    assert local_library._legacy_index_db_candidates()[0] == legacy
