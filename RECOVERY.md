@@ -255,6 +255,10 @@ the recovered bytecode modules remain unchanged.
 - The task history page was restored from original May source plus the June/July
   rollout patches. It now includes the original expandable report card: task
   duration, score, metadata, diagnostics summary, and `/jobs/{id}/logs` tail.
+- `MediaDetailPanel.vue` now uses the original genre filter that removes code,
+  studio, series, and actor duplicate tags. Preview playback also prefers the
+  Emby `stream_url` from the detail payload and falls back to the local
+  hardlink preview endpoint when streaming fails.
 
 ## Recovery Consistency (2026-08-23)
 

@@ -103,6 +103,9 @@
 - `History.vue` 已按“5 月原版源码 + June/July rollout 补丁回放”恢复，补回
   原版任务日志展开、评分/诊断摘要、任务元数据与日志尾部查看功能；当前文件
   从简化的 363 行恢复为 714 行，前端生产构建通过。
+- `MediaDetailPanel.vue` 已补回原版标签过滤和播放地址策略：标签会排除番号、
+  片商、系列、演员名等重复项；预览优先使用 Emby `stream_url`，失败后回退
+  本地 hardlink 预览接口。
 - 继续核对 LADA/设置/模型契约：`pipeline/lada/runner.py` 恢复最终 NOOR Python
   环境、LADA model/cache/temp 分离和 `--temporary-directory`；
   `settings_helpers.py` 恢复 `NOOR_DATA_DIR` 模型回退、最终 ChickenRice/VAD 模型
