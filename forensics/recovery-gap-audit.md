@@ -372,10 +372,28 @@
 ## 全会话读取快照与跨格式回放（2026-08-23 深夜）
 
 - 新增 `forensics/extract_read_snapshots.py`，同时识别旧版 `function_call` 与
-  新版 `custom_tool_call` 中的 `sed -n` 读取。覆盖 4 月/5 月/6 月/7 月删除前
-  会话后，归档 1164 份原版读取快照、203 个路径到
+  新版 `custom_tool_call` 中的 `sed -n` 读取，并升级为可处理链式命令、多文件
+  `sed`、`Chunk ID ... Output:` 包装和 `--paths` 过滤。覆盖 4 月/5 月/6 月/7 月
+  删除前会话后，归档 1164 份原版读取快照、203 个路径到
   `forensics/recovered-sources/all-original-read-snapshots/`。
 - 升级 `forensics/replay_rollout_file.py`，支持多 rollout、旧/新事件格式、
   直接 `apply_patch` 与 exec 内嵌 `const patch = "..."`，并记录成功状态。
 - 当前原始读取快照受会话输出截断和 `git status && sed` 混用影响，不是所有
   路径都能直接拼成完整 seed；后续会按路径选择可用 seed，再结合补丁回放。
+
+## 迅雷远程原版账号/移动端链路恢复（2026-08-23）
+
+- `plugins/xunlei-remote/backend.py` 已从 4 月底首版 seed 起按 rollout 回放，
+  再与 6/24、6/25、7/25 原版读取快照核对，接回账号远程
+  `account_user_me/account_clients/account_paths/account_submit`、移动端
+  `mobile_status/mobile_submit`、试用加速 `try_speed_*`、会员流量 `flow_info`
+  和残留任务历史匹配的完整实现。
+- 保留当前已经过用户验证的 NAS 安全行为：显式 `savepath` 无法解析为目录 ID 时
+  fail closed，不会回退到迅雷默认目录；`.xltd/.xtld` 删除仍限制在配置扫描根目录内。
+- `plugins/xunlei-remote/plugin.json` 恢复原版 `insecure_skip_verify`、
+  `cookie/file_indices/min_file_size_mb/restore_path_mappings`，并补回账号远程与
+  移动端 fallback 配置项；源码不包含原版运行配置里的真实 token/cookie。
+- 新增 `backend/tests/test_xunlei_remote_plugin.py` 覆盖账号常量/签名、请求头、
+  JWT 过期、残留文件安全删除、显式保存路径 fail-closed 和插件配置字段。
+- 本轮验证：后端全量 `pytest` 237 项通过，迅雷插件 `compileall` 通过，
+  插件校验仅剩已知 capability/CSS 前缀警告。

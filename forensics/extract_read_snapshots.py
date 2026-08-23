@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Extract full-file read snapshots from original NOOR Codex sessions.
+"""Extract path-specific read snapshots from original Codex rollouts.
 
-The project was modified through Codex in several sessions before deletion. Both
-old ``function_call`` events and newer ``custom_tool_call`` events contain
-``exec_command`` reads such as ``sed -n '1,260p' path``. This script archives
-those exact outputs so they can be used as pre-patch seeds during file replay.
+Handles chained shell commands such as ``git status && sed -n '1,100p' file``,
+multiple ``sed`` ranges in one command, and wrapper text such as
+``Chunk ID ... Output:``.
 """
 
 from __future__ import annotations
@@ -16,10 +15,19 @@ import re
 from pathlib import Path
 from typing import Any
 
-
 ORIGINAL_PREFIX = "/home/kinax/noor/"
-SED_RE = re.compile(r"sed -n '(\d+),(\d+)\s*p'\s+(\S+)")
-OUTPUT_RE = re.compile(r"^Output:\s*\n", re.MULTILINE)
+SED_RE = re.compile(
+    r"sed\s+-n\s+['\"]?(\d+)\s*,\s*(\d+)\s*p['\"]?\s+(\S+)"
+)
+WRAPPER_RE = re.compile(
+    r"(?:^|\n)Chunk ID: [0-9a-f]+"
+    r"\nWall time: [^\n]*"
+    r"\nProcess exited with code \d+"
+    r"\nOriginal token count: \d+"
+    r"\nOutput:\n",
+    re.MULTILINE,
+)
+MARKER_RE = re.compile(r"^\s*-{3,}\s*[^\n]*\s*-{3,}\s*$", re.MULTILINE)
 
 
 def parse_call_args(payload: dict[str, Any]) -> dict[str, Any]:
@@ -49,9 +57,9 @@ def output_text(raw: Any) -> str:
         text = str(raw.get("output") or raw.get("text") or raw.get("content") or "")
     else:
         text = str(raw or "")
-    match = OUTPUT_RE.search(text)
-    if match:
-        text = text[match.end():]
+    text = WRAPPER_RE.sub("\n", text)
+    # Also strip a bare first "Output:" header from legacy outputs.
+    text = re.sub(r"^Output:\s*\n", "", text, count=1)
     return text
 
 
@@ -62,9 +70,27 @@ def normalize_path(raw_path: str, workdir: str) -> str | None:
     candidate = Path(path)
     if candidate.is_absolute():
         return None
-    if workdir and workdir.startswith(ORIGINAL_PREFIX):
+    original_root = ORIGINAL_PREFIX.rstrip("/")
+    if workdir and (workdir == original_root or workdir.startswith(ORIGINAL_PREFIX)):
         return (Path(workdir) / candidate).resolve().as_posix().removeprefix(ORIGINAL_PREFIX)
     return None
+
+
+def parse_sed_commands(cmd: str, workdir: str) -> list[dict[str, Any]]:
+    """Return sed commands in execution order, with optional preceding marker."""
+    commands: list[dict[str, Any]] = []
+    for match in SED_RE.finditer(cmd):
+        path = normalize_path(match.group(3), workdir)
+        if not path:
+            continue
+        commands.append(
+            {
+                "path": path,
+                "start": int(match.group(1)),
+                "end": int(match.group(2)),
+            }
+        )
+    return commands
 
 
 def collect_snapshots(rollout: Path, cutoff: str) -> list[dict[str, Any]]:
@@ -89,19 +115,15 @@ def collect_snapshots(rollout: Path, cutoff: str) -> list[dict[str, Any]]:
                     continue
                 args = parse_call_args(payload)
                 cmd = str(args.get("cmd") or "")
-                match = SED_RE.search(cmd)
-                if not match:
+                workdir = str(args.get("workdir") or "")
+                commands = parse_sed_commands(cmd, workdir)
+                if not commands:
                     continue
                 call_id = str(payload.get("call_id") or payload.get("id") or "")
-                path = normalize_path(match.group(3), str(args.get("workdir") or ""))
-                if not path:
-                    continue
                 calls[call_id] = {
                     "timestamp": timestamp,
-                    "path": path,
-                    "start": int(match.group(1)),
-                    "end": int(match.group(2)),
                     "cmd": cmd,
+                    "commands": commands,
                     "call_id": call_id,
                 }
             elif payload_type in ("function_call_output", "custom_tool_call_output"):
@@ -112,22 +134,29 @@ def collect_snapshots(rollout: Path, cutoff: str) -> list[dict[str, Any]]:
         if call_id not in outputs:
             continue
         content = outputs[call_id]
-        if not content:
-            continue
         lines = content.splitlines()
-        sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        snapshots.append(
-            {
-                "call": call_id,
-                "ts": call["timestamp"],
-                "path": call["path"],
-                "range": [call["start"], call["end"]],
-                "lines": len(lines),
-                "sha256": sha,
-                "file": "",
-                "content": content,
-            }
-        )
+        # Remove diagnostic marker lines inserted by printf between files.
+        lines = [line for line in lines if not MARKER_RE.fullmatch(line.strip())]
+        pos = 0
+        for item in call["commands"]:
+            expected = item["end"] - item["start"] + 1
+            if pos + expected > len(lines):
+                break
+            segment = "\n".join(lines[pos:pos + expected]) + "\n"
+            pos += expected
+            sha = hashlib.sha256(segment.encode("utf-8")).hexdigest()
+            snapshots.append(
+                {
+                    "call": call_id,
+                    "ts": call["timestamp"],
+                    "path": item["path"],
+                    "range": [item["start"], item["end"]],
+                    "lines": expected,
+                    "sha256": sha,
+                    "file": "",
+                    "content": segment,
+                }
+            )
     return snapshots
 
 
@@ -136,12 +165,18 @@ def main() -> None:
     parser.add_argument("rollouts", nargs="+", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--cutoff", default="2026-08-09T16:52:00Z")
+    parser.add_argument("--paths", nargs="*")
     args = parser.parse_args()
 
     all_snapshots: list[dict[str, Any]] = []
     seen: set[str] = set()
     for rollout in args.rollouts:
         for snapshot in collect_snapshots(rollout, args.cutoff):
+            if args.paths and not any(
+                snapshot["path"] == path or snapshot["path"].startswith(path + "/")
+                for path in args.paths
+            ):
+                continue
             key = (
                 snapshot["ts"],
                 snapshot["path"],
