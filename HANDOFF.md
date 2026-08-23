@@ -25,9 +25,16 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
-- Added `backend/tests/test_forensic_read_snapshot_contracts.py`, which rechecks
-  every final `2026-08-23` read snapshot against the current recovery tree with
-  at least `0.999` sequence similarity and asserts the expected count of `79`.
+- Corrected the forensic read-snapshot audit and regression contract. The original
+  snapshots through `2026-07-25` are the authoritative evidence set; the
+  `2026-08-23` recovery reads are not original final source. The contract now
+  locks the 35 original snapshot segments that still match the restored tree at
+  `1.000` within the drift window.
+- FaceFusion source-map evidence is a baseline, not the final file. Current
+  `FaceFusionPanel.vue` retains final source-image library multi-select /
+  add-selected behavior, and current `FaceFusionSettings.vue` retains
+  `badgeAlwaysVisible` / `faceTrackerScore`; do not overwrite them with the older
+  raw source-map versions.
 - Expanded byte-level original-source matches from the pre-takeover backup: stable backend/frontend config, tooling, docs, and UI files that were unchanged in the original commit index now have 53 verified rows in `forensics/current-byte-level-matches.tsv`. `test_forensic_byte_matches.py` still rechecks every row against the current tree.
 - Verification after the evidence expansion: recovery-workspace backend full `pytest` passes with `283 passed, 1 warning`, frontend production build passes, and plugin validation remains all `NOOR_PLUGIN_OK`.
 - Restored the subscription center original card workflow: source/quality metadata, expanded candidate comparison, edit mode, and old-version acknowledgment are back.
@@ -39,7 +46,12 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Re-checked all three 2026-08-23 HardlinkView read snapshots segment-by-segment; the only remaining difference from the preserved original segments is the confirmed duplicate `summary.total_groups` deletion.
 - Restored the visible `文件` page title in `FilesView.vue` and its mobile layout behavior from the original early evidence, while keeping the current `/files` route normalization and actor tab. Added `backend/tests/test_files_view_contract.py` so the `文件 -> 硬链接/演员管理` structure and `/hardlinks` redirect cannot drift back silently.
 - Verification: frontend production build passes; backend full pytest passes with `266 passed, 6 skipped`; restored-page smoke covers `/files` plus all main/plugin routes and reports no HTTP errors and no console errors.
-- Added a reproducible read-snapshot audit (`forensics/audit_read_snapshots.py`): the final 2026-08-23 window has 79/79 snapshots matching exactly within drift, and every actor/actor-management snapshot also matches. The remaining full-history drift/missing rows are classified as old revisions, final module splits, or retired Whisper multi-chain files in `forensics/read-snapshot-audit-classification.md`.
+- Added a reproducible read-snapshot audit (`forensics/audit_read_snapshots.py`):
+  corrected reports are `read-snapshot-audit-original.tsv/.md` and
+  `read-snapshot-audit-recovery-session.tsv/.md`. The original snapshot run is
+  `35 exact / 11 likely / 119 review / 516 drift / 7 missing`; drift is expected
+  for early revisions, final module splits, and retired Whisper multi-chain files
+  as classified in `forensics/read-snapshot-audit-classification.md`.
 - Locked the final Whisper runtime contract with `backend/tests/test_subtitle_panel_runtime_contract.py`: `SubtitlePanel.vue` starts Whisper with `runtime_tier`, `vad_backend`, and `timing_refiner`, and the settings/profile files keep the runtime-tier UI and payload. Verification is now `269 passed, 6 skipped` plus a clean frontend production build.
 - Added reproducible session-diff and final-commit audits under `forensics/audit_session_diffs.py` and `forensics/audit_final_commit_paths.py`. The session-diff manifest covers 520 sections / 477 unique diffs / 126 paths; final commits after 2026-07-14 are all present, and the embedded FaceFusion runtime reports 3.8.0.
 - Restored the final FaceFusion `facefusion_face_tracker_score` core setting and added `backend/tests/test_facefusion_final_contract.py` to lock the tracker score, source-image library multi-select, add-selected behavior, and deletion cleanup.
