@@ -88,6 +88,27 @@ def test_recommendation_controls_filter_confidence_and_explore():
     assert any(item["code"] in {"AB-008", "AB-009", "AB-010"} for item in selected)
 
 
+def test_candidate_score_sanitizes_dict_string_relations_and_uses_recommendation_type():
+    backend = _load_backend()
+
+    item = {
+        "code": "DVAJ-752",
+        "title": "DVAJ-752",
+        "maker": "{'external_id': 'J2x', 'name': 'アリスJAPAN'}",
+        "series": "[{'external_id': 'S1', 'name': 'アリス'}]",
+        "director": "{'name': '矢澤レシーブ'}",
+        "magnets_count": 1,
+        "release_date": "2026-08-12",
+    }
+    rec = backend._candidate_score(item, {"media_count": 1}, {}, {})
+
+    assert rec is not None
+    assert rec["maker"] == "アリスJAPAN"
+    assert rec["series"] == "アリス"
+    assert rec["director"] == "矢澤レシーブ"
+    assert rec["type"] == "recommendation"
+
+
 def test_preference_strength_preserves_legacy_behavior():
     backend = _load_backend()
 

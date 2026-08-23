@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import contextlib
 import datetime as dt
@@ -926,7 +927,14 @@ def _name_one(value: Any) -> str:
     if isinstance(value, list):
         names = _names(value)
         return names[0] if names else ""
-    return str(value or "").strip()
+    text = str(value or "").strip()
+    if text.startswith(("{", "[")):
+        try:
+            parsed = ast.literal_eval(text)
+        except (SyntaxError, ValueError):
+            return text
+        return _name_one(parsed)
+    return text
 
 
 def _unique_names(items: Any, limit: int = 20) -> list[str]:
@@ -983,10 +991,13 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
         candidate_limit = max(12, min(int(config.get("candidate_limit") or 48), 120))
         detail_limit = max(0, min(int(config.get("detail_limit") or 36), 80))
         requests = [
-            ("latest", {"page": 1, "limit": candidate_limit, "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "update"}),
+            ("latest", "最新更新", {"page": 1, "limit": candidate_limit, "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "update"}),
+            ("rankings", "日榜", {"page": 1, "limit": max(18, candidate_limit // 3), "period": "daily", "type": 0}),
+            ("rankings", "周榜", {"page": 1, "limit": max(18, candidate_limit // 3), "period": "weekly", "type": 0}),
+            ("rankings", "月榜", {"page": 1, "limit": max(18, candidate_limit // 3), "period": "monthly", "type": 0}),
         ]
         by_code: dict[str, dict[str, Any]] = {}
-        for action, payload in requests:
+        for action, label, payload in requests:
             try:
                 data = await runtime.handle_action("javdb", action, payload)
                 for item in data.get("items") or []:
@@ -999,11 +1010,15 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
                         # Match the JavDB plugin media card: the horizontal
                         # cover is cover_url/thumb_url, not preview screenshots.
                         next_item["fanart_url"] = next_item.get("cover_url") or next_item.get("thumb_url") or ""
+                        next_item["source_tags"] = [{"id": label, "label": label, "date": dt.date.today().isoformat()}]
                         by_code[code] = next_item
                     else:
                         current["magnets_count"] = max(int(current.get("magnets_count") or 0), int(item.get("magnets_count") or 0))
                         current["has_cnsub"] = bool(current.get("has_cnsub") or item.get("has_cnsub") or item.get("play_subtitle"))
                         current["is_cracked"] = bool(current.get("is_cracked") or item.get("is_cracked"))
+                        tags = current.get("source_tags") if isinstance(current.get("source_tags"), list) else []
+                        if not any(isinstance(tag, dict) and tag.get("id") == label for tag in tags):
+                            current["source_tags"] = [*tags, {"id": label, "label": label, "date": dt.date.today().isoformat()}]
                         if not current.get("fanart_url"):
                             current["fanart_url"] = current.get("cover_url") or current.get("thumb_url") or item.get("cover_url") or item.get("thumb_url") or ""
             except Exception as exc:
@@ -1023,7 +1038,7 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
                         item["detail"] = data
                         item["actors"] = _names(data.get("actors"))
                         item["categories"] = _names(data.get("categories"))
-                        item["maker"] = data.get("maker") or data.get("publisher") or ""
+                        item["maker"] = _name_one(data.get("maker") or data.get("publisher") or "")
                         item["series"] = _name_one(data.get("series"))
                         item["director"] = _name_one(data.get("director"))
                         item["cover_url"] = data.get("cover_url") or item.get("cover_url")
@@ -1220,7 +1235,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
     title_profile = _ensure_title_profile(item)
     title_traits = _title_trait_labels(title_profile, limit=10, min_weight=0.55)
     categories = _merge_title_traits(base_categories, title_traits, 18)
-    maker = str(item.get("maker") or "").strip()
+    maker = _name_one(item.get("maker") or item.get("publisher") or item.get("studio") or "")
     series = _name_one(item.get("series"))
     director = _name_one(item.get("director"))
     score = 0.0
@@ -1448,7 +1463,6 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         reasons.append("标签过泛降权")
 
     local_features = (profile.get("local_features") or {}).get(code) or {}
-    rec_type = "upgrade" if in_library else "subscribe"
     if in_library:
         current_has_sub = bool(local_features.get("has_subtitle"))
         current_cracked = bool(local_features.get("is_cracked"))
@@ -1504,7 +1518,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
             "quality": round(quality_score, 1),
             "penalty": round(penalty_score, 1),
         },
-        "type": rec_type,
+        "type": "recommendation",
         "in_library": bool(in_library),
         "magnets_count": magnets_count,
         "has_cnsub": bool(item.get("has_cnsub")),
@@ -1771,7 +1785,8 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
             code = _candidate_code(item)
             persisted = pool_items.get(code) if code else None
             if isinstance(persisted, dict):
-                item["source_tags"] = list(persisted.get("source_tags") or [])
+                if not item.get("source_tags"):
+                    item["source_tags"] = list(persisted.get("source_tags") or [])
                 item["is_today_increment"] = bool(persisted.get("is_today_increment"))
 
     excluded_codes = set(profile.get("codes") or set())
