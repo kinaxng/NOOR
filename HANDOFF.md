@@ -459,3 +459,14 @@ Notes:
 - Frontend build passed after adding `sdk.avatar.resolve()` and JavDB avatar override.
 - Plugin validation is clean: `scripts/noor-plugin validate plugins` reports all official plugins as OK.
   - `mteam-plugin` and `qbittorrent` custom modal migration advice
+
+### Latest Recovery Update (2026-08-24)
+
+- Locked final frontend recovery contracts for `SystemSettings.vue`,
+  `SettingsIndex.vue`, `FaceFusionSettings.vue`, `PluginHost.vue`,
+  `LadaPanel.vue`, and `WhisperSettings.vue` in
+  `backend/tests/test_final_frontend_recovery_contract.py`.
+- The contract test verifies the final MDC mapping, local subtitle library tab,
+  FaceFusion badge/tracker settings, plugin routing/avatar/control-panel SDK,
+  LADA job navigation/progress, and the Chicken Rice single-chain Whisper UI.
+  It also asserts retired Whisper multi-chain markers do not return.
