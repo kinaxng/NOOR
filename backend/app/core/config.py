@@ -22,10 +22,13 @@ WHISPER_MODEL_DIR = Path(
     os.environ.get("WHISPER_MODEL_DIR", str(Path.home() / ".cache" / "huggingface"))
 )
 DEFAULT_LADA_MODEL_WEIGHTS_DIR = "/volume1/models/lada_model_weights"
+DEFAULT_FACEFUSION_DIR = ""
 
 
 class Settings(BaseSettings):
     lada_cli_path: str = "python3 -m lada.cli.main"
+    facefusion_dir: str = DEFAULT_FACEFUSION_DIR
+    facefusion_python_path: str = ""
 
     emby_server: str = "http://localhost:8096"
     emby_api_key: str = ""
@@ -33,6 +36,8 @@ class Settings(BaseSettings):
     emby_enabled_library_ids: str = ""
 
     noor_data_dir: str = DEFAULT_NOOR_DATA_DIR
+    model_root_dir: str = ""
+    runtime_root_dir: str = ""
     source_dir: str = ""
     output_dir: str = ""
     whisper_model_dir: str = ""
@@ -93,6 +98,60 @@ class Settings(BaseSettings):
     lada_max_clip_length: int = 180
     lada_detect_face_mosaics: bool = False
 
+    facefusion_execution_provider: str = "cuda"
+    facefusion_device_ids: str = "0"
+    facefusion_thread_count: int = 8
+    facefusion_video_memory_strategy: str = "strict"
+    facefusion_system_memory_limit: int = 0
+    facefusion_log_level: str = "info"
+    facefusion_download_providers: str = "github huggingface"
+    facefusion_halt_on_error: bool = False
+    facefusion_preview_mode: str = "default"
+    facefusion_preview_resolution: str = "768x768"
+    facefusion_processors: str = ""
+    facefusion_face_swapper_model: str = "hyperswap_1a_256"
+    facefusion_face_swapper_pixel_boost: str = "256x256"
+    facefusion_face_swapper_weight: float = 0.5
+    facefusion_face_enhancer_model: str = "gfpgan_1.4"
+    facefusion_face_enhancer_blend: int = 80
+    facefusion_face_enhancer_weight: float = 0.5
+    facefusion_frame_enhancer_model: str = "span_kendata_x4"
+    facefusion_frame_enhancer_blend: int = 80
+    facefusion_face_detector_model: str = "yolo_face"
+    facefusion_face_detector_size: str = "640x640"
+    facefusion_face_detector_score: float = 0.5
+    facefusion_face_detector_angles: str = "0"
+    facefusion_face_detector_margin: str = "0 0 0 0"
+    facefusion_face_landmarker_model: str = "2dfan4"
+    facefusion_face_landmarker_score: float = 0.5
+    facefusion_face_selector_mode: str = "reference"
+    facefusion_face_selector_order: str = "large-small"
+    facefusion_face_selector_gender: str = ""
+    facefusion_face_selector_age_start: str = ""
+    facefusion_face_selector_age_end: str = ""
+    facefusion_face_selector_race: str = ""
+    facefusion_reference_frame_number: int = 0
+    facefusion_reference_face_position: int = 0
+    facefusion_reference_face_distance: float = 0.3
+    facefusion_face_mask_types: str = "box"
+    facefusion_face_mask_areas: str = ""
+    facefusion_face_mask_regions: str = ""
+    facefusion_face_mask_blur: float = 0.3
+    facefusion_face_mask_padding: str = "0 0 0 0"
+    facefusion_face_occluder_model: str = "xseg_1"
+    facefusion_face_parser_model: str = "bisenet_resnet_34"
+    facefusion_output_video_encoder: str = "libx264"
+    facefusion_output_video_preset: str = "veryfast"
+    facefusion_output_video_quality: int = 80
+    facefusion_output_video_scale: str = "1.0"
+    facefusion_output_video_fps: str = ""
+    facefusion_output_audio_encoder: str = "aac"
+    facefusion_output_audio_quality: int = 80
+    facefusion_output_audio_volume: int = 100
+    facefusion_output_image_quality: int = 80
+    facefusion_output_image_scale: str = "1.0"
+    facefusion_temp_frame_format: str = "png"
+
     host: str = "0.0.0.0"
     port: int = 9898
     reload: bool = Field(
@@ -104,20 +163,24 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def apply_storage_defaults(self):
         data_dir = Path(self.noor_data_dir or DEFAULT_NOOR_DATA_DIR)
+        model_root = Path(self.model_root_dir or data_dir / "models")
+        runtime_root = Path(self.runtime_root_dir or data_dir / "runtime")
 
         def fill(attr: str, path: Path) -> None:
             if not (getattr(self, attr, "") or "").strip():
                 setattr(self, attr, str(path))
 
-        fill("whisper_model_dir", data_dir / "models" / "whisper")
-        fill("whisper_cache_dir", data_dir / "runtime" / "whisper" / "cache")
-        fill("whisper_temp_dir", data_dir / "runtime" / "whisper" / "temp")
-        fill("lada_model_dir", data_dir / "models" / "lada")
-        fill("lada_cache_dir", data_dir / "runtime" / "lada" / "cache")
-        fill("lada_temp_dir", data_dir / "runtime" / "lada" / "temp")
-        fill("facefusion_model_dir", data_dir / "models" / "facefusion")
-        fill("facefusion_cache_dir", data_dir / "runtime" / "facefusion" / "cache")
-        fill("facefusion_temp_dir", data_dir / "runtime" / "facefusion" / "temp")
+        fill("model_root_dir", model_root)
+        fill("runtime_root_dir", runtime_root)
+        fill("whisper_model_dir", model_root / "whisper")
+        fill("whisper_cache_dir", runtime_root / "whisper" / "cache")
+        fill("whisper_temp_dir", runtime_root / "whisper" / "temp")
+        fill("lada_model_dir", model_root / "lada")
+        fill("lada_cache_dir", runtime_root / "lada" / "cache")
+        fill("lada_temp_dir", runtime_root / "lada" / "temp")
+        fill("facefusion_model_dir", model_root / "facefusion")
+        fill("facefusion_cache_dir", runtime_root / "facefusion" / "cache")
+        fill("facefusion_temp_dir", runtime_root / "facefusion" / "temp")
         fill("database_url", data_dir / "noor.db")
         if "://" not in self.database_url:
             self.database_url = f"sqlite+aiosqlite:///{self.database_url}"
@@ -177,7 +240,10 @@ class Settings(BaseSettings):
         )
 
     model_config = SettingsConfigDict(
-        env_file=str(ENV_FILE_PATH), env_file_encoding="utf-8", extra="ignore"
+        env_file=str(ENV_FILE_PATH),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        protected_namespaces=(),
     )
 
 

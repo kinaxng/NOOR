@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import re
+import xml.etree.ElementTree as ET
 from typing import Any, Callable
 from urllib.parse import urlencode, urljoin
 
@@ -231,6 +232,90 @@ def get_main_nfo_impl(file_path: str | None) -> str | None:
     return candidate if os.path.isfile(candidate) else None
 
 
+def _nfo_text(root: ET.Element, tag: str) -> str:
+    value = root.findtext(tag)
+    return (value or '').strip()
+
+
+def _nfo_list(root: ET.Element, tag: str) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for node in root.findall(tag):
+        text = (node.text or '').strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        values.append(text)
+    return values
+
+
+def parse_nfo_file_impl(nfo_path: str | None) -> dict:
+    if not nfo_path or not os.path.isfile(nfo_path):
+        return {}
+    try:
+        root = ET.parse(nfo_path).getroot()
+    except Exception:
+        return {}
+
+    nfo: dict[str, Any] = {}
+    scalar_fields = (
+        'title',
+        'originaltitle',
+        'sorttitle',
+        'year',
+        'premiered',
+        'studio',
+        'plot',
+        'outline',
+        'director',
+        'rating',
+        'set',
+        'id',
+        'tagline',
+        'votes',
+        'maker',
+        'publisher',
+        'label',
+        'num',
+    )
+    for field in scalar_fields:
+        value = _nfo_text(root, field)
+        if value:
+            nfo[field] = value
+
+    release = _nfo_text(root, 'releasedate') or _nfo_text(root, 'release')
+    if release and not nfo.get('premiered'):
+        nfo['premiered'] = release
+
+    genres = _nfo_list(root, 'genre')
+    if genres:
+        nfo['genres'] = genres
+    tags = _nfo_list(root, 'tag')
+    if tags:
+        nfo['tags'] = tags
+        nfo['tag'] = tags[0]
+
+    actors: list[dict[str, str]] = []
+    seen_actors: set[tuple[str, str]] = set()
+    for actor_node in root.findall('actor'):
+        name = ((actor_node.findtext('name') if len(actor_node) else actor_node.text) or '').strip()
+        role = (actor_node.findtext('role') or actor_node.findtext('type') or '').strip()
+        if not name:
+            continue
+        key = (name, role)
+        if key in seen_actors:
+            continue
+        seen_actors.add(key)
+        actor: dict[str, str] = {'name': name}
+        if role:
+            actor['role'] = role
+        actors.append(actor)
+    if actors:
+        nfo['actors'] = actors
+
+    return nfo
+
+
 async def get_siblings_impl(
     config: dict,
     parent_id: str | None,
@@ -347,6 +432,7 @@ async def get_item_impl(
 
     siblings = await get_siblings_fn(config, data.get("ParentId"), item_id)
     main_nfo = get_main_nfo_fn(file_path) if file_path else None
+    nfo = parse_nfo_file_impl(main_nfo)
     studios = [s.get("Name") for s in data.get("Studios", []) if s.get("Name")]
     actors = [
         {"name": person.get("Name"), "role": person.get("Role")}
@@ -453,6 +539,7 @@ async def get_item_impl(
         "backdrop_path": backdrop_url,
         "tags": tags,
         "actors": actors,
+        "nfo": nfo,
         "siblings": siblings,
         "variant_count": len(siblings) + (1 if file_path else 0),
         "main_nfo": main_nfo,

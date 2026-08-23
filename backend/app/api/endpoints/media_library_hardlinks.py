@@ -151,33 +151,67 @@ def source_file_size_impl(source_path: str | None) -> int | None:
 
 
 def enrich_hardlink_groups_impl(groups: list[dict], *, source_file_size_fn: Callable[[str | None], int | None] = source_file_size_impl) -> dict[str, Any]:
-    enriched, total_entries, total_hardlinks, issue_groups, orphan_entries = [], 0, 0, 0, 0
+    enriched_groups: list[dict] = []
+    total_entries = 0
+    total_hardlinks = 0
+    issue_groups = 0
+    orphan_entries = 0
+
     for group in groups:
-        entries, group_hardlinks, group_orphans = [], 0, 0
+        enriched_entries: list[dict] = []
+        group_hardlinks = 0
+        group_orphans = 0
+        is_unparsed = group.get('code', 'N/A') == 'N/A'
+
         for entry in group.get('entries', []):
-            paths = [item for item in entry.get('hardlink_paths', []) if item]
+            hardlink_paths = [item for item in (entry.get('hardlink_paths', []) or []) if item]
+            hardlink_count = len(hardlink_paths)
             source_path = entry.get('source_path')
-            issues = [] if source_path else ['orphan_source']
-            group_orphans += int(not source_path)
-            group_hardlinks += len(paths)
-            entries.append({'source_path': source_path, 'hardlink_paths': paths, 'hardlink_count': len(paths), 'source_size': source_file_size_fn(source_path), 'issues': issues, 'status': 'issue' if issues else 'healthy'})
-        issues = group_orphans + int(group.get('code', 'N/A') == 'N/A')
-        total_entries += len(entries)
+            source_size = source_file_size_fn(source_path)
+            issues: list[str] = []
+            if not source_path:
+                issues.append('orphan_source')
+                group_orphans += 1
+                orphan_entries += 1
+
+            status = 'issue' if issues else 'healthy'
+            group_hardlinks += hardlink_count
+            enriched_entries.append({
+                'source_path': source_path,
+                'hardlink_paths': hardlink_paths,
+                'hardlink_count': hardlink_count,
+                'source_size': source_size,
+                'issues': issues,
+                'status': status,
+            })
+
+        group_issues: list[str] = []
+        if is_unparsed:
+            group_issues.append('unparsed_code')
+        if group_orphans:
+            group_issues.append('orphan_source')
+        total_entries += len(enriched_entries)
         total_hardlinks += group_hardlinks
-        orphan_entries += group_orphans
-        issue_groups += int(bool(issues))
-        enriched.append({**group, 'entries': entries, 'hardlink_count': group_hardlinks, 'orphan_count': group_orphans, 'issue_count': issues, 'status': 'issue' if issues else 'healthy'})
+        issue_groups += int(bool(group_issues))
+        enriched_groups.append({
+            **group,
+            'entries': enriched_entries,
+            'hardlink_count': group_hardlinks,
+            'orphan_count': group_orphans,
+            'issue_count': len(group_issues),
+            'issues': group_issues,
+            'status': 'issue' if group_issues else 'healthy',
+        })
+
     return {
-        'groups': enriched,
+        'groups': enriched_groups,
         'summary': {
-            'total_groups': len(enriched),
+            'total_groups': len(enriched_groups),
             'total_entries': total_entries,
             'total_hardlinks': total_hardlinks,
             'issue_groups': issue_groups,
             'orphan_entries': orphan_entries,
-            # Preserve the names used by early callers while the recovered API
-            # consumes the newer total_* keys above.
-            'group_count': len(enriched),
+            'group_count': len(enriched_groups),
             'entry_count': total_entries,
             'hardlink_count': total_hardlinks,
             'issue_group_count': issue_groups,

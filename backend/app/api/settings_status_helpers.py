@@ -18,11 +18,11 @@ def status_timestamp() -> str:
 
 
 def model_download_status_path() -> Path:
-    return PROJECT_ROOT / "model_download_status.json"
+    return data_path("runtime", "status", "model_download_status.json")
 
 
 def install_status_path() -> Path:
-    return PROJECT_ROOT / "install_status.json"
+    return data_path("runtime", "status", "install_status.json")
 
 
 def facefusion_model_status_path() -> Path:

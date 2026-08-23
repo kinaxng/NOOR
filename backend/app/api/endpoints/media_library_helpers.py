@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.api.settings_helpers import read_env_file, set_env_values
+from app.core.runtime_paths import data_path
 
 
 SUBTITLE_EXTS = {".srt", ".ass", ".ssa", ".vtt", ".sub", ".sbv", ".sup"}
@@ -28,10 +29,9 @@ MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV = "MEDIA_LIBRARY_LOCAL_PATH_PREFIX"
 
 
 def config_path() -> Path:
-    project_root = Path(__file__).parent.parent.parent.parent
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
-    return data_dir / "media_library_config.json"
+    path = data_path("media_library_config.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _parse_scan_groups(raw_value: str) -> list[dict[str, str]]:

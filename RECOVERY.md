@@ -228,6 +228,22 @@ the recovered bytecode modules remain unchanged.
   media detail reads only preview metadata; a preview is generated only after a source
   image is selected and the frame slider is released.
 
+## Recovery Consistency (2026-08-23)
+
+- Backend `compileall` is clean and the full test suite currently passes: 183 passed.
+- Frontend production build passes with `npm run build`.
+- `backend/tests/test_media_library_api.py` was restored as a test module for NFO/CDATA
+  parsing, local-NFO item detail, media-library 503/502 error handling, and hardlink
+  scan/response contracts.
+- Final FaceFusion runtime directory, Python path, and full parameter defaults were
+  restored into `core/config.py`; `facefusion_defaults.py` remains as the compatibility
+  layer for the separate overrides file.
+- Whisper settings now expose a storage-root contract (`model_root_dir`,
+  `runtime_root_dir`, `database_url`, `database_path`) without retired Reazon fields.
+- `forensics/version-gap-audit.md` reports no missing indexed paths. 121 paths remain
+  `pending` until the remaining components are verified against original rollout
+  evidence; runtime and derived data remain outside the commit.
+
 The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
 outside cache directories remain versioned as forensic evidence.

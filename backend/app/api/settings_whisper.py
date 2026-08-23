@@ -12,6 +12,7 @@ from app.pipeline.whisper.strategy import apply_whisper_strategy
 
 
 TRANSFORMERS_MODEL_KEYS = {"anime-whisper": "anime_whisper"}
+ONNX_VAD_MODEL_KEYS = {"whisper-vad-onnx": "whisper_vad_onnx"}
 
 
 def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
@@ -90,6 +91,9 @@ def build_whisper_models_payload(
     for key, info in whisper_models.items():
         if info["type"] == "transformers":
             check_key = TRANSFORMERS_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        elif info["type"] in {"onnx", "onnx-vad"}:
+            check_key = ONNX_VAD_MODEL_KEYS.get(key, key)
             downloaded = available_models.get(check_key, {}).get("downloaded", False)
         else:
             downloaded = available_models.get(f"faster_{key}", {}).get("downloaded", False)

@@ -32,7 +32,21 @@
   FF/LADA/字幕/详情/删除面板入口、Emby webhook 同步与移动端响应式样式。
 - 演员管理/详情页：与 `2a7fe62` 中按历史工作区源码恢复的版本一致。
 - 媒体库页面：Emby 数据可读，549 位演员、作品列表、破解/中字/流出/无码标签可用。
-- 前端构建通过，后端 `pytest` 134 项通过。
+- 前端构建通过，后端 `pytest` 183 项通过；`compileall` 无语法错误。
+
+## 本轮一致性收敛（2026-08-23）
+
+- 新增 `backend/tests/test_media_library_api.py`，覆盖 NFO 嵌套演员/CDATA、
+  `get_item_impl` 本地 NFO 集成、媒体库 503/502 错误响应、硬链接扫描与摘要契约。
+- 恢复最终版本 `Settings` 中的 FaceFusion 目录、Python 路径和完整默认参数，
+  同时保留 `facefusion_defaults.py` 作为旧配置覆盖文件兼容层。
+- Whisper 模型删除统一走 `resolve_model_cache_candidates`，支持
+  `transformers` / `onnx-vad` / `onnx` 三类缓存；Whisper 运行时探测不再返回
+  `reazon_nemo` 等已退役链路字段。
+- 设置页存储契约改为返回 `model_root_dir`、`runtime_root_dir`、
+  `database_url`、`database_path`，前端不再依赖已移除的 Reazon 字段。
+- 文件级差距清单已重新生成：当前无 `missing` 路径；121 个路径仍为
+  `pending`，需要在后续逐文件核对后转 `verified`。
 
 ## 明确差距
 
@@ -67,7 +81,7 @@
 ## 后续恢复建议（按影响排序）
 
 1. 下一批继续用 rollout 回放核对 `i18n`、`ActorManagementView`、`ActorDetailView`
-   和 `FaceFusionPanel` 的后续修订。
+   和 `FaceFusionPanel` 的后续修订，把 `pending` 文件逐步转为 `verified`。
 2. 补充后端原单模块拆分的兼容层，让旧路由/旧函数名仍可被插件调用。
 3. 把 Whisper 旧链路的 `.py` 源码从历史会话/反编译中重建，或以文档形式明确退役。
 4. 每恢复一个模块，更新本文件并提交，避免再次丢失。

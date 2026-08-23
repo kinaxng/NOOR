@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.settings_directories import build_directory_browse_payload, is_allowed_directory_path, resolve_browse_path
 from app.api.settings_helpers import (LADA_MODEL_WEIGHTS_ENV, WHISPER_MODELS, format_size as _format_size, get_httpx as _get_httpx, get_lada_installation_info as _get_lada_installation_info, get_lada_model_weights_dir_from_env as _get_lada_model_weights_dir_from_env, get_lada_version_info as _get_lada_version_info, get_whisper_feature_flags as _get_whisper_feature_flags, lada_cli_base_cmd as _lada_cli_base_cmd, python_executable as _python_executable, read_env_file, set_env_values, update_env_value)
@@ -25,7 +25,7 @@ from app.api.settings_status_helpers import build_status_payload, facefusion_mod
 from app.api.settings_updates import apply_emby_config_updates, apply_lada_config_updates, apply_network_config_updates, build_storage_env_updates
 from app.api.settings_whisper import apply_whisper_config_updates, build_whisper_models_payload, normalize_whisper_config_payload, sanitize_download_status
 from app.api.settings_whisper_models import delete_whisper_model_files, resolve_whisper_model_dir
-from app.api.settings_whisper_runtime import detect_install_requirements, inspect_whisper_model_cache, inspect_whisper_python_dependencies, log_whisper_dependency_summary
+from app.api.settings_whisper_runtime import detect_install_requirements, detect_onnxruntime_gpu_requirement, inspect_whisper_model_cache, inspect_whisper_python_dependencies, log_whisper_dependency_summary
 from app.api.system import SystemLogManager
 from app.api.system import _save_ui_settings, _ui_settings
 from app.core.config import PROJECT_ROOT, WHISPER_MODEL_DIR, clear_settings_cache, get_settings
@@ -46,10 +46,22 @@ class EmbyConfig(BaseModel):
 
 
 class StorageConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     source_dir: str
     output_dir: str
+    noor_data_dir: str = ""
+    model_root_dir: str = ""
+    runtime_root_dir: str = ""
     whisper_model_dir: str = ""
+    whisper_cache_dir: str = ""
+    whisper_temp_dir: str = ""
     lada_model_dir: str = Field("", validation_alias="lada_model_weights_dir")
+    lada_cache_dir: str = ""
+    lada_temp_dir: str = ""
+    facefusion_model_dir: str = ""
+    facefusion_cache_dir: str = ""
+    facefusion_temp_dir: str = ""
 
 
 class LadaConfig(BaseModel):
@@ -69,6 +81,8 @@ class LadaDefaultsConfig(BaseModel):
 
 
 class WhisperConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     strategy: str = "chickenrice"
     subtitle_profile: str = "standard"
     model_backend: str = "chickenrice-zh"
@@ -213,7 +227,7 @@ def _save_config(action: str, success_log: str, success_message: str, operation)
 @router.get("")
 async def get_settings_all():
     env_data = read_env_file()
-    return build_settings_payload(env_data=env_data, version_info=_get_lada_version_info(), lada_model_weights_dir=_get_lada_model_weights_dir_from_env(env_data), whisper_features=_get_whisper_feature_flags(), custom_whisper_config={})
+    return build_settings_payload(env_data=env_data, version_info=_get_lada_version_info(), lada_model_weights_dir=_get_lada_model_weights_dir_from_env(env_data), whisper_features=_get_whisper_feature_flags())
 
 
 @router.put("/emby")
@@ -699,16 +713,26 @@ async def install_whisper_deps(req: Optional[InstallDepsRequest] = None):
         req = InstallDepsRequest()
     torch_variant, torch_current_cuda = req.torch_variant, req.torch_current_cuda
     log_mgr = SystemLogManager.get_instance()
+    current_deps, _, _ = inspect_whisper_python_dependencies()
+
+    def installed_outside_noor(dep_name: str) -> bool:
+        dep = current_deps.get(dep_name, {})
+        return bool(dep.get("installed")) and not bool(dep.get("in_noor_env", True))
+
     needs_torch, needs_librosa = detect_install_requirements(torch_variant, torch_current_cuda)
-    if not needs_torch and not needs_librosa:
+    needs_torch = needs_torch or installed_outside_noor("torch")
+    needs_librosa = needs_librosa or installed_outside_noor("librosa")
+    needs_onnxruntime_gpu = detect_onnxruntime_gpu_requirement(torch_variant, torch_current_cuda)
+    needs_onnxruntime_gpu = needs_onnxruntime_gpu or installed_outside_noor("onnxruntime")
+    if not needs_torch and not needs_librosa and not needs_onnxruntime_gpu:
         log_mgr.add_log("success", "[Whisper] 所有运行时依赖已就绪，无需安装")
         return {"success": True, "message": "All dependencies already installed"}
-    parts = ([] if not needs_librosa else ["librosa"]) + ([] if not needs_torch else [f"torch ({torch_variant.upper()})"])
+    parts = ([] if not needs_librosa else ["librosa"]) + ([] if not needs_torch else [f"torch ({torch_variant.upper()})"]) + ([] if not needs_onnxruntime_gpu else ["onnxruntime-gpu"])
     log_mgr.add_log("info", f"[Whisper] 正在安装运行时依赖: {', '.join(parts)}...")
     settings = get_settings()
     env = os.environ.copy()
     settings.apply_network_env()
-    pip_base = ["pip", "install", "--break-system-packages"]
+    pip_base = [sys.executable, "-m", "pip", "install", "--break-system-packages", "--ignore-installed"]
     pip_extra = ["-i", settings.pip_mirror or "https://pypi.tuna.tsinghua.edu.cn/simple", "--timeout=60"] if settings.acceleration_mode == "mirror" else []
     write_status_file(install_status_path(), build_status_payload(status="running", progress=0, message="Preparing...", current_package="", output=None))
     def update_status(status: str, progress: int, message: str, current_package: str = "", output: str | None = None):
@@ -737,6 +761,8 @@ async def install_whisper_deps(req: Optional[InstallDepsRequest] = None):
                 tasks.append((f"torch ({'GPU' if torch_variant == 'gpu' else 'CPU'})", pip_base + ["torch", "--index-url", index] + pip_extra, "torch"))
             if needs_librosa:
                 tasks.append(("librosa", pip_base + ["librosa"] + pip_extra, "librosa"))
+            if needs_onnxruntime_gpu:
+                tasks.append(("onnxruntime-gpu", pip_base + ["onnxruntime-gpu"] + pip_extra, "onnxruntime"))
             total = len(tasks)
             for i, (label, args, pkg) in enumerate(tasks):
                 update_status("running", int(i / total * 100), f"Installing {label}...", pkg)

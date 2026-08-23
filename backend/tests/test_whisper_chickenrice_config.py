@@ -33,7 +33,6 @@ def test_settings_payload_defaults_match_frontend_chickenrice_profile():
         },
         lada_model_weights_dir="/models/lada",
         whisper_features={},
-        custom_whisper_config={},
     )["whisper"]
 
     assert payload["strategy"] == "chickenrice"

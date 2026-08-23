@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.settings_helpers import read_env_file, set_env_values
+from app.core.runtime_paths import data_path
 
 
 router = APIRouter(prefix="/api/local-library", tags=["local-library"])
@@ -50,10 +51,9 @@ def _save_config(config: dict) -> None:
 
 
 def _index_db_path() -> Path:
-    project_root = Path(__file__).parent.parent.parent
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
-    return data_dir / "subtitle_index.db"
+    path = data_path("subtitle_index.db")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _get_library_paths(config: dict) -> list[str]:

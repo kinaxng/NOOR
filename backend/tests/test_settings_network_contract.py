@@ -28,7 +28,6 @@ def test_network_settings_payload_includes_actor_mapping_and_github_token():
         version_info=_version_info(),
         lada_model_weights_dir="/models/lada",
         whisper_features={},
-        custom_whisper_config={},
     )
 
     assert payload["network"]["github_token"] == "ghp_test"
