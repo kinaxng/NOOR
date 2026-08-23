@@ -475,6 +475,21 @@ the recovered bytecode modules remain unchanged.
 - Full backend pytest: `266 passed, 6 skipped`; frontend production build passes;
   restored-page smoke covers `/files` and still reports no HTTP/console errors.
 
+## Read Snapshot Audit and Whisper Contract Lock (2026-08-24)
+
+- Added `forensics/audit_read_snapshots.py` to reproduce the snapshot comparison
+  against the active `/home/kinax/noor` tree. The 2026-08-23 final window is
+  79/79 exact within drift; actor, actor-management, and actor-detail snapshots
+  are also exact within drift.
+- The full-history scan reports 676 exact, 6 review, 138 drift, and 5 missing.
+  Those rows are classified in `forensics/read-snapshot-audit-classification.md`
+  as older revisions, final module splits, or intentionally retired Whisper
+  multi-chain files.
+- Added `backend/tests/test_subtitle_panel_runtime_contract.py` so the final
+  Whisper runtime-tier payload cannot be removed as apparent recovery drift.
+- Verification: frontend production build passes; backend full pytest passes
+  with `269 passed, 6 skipped`.
+
 
 The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
