@@ -23,24 +23,12 @@ let mountSeq = 0
 let sdkAbortController: AbortController | null = null
 let sdkCleanupFns: Array<() => void> = []
 
-function isLifecycleCancelMessage(value: unknown) {
-  const text = String(value || '').toLowerCase()
-  return ['aborterror', 'err_canceled', 'operation was aborted', 'request aborted', 'request canceled', 'request cancelled', 'is unmounted', 'plugin unmounted', 'cancelederror'].some(token => text.includes(token))
-}
-
-function isAbortLikeError(error: any) {
-  return error?.name === 'AbortError'
-    || error?.name === 'CanceledError'
-    || error?.code === 'ERR_CANCELED'
-    || isLifecycleCancelMessage(error?.response?.data?.detail || error?.message)
-}
-
 function pluginDiagnostic(level: 'info' | 'warning' | 'error', message: string, sourceId = pluginId.value) {
-  if (!showSystemLog.value || isLifecycleCancelMessage(message)) return
+  if (!showSystemLog.value) return
   void api.post('/system/logs/client', {
     level,
     source: `plugin.${sourceId || 'unknown'}.frontend`,
-    message: String(message || '').slice(0, 2000),
+    message,
     route: window.location.pathname + window.location.search,
   }).catch(() => {})
 }
@@ -58,6 +46,32 @@ function shouldLogPluginRequest(path: string, level: 'info' | 'warning' | 'error
 
 function errorMessage(error: any) {
   return error?.response?.data?.detail || error?.message || String(error || 'unknown error')
+}
+
+function isAbortLikeError(error: any) {
+  const name = String(error?.name || '')
+  const code = String(error?.code || '')
+  const message = String(error?.response?.data?.detail || error?.message || '')
+  return name === 'AbortError'
+    || name === 'CanceledError'
+    || code === 'ERR_CANCELED'
+    || message.includes('is unmounted')
+    || message.includes('aborted')
+    || message.includes('canceled')
+}
+
+function isLifecycleCancelMessage(message: any) {
+  const value = String(message || '').toLowerCase()
+  return value.includes('aborterror')
+    || value.includes('err_canceled')
+    || value.includes('operation was aborted')
+    || value.includes('request aborted')
+    || value.includes('request canceled')
+    || value.includes('request cancelled')
+    || value.includes('is unmounted')
+    || value.includes('plugin unmounted')
+    || value.includes('canceled')
+    || value.includes('cancelled')
 }
 
 function clearMounted() {
