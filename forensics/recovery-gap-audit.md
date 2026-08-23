@@ -499,3 +499,12 @@
 - 无头 Chromium 渲染 `/plugins/javdb` 已验证面板节点带
   `is-collapsible is-collapsed`，折叠按钮 title 为“展开筛选面板”。
 - 验证：前端生产构建通过。
+
+## PluginHost 弹窗 titleMeta 恢复（2026-08-23）
+
+- `makeModal` 已按原版 6 月快照补回 `options.titleMeta` 渲染：
+  JavDB 多选筛选弹窗传入的计数/说明会显示在标题旁。
+- SDK 弹窗样式同步恢复原版布局：`noor-plugin-modal` 使用纵向 flex、
+  body 独立滚动，标题为 baseline 行内布局，并补回
+  `.noor-plugin-modal__title-meta` 样式。
+- 验证：前端生产构建通过。

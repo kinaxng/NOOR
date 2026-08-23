@@ -249,7 +249,15 @@ function makeModal(options: any = {}) {
   head.className = 'noor-plugin-modal__head'
   const title = document.createElement('div')
   title.className = 'noor-plugin-modal__title'
-  title.textContent = options.title || ''
+  const titleText = document.createElement('span')
+  titleText.textContent = options.title || ''
+  title.appendChild(titleText)
+  if (options.titleMeta) {
+    const titleMeta = document.createElement('span')
+    titleMeta.className = 'noor-plugin-modal__title-meta'
+    titleMeta.textContent = String(options.titleMeta)
+    title.appendChild(titleMeta)
+  }
   const closeBtn = makeButton({ label: '×', title: '关闭', className: 'noor-plugin-modal__close' })
   head.append(title, closeBtn)
   const body = document.createElement('div')
@@ -1073,12 +1081,13 @@ onBeforeUnmount(clearMounted)
 .noor-plugin-field__label { font-size: .75rem; color: rgba(255,255,255,.52); font-weight: 600; }
 .noor-plugin-field__hint { color: rgba(255,255,255,.35); }
 .noor-plugin-modal-mask { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(0,0,0,.62); backdrop-filter: blur(10px); }
-.noor-plugin-modal { width: min(560px, 100%); max-height: min(760px, 92vh); overflow: auto; border-radius: var(--radius-xl); background: rgb(26,31,55); border: 1px solid rgba(255,255,255,.08); box-shadow: var(--shadow-xl); }
+.noor-plugin-modal { width: min(560px, 100%); max-height: min(760px, 92vh); display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-xl); background: rgb(26,31,55); border: 1px solid rgba(255,255,255,.08); box-shadow: var(--shadow-xl); }
 .noor-plugin-modal--lg { width: min(920px, 100%); }
 .noor-plugin-modal__head, .noor-plugin-modal__actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem; border-bottom: 1px solid rgba(255,255,255,.06); }
-.noor-plugin-modal__actions { justify-content: flex-end; border-top: 1px solid rgba(255,255,255,.06); border-bottom: 0; }
-.noor-plugin-modal__title { color: white; font-weight: 700; }
-.noor-plugin-modal__body { padding: 1rem; display: grid; gap: .85rem; }
+.noor-plugin-modal__actions { justify-content: flex-end; border-top: 1px solid rgba(255,255,255,.06); border-bottom: 0; flex: none; }
+.noor-plugin-modal__title { display: inline-flex; align-items: baseline; gap: .45rem; color: white; font-weight: 700; }
+.noor-plugin-modal__title-meta { color: rgba(255,255,255,.46); font-size: .8em; font-weight: 600; }
+.noor-plugin-modal__body { padding: 1rem; display: grid; gap: .85rem; overflow: auto; min-height: 0; }
 .noor-plugin-tabs { position: relative; display: inline-flex; align-items: center; gap: .25rem; padding: .375rem; border-radius: var(--radius-xl); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .noor-plugin-tabs::-webkit-scrollbar { display: none; }
 .noor-plugin-tabs__marker { position: absolute; top: .375rem; bottom: .375rem; left: 0; border-radius: var(--radius-lg); background: var(--color-brand); box-shadow: 0 4px 12px rgba(0,117,255,.3); transition: none; z-index: 0; pointer-events: none; }
