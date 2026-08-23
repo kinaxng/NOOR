@@ -1,5 +1,8 @@
 export async function mount(el, sdk = {}) {
   const pluginId = sdk.pluginId || 'mteam-plugin'
+  const pluginFetch = (path, init) => sdk.api?.plugin
+    ? sdk.api.plugin(path, init)
+    : fetch(`/api/plugins/${pluginId}${path}`, init)
   const state = {
     activeTab: 'rss',
     rssItems: [],
@@ -150,7 +153,7 @@ export async function mount(el, sdk = {}) {
     state.loading = true
     render()
     try {
-      const r = await fetch(`/api/plugins/${pluginId}/rss/items?limit=300${force ? '&refresh=true' : ''}`)
+      const r = await pluginFetch(`/rss/items?limit=300${force ? '&refresh=true' : ''}`)
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || '加载失败')
       state.rssItems = Array.isArray(data) ? data : (data.items || [])
@@ -170,7 +173,7 @@ export async function mount(el, sdk = {}) {
     state.loading = true
     render()
     try {
-      const r = await fetch(`/api/plugins/${pluginId}/actions/albums`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload: {} }) })
+      const r = await pluginFetch(`/actions/albums`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload: {} }) })
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || '片单加载失败')
       state.albums = data.albums || []
@@ -191,7 +194,7 @@ export async function mount(el, sdk = {}) {
     state.adding = true
     render()
     try {
-      const r = await fetch(`/api/plugins/${pluginId}/actions/add_album`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload: { url: value } }) })
+      const r = await pluginFetch(`/actions/add_album`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload: { url: value } }) })
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || '添加片单失败')
       const album = data.album
@@ -217,7 +220,7 @@ export async function mount(el, sdk = {}) {
     state.pushing.add(k)
     render()
     try {
-      const r = await fetch(`/api/plugins/${pluginId}/rss/push`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item }) })
+      const r = await pluginFetch(`/rss/push`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item }) })
       const data = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(data.detail || '推送失败')
       notify('success', '已推送至下载器')

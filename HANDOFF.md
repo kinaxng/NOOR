@@ -26,6 +26,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Stopped hidden sidebar widget polling. The desktop and mobile sidebars no longer mount the widget-system renderer simultaneously, and plugin widgets pause when the browser tab is hidden. System metrics sampling is also throttled for 1 second on the backend.
 - Unified recommendation resource quality features: resource enrichment now separates real uncensored resources from cracked/leak signals, exposes `has_uncensored`, and returns a consistent `resource_summary.quality_score`.
+- Converged plugin API calls in `av-recommend`, `mteam-plugin`, and `subscription-core` frontends onto `sdk.api.plugin()` with a raw fetch fallback; plugin validation no longer reports `PLUGIN_API_SHOULD_USE_SDK`.
 - Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
 - Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.
 - Plugin host now skips standalone page loading when a plugin has no `frontend.entry`; AVDB is restored as a resource provider only and no longer triggers an assets `page.js` 404.
@@ -352,7 +353,7 @@ Recommended next implementation order:
 
 1. Formally add/track `plugins/av-recommend/` and ignore cache noise.
    - `.gitignore` now ignores generated `data/plugin_cache/`, `data/av_recommend/`, and `data/subscription_core/`.
-   - Existing tracked cache files still need a non-destructive index cleanup such as `git rm -r --cached data/plugin_cache`.
+   - `data/` runtime files are no longer tracked in git; no non-destructive index cleanup remains.
 2. Add subscription-center state awareness: done in `plugins/av-recommend/`.
    - Recommendation backend merges `subscription-core` overview state into items.
    - Cards show 已订阅 / 洗版中 when a recommendation already has an active subscription.
@@ -371,13 +372,14 @@ Recommended next implementation order:
    - subtitle/cracked preference strength: done as `prefer_subtitle_strength` / `prefer_cracked_strength`
    - minimum confidence threshold: done as `minimum_confidence_threshold`
 6. Add performance controls:
-   - cache recommendations per profile/config/feedback
+   - cache recommendations per profile/config/feedback: already implemented via 5-minute in-process `_CACHE`
    - limit concurrent JavDB/detail/resource calls: `resource_enrich_concurrency` added to plugin config
    - avoid plugin calls when dashboard card hidden/unmounted
 
 Latest recommendation verification: full backend pytest passes with
-`264 passed, 1 warning`; `test_av_recommend_recovery.py` covers confidence
-filtering, exploration slots, and legacy preference-strength compatibility.
+`266 passed, 1 warning`; `test_av_recommend_recovery.py` covers confidence
+filtering, exploration slots, legacy preference-strength compatibility, and
+uncensored/cracked resource separation.
 
 ## Known Pitfalls
 
@@ -427,5 +429,5 @@ Notes:
 - Frontend build passed after adding `sdk.avatar.resolve()` and JavDB avatar override.
 - Plugin validation has no errors; remaining output is design/API advice only:
   - `av-graph` and `subscription-core` CSS design-token advice
-  - `av-recommend`, `mteam-plugin`, and `subscription-core` should use `sdk.api.plugin()` where practical
+  - `mteam-plugin` and `qBittorrent` custom-modal migration advice
   - `mteam-plugin` and `qbittorrent` custom modal migration advice

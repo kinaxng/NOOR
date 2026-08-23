@@ -24,21 +24,22 @@ function imageCandidates(...values) {
   return out
 }
 
+function pluginFetch(sdk, path, init) {
+  return sdk.api?.plugin
+    ? sdk.api.plugin(path, init)
+    : fetch(`/api/plugins/av-recommend${path}`, init)
+}
+
 async function refreshStoredImageCandidates(sdk, code) {
   const text = String(code || '').trim()
   if (!text) return []
   try {
-    let payload
-    if (sdk.api?.post) {
-      const resp = await sdk.api.post('/plugins/av-recommend/actions/refresh_cover', { payload: { code: text } })
-      payload = resp.data
-    } else {
-      payload = await fetch('/api/plugins/av-recommend/actions/refresh_cover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload: { code: text } }),
-      }).then(r => r.json())
-    }
+    const response = await pluginFetch(sdk, '/actions/refresh_cover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload: { code: text } }),
+    })
+    const payload = await response.json()
     return imageCandidates(payload?.image_candidates, payload?.cover_url, payload?.thumb_url, payload?.fanart_url)
   } catch {
     return []
