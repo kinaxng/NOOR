@@ -1,0 +1,63 @@
+# NOOR 恢复差距审计
+
+更新时间：2026-08-23
+
+本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
+只用于回答“现在为什么还不能说已经恢复原样”。
+
+## 证据来源
+
+- 原始 Codex rollout：`/home/kinax/.codex/sessions/2026/06/08/rollout-...jsonl`
+- 早期前端会话：`/home/kinax/.codex/sessions/2026/04/12/rollout-...jsonl`
+- 原始提交索引：`forensics/original-commit-index.json`
+- 原始符号索引：`forensics/original-symbol-index.json`
+- 前端快照：`forensics/frontend-snapshots/`
+- 恢复后端字节码：`backend/app/**/*.pyc`（只作证据，不作为运行源码）
+
+## 已验证为恢复原样的部分
+
+- 资源搜索页 `ResourceSearch.vue`：已按 rollout 历史回放恢复为 851 行聚合页，
+  实测 `DASS-927` 返回作品/资源/中字/JavDB 聚合结果。
+- 插件运行时 `backend/app/plugins/runtime.py`：已恢复插件生命周期、SDK、
+  后台任务钩子；14 个插件目录与运行注册表一致。
+- 插件管理页 `PluginManager.vue`：当前 1530 行，覆盖已安装/市场/配置/测试/卸载等入口。
+- FaceFusion 面板 `FaceFusionPanel.vue`：当前 2898 行，包含默认面板、全宽面板、
+  模型选择、参考人脸、源脸库、预览和后续 face tracker score。
+- 演员管理/详情页：与 `2a7fe62` 中按历史工作区源码恢复的版本一致。
+- 媒体库页面：Emby 数据可读，549 位演员、作品列表、破解/中字/流出/无码标签可用。
+- 前端构建通过，后端 `pytest` 134 项通过。
+
+## 明确差距
+
+1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。
+   - 文件路径齐全，但部分文件内容仍是可维护重建，不是字节级原文件。
+   - 例如 i18n 曾漏掉 `settings.whisper.testFailed`，本次已补回中英文键。
+2. 原始 `media_library.py` 是约 228 个函数、43 个路由的单模块；当前按职责拆为
+   `endpoints/media_library*.py` 和 `endpoints/actors.py`。大多数功能等价，
+   但函数名、路由前缀、文件结构不同。
+3. 演员映射表工作流有意从“上传 XML / 在线同步”改为“MDC-NG 路径同步”：
+   - 已移除：`/actors/mapping/upload`、`/actors/mapping/sync-online`、
+     `/actors/mapping/import-latest`、`/actors/mapping/latest-upload`。
+   - 已保留：`/actors/mapping/source`、`/actors/mapping/sync-mdc-ng`。
+   - 这是用户后来明确要求的方向，不作为待恢复项。
+4. 推荐插件有意移除了“订阅推荐/洗版推荐”两个独立推荐模式：
+   - 当前为 `latest`（最新推荐）和 `full`（完整推荐），候选池显示 `总数+今日增量`。
+   - 卡片保留订阅按钮，但不再作为独立推荐 Tab。
+5. Whisper 旧链路源码未保留源码文件，只保留 `.pyc` 证据：
+   - `decoupled/anime_qwen3_chain.py`、`decoupled/qwen3.py`、
+     `enhancer.py`、`preprocess.py` 只有字节码，没有 `.py`。
+   - 这是用户要求收敛为 Chicken Rice 主链路后的预期结果；如后续要恢复为源码，
+     只能靠反编译或会话历史重建。
+6. 尚未找到的原始完整快照：
+   - 完整 Vue 组件树没有单一可信的“最终原文件”副本。
+   - `App.recovered-full.vue` 是旧单文件 UI，不能直接替换当前组件化前端。
+   - 每个组件都应按 rollout 证据逐文件核对，已核对完 `ResourceSearch`，
+     其余按 commit 频率优先级是 i18n、FaceFusionPanel、ActorManagementView、
+     FaceFusionSettings、LadaPanel、ActorDetailView。
+
+## 后续恢复建议（按影响排序）
+
+1. 继续用 rollout 回放恢复 `FaceFusionSettings.vue`、`LadaPanel.vue`、`Home.vue`。
+2. 补充后端原单模块拆分的兼容层，让旧路由/旧函数名仍可被插件调用。
+3. 把 Whisper 旧链路的 `.py` 源码从历史会话/反编译中重建，或以文档形式明确退役。
+4. 每恢复一个模块，更新本文件并提交，避免再次丢失。

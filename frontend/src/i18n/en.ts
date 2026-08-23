@@ -863,6 +863,7 @@ export const en: Record<string, string> = {
   'settings.whisper.saving': 'Saving...',
   'settings.whisper.saveDefaults': 'Save Default Settings',
   'settings.whisper.testConnection': 'Test Connection',
+  'settings.whisper.testFailed': 'Connection test failed',
   'settings.whisper.testing': 'Testing...',
   'common.enabled': 'Enabled',
   'common.disabled': 'Disabled',

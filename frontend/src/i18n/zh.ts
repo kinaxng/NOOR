@@ -859,6 +859,7 @@ export const zh: Record<string, string> = {
   'settings.whisper.saving': '保存中...',
   'settings.whisper.saveDefaults': '保存默认设置',
   'settings.whisper.testConnection': '测试连接',
+  'settings.whisper.testFailed': '测试连接失败',
   'settings.whisper.testing': '测试中...',
   'common.enabled': '已启用',
   'common.disabled': '已关闭',
