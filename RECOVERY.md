@@ -268,7 +268,7 @@ the recovered bytecode modules remain unchanged.
 
 ## Recovery Consistency (2026-08-23)
 
-- Backend `compileall` is clean and the full test suite currently passes: 214 passed.
+- Backend `compileall` is clean and the full test suite currently passes: 216 passed.
 - Frontend production build passes with `npm run build`.
 - The task manager is restored to the full queue contract: persisted queued-job
   recovery, phase/SSE state, queued and running cancellation, dependent activation

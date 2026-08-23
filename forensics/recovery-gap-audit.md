@@ -32,7 +32,7 @@
   FF/LADA/字幕/详情/删除面板入口、Emby webhook 同步与移动端响应式样式。
 - 演员管理/详情页：与 `2a7fe62` 中按历史工作区源码恢复的版本一致。
 - 媒体库页面：Emby 数据可读，549 位演员、作品列表、破解/中字/流出/无码标签可用。
-- 前端构建通过，后端 `pytest` 188 项通过；`compileall` 无语法错误。
+- 前端构建通过，后端 `pytest` 216 项通过；`compileall` 无语法错误。
 - `StorageSettings.vue`：已恢复为最终“两个大头目录”形态，只编辑模型根目录、
   运行时根目录、NOOR 数据目录和数据库只读路径；子模块缓存/临时目录输入已移除。
 - `SystemSettings.vue`：MDC-NG 路径、演员映射自动更新、Emby 连接与 webhook
@@ -62,7 +62,7 @@
 - `backend/app/tasks/manager.py` 已恢复完整队列语义并转 `verified`：阶段/SSE、
   持久化恢复、排队与运行中取消、依赖链激活/跳过、孤儿 `running` 清理、日志落盘、
   GPU Guard、LADA/FaceFusion，以及 Whisper/翻译独立 worker 进程和超时强杀。
-  新增 `backend/tests/test_job_manager_recovery.py`，当前后端全量测试为 214 项通过。
+  新增 `backend/tests/test_job_manager_recovery.py`，当前后端全量测试为 216 项通过。
 - 新增 `backend/tests/test_media_library_api.py`，覆盖 NFO 嵌套演员/CDATA、
   `get_item_impl` 本地 NFO 集成、媒体库 503/502 错误响应、硬链接扫描与摘要契约。
 - 恢复最终版本 `Settings` 中的 FaceFusion 目录、Python 路径和完整默认参数，
@@ -92,7 +92,7 @@
   原 `data/subtitle_index.db` 不再是运行路径。
 - 任务/事件 API 新增契约测试：覆盖任务列表/详情/取消/删除/清理以及 SSE
   connected/done 序列，并恢复 `POST /api/jobs` 的原版任务类型白名单；
-  后端全量测试更新为 214 项通过。文件级差距清单当前为 130 个 `verified`、
+  后端全量测试更新为 216 项通过。文件级差距清单当前为 130 个 `verified`、
   0 个 `pending`、0 个 `missing`。
 - 新增媒体库路由契约测试：以 `forensics/original-symbol-index.json` 中的原版
   43 条路由为基准，核对当前 `/api/media-library/*`；除用户明确改为 MDC-NG
