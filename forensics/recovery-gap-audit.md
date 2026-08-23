@@ -451,3 +451,15 @@
   回放文件并断言全部原版公开顶层符号已由当前拆分模块提供，防止兼容层再退化。
 - `current-byte-level-matches.tsv` 已更新到 32 个字节级匹配文件，
   `MediaDetailPanel.vue` 与 `BaseToast.vue` 均登记证据来源。
+
+## 字节级匹配登记复核（2026-08-23）
+
+- `frontend/src/App.vue` 已与
+  `forensics/frontend-snapshots/vite-cache-devtools/latest/src/App.vue` 哈希一致，
+  对应最终浏览器缓存证据；`frontend/src/views/History.vue` 已与
+  `forensics/recovered-sources/History.vue.replayed.vue` 哈希一致。
+- 通过全量读取快照哈希比对，再补上 4 个原版字节级匹配文件：
+  `frontend/src/api/index.ts`、`frontend/src/composables/useJobNavigation.ts`、
+  `frontend/src/composables/useToast.ts`、`backend/run.py`。
+- `current-byte-level-matches.tsv` 当前为 38 个匹配路径；前端生产构建通过，
+  后端全量 `pytest` 238 项通过。
