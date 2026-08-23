@@ -465,34 +465,36 @@ function makePagination(options: any = {}) {
   return wrap
 }
 
-function makeFilterPanelSection(options: any = {}) {
+function makeControlPanelSection(options: any = {}) {
   const section = document.createElement('div')
-  section.className = 'noor-control-panel__section'
+  section.className = ['noor-control-panel__section', options.className || ''].filter(Boolean).join(' ')
   if (options.label) {
     const label = document.createElement('span')
     label.className = 'noor-control-panel__section-label'
-    label.textContent = String(options.label)
+    label.textContent = options.label
     section.appendChild(label)
   }
   const body = document.createElement('div')
   body.className = 'noor-control-panel__section-body'
-  for (const item of (Array.isArray(options.items) ? options.items : [options.items]).filter(Boolean)) body.appendChild(item)
+  const children = options.items || options.children
+  for (const item of (Array.isArray(children) ? children : [children]).filter(Boolean)) body.appendChild(item)
   section.appendChild(body)
   return section
 }
 
-function makeFilterPanelGroup(options: any = {}) {
+function makeControlPanelGroup(options: any = {}) {
   const group = document.createElement('div')
-  group.className = 'noor-control-panel__group'
+  group.className = ['noor-control-panel__group', options.className || ''].filter(Boolean).join(' ')
   if (options.label) {
     const label = document.createElement('span')
     label.className = 'noor-control-panel__group-label'
-    label.textContent = String(options.label)
+    label.textContent = options.label
     group.appendChild(label)
   }
   const items = document.createElement('div')
   items.className = 'noor-control-panel__group-items'
-  for (const item of (Array.isArray(options.items) ? options.items : [options.items]).filter(Boolean)) items.appendChild(item)
+  const children = options.items || options.children
+  for (const item of (Array.isArray(children) ? children : [children]).filter(Boolean)) items.appendChild(item)
   group.appendChild(items)
   return group
 }
@@ -505,32 +507,42 @@ function makeControlPanelRow(options: any = {}) {
   return row
 }
 
-function makeFilterPanel(options: any = {}) {
+function makeControlPanel(options: any = {}) {
   const panel = document.createElement('section')
-  panel.className = ['noor-control-panel', options.className || '', options.collapsible ? 'is-collapsible' : ''].filter(Boolean).join(' ')
-  const storageKey = options.collapseKey ? `noor:filter-panel:${options.collapseKey}` : ''
-  let collapsed = false
-  if (options.collapsible) {
-    const saved = storageKey ? window.localStorage.getItem(storageKey) : null
-    collapsed = saved == null ? !!options.defaultCollapsed : saved === '1'
-    panel.classList.toggle('is-collapsed', collapsed)
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'noor-control-panel__collapse-btn'
-    button.title = collapsed ? '展开筛选面板' : '收起筛选面板'
-    const icon = document.createElement('span')
-    icon.className = 'noor-control-panel__collapse-icon'
-    icon.textContent = '⌃'
-    button.appendChild(icon)
-    button.onclick = () => {
-      collapsed = !collapsed
-      panel.classList.toggle('is-collapsed', collapsed)
-      button.title = collapsed ? '展开筛选面板' : '收起筛选面板'
-      if (storageKey) window.localStorage.setItem(storageKey, collapsed ? '1' : '0')
+  panel.className = ['noor-control-panel', options.collapsible ? 'is-collapsible' : '', options.className || ''].filter(Boolean).join(' ')
+  const collapseStorageKey = options.collapseKey ? `noor:filter-panel:${options.collapseKey}` : ''
+  const legacyCollapseStorageKey = options.collapseKey ? `noor:control-panel:${options.collapseKey}` : ''
+  const readCollapsed = () => {
+    if (!options.collapsible) return false
+    if (!collapseStorageKey) return options.defaultCollapsed !== false
+    const saved = window.localStorage.getItem(collapseStorageKey)
+    if (saved == null && legacyCollapseStorageKey) {
+      const legacySaved = window.localStorage.getItem(legacyCollapseStorageKey)
+      if (legacySaved != null) return legacySaved === '1'
     }
-    panel.appendChild(button)
+    if (saved == null) return options.defaultCollapsed !== false
+    return saved === '1'
   }
-  if (options.title || options.summary) {
+  let collapsed = readCollapsed()
+  const persistCollapsed = () => {
+    if (!options.collapsible || !collapseStorageKey) return
+    window.localStorage.setItem(collapseStorageKey, collapsed ? '1' : '0')
+  }
+  const rows = Array.isArray(options.rows) ? options.rows : []
+  const extraRows: HTMLElement[] = []
+  let collapseBtn: HTMLButtonElement | null = null
+  let footer: HTMLDivElement | null = null
+  const syncCollapsed = () => {
+    panel.classList.toggle('is-collapsed', !!(options.collapsible && collapsed))
+    extraRows.forEach(row => { row.style.display = options.collapsible && collapsed ? 'none' : '' })
+    if (body.childNodes.length) body.style.display = options.collapsible && collapsed && rows.length ? 'none' : ''
+    if (footer && footer.childNodes.length) footer.style.display = options.collapsible && collapsed ? 'none' : ''
+    if (collapseBtn) {
+      collapseBtn.title = collapsed ? '展开筛选面板' : '收起筛选面板'
+    }
+  }
+
+  if (options.title || options.summary || options.headerActions || options.collapsible) {
     const header = document.createElement('div')
     header.className = 'noor-control-panel__header'
     const main = document.createElement('div')
@@ -538,24 +550,80 @@ function makeFilterPanel(options: any = {}) {
     if (options.title) {
       const title = document.createElement('strong')
       title.className = 'noor-control-panel__title'
-      title.textContent = String(options.title)
+      title.textContent = options.title
       main.appendChild(title)
     }
     if (options.summary) {
       const summary = document.createElement('span')
       summary.className = 'noor-control-panel__summary'
-      summary.textContent = String(options.summary)
+      summary.textContent = options.summary
       main.appendChild(summary)
     }
     header.appendChild(main)
+    if (options.headerActions || options.collapsible) {
+      const actions = document.createElement('div')
+      actions.className = 'noor-control-panel__header-actions'
+      if (options.headerActions) {
+        const headerActions = Array.isArray(options.headerActions) ? options.headerActions : [options.headerActions]
+        for (const action of headerActions.filter(Boolean)) actions.appendChild(action)
+      }
+      if (options.collapsible) {
+        collapseBtn = document.createElement('button')
+        collapseBtn.type = 'button'
+        collapseBtn.className = 'noor-control-panel__collapse-btn'
+        collapseBtn.title = collapsed ? '展开筛选面板' : '收起筛选面板'
+        const icon = document.createElement('span')
+        icon.className = 'noor-control-panel__collapse-icon'
+        icon.textContent = '⌃'
+        collapseBtn.appendChild(icon)
+        collapseBtn.onclick = () => {
+          collapsed = !collapsed
+          persistCollapsed()
+          syncCollapsed()
+        }
+        actions.appendChild(collapseBtn)
+      }
+      header.appendChild(actions)
+    }
     panel.appendChild(header)
   }
-  for (const [index, row] of (Array.isArray(options.rows) ? options.rows : []).entries()) {
-    const rowEl = document.createElement('div')
-    rowEl.className = `noor-control-panel__row noor-control-panel__row--${index === 0 ? 'primary' : index === 1 ? 'secondary' : 'tertiary'}`
-    for (const section of (Array.isArray(row?.sections) ? row.sections : []).filter(Boolean)) rowEl.appendChild(section)
-    panel.appendChild(rowEl)
+
+  const body = document.createElement('div')
+  body.className = 'noor-control-panel__body'
+  if (options.left) {
+    const left = document.createElement('div')
+    left.className = 'noor-control-panel__left'
+    const leftChildren = Array.isArray(options.left) ? options.left : [options.left]
+    for (const child of leftChildren.filter(Boolean)) left.appendChild(child)
+    body.appendChild(left)
   }
+  if (options.right) {
+    const right = document.createElement('div')
+    right.className = 'noor-control-panel__right'
+    const rightChildren = Array.isArray(options.right) ? options.right : [options.right]
+    for (const child of rightChildren.filter(Boolean)) right.appendChild(child)
+    body.appendChild(right)
+  }
+  if (body.childNodes.length) panel.appendChild(body)
+
+  for (const [index, rowConfig] of rows.entries()) {
+    const row = makeControlPanelRow(rowConfig)
+    if (row.childNodes.length) {
+      row.classList.add(`noor-control-panel__row--${index === 0 ? 'primary' : index === 1 ? 'secondary' : 'tertiary'}`)
+      if (index > 0) extraRows.push(row)
+      panel.appendChild(row)
+    }
+  }
+
+  if (options.footer) {
+    footer = document.createElement('div')
+    footer.className = 'noor-control-panel__footer'
+    const footerChildren = Array.isArray(options.footer) ? options.footer : [options.footer]
+    for (const child of footerChildren.filter(Boolean)) footer.appendChild(child)
+    panel.appendChild(footer)
+  }
+
+  syncCollapsed()
   return panel
 }
 
@@ -878,12 +946,12 @@ function sdkFor(id: string) {
       panel: makePanel,
       tabs: makeTabs,
       pagination: makePagination,
-      filterPanel: makeFilterPanel,
-      controlPanel: makeFilterPanel,
-      filterPanelGroup: makeFilterPanelGroup,
-      controlPanelGroup: makeFilterPanelGroup,
-      filterPanelSection: makeFilterPanelSection,
-      controlPanelSection: makeFilterPanelSection,
+      filterPanel: makeControlPanel,
+      controlPanel: makeControlPanel,
+      filterPanelGroup: makeControlPanelGroup,
+      controlPanelGroup: makeControlPanelGroup,
+      filterPanelSection: makeControlPanelSection,
+      controlPanelSection: makeControlPanelSection,
       filterPanelRow: makeControlPanelRow,
       controlPanelRow: makeControlPanelRow,
       submitButton: makeSubmitButton,

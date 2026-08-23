@@ -484,3 +484,18 @@
 - 继续点击演员卡片后 URL 变为 `/plugins/javdb/actor/{id}/{label}`，
   刷新后仍保持该演员关系页。
 - 验证：前端生产构建通过。
+
+## PluginHost 控制面板契约恢复（2026-08-23）
+
+- `frontend/src/views/PluginHost.vue` 的 `makeControlPanel*` 已按原版 6 月
+  快照恢复：支持 `body/left/right/footer/headerActions`、`rows/extraRows`，
+  折叠时隐藏扩展行、body 与 footer，折叠按钮保留原版 title 状态。
+- 折叠状态同时读取新版 `noor:filter-panel:*` 与旧版
+  `noor:control-panel:*`，写入仍统一到 `noor:filter-panel:*`，避免旧插件
+  之前保存的折叠状态丢失。
+- `sdk.ui.filterPanel/controlPanel` 及其 group/section/row 现在直接暴露
+  `makeControlPanel*`，与原版 SDK 命名一致；JavDB 与 AV Graph 的筛选面板
+  都走同一实现。
+- 无头 Chromium 渲染 `/plugins/javdb` 已验证面板节点带
+  `is-collapsible is-collapsed`，折叠按钮 title 为“展开筛选面板”。
+- 验证：前端生产构建通过。
