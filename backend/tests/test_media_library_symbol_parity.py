@@ -71,6 +71,15 @@ def test_media_library_module_exposes_all_original_functions() -> None:
     assert missing == []
 
 
+def test_media_library_module_exposes_all_original_top_level_names() -> None:
+    root = Path(__file__).resolve().parents[2]
+    original = _top_level_names(root / "forensics" / "recovered-sources" / "media_library.final-replayed.py")
+    from app.api.endpoints import media_library
+
+    missing = sorted(name for name in original if name != "base64" and not hasattr(media_library, name))
+    assert missing == []
+
+
 def test_media_library_module_exposes_restored_actor_helpers() -> None:
     from app.api.endpoints import media_library
 

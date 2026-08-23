@@ -33,8 +33,8 @@
   列表、作品、头像、TMDB、映射同步/清除、名称同步、批量合并等旧入口都可从
   `app.api.endpoints.media_library` 解析；当前拆分后的 actor 辅助函数按
   等价名称/别名回填。新增 `media_library_actor_compat.py` 惰性兼容层，
-  原版最终回放文件中的全部顶层函数名现在都可由
-  `app.api.endpoints.media_library` 解析；新增全函数名回归测试。
+  原版最终回放文件中的全部顶层符号（除有意省略的 `base64` 导入）现在都可
+  由 `app.api.endpoints.media_library` 解析；新增全函数名与顶层符号回归测试。
 - 新增可复跑浏览器冒烟 `forensics/smoke_restored_pages.js`：覆盖首页、媒体库详情、
   任务/历史/设置/文件/演员、JavDB 演员路由、推荐中心、订阅中心、qBittorrent 与
   资源搜索；当前运行无 HTTP 4xx/5xx、无 console 错误。Emby webhook 也再次验证，
@@ -47,7 +47,7 @@
   后台时卸载插件 widget 并清理轮询/AbortController，回到前台再重新挂载，
   避免隐藏标签继续占用 CPU、网络和 `nvidia-smi`。
 - `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
-- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 259 项通过。
+- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 260 项通过。
 
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。
@@ -193,9 +193,9 @@
   `javdb-recommend`。
 - `media_library.py` 已补齐拆分后的旧函数名兼容层；与保留的
   `media_library.pyc` 顶层代码对象逐项比对，原版最终回放文件中的全部顶层
-  函数名均可由 `media_library` 解析。公开函数、当前 actor 等价 helper 与
-  遗留私有 helper 分别由 `actors.py` 和 `media_library_actor_compat.py`
-  承载，行为仍以当前拆分实现为准。
+  符号（`base64` 标准库导入除外）均可由 `media_library` 解析。公开函数、
+  当前 actor 等价 helper 与遗留私有 helper 分别由 `actors.py` 和
+  `media_library_actor_compat.py` 承载，行为仍以当前拆分实现为准。
 - 继续按 rollout 回放核对运行时/路径模块：`runtime_cleanup`、`runtime_paths`、
   `database_paths`、`gpu_guard`、`lada_paths`、`timing_refiner`、
   `settings_whisper_models`、`settings_whisper_runtime` 已转 `verified`。
@@ -494,9 +494,9 @@
   对当前 `endpoints/media_library*.py` 与 `endpoints/actors.py` 做顶层名称复核。
 - 原版顶层 286 个名称中，公开名称仅有 `base64` 这个标准库导入名未在当前模块重复；
   其余公开函数、类、请求模型和兼容别名均已由当前拆分模块提供。
-- 原版最终回放文件中的全部顶层函数名现已由 `media_library` 解析；公开
-  名称、等价 actor helper 与遗留私有兼容函数分别由当前拆分模块和
-  `media_library_actor_compat.py` 承载，路由契约由
+- 原版最终回放文件中的全部顶层符号（`base64` 导入除外）现已由
+  `media_library` 解析；公开名称、等价 actor helper 与遗留私有兼容函数
+  分别由当前拆分模块和 `media_library_actor_compat.py` 承载，路由契约由
   `backend/tests/test_actor_routes.py` 与媒体库路由测试继续锁定。
 - 新增 `backend/tests/test_media_library_symbol_parity.py`，用 AST 解析原版最终
   回放文件并断言全部原版公开顶层符号已由当前拆分模块提供，防止兼容层再退化。
