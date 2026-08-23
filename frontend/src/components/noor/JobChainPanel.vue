@@ -1,4 +1,3 @@
-
 <script setup lang="ts">
 import VuiBadge from '../ui/Badge/VuiBadge.vue'
 
@@ -182,5 +181,3 @@ defineEmits<{
   color: rgba(86, 204, 242, 0.76);
 }
 </style>
-
-

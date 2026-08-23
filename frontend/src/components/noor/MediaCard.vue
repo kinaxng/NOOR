@@ -263,4 +263,3 @@ function handleFaceFusionBadgeClick() {
   color: #fff;
 }
 </style>
-

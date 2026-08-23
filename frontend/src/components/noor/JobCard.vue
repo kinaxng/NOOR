@@ -237,5 +237,3 @@ defineEmits<{
   line-height: 1.2;
 }
 </style>
-
-

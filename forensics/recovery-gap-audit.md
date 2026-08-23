@@ -83,6 +83,10 @@
   VAD/timing refiner、NOOR 环境依赖来源与旧链路移除；`MediaDetailPanel.vue`
   已覆盖 Emby stream 优先/本地 hardlink 回退和标签去重；`App.vue` 已覆盖全局
   搜索、封面模糊快捷键、前端诊断日志与启动时 `/settings/ui` 全局模糊同步。
+- 字节级匹配扫描：新增 `forensics/current-byte-level-matches.tsv`，当前
+  27 个前端文件已与 Vite source map 或浏览器缓存证据完全一致；其中
+  `JobCard`、`JobChainPanel`、`MediaCard`、`VuiProgress`、`History`、
+  `LadaSettings` 本次按证据补回仅有的空行/换行差异，已恢复字节级一致。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
   `operation_id`，消除 FastAPI OpenAPI 重复操作名告警；后端全量测试仍为
   216 项通过。

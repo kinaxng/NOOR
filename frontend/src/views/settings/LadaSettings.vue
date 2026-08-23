@@ -84,6 +84,7 @@ async function loadSettings() {
       ladaMaxClipLength.value = data.lada_defaults.max_clip_length || 180
       ladaDetectFaceMosaics.value = data.lada_defaults.detect_face_mosaics ?? false
     }
+
     // Encoding presets always available immediately
     ladaEncodingPresets.value = buildFallbackEncodingPresets()
 

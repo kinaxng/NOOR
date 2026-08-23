@@ -111,5 +111,3 @@ withDefaults(defineProps<{
   color: #FFB547;
 }
 </style>
-
-
