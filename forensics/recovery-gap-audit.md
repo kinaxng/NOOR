@@ -96,6 +96,9 @@
   `av-graph` / `subscription-core` CSS 改为复用 NOOR design token。
   `scripts/noor-plugin validate plugins` 全部返回 OK，前端生产构建和
   浏览器冒烟均通过。
+- 恢复根目录 `AGENTS.md`：HANDOFF 明确记录原版存在该文件，用于阻止后续
+  代理递归扫描 NFS 挂载；当前版本按恢复工作区搜索边界、运行命令和提交
+  规范重建，避免再次触发 `Videos` / `Music` / 其他 home 下 NFS 路径。
 
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
   `original-path-inventory.tsv`：补登记 `backend/app/pipeline/lada/source/pyproject.toml`
