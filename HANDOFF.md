@@ -33,6 +33,10 @@ Last updated: 2026-08-24 Asia/Shanghai
   and repetitive translation cleanup. Verification: backend full `pytest` passes
   with `291 passed, 8 skipped`, frontend production build passes, plugin validation
   remains all `NOOR_PLUGIN_OK`, and restored-page smoke reports no HTTP/console errors.
+- Verified the restored translator against the live Ollama at
+  `192.168.31.3:11434` through both `/v1/chat/completions` and `/api/chat`; the
+  restored backend on `127.0.0.1:9899` was restarted so the new translator code is
+  active for real Whisper/translation tasks.
 - Corrected the forensic read-snapshot audit and regression contract. The original
   snapshots through `2026-07-25` are the authoritative evidence set; the
   `2026-08-23` recovery reads are not original final source. The contract now
