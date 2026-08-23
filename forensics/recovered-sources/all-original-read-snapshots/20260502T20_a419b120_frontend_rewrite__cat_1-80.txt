@@ -1,2 +1,0 @@
-kinax    2820473    3565  1 May02 ?        00:13:47 node /home/kinax/noor/frontend/node_modules/.bin/vite dev --port 5173 --host 0.0.0.0
-5180:000

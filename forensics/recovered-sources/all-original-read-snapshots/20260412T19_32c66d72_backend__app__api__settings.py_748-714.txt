@@ -1,1 +1,0 @@
-    if settings.acceleration_mode == "mirror":

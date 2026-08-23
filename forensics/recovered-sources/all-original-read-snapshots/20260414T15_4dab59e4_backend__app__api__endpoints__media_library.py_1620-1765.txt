@@ -1,4 +1,0 @@
-66:class SourceChainDeleteRequest(BaseModel):
-911:async def delete_hardlink_file(req: HardlinkDeleteRequest):
-946:async def delete_source_chain(req: SourceChainDeleteRequest):
-983:async def delete_hardlink_group(req: GroupDeleteRequest):
