@@ -147,7 +147,7 @@
 | `plugins/gfriends/plugin.json` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
 | `plugins/javdb/backend.py` | 1 | verified | 2225f1e feat(javdb): add recent series directory | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/javdb/frontend/page.js` | 1 | verified | 2225f1e feat(javdb): add recent series directory | 247aebb Restore JavDB actor panel and avatar resolution |
-| `plugins/javdb/frontend/style.css` | 1 | verified | 2225f1e feat(javdb): add recent series directory | 247aebb Restore JavDB actor panel and avatar resolution |
+| `plugins/javdb/frontend/style.css` | 1 | verified | 2225f1e feat(javdb): add recent series directory | 93019d3 Restore JavDB detail and resource list styles |
 | `plugins/mteam-plugin/backend.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/qbittorrent/plugin.json` | 1 | verified | fd44ab3 Support qBittorrent API key auth | 81940de Restore original plugin service icons |
 | `plugins/subscription-core/frontend/page.js` | 1 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 587ea15 Restore subscription cover persistence |
