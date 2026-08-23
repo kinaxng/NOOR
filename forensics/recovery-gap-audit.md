@@ -63,6 +63,10 @@
 
 ## 本轮一致性收敛（2026-08-23）
 
+- 将此前只存在于 `/tmp` 的原版前端证据复制到 `forensics/recovered-sources/`
+  并生成 SHA256SUMS：ActorDetail、History、ResourceSearch、Home source-map raw、
+  FaceFusionPanel source-map raw 和 Jobs 回放证据。
+
 - 从活盘 `/dev/nvme0n1p2` 恢复出早期原版 `media_library.py` 源码种子，并
   用 2026-06/07 NOOR rollout 补丁回放得到
   `forensics/recovered-sources/media_library.early-replayed.py`（4400 行、

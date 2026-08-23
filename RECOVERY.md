@@ -22,7 +22,9 @@ This tree is an isolated recovery workspace. It does not replace `/home/kinax/no
 
 The raw-image recovery did not contain source for the application entrypoint, task
 manager, plugin framework, FaceFusion integration, recommendation/subscription plugins,
-or the Vue frontend. The original Vue sources and router cannot be recovered from disk.
+or every Vue component. Later recovery added byte-level Vite source maps and rollout
+replays for the frontend, but not every component has a single original full-file disk
+copy.
 
 Those areas are now reconstructed from verified API behavior and session evidence. They
 are deliberately kept as normal source files alongside the preserved `.pyc` evidence;
@@ -264,8 +266,9 @@ the recovered bytecode modules remain unchanged.
 - The task history page was restored from original May source plus the June/July
   rollout patches. It now includes the original expandable report card: task
   duration, score, metadata, diagnostics summary, and `/jobs/{id}/logs` tail.
-  The jobs page also recovers the original Whisper recommended-chain diagnostics
-  panel and the corresponding `RecommendedDiagnostics` TypeScript contract.
+  The recommended-chain diagnostics contract remains on `History.vue`; the
+  original `Jobs.vue` removed that panel in the May session and instead contains
+  the final running/queued/completed/failed/background tabs.
 - `MediaDetailPanel.vue` now uses the original genre filter that removes code,
   studio, series, and actor duplicate tags. Preview playback also prefers the
   Emby `stream_url` from the detail payload and falls back to the local

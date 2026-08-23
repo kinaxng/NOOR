@@ -55,6 +55,20 @@ application.
   rollout patches. It contains 188 functions and 43 original media-library
   routes. Four XML/online mapping routes were intentionally replaced later by
   the MDC-NG mapping workflow.
+- `media_library.final-replayed.py`: final replay of the same 43-route media
+  library contract, including stream and MDC-NG mapping routes, plus the
+  intentional retired XML/online mapping routes.
+- `Jobs.vue.2026-06-13-final-replayed.vue`: original Jobs view replay before
+  the final background-task patches; the current `Jobs.vue` is the replayed
+  result after those patches.
+- `History.vue.replayed.vue`: original task history replay used to restore the
+  expandable report/diagnostics cards.
+- `ResourceSearch.vue.replayed.vue`: original resource search page replay.
+- `ActorDetailView.vue.original-read.vue`: original actor detail source read
+  archived before replay/merge work.
+- `Home.vue.vite-sourcemap-raw.vue` and
+  `FaceFusionPanel.vue.vite-sourcemap-raw.vue`: raw source-map recovery content
+  with the leading tool wrapper line retained for provenance.
 
 `raw-vite-sourcemaps/` stores 120 original Vue/TS/JS files recovered from inline
 Vite source maps found in the raw ext4 image. Each filename starts with the first
