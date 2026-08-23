@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED, VIDEO_EXTS, config_path as _config_path, headers as _headers, load_config as _load_config, map_path as _map_path, parse_item as _parse_item, parse_tags as _parse_tags, save_config as _save_config, server_url as _server_url
+from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED, VIDEO_EXTS, config_path as _config_path, env_source_dir, headers as _headers, load_config as _load_config, local_media_root, map_path as _map_path, parse_item as _parse_item, parse_tags as _parse_tags, save_config as _save_config, server_url as _server_url
 from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
 from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl as _fetch_emby_item_info, hardlink_groups_path_impl, load_hardlink_groups_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
 from app.api.endpoints.media_library_listing import apply_filter_and_paginate as _apply_filter_and_paginate, deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, item_variant_penalty as _item_variant_penalty, merge_group_metadata as _merge_group_metadata, pick_group_representative as _pick_group_representative
@@ -25,6 +25,17 @@ _items_cache:dict[str,tuple[list[dict],float]]={}
 _sync_version=0
 _last_invalidated_at:float|None=None
 _last_webhook_at:float|None=None
+MDC_NG_ACTOR_MAPPING_RELATIVE_PATH = Path("data") / "data" / "mapping_actor.xml"
+
+
+# Public names from the pre-split media_library module.
+config_path = _config_path
+headers = _headers
+load_config = _load_config
+server_url = _server_url
+map_path = _map_path
+parse_tags = _parse_tags
+parse_item = _parse_item
 
 def _iso_from_ts(value:float|None)->str|None:
  return datetime.fromtimestamp(value,timezone.utc).isoformat() if value is not None else None
@@ -397,6 +408,71 @@ async def import_latest_actor_mapping():
     return await actor_api.import_latest_actor_mapping()
 
 
+async def get_actors(limit: int = 60, offset: int = 0, q: str | None = None, sort_by: str = "SortName", sort_order: str = "Ascending", lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.get_actors(limit=limit, offset=offset, q=q, sort_by=sort_by, sort_order=sort_order, lang=lang)
+
+
+async def get_actor_movies(actor_id: str, limit: int = 120, offset: int = 0):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.get_actor_movies(actor_id=actor_id, limit=limit, offset=offset)
+
+
+async def upload_actor_avatar(actor_id: str, file, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.upload_actor_avatar(actor_id=actor_id, file=file, lang=lang)
+
+
+async def set_actor_avatar_from_url(actor_id: str, req, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.set_actor_avatar_from_url(actor_id=actor_id, req=req, lang=lang)
+
+
+async def preview_actor_tmdb_metadata(actor_id: str, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.preview_actor_tmdb_metadata(actor_id=actor_id, lang=lang)
+
+
+async def apply_actor_tmdb_metadata(actor_id: str, req, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.apply_actor_tmdb_metadata(actor_id=actor_id, req=req, lang=lang)
+
+
+async def sync_mdc_ng_actor_mapping():
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.sync_mdc_ng_actor_mapping()
+
+
+async def clear_actor_mapping():
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.clear_actor_mapping()
+
+
+async def preview_actor_tmdb_backfill(limit: int = 5000, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.preview_actor_tmdb_backfill(lang=lang)
+
+
+async def apply_actor_tmdb_backfill(req, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.apply_actor_tmdb_backfill(req=req, lang=lang)
+
+
+async def preview_actor_name_sync(lang: str | None = None, limit: int = 5000):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.preview_actor_name_sync(lang=lang)
+
+
+async def apply_actor_name_sync(req, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.apply_actor_name_sync(req=req, lang=lang)
+
+
+async def execute_actor_mapping_merge(req, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.execute_actor_mapping_merge(req=req, lang=lang)
+
+
 MediaItemDeleteRequest = ItemChainDeleteRequest
 
 _ACTOR_COMPAT_EXPORTS = {
@@ -409,9 +485,41 @@ _ACTOR_COMPAT_EXPORTS = {
     "ActorTmdbBackfillRequest",
 }
 
+_ACTOR_COMPAT_ALIASES = {
+    "_actor_mapping_name_index": "_mapping_index",
+    "_actor_mapping_store_path": "_mapping_store_path",
+    "_actor_mapping_sync_state_path": "_mapping_sync_state_path",
+    "_actor_profile_overrides_path": "_profile_overrides_path",
+    "_apply_actor_profile_override": "_apply_profile_override",
+    "_build_actor_mapping_merge_plan": "_merge_plan",
+    "_configured_mdc_ng_actor_mapping_path": "_mapping_path",
+    "_configured_mdc_ng_root_path": "_configured_mapping_root",
+    "_execute_actor_mapping_merge": "_execute_merge",
+    "_get_actor_profile": "_actor_profile",
+    "_load_actor_mapping_records": "_mapping_records",
+    "_load_actor_profile_overrides": "_load_profile_overrides",
+    "_localized_mapping_name": "_mapping_display_name",
+    "_parse_actor_mapping_xml": "_parse_mapping_xml",
+    "_preview_actor_name_sync": "_name_sync_candidates",
+    "_preview_actor_tmdb_backfill": "_tmdb_backfill_candidates",
+    "_save_actor_mapping_records": "_save_mapping_records",
+    "_save_actor_profile_overrides": "_save_profile_overrides",
+    "_sync_actor_mapping_from_mdc_ng": "_sync_mapping_from_mdc_ng",
+}
+
 
 def __getattr__(name: str):
     if name in _ACTOR_COMPAT_EXPORTS:
         from app.api.endpoints import actors as actor_api
         return getattr(actor_api, name)
+    alias = _ACTOR_COMPAT_ALIASES.get(name)
+    if alias:
+        from app.api.endpoints import actors as actor_api
+        return getattr(actor_api, alias)
+    from app.api.endpoints import actors as actor_api
+    if hasattr(actor_api, name):
+        return getattr(actor_api, name)
+    from app.api.endpoints import media_library_helpers as helper_api
+    if hasattr(helper_api, name):
+        return getattr(helper_api, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

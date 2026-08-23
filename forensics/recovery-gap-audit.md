@@ -29,6 +29,10 @@
   统一走原版 `media_library._list_libraries()` / `_list_items()` / `_get_item()`
   主路径。Emby 不可用时推荐中心返回 warning 空集合，不再静默切换数据源；
   推荐中心强制刷新实测无 warning，实时排除链路可用。
+- `media_library.py` 兼容层补回原版公开函数名：配置/解析辅助函数，以及演员
+  列表、作品、头像、TMDB、映射同步/清除、名称同步、批量合并等旧入口都可从
+  `app.api.endpoints.media_library` 解析；当前拆分后的 actor 辅助函数按
+  等价名称/别名回填。新增模块级公开函数与关键 actor 辅助名回归测试。
 - 新增可复跑浏览器冒烟 `forensics/smoke_restored_pages.js`：覆盖首页、媒体库详情、
   任务/历史/设置/文件/演员、JavDB 演员路由、推荐中心、订阅中心、qBittorrent 与
   资源搜索；当前运行无 HTTP 4xx/5xx、无 console 错误。Emby webhook 也再次验证，
@@ -41,7 +45,7 @@
   后台时卸载插件 widget 并清理轮询/AbortController，回到前台再重新挂载，
   避免隐藏标签继续占用 CPU、网络和 `nvidia-smi`。
 - `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
-- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 256 项通过。
+- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 258 项通过。
 
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。
@@ -186,7 +190,9 @@
   卡片恢复，`/api/plugins/dashboard/widgets?plugin_ids=javdb` 返回
   `javdb-recommend`。
 - `media_library.py` 已补齐拆分后的旧函数名兼容层；与保留的
-  `media_library.pyc` 顶层代码对象逐项比对，原版旧名字均已可导入。
+  `media_library.pyc` 顶层代码对象逐项比对，原版公开函数名及当前拆分后仍
+  有等价实现的 actor helper 均可导入。未复刻的旧私有 helper 不进入运行时
+  兼容层，统一由 `actors.py` 的当前实现承载。
 - 继续按 rollout 回放核对运行时/路径模块：`runtime_cleanup`、`runtime_paths`、
   `database_paths`、`gpu_guard`、`lada_paths`、`timing_refiner`、
   `settings_whisper_models`、`settings_whisper_runtime` 已转 `verified`。
