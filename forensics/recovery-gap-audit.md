@@ -553,10 +553,12 @@
 ## BaseToast 原版恢复（2026-08-23）
 
 - `frontend/src/components/noor/BaseToast.vue` 已切回
-  `forensics/frontend-snapshots/vite-cache-chromium/latest/src/components/noor/BaseToast.vue`，
-  与原版 2026-04-12 读取快照字节一致。
-- 移除此前重建中新增的硬编码中文标题、duration 计时条和 271 行重设计；
-  原版是通用 i18n 消息 toast，不绑定中文文案。
+  `forensics/frontend-snapshots/vite-cache-devtools/latest/src/components/noor/BaseToast.vue`，
+  与 2026-08-01 浏览器缓存中的最终原版字节一致（sha256
+  `da68f1d302e378481d63b653b7f8db2dfa6aeb680bf32a88e9ab6d24a0333c1f`）。
+- 该版本包含 NOOR 最终 toast 的标题、图标、进度计时、移动端布局与主题变量，
+  比 4/12 读取快照更接近删除前的最终 UI。`current-byte-level-matches.tsv`
+  已改为登记 devtools 最终缓存来源。
 - 验证：`vue-tsc && vite build` 通过。
 
 ## 媒体库拆分函数清单复核（2026-08-23）
