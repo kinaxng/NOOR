@@ -2,6 +2,11 @@
 
 This tree is an isolated recovery workspace. It does not replace `/home/kinax/noor`.
 
+As of 2026-08-24 the restored application source is also mirrored to
+`/home/kinax/noor`. The original path keeps its pre-existing `data/` directory and
+does not carry the large `forensics/` recovery archive; the isolated workspace
+remains the authoritative recovery/history tree.
+
 ## Evidence-Preserving Files
 
 - `backend/app/**/*.pyc` contains 45 Python 3.13 modules recovered directly from the

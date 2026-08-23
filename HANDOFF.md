@@ -7,6 +7,9 @@ Last updated: 2026-08-24 Asia/Shanghai
 - The original `/home/kinax/noor` source tree was deleted. The isolated recovery
   workspace is `/home/kinax/noor-restored`; do not treat the current
   `/home/kinax/noor` directory as the source of truth.
+- Restored application source is also mirrored back to `/home/kinax/noor`, with
+  root `forensics/` and `data/` excluded so the original path is a clean runnable
+  tree rather than the recovery archive.
 - The recovered frontend runs at `http://192.168.31.3:5173/` and the recovered
   backend currently listens on `127.0.0.1:9899`.
 - Original-handoff evidence is archived at
