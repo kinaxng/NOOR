@@ -59,6 +59,10 @@
 
 ## 本轮一致性收敛（2026-08-23）
 
+- `backend/app/tasks/manager.py` 已恢复完整队列语义并转 `verified`：阶段/SSE、
+  持久化恢复、排队与运行中取消、依赖链激活/跳过、孤儿 `running` 清理、日志落盘、
+  GPU Guard、LADA/FaceFusion，以及 Whisper/翻译独立 worker 进程和超时强杀。
+  新增 `backend/tests/test_job_manager_recovery.py`，当前后端全量测试为 195 项通过。
 - 新增 `backend/tests/test_media_library_api.py`，覆盖 NFO 嵌套演员/CDATA、
   `get_item_impl` 本地 NFO 集成、媒体库 503/502 错误响应、硬链接扫描与摘要契约。
 - 恢复最终版本 `Settings` 中的 FaceFusion 目录、Python 路径和完整默认参数，
@@ -68,7 +72,7 @@
   `reazon_nemo` 等已退役链路字段。
 - 设置页存储契约改为返回 `model_root_dir`、`runtime_root_dir`、
   `database_url`、`database_path`，前端不再依赖已移除的 Reazon 字段。
-- 文件级差距清单已重新生成：当前无 `missing` 路径；74 个路径仍为
+- 文件级差距清单已重新生成：当前无 `missing` 路径；71 个路径仍为
   `pending`，需要在后续逐文件核对后转 `verified`。
 - JavDB 插件清单已按原版会话恢复：补回 `dashboard_widget`、下载器绑定、
   `resource_search`、RSS/知识图谱等能力；浏览器验证概览页的 `JAVDB 推荐`

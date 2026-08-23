@@ -251,8 +251,14 @@ the recovered bytecode modules remain unchanged.
 
 ## Recovery Consistency (2026-08-23)
 
-- Backend `compileall` is clean and the full test suite currently passes: 188 passed.
+- Backend `compileall` is clean and the full test suite currently passes: 195 passed.
 - Frontend production build passes with `npm run build`.
+- The task manager is restored to the full queue contract: persisted queued-job
+  recovery, phase/SSE state, queued and running cancellation, dependent activation
+  and skipping, orphaned `running` cleanup, GPU Guard, log persistence, LADA,
+  FaceFusion, and isolated Whisper/translation worker processes with graceful cancel
+  followed by forced termination. Regression coverage was added in
+  `backend/tests/test_job_manager_recovery.py`.
 - `backend/tests/test_media_library_api.py` was restored as a test module for NFO/CDATA
   parsing, local-NFO item detail, media-library 503/502 error handling, and hardlink
   scan/response contracts.
@@ -261,7 +267,7 @@ the recovered bytecode modules remain unchanged.
   layer for the separate overrides file.
 - Whisper settings now expose a storage-root contract (`model_root_dir`,
   `runtime_root_dir`, `database_url`, `database_path`) without retired Reazon fields.
-- `forensics/version-gap-audit.md` reports no missing indexed paths. 74 paths remain
+- `forensics/version-gap-audit.md` reports no missing indexed paths. 71 paths remain
   `pending` until the remaining components are verified against original rollout
   evidence; runtime and derived data remain outside the commit.
 - JavDB plugin manifest now matches the original capability contract, including
