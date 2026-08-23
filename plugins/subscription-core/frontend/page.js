@@ -518,32 +518,5 @@ export async function mount(root, sdk = {}) {
   }
 
   await load()
-      } catch (e) {
-        notify('error', e?.message || '删除失败')
-      }
-    }
-    if (sdk.ui?.confirm) {
-      sdk.ui.confirm({ title: '取消订阅', text: `确认取消 ${item?.code || '这个订阅'}？`, danger: true, onConfirm: remove })
-      return
-    }
-    await remove()
-  }
-
-  await load()
-      } catch (e) {
-        notify('error', e?.message || '删除失败')
-      }
-    } }) : null
-    if (confirm) return
-    try {
-      await apiPost('delete', { id })
-      notify('success', '订阅已删除')
-      await load()
-    } catch (e) {
-      notify('error', e?.message || '删除失败')
-    }
-  }
-
-  await load()
   return () => {}
 }
