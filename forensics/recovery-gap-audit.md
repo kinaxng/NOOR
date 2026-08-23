@@ -678,3 +678,4 @@
 - 验证：后端全量测试 `244 passed`；插件校验仅设计/API 建议；四个插件页面
   无 4xx、无 console error，并显示不可用状态。
 - 最终全路由无头浏览器复核：主路由与全部插件路由均无 4xx/5xx、无 console error。
+- JavDB 演员目录在 mount 时读取一次 `/plugins` 判断 Gfriends 是否启用；禁用时不再对每个演员卡片调用 `resolve`。Puppeteer 实测 Gfriends resolve 请求从 9 次降为 0 次，演员列表仍正常加载。
