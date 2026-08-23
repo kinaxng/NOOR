@@ -34,7 +34,7 @@ def test_background_tasks_exposes_core_cleanup(monkeypatch):
         return []
 
     monkeypatch.setattr(plugins.runtime, 'get_background_tasks', empty_background_tasks)
-    monkeypatch.setattr(plugins, 'runtime_cleanup_status', lambda min_age_hours: {
+    monkeypatch.setattr(plugins, 'runtime_cleanup_status', lambda min_age_hours=6: {
         'summary': '可清理 1 KB · 1 项',
         'candidate_count': 1,
         'reclaimable_bytes': 1024,
@@ -42,10 +42,16 @@ def test_background_tasks_exposes_core_cleanup(monkeypatch):
     })
     response = TestClient(_app()).get('/api/plugins/background/tasks')
     assert response.status_code == 200
-    item = response.json()['items'][0]
+    item = next(item for item in response.json()['items'] if item['id'] == 'noor-core.runtime-cleanup')
     assert item['id'] == 'noor-core.runtime-cleanup'
     assert item['status'] == 'idle'
-    assert item['metrics']['candidate_count'] == 1
+    assert item['metrics']['候选'] == 1
+    assert item['can_run'] is True
+    assert item['run_action'] == {
+        'plugin_id': 'noor-core',
+        'action': 'runtime-cleanup',
+        'payload': {'min_age_hours': 6},
+    }
 
 
 def test_core_cleanup_action_forwards_age(monkeypatch):

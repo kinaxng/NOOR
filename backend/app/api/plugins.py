@@ -1,16 +1,95 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from app.api.system import SystemLogManager
 from app.plugins.market import MarketError
 from app.plugins.runtime import runtime
 from app.core.runtime_cleanup import DEFAULT_MIN_AGE_HOURS, run_runtime_cleanup, runtime_cleanup_status
 
 router = APIRouter(prefix='/api/plugins', tags=['plugins'])
+NOISY_PLUGIN_ACTIONS = {
+    'metrics',
+    'overview',
+    'status',
+    'refresh-status',
+    'refresh_status',
+    'stats',
+}
+NOISY_PLUGIN_PATH_PARTS = (
+    '/ws/overview',
+    '/ws/metrics',
+)
+
+
+def _plugin_log(level: str, plugin_id: str, message: str, *, source: str | None = None) -> None:
+    try:
+        SystemLogManager.get_instance().add_log(level, message, source=source or f'plugin.{plugin_id}')
+    except Exception:
+        pass
+
+
+def _payload_hint(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return type(payload).__name__
+    keys = ', '.join(list(payload.keys())[:8])
+    more = '' if len(payload) <= 8 else f', +{len(payload) - 8}'
+    return f'keys=[{keys}{more}]'
+
+
+def _request_hint(request: Request | None) -> str:
+    if not request:
+        return ''
+    referer = str(request.headers.get('referer') or '')
+    ua = str(request.headers.get('user-agent') or '')
+    client = request.client.host if request.client else ''
+    parts = []
+    if client:
+        parts.append(f'client={client}')
+    if referer:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            ref = f"{parsed.path}{('?' + parsed.query) if parsed.query else ''}" or referer
+        except Exception:
+            ref = referer
+        parts.append(f'referer={ref}')
+    if ua:
+        parts.append(f'ua={ua[:60]}')
+    return ' '.join(parts)
+
+
+def _is_noisy_plugin_action(action: str) -> bool:
+    value = str(action or '').lower().strip()
+    return value in NOISY_PLUGIN_ACTIONS or value.endswith('_status') or value.endswith('-status')
+
+
+def _status_to_background_status(value: Any) -> str:
+    status = str(value or 'idle').lower()
+    if status in {'running', 'queued', 'pending'}:
+        return 'running'
+    if status in {'failed', 'error'}:
+        return 'failed'
+    return 'idle'
+
+
+def _progress_value(value: Any) -> int:
+    try:
+        return max(0, min(int(value or 0), 100))
+    except Exception:
+        return 0
+
+
+def _short_text(value: Any, limit: int = 180) -> str:
+    text = str(value or '').strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + '...'
 
 
 class PluginConfigPayload(BaseModel):
@@ -54,6 +133,156 @@ class MarketRepoPayload(BaseModel):
     url: str = ''
 
 
+async def _get_core_background_tasks() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+
+    try:
+        from app.api.settings_status_helpers import read_install_status_response, read_model_download_status_response
+
+        download = read_model_download_status_response()
+        download_status = _status_to_background_status(download.get('status'))
+        download_progress = _progress_value(download.get('progress'))
+        model = str(download.get('model') or '')
+        items.append({
+            'id': 'noor-core.whisper-model-download',
+            'plugin_id': 'noor-core',
+            'plugin_name': 'NOOR',
+            'title': 'Whisper 模型下载',
+            'status': download_status,
+            'enabled': True,
+            'progress': download_progress if download_status == 'running' else (100 if str(download.get('status') or '') == 'completed' else 0),
+            'summary': _short_text(download.get('message') or ('模型下载待命' if not model else f'{model} 下载状态')),
+            'detail': _short_text(download.get('output') or download.get('message') or '', 320),
+            'metrics': {
+                '进度': download_progress,
+            },
+            'can_run': False,
+        })
+
+        install = read_install_status_response()
+        install_status = _status_to_background_status(install.get('status'))
+        install_progress = _progress_value(install.get('progress'))
+        current_package = str(install.get('current_package') or '')
+        items.append({
+            'id': 'noor-core.whisper-runtime-install',
+            'plugin_id': 'noor-core',
+            'plugin_name': 'NOOR',
+            'title': 'Whisper 运行时依赖安装',
+            'status': install_status,
+            'enabled': True,
+            'progress': install_progress if install_status == 'running' else (100 if str(install.get('status') or '') == 'completed' else 0),
+            'summary': _short_text(install.get('message') or '运行时依赖安装待命'),
+            'detail': _short_text(install.get('output') or '', 320),
+            'metrics': {
+                '进度': install_progress,
+                '当前包': current_package,
+            },
+            'can_run': False,
+        })
+    except Exception as exc:
+        items.append({
+            'id': 'noor-core.whisper-background-status',
+            'plugin_id': 'noor-core',
+            'plugin_name': 'NOOR',
+            'title': 'Whisper 后台状态',
+            'status': 'failed',
+            'enabled': True,
+            'summary': 'Whisper 后台状态读取失败',
+            'detail': str(exc),
+            'metrics': {},
+            'can_run': False,
+        })
+
+    try:
+        from app.core import database
+        from app.knowledge.repository import KnowledgeRepository
+
+        async with database.async_session_maker() as db:
+            run = await KnowledgeRepository(db).latest_run()
+        stats = run.stats if run and isinstance(run.stats, dict) else {}
+        status = _status_to_background_status(run.status if run else 'idle')
+        progress = _progress_value(stats.get('percent'))
+        processed = int(stats.get('processed') or 0) if isinstance(stats, dict) else 0
+        total = int(stats.get('total') or 0) if isinstance(stats, dict) else 0
+        items.append({
+            'id': 'noor-core.knowledge-rebuild',
+            'plugin_id': 'noor-core',
+            'plugin_name': 'NOOR',
+            'title': 'Knowledge Core 重建',
+            'status': status,
+            'enabled': True,
+            'last_run_at': run.started_at.isoformat() if run and run.started_at else '',
+            'last_started_at': run.started_at.isoformat() if run and run.started_at else '',
+            'last_finished_at': run.completed_at.isoformat() if run and run.completed_at else '',
+            'progress': progress if status == 'running' else (100 if run and run.status == 'completed' else progress),
+            'summary': run.message if run else '知识库重建待命',
+            'detail': str(stats.get('phase') or '') if isinstance(stats, dict) else '',
+            'metrics': {
+                '已处理': processed,
+                '总数': total,
+                '进度': progress,
+            },
+            'can_run': False,
+        })
+    except Exception as exc:
+        items.append({
+            'id': 'noor-core.knowledge-rebuild',
+            'plugin_id': 'noor-core',
+            'plugin_name': 'NOOR',
+            'title': 'Knowledge Core 重建',
+            'status': 'failed',
+            'enabled': True,
+            'summary': 'Knowledge Core 状态读取失败',
+            'detail': str(exc),
+            'metrics': {},
+            'can_run': False,
+        })
+
+    try:
+        cleanup = runtime_cleanup_status()
+        last_cleanup = cleanup.get('last_cleanup') or {}
+        items.append({
+            'id': 'noor-core.runtime-cleanup',
+            'plugin_id': 'noor-core',
+            'plugin_name': 'NOOR',
+            'title': '运行时临时文件清理',
+            'status': _status_to_background_status(cleanup.get('status')),
+            'enabled': True,
+            'last_run_at': last_cleanup.get('finished_at') or last_cleanup.get('started_at') or '',
+            'last_started_at': last_cleanup.get('started_at') or '',
+            'last_finished_at': last_cleanup.get('finished_at') or '',
+            'progress': 0,
+            'summary': cleanup.get('summary') or '运行时清理待命',
+            'detail': '清理 6 小时以前的 NOOR / Whisper / FaceFusion 临时目录，不删除模型和可复用推理缓存。',
+            'metrics': {
+                '候选': int(cleanup.get('candidate_count') or 0),
+                '可清理': cleanup.get('summary', '').split(' · ')[0].replace('可清理 ', ''),
+                '上次': last_cleanup.get('message') or '未运行',
+            },
+            'can_run': True,
+            'run_action': {
+                'plugin_id': 'noor-core',
+                'action': 'runtime-cleanup',
+                'payload': {'min_age_hours': 6},
+            },
+        })
+    except Exception as exc:
+        items.append({
+            'id': 'noor-core.runtime-cleanup',
+            'plugin_id': 'noor-core',
+            'plugin_name': 'NOOR',
+            'title': '运行时临时文件清理',
+            'status': 'failed',
+            'enabled': True,
+            'summary': '运行时清理状态读取失败',
+            'detail': str(exc),
+            'metrics': {},
+            'can_run': False,
+        })
+
+    return items
+
+
 @router.get('')
 async def list_plugins():
     if not runtime._manifests:
@@ -69,35 +298,8 @@ async def reload_plugins():
 @router.get('/background/tasks')
 async def get_background_tasks():
     items = await runtime.get_background_tasks()
-    cleanup = runtime_cleanup_status(min_age_hours=DEFAULT_MIN_AGE_HOURS)
-    last = cleanup.get('last_cleanup') or {}
-    items.insert(0, {
-        'plugin_id': 'noor-core',
-        'plugin_name': 'NOOR 核心',
-        'id': 'noor-core.runtime-cleanup',
-        'title': '运行时资源清理',
-        'status': last.get('status') if last.get('status') in {'running', 'failed'} else 'idle',
-        'last_run_at': last.get('started_at') or None,
-        'last_finished_at': last.get('finished_at') or None,
-        'summary': cleanup.get('summary', ''),
-        'detail': last.get('message') or '按需清理过期的 NOOR 任务临时目录',
-        'metrics': {
-            'reclaimable_bytes': cleanup.get('reclaimable_bytes', 0),
-            'candidate_count': cleanup.get('candidate_count', 0),
-            'min_age_hours': DEFAULT_MIN_AGE_HOURS,
-        },
-    })
+    items.extend(await _get_core_background_tasks())
     return {'ok': True, 'items': items, 'total': len(items)}
-
-
-@router.post('/noor-core/actions/runtime-cleanup')
-async def run_core_runtime_cleanup(payload: PluginActionPayload):
-    min_age_hours = payload.payload.get('min_age_hours', DEFAULT_MIN_AGE_HOURS)
-    try:
-        min_age_hours = max(0, min(168, int(min_age_hours)))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail='min_age_hours 必须为整数') from exc
-    return run_runtime_cleanup(min_age_hours=min_age_hours)
 
 
 @router.post('/resources/search')
@@ -258,19 +460,40 @@ async def disable_plugin(plugin_id: str):
 
 @router.post('/{plugin_id}/test')
 async def test_plugin(plugin_id: str):
-    return await plugin_action(plugin_id, 'test', PluginActionPayload())
+    return await _handle_plugin_action(plugin_id, 'test', PluginActionPayload())
 
 
-@router.post('/{plugin_id}/actions/{action}')
-async def plugin_action(plugin_id: str, action: str, payload: PluginActionPayload):
+async def _handle_plugin_action(
+    plugin_id: str,
+    action: str,
+    body: PluginActionPayload,
+    request: Request | None = None,
+):
+    start = time.perf_counter()
+    should_log = not _is_noisy_plugin_action(action)
+    origin = _request_hint(request)
     try:
-        return await runtime.handle_action(plugin_id, action, payload.payload)
+        if plugin_id == 'noor-core' and action == 'runtime-cleanup':
+            min_age_hours = int((body.payload or {}).get('min_age_hours') or 6)
+            result = run_runtime_cleanup(min_age_hours=min_age_hours)
+            if should_log:
+                _plugin_log('info', plugin_id, f'action 完成 action={action} deleted={result.get("deleted_size")} count={result.get("deleted_count")} cost={(time.perf_counter() - start) * 1000:.0f}ms {origin}'.strip())
+            return result
+        result = await runtime.handle_action(plugin_id, action, body.payload)
+        if should_log:
+            _plugin_log('info', plugin_id, f'action 完成 action={action} {_payload_hint(body.payload)} cost={(time.perf_counter() - start) * 1000:.0f}ms {origin}'.strip())
+        return result
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post('/{plugin_id}/actions/{action}')
+async def plugin_action(plugin_id: str, action: str, body: PluginActionPayload, request: Request):
+    return await _handle_plugin_action(plugin_id, action, body, request)
 
 
 @router.get('/{plugin_id}/assets/{asset_path:path}')
