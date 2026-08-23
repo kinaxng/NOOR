@@ -30,7 +30,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Restored repo-level `AGENTS.md` with the NOOR recovery search boundaries and runtime commands.
 - Added `backend/tests/test_forensic_byte_matches.py` so every row in `forensics/current-byte-level-matches.tsv` is re-verified against the current tree during backend tests.
 - Browser smoke coverage now also opens the M-Team `添加片单` modal and the qBittorrent `qB 设置` / `新建分类` SDK modals. The restored-page run reports `HTTP_ERRORS []` and `CONSOLE_ERRORS []`.
-- Stopped hidden sidebar widget polling. The desktop and mobile sidebars no longer mount the widget-system renderer simultaneously, and plugin widgets pause when the browser tab is hidden. System metrics sampling is also throttled for 1 second on the backend.
+- Restored `App.vue` and `AppSidebar.vue` byte-for-byte from the original DevTools cache snapshot, and restored `PluginManager.loadData()` to the original `/api/plugins` array handling. Recovery-only sidebar viewport/active-path changes were removed to bring the app shell back to the deleted project.
 - Unified recommendation resource quality features: resource enrichment now separates real uncensored resources from cracked/leak signals, exposes `has_uncensored`, and returns a consistent `resource_summary.quality_score`.
 - Converged plugin API calls in `av-recommend`, `mteam-plugin`, and `subscription-core` frontends onto `sdk.api.plugin()` with a raw fetch fallback; plugin validation no longer reports `PLUGIN_API_SHOULD_USE_SDK`.
 - Migrated M-Team's add-album dialog to `sdk.ui.modal`; the shared NOOR modal shell is verified in the browser.
