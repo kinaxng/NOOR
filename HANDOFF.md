@@ -37,6 +37,17 @@ Last updated: 2026-08-24 Asia/Shanghai
   `192.168.31.3:11434` through both `/v1/chat/completions` and `/api/chat`; the
   restored backend on `127.0.0.1:9899` was restarted so the new translator code is
   active for real Whisper/translation tasks.
+- Rechecked the remaining high-similarity restored files against their final
+  session diffs and original snapshots: JavDB backend/page/style, subscription
+  backend/page, `MediaDetailPanel.vue`, `WhisperSettings.vue`,
+  `SubtitlePanel.vue`, and `japanese_post.py`. Final behavior is present,
+  including the JavDB recent-series directory, subscription cover refresh,
+  Emby stream preview fallback, ChickenRice runtime tier/single-chain UI, and
+  the recommended subtitle postprocessor. Added a regression test proving the
+  recommended postprocessor removes adjacent duplicates and noise-only segments
+  while preserving meaningful short dialogue. Verification is now
+  `292 passed, 8 skipped`; frontend production build, plugin validation, and the
+  restored-page smoke all remain clean.
 - Corrected the forensic read-snapshot audit and regression contract. The original
   snapshots through `2026-07-25` are the authoritative evidence set; the
   `2026-08-23` recovery reads are not original final source. The contract now
