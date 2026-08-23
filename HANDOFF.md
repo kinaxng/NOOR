@@ -33,9 +33,11 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Restored qBittorrent runtime config from original evidence and enabled the plugin. qBittorrent is reachable as v5.2.3, resource search now reports `qbittorrent` as compatible/preferred, and the pending subscription `CJOD-528` was successfully submitted to qBittorrent.
 - Added `forensics/restore_plugin_downloader_config.py` so downloader config can be restored reproducibly from the preserved original read snapshots without hardcoding credentials in the script.
 - Hardened resource download resolution: `PluginRuntime.resolve_resource_download()` now derives requirements from the resolved URL, backfills compatible enabled downloaders, and restores the preferred downloader when a provider/cache returns a stripped resource. This prevents subscription push from incorrectly reporting "没有已启用的兼容下载器" for old cached resources.
+- Recommendation live-library exclusion now calls the original media-library adapter first and only falls back to the recovery adapter when Emby list calls fail. This keeps normal recommendation refresh on the same Emby path as the main media library instead of the recovery-only Items adapter.
 - Removed the recovery override from `main.py`; media library now uses the original Emby adapter routes. Emby calls in the media library were hardened with `trust_env=False` so the host system proxy cannot turn LAN Emby requests into 502s.
 - Restored media-library NFO lookup for exact video stems such as `DVAJ-727-C.nfo`; detail responses now also expose `original_title`, `overview`, `provider_ids`, and `directors` again.
-- Verification: frontend production build passes; backend full pytest passes with `253 passed, 1 warning`; media-library libraries/items/detail, qBittorrent overview, FaceFusion preview metadata, and source image library all returned healthy responses.
+- Added a reproducible browser smoke at `forensics/smoke_restored_pages.js`; it covers main routes, actor routes, media detail, JavDB actor routing, recommendation/subscription/qBittorrent pages, and resource search. Current run has no HTTP 4xx/5xx and no console errors.
+- Verification: frontend production build passes; backend full pytest passes with `254 passed, 1 warning`; media-library libraries/items/detail, qBittorrent overview, FaceFusion preview metadata, source image library, Emby webhook system log, and full-mode recommendation responses all returned healthy results.
 
 # Hard Rules
 
@@ -324,7 +326,7 @@ Recent validation:
 ```bash
 python3 -m py_compile plugins/av-recommend/backend.py
 node --check plugins/av-recommend/frontend/page.js
-curl -s -X POST http://127.0.0.1:9898/api/plugins/av-recommend/actions/recommendations \
+curl -s -X POST http://127.0.0.1:9899/api/plugins/av-recommend/actions/recommendations \
   -H 'Content-Type: application/json' \
   -d '{"payload":{"limit":3,"refresh":true}}' | jq
 ```
@@ -332,9 +334,8 @@ curl -s -X POST http://127.0.0.1:9898/api/plugins/av-recommend/actions/recommend
 Last smoke result:
 
 - ok: true
-- candidates: 122
-- recommendations: 42
-- first item example had score breakdown and reasons.
+- full mode total: 1180
+- returned items: 3 with score breakdown and reasons.
 
 ### AV Recommend Next Steps
 
@@ -411,8 +412,7 @@ Notes:
 
 - Gfriends direct resolve for `波多野結衣` returns a correct URL ending in `AI-Fix-波多野結衣.jpg?t=1607433807`.
 - Frontend build passed after adding `sdk.avatar.resolve()` and JavDB avatar override.
-- Manifest test still has 4 unrelated pre-existing failures:
-  - `subscription-core` manifest type `tool`
-  - `widget-system` frontend missing `type: module`
-  - `av-recommend` mount cleanup missing
-  - `av-recommend` unscoped CSS classes `is-disabled`, `is-loading`, `is-primary`
+- Plugin validation has no errors; remaining output is design/API advice only:
+  - `av-graph` and `subscription-core` CSS design-token advice
+  - `av-recommend`, `mteam-plugin`, and `subscription-core` should use `sdk.api.plugin()` where practical
+  - `mteam-plugin` and `qbittorrent` custom modal migration advice

@@ -25,6 +25,13 @@
   `DVAJ-727-C.mp4 -> DVAJ-727-C.nfo`），再回退番号 NFO；详情接口补回
   `original_title`、`overview`、`provider_ids`、`directors` 字段，与恢复期
   详情面板契约保持一致。
+- 推荐中心实时媒体库排除改回原版 `media_library._list_items` 主路径，只有
+  原版列表接口失败时才降级到恢复期 Items fallback；Knowledge Core 仍以原版
+  媒体库适配器为主。推荐中心强制刷新实测无 warning，实时排除链路可用。
+- 新增可复跑浏览器冒烟 `forensics/smoke_restored_pages.js`：覆盖首页、媒体库详情、
+  任务/历史/设置/文件/演员、JavDB 演员路由、推荐中心、订阅中心、qBittorrent 与
+  资源搜索；当前运行无 HTTP 4xx/5xx、无 console 错误。Emby webhook 也再次验证，
+  系统日志显示 `Emby · 127.0.0.1` 真实来源，并正确记录事件类型。
 - 修复侧边栏插件轮询重复挂载：桌面/移动两套侧栏原本都会挂载
   `widget-system` 的 `renderSidebarWidget`，隐藏侧栏仍持续调用
   `/plugins/widget-system/actions/metrics`。现在按 `min-width: 1024px`
@@ -33,7 +40,7 @@
   后台时卸载插件 widget 并清理轮询/AbortController，回到前台再重新挂载，
   避免隐藏标签继续占用 CPU、网络和 `nvidia-smi`。
 - `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
-- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 253 项通过。
+- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 254 项通过。
 
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。

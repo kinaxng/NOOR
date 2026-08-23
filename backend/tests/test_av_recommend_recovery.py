@@ -52,6 +52,10 @@ def test_media_library_item_codes_include_provider_and_nfo_values():
     assert "ABCD-123" in codes
 
 
+def test_live_library_codes_prefers_original_media_library_adapter(monkeypatch):
+    asyncio.run(_run_live_library_codes_prefers_original_media_library_adapter(monkeypatch))
+
+
 def test_recommend_crack_signal_ignores_title_only_keywords():
     backend = _load_backend()
 
@@ -108,6 +112,43 @@ async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     result = await backend._recommendations({}, {"source_mode": "latest", "refresh": True})
 
     assert [item["code"] for item in result["items"]] == ["ABCD-123"]
+
+
+async def _run_live_library_codes_prefers_original_media_library_adapter(monkeypatch):
+    backend = _load_backend()
+    backend._LIVE_LIBRARY_CODES_CACHE.update({"ts": 0, "key": "", "codes": set(), "warning": ""})
+
+    import app.api.endpoints.media_library as media_library
+    import app.api.endpoints.media_library_helpers as media_library_helpers
+    import app.api.endpoints.media_library_recovery as media_library_recovery
+
+    media_config = {
+        "server_url": "http://emby",
+        "api_key": "key",
+        "user_id": "u",
+        "enabled_library_ids": "3",
+    }
+    monkeypatch.setattr(media_library_helpers, "load_config", lambda: media_config)
+
+    async def fake_list_libraries(config):
+        return [{"id": "3", "name": "Movies"}]
+
+    async def fake_list_items(config, library_id, limit=50, offset=0, filter=None, q=None, force_refresh=False):
+        assert library_id == "3"
+        assert force_refresh is True
+        return [{"provider_ids": {"Javdb": "MIDA-669"}}], 1
+
+    async def fail_recovery_fetch(*args, **kwargs):
+        raise AssertionError("recovery media-library fallback should not be used")
+
+    monkeypatch.setattr(media_library, "_list_libraries", fake_list_libraries)
+    monkeypatch.setattr(media_library, "_list_items", fake_list_items)
+    monkeypatch.setattr(media_library_recovery, "_fetch_items", fail_recovery_fetch)
+
+    codes, warning = await backend._live_library_codes({"library_exclusion_scan_limit": 100}, force=True)
+
+    assert codes == {"MIDA-669"}
+    assert warning == ""
 
 
 async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):

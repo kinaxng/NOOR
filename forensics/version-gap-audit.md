@@ -1,6 +1,6 @@
 # NOOR 文件级恢复差距清单
 
-更新时间：2026-08-24
+更新时间：2026-08-23
 
 本清单由 `forensics/version_gap_audit.py` 从 `forensics/original-commit-index.json` 生成。
 它用于追踪原版历史中改过的路径在恢复树里的状态，不能替代行为/路由/字节级验证。
@@ -16,7 +16,7 @@
 
 | 路径 | 原版提交数 | 状态 | 原版最后提交 | 当前最后提交 |
 | --- | ---: | --- | --- | --- |
-| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | 8902631 Restore hardlink-aware media deletion and actor delete fallback |
+| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | cba9c12 Restore media library detail and Emby proxy-safe calls |
 | `backend/app/pipeline/whisper/decoupled/qwen3.py` | 2 | intentional | c96ca5d Share Whisper cache path candidates | - |
 | `backend/app/pipeline/whisper/preprocess.py` | 2 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
 | `backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py` | 1 | intentional | 17602ad Organize AI runtime storage paths | - |
@@ -24,7 +24,7 @@
 | `backend/tests/test_whisper_preprocess.py` | 1 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
 | `frontend/src/i18n/zh.ts` | 39 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 971a645 Stop Gfriends and TMDB preview runtime 400s |
 | `frontend/src/i18n/en.ts` | 37 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 971a645 Stop Gfriends and TMDB preview runtime 400s |
-| `backend/tests/test_media_library_api.py` | 31 | verified | 7c44237 Import TMDB actor aliases and clean overview links | b29c8d6 Restore media library legacy helper compatibility |
+| `backend/tests/test_media_library_api.py` | 31 | verified | 7c44237 Import TMDB actor aliases and clean overview links | cba9c12 Restore media library detail and Emby proxy-safe calls |
 | `frontend/src/views/ActorManagementView.vue` | 28 | verified | 9c49a79 Use MDC-NG actor mapping source | 2a7fe62 Restore exact historical actor workspace sources |
 | `frontend/src/components/noor/FaceFusionPanel.vue` | 25 | verified | 301d3d8 feat(facefusion): expose face tracker score | 9b35844 Restore FaceFusion source image library multi-select |
 | `backend/app/api/settings_response.py` | 21 | verified | 301d3d8 feat(facefusion): expose face tracker score | 1d7bc41 Clean recovered plugin versions and retired whisper config |
@@ -64,8 +64,8 @@
 | `plugins/av-recommend/frontend/page.js` | 3 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/qbittorrent/backend.py` | 3 | verified | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | verified | 7d9120d Simplify Xunlei residual cleanup flow | ba4a75e Restore final UI details and plugin runtime data paths |
-| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 2885ec9 Harden resource downloader resolution fallback |
-| `backend/app/api/endpoints/media_library_item_detail.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | 558869c Restore settings contract and media library API tests |
+| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | cba9c12 Restore media library detail and Emby proxy-safe calls |
+| `backend/app/api/endpoints/media_library_item_detail.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | cba9c12 Restore media library detail and Emby proxy-safe calls |
 | `backend/app/api/settings_helpers.py` | 2 | verified | 106df4b Prefer bundled LADA python path | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/settings_status_helpers.py` | 2 | verified | a382063 Add FaceFusion model management settings tab | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/settings_whisper.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 1d7bc41 Clean recovered plugin versions and retired whisper config |
@@ -76,13 +76,13 @@
 | `backend/app/core/gpu_guard.py` | 2 | verified | 6a760cc Let GPU guard stop model server processes | dd3422d Restore GPU guard and FaceFusion reference worker |
 | `backend/app/core/lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/app/core/models.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | 76ea151 Restore final LADA runtime and settings helpers |
-| `backend/app/main.py` | 2 | verified | 43acc3a Add NOOR runtime cleanup task | 8296a65 Restore local subtitle library settings |
+| `backend/app/main.py` | 2 | verified | 43acc3a Add NOOR runtime cleanup task | cba9c12 Restore media library detail and Emby proxy-safe calls |
 | `backend/app/pipeline/facefusion/preview_worker.py` | 2 | verified | 6a71cd1 Skip FaceFusion content blur in previews | 616866a Preserve recovered NOOR backend artifacts |
 | `backend/app/pipeline/whisper/timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
 | `backend/app/pipeline/whisper/types.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/tasks/job_phases.py` | 2 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 18410b1 Restore Whisper line-retry and session diff evidence |
 | `backend/app/tasks/manager_helpers.py` | 2 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 2885ec9 Harden resource downloader resolution fallback |
+| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | cba9c12 Restore media library detail and Emby proxy-safe calls |
 | `backend/tests/test_lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 6ba66c2 Recover original session reads and storage env contracts |
 | `backend/tests/test_lada_runner_cancel.py` | 2 | verified | e436cc0 Split LADA runtime cache directories | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_runtime_cleanup.py` | 2 | verified | 1a02e32 Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
