@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import BaseIcon from './BaseIcon.vue'
 import PluginIcon from './PluginIcon.vue'
@@ -24,7 +24,23 @@ const emit = defineEmits<{
 const route = useRoute()
 const { enabledPagePlugins, loadPlugins } = usePlugins()
 const { hasMultipleWidgets, selectNextWidget, activeWidget } = useSidebarWidgets()
-onMounted(() => loadPlugins())
+const isDesktopViewport = ref(true)
+let desktopMedia: MediaQueryList | null = null
+
+function updateDesktopViewport() {
+  isDesktopViewport.value = desktopMedia ? desktopMedia.matches : true
+}
+
+onMounted(() => {
+  loadPlugins()
+  desktopMedia = window.matchMedia?.('(min-width: 1024px)') || null
+  updateDesktopViewport()
+  desktopMedia?.addEventListener?.('change', updateDesktopViewport)
+})
+
+onBeforeUnmount(() => {
+  desktopMedia?.removeEventListener?.('change', updateDesktopViewport)
+})
 
 const navItems = computed(() => {
   void _currentLang.value
@@ -111,7 +127,7 @@ function isActivePath(path: string) {
 
     <!-- Bottom -->
     <div class="app-sidebar__bottom">
-      <SidebarWidgetSlot :collapsed="collapsed" />
+      <SidebarWidgetSlot v-if="isDesktopViewport" :collapsed="collapsed" />
       <div class="app-sidebar__bottom-controls">
         <button
           v-if="hasMultipleWidgets"
@@ -184,7 +200,7 @@ function isActivePath(path: string) {
 
     <!-- Bottom -->
     <div class="app-sidebar__bottom">
-      <SidebarWidgetSlot />
+      <SidebarWidgetSlot v-if="!isDesktopViewport && mobileOpen" />
     </div>
   </aside>
 </template>

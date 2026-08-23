@@ -26,7 +26,7 @@
 | `frontend/src/i18n/en.ts` | 37 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 1d7bc41 Clean recovered plugin versions and retired whisper config |
 | `backend/tests/test_media_library_api.py` | 31 | verified | 7c44237 Import TMDB actor aliases and clean overview links | b29c8d6 Restore media library legacy helper compatibility |
 | `frontend/src/views/ActorManagementView.vue` | 28 | verified | 9c49a79 Use MDC-NG actor mapping source | 2a7fe62 Restore exact historical actor workspace sources |
-| `frontend/src/components/noor/FaceFusionPanel.vue` | 25 | verified | 301d3d8 feat(facefusion): expose face tracker score | 86c250d Restore FaceFusion tracker score |
+| `frontend/src/components/noor/FaceFusionPanel.vue` | 25 | verified | 301d3d8 feat(facefusion): expose face tracker score | 9b35844 Restore FaceFusion source image library multi-select |
 | `backend/app/api/settings_response.py` | 21 | verified | 301d3d8 feat(facefusion): expose face tracker score | 1d7bc41 Clean recovered plugin versions and retired whisper config |
 | `frontend/src/views/settings/FaceFusionSettings.vue` | 19 | verified | 301d3d8 feat(facefusion): expose face tracker score | a994e55 Restore FaceFusion media badge setting |
 | `backend/app/api/settings.py` | 18 | verified | 301d3d8 feat(facefusion): expose face tracker score | 3445bac Restore app startup cover blur sync |
@@ -90,7 +90,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 419af5e Restore actor detail navigation context |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 9b35844 Restore FaceFusion source image library multi-select |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |

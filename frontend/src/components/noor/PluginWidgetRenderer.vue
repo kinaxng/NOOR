@@ -14,6 +14,11 @@ const host = ref<HTMLElement | null>(null)
 let dispose: null | (() => void) = null
 let sdkDispose: null | (() => void) = null
 let token = 0
+const documentVisible = ref(document.visibilityState !== 'hidden')
+
+function handleVisibilityChange() {
+  documentVisible.value = document.visibilityState !== 'hidden'
+}
 
 function clear() {
   if (dispose) {
@@ -28,6 +33,7 @@ function clear() {
 }
 
 async function mount() {
+  if (!documentVisible.value) return
   const current = ++token
   clear()
   if (!host.value || !props.pluginId) return
@@ -52,9 +58,19 @@ async function mount() {
   }
 }
 
-onMounted(mount)
+onMounted(() => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  mount()
+})
 watch(() => [props.pluginId, props.slotName, props.widget, props.payload, props.collapsed], mount, { deep: true, flush: 'post' })
-onBeforeUnmount(clear)
+watch(documentVisible, value => {
+  if (value) void mount()
+  else clear()
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  clear()
+})
 </script>
 
 <template>

@@ -1,6 +1,6 @@
 # NOOR 恢复差距审计
 
-更新时间：2026-08-23
+更新时间：2026-08-24
 
 ## 原版证据复核修正（2026-08-23）
 
@@ -13,8 +13,19 @@
 - `RecommendedDiagnostics` / `RecommendedDiagnosticsSegment` 在原版读取快照和
   Vite 缓存快照中都有证据，已恢复 `frontend/src/api/types.ts`，避免与
   恢复后的 `History.vue` / 任务历史类型契约脱节。
-- 当前验证：`frontend` 生产构建通过；后端全量 `pytest` 238 项通过
+- 当前验证：`frontend` 生产构建通过；后端全量 `pytest` 239 项通过
   （命令需带 `PYTHONPATH=backend`）。
+
+## 本轮收敛（2026-08-24）
+
+- 修复侧边栏插件轮询重复挂载：桌面/移动两套侧栏原本都会挂载
+  `widget-system` 的 `renderSidebarWidget`，隐藏侧栏仍持续调用
+  `/plugins/widget-system/actions/metrics`。现在按 `min-width: 1024px`
+  视口只挂载当前可见侧栏，移动侧栏也只在抽屉打开时挂载。
+- `PluginWidgetRenderer.vue` 增加标签页 `visibilitychange` 保护：页面切到
+  后台时卸载插件 widget 并清理轮询/AbortController，回到前台再重新挂载，
+  避免隐藏标签继续占用 CPU、网络和 `nvidia-smi`。
+- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 239 项通过。
 
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。
