@@ -319,7 +319,7 @@ export async function mount(root, sdk = {}) {
       candidateBlock.appendChild(h('span', 'sub-compare__empty', '暂无匹配资源'))
     }
     box.append(currentBlock, candidateBlock)
-    return box
+    return box.outerHTML
   }
 
   function row(label, value) {
