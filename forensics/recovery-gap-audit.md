@@ -463,3 +463,15 @@
   `frontend/src/composables/useToast.ts`、`backend/run.py`。
 - `current-byte-level-matches.tsv` 当前为 38 个匹配路径；前端生产构建通过，
   后端全量 `pytest` 238 项通过。
+
+## PluginHost 路由化 tabs 恢复（2026-08-23）
+
+- `frontend/src/views/PluginHost.vue` 的 `makeTabs` 已补回原版
+  `routeConfig` 逻辑：`basePath`、`subPath`、`path` 映射、
+  `push`/`replace`、`defaultReplace`、初始路由回填和
+  `noor-plugin-route-change` 监听/清理。
+- 该缺口会让 `sdk.ui.tabs({ route: ... })` 只切换本地状态，刷新或深链后
+  回退到默认 tab；JAVDB 的最近更新/榜单/演员/系列/查看记录均依赖它。
+- 无头 Chrome 实测：从 `/plugins/javdb` 点击“演员”后 URL 变为
+  `/plugins/javdb/actors`，刷新后仍保持“演员”tab。
+- 验证：前端生产构建通过。

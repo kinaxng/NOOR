@@ -306,9 +306,44 @@ function makeTabs(options: any = {}) {
 
   const buttons: HTMLButtonElement[] = []
   const getTabValue = (tab: any) => String(tab?.value ?? tab?.key ?? '')
+  const routeConfig = options.route && typeof options.route === 'object' ? options.route as any : null
+  const routeBasePath = routeConfig?.basePath ? String(routeConfig.basePath).replace(/^\/+|\/+$/g, '') : ''
+  const routeMode = routeConfig?.mode || 'path'
+  const routeReplace = routeConfig?.replace === true
+  const routeDefaultReplace = routeConfig?.defaultReplace !== false
+  const pathToValue = new Map<string, string>()
+  const tabPath = (value: string) => {
+    const tab = (Array.isArray(options.tabs) ? options.tabs : []).find((item: any) => getTabValue(item) === value)
+    return String(tab?.path ?? tab?.route ?? value).replace(/^\/+|\/+$/g, '')
+  }
+  const valueFromRoute = () => {
+    if (!routeConfig || routeMode !== 'path') return ''
+    const raw = String(routeConfig.subPath?.() ?? routeConfig.subPath ?? '').replace(/^\/+|\/+$/g, '')
+    const relative = routeBasePath && raw.startsWith(`${routeBasePath}/`) ? raw.slice(routeBasePath.length + 1) : raw
+    const first = relative.split('/').filter(Boolean)[0]
+    return first ? (pathToValue.get(first) || '') : ''
+  }
+  const syncRoute = (value: string, forceReplace = false) => {
+    if (!routeConfig || routeMode !== 'path') return
+    const next = [routeBasePath, tabPath(value)].filter(Boolean).join('/')
+    const currentRaw = String(routeConfig.subPath?.() ?? routeConfig.subPath ?? '').replace(/^\/+|\/+$/g, '')
+    if (currentRaw === next) return
+    const nav = (forceReplace || routeReplace) ? routeConfig.replace : routeConfig.push
+    nav?.(next)
+  }
   const initialTabs = Array.isArray(options.tabs) ? options.tabs : []
-  const initialValue = String(options.value ?? '') || getTabValue(initialTabs[0])
+  initialTabs.forEach((tab: any) => {
+    const value = getTabValue(tab)
+    pathToValue.set(tabPath(value) || value, value)
+  })
+  const routeValue = valueFromRoute()
+  const providedValue = String(options.value ?? '')
+  const initialValue = routeValue || providedValue || getTabValue(initialTabs[0])
   options.value = initialValue
+  if (routeConfig && !routeValue && routeDefaultReplace) queueMicrotask(() => syncRoute(initialValue, true))
+  if (routeConfig && routeValue && routeValue !== providedValue) {
+    queueMicrotask(() => options.onChange?.(initialValue, { syncRoute: false, initial: true }))
+  }
   let raf = 0
 
   const refresh = () => {
@@ -339,6 +374,7 @@ function makeTabs(options: any = {}) {
       if (String(options.value ?? '') === value) return
       options.value = value
       refresh()
+      syncRoute(value)
       options.onChange?.(value)
       scheduleRefresh()
     }
@@ -356,9 +392,19 @@ function makeTabs(options: any = {}) {
     options.value = String(value)
     refresh()
   }
+  const onRouteChange = () => {
+    const next = valueFromRoute()
+    if (!next || String(options.value ?? '') === next) return
+    options.value = next
+    refresh()
+    options.onChange?.(next, { syncRoute: false })
+    scheduleRefresh()
+  }
+  if (routeConfig) window.addEventListener('noor-plugin-route-change', onRouteChange)
   const dispose = () => {
     if (raf) cancelAnimationFrame(raf)
     window.removeEventListener('resize', scheduleRefresh)
+    if (routeConfig) window.removeEventListener('noor-plugin-route-change', onRouteChange)
   }
   wrap.dispose = dispose
   wrap.__noorDispose = dispose
