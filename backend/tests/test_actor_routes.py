@@ -47,14 +47,7 @@ def test_media_library_route_parity_matches_original_index() -> None:
         for method, path in (item.split(" ", 1) for item in original)
     }
 
-    # These routes were intentionally replaced by the later MDC-NG mapping workflow.
-    intentionally_removed = {
-        ("GET", "/api/media-library/actors/mapping/latest-upload"),
-        ("POST", "/api/media-library/actors/mapping/import-latest"),
-        ("POST", "/api/media-library/actors/mapping/sync-online"),
-        ("POST", "/api/media-library/actors/mapping/upload"),
-    }
-    expected = original_routes - intentionally_removed
+    expected = set(original_routes)
     expected |= {
         ("GET", "/api/media-library"),
         ("GET", "/api/media-library/actors/name-sync/progress/{progress_key}"),

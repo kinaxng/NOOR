@@ -108,13 +108,16 @@
   `forensics/recovered-sources/media_library.early-replayed.py`（4400 行、
   188 个函数、45 条媒体库路由）。随后将 helper/item-detail/stream 契约内联为
   `forensics/recovered-sources/media_library.final-replayed.py`：204 个函数、
-  覆盖原版 43 条路由（另含 `/stream` 与 `/sync-mdc-ng`）。剩余 29 个原版符号
-  主要是已退役 XML/在线映射函数、历史单测和旧适配器兼容函数；该文件已通过
-  `ast.parse`，可作为原版媒体库路由/函数的独立证据，不再只依赖会话片段。
-- 路由核对：回放版 43 条原版路由里，除 4 条用户明确废弃的 XML/在线映射
-  路由外，全部由当前 `endpoints/media_library*.py + endpoints/actors.py`
-  承接；当前另有 `/stream/{item_id}` 和 `/actors/mapping/source` 两条
-  恢复期新增/保留路由。
+  覆盖原版 43 条路由（另含 `/stream` 与 `/sync-mdc-ng`）。原版公共函数名和
+  请求模型已通过当前拆分模块的兼容层补回，剩余差异主要是私有 helper 的内部
+  命名和已退役映射实现；该文件已通过 `ast.parse`，可作为原版媒体库路由/函数的
+  独立证据，不再只依赖会话片段。
+- 路由核对：回放版 43 条原版路由已全部由当前
+  `endpoints/media_library*.py + endpoints/actors.py` 承接；4 条旧
+  XML/在线映射路由以兼容入口恢复在 `actors.py`，其中
+  `/actors/mapping/sync-online` 委托当前 MDC-NG 同步实现。当前另有
+  `/stream/{item_id}`、`/actors/mapping/source` 和
+  `/actors/mapping/sync-mdc-ng` 等恢复期新增/保留路由。
 - 继续全盘扫描 `/dev/nvme0n1p2` 中可能残留的 Git pack，目标是匹配原版
   commit hash；扫描仍在后台运行。同时用 4 月预接管备份和旧 464G 镜像交叉核对，
   目前尚未命中 NOOR pack，但已确认预接管备份保留的是删除前原始早期工作树。
@@ -199,6 +202,10 @@
   `/files/hardlinks?q=` 路由搜索参数。原版 MDC 专有 `mdcManualAvailable` /
   `reorganizeSource` 已替换为通用 `loadHardlinkSourceActions` /
   `runHardlinkSourceAction`。
+- 后端媒体库旧兼容层已收敛：`media_library.py` 补回原版拆分前的公共函数名
+  （演员资料、重名、映射、TMDB 补全、批量合并、删除链等）和旧请求模型导出；
+  `actors.py` 恢复 4 条旧映射路由。`test_actor_routes.py` 的 OpenAPI 路由一致性
+  测试已更新为完整 43 条原版路由，后端全量测试仍为 216 项通过。
 - 从原始 rollout 的 `git status` 快照提取 `forensics/original-status-inventory.tsv`，
   覆盖 617 个唯一状态行、114 个源码路径，补上 `dd000a8` 那次 710 文件 checkpoint
   未记录 `staged_paths` 的路径缺口；Docker、运行时数据与插件缓存路径按恢复策略保留
@@ -232,11 +239,12 @@
    但函数名、路由前缀、文件结构不同。原版路由/函数证据已存入
    `forensics/recovered-sources/media_library.early-replayed.py`；下一步可继续
    用该证据反查当前拆分模块里函数名差异，而非继续依赖旧估算数字。
-3. 演员映射表工作流有意从“上传 XML / 在线同步”改为“MDC-NG 路径同步”：
-   - 已移除：`/actors/mapping/upload`、`/actors/mapping/sync-online`、
+3. 演员映射表工作流以 MDC-NG 路径同步为主，同时保留旧上传/导入兼容入口：
+   - 已恢复：`/actors/mapping/upload`、`/actors/mapping/sync-online`、
      `/actors/mapping/import-latest`、`/actors/mapping/latest-upload`。
    - 已保留：`/actors/mapping/source`、`/actors/mapping/sync-mdc-ng`。
-   - 这是用户后来明确要求的方向，不作为待恢复项。
+   - `sync-online` 与 `sync-mdc-ng` 当前都委托同一份 MDC-NG 映射同步实现；
+     上传/导入接口继续服务于旧前端和外部脚本的兼容调用。
 4. 推荐插件有意移除了“订阅推荐/洗版推荐”两个独立推荐模式：
    - 当前为 `latest`（最新推荐）和 `full`（完整推荐），候选池显示 `总数+今日增量`。
    - 卡片保留订阅按钮，但不再作为独立推荐 Tab。

@@ -21,6 +21,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.api.endpoints import media_library as media
+from app.api.system import SystemLogManager
 from app.core.config import get_settings
 from app.core.runtime_paths import data_path
 
@@ -295,6 +296,36 @@ def _mapping_sync_state_path() -> Path:
     path = data_path() / "media_actor_mapping_sync_state.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _actor_mapping_upload_dir() -> Path:
+    path = data_path() / "media_actor_mapping_uploads"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _safe_upload_filename(filename: str | None) -> str:
+    raw = Path(filename or "actor_mapping").name.strip() or "actor_mapping"
+    return re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fff\u3040-\u30ff\u3400-\u9fff]", "_", raw)[:120]
+
+
+def _actor_mapping_upload_info(path: Path, size: int | None = None) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "filename": path.name,
+        "size": size if size is not None else stat.st_size,
+        "format": path.suffix.lower().lstrip(".") or "unknown",
+        "saved_path": str(path),
+        "uploaded_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+    }
+
+
+def _latest_actor_mapping_upload_path() -> Path | None:
+    latest = _actor_mapping_upload_dir() / "latest"
+    if not latest.is_file():
+        return None
+    path = Path(latest.read_text(encoding="utf-8").strip())
+    return path if path.is_file() else None
 
 
 def _profile_overrides_path() -> Path:
@@ -822,6 +853,67 @@ async def sync_mdc_ng_actor_mapping():
         return await _sync_mapping_from_mdc_ng(force=True)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/actors/mapping/sync-online")
+async def sync_online_actor_mapping():
+    try:
+        return await _sync_mapping_from_mdc_ng(force=True)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/actors/mapping/upload")
+async def upload_actor_mapping(file: UploadFile = File(...)):
+    filename = _safe_upload_filename(file.filename)
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(content) > 30 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="上传文件超过 30MB")
+
+    upload_dir = _actor_mapping_upload_dir()
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    target = upload_dir / f"{timestamp}_{filename}"
+    target.write_bytes(content)
+    latest = upload_dir / "latest"
+    latest.write_text(str(target), encoding="utf-8")
+
+    file_info = _actor_mapping_upload_info(target, len(content))
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 已上传演员映射表: {filename} · {len(content)} bytes",
+        source="media_library.actors",
+    )
+    return {"ok": True, "file": file_info}
+
+
+@router.get("/actors/mapping/latest-upload")
+async def get_latest_actor_mapping_upload():
+    path = _latest_actor_mapping_upload_path()
+    if path is None:
+        return {"ok": True, "uploaded": False}
+    return {"ok": True, "uploaded": True, "file": _actor_mapping_upload_info(path)}
+
+
+@router.post("/actors/mapping/import-latest")
+async def import_latest_actor_mapping():
+    path = _latest_actor_mapping_upload_path()
+    if path is None:
+        raise HTTPException(status_code=400, detail="还没有上传演员映射表")
+    if path.suffix.lower() != ".xml":
+        raise HTTPException(status_code=400, detail="当前仅支持导入 XML 演员映射表")
+    try:
+        records, stats = _parse_mapping_xml(path)
+        result = _save_mapping_records(records, path, stats)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"导入演员映射表失败: {exc}") from exc
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 已导入演员映射表: {stats.get('total', 0)} 条 · TMDB {stats.get('with_tmdb', 0)} 条",
+        source="media_library.actors",
+    )
+    return {"ok": True, "mapping": result}
 
 
 @router.delete("/actors/mapping")

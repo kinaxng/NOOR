@@ -3,7 +3,7 @@
 Reconstructed from preserved Python 3.13 bytecode and split recovery helpers.
 """
 from __future__ import annotations
-import mimetypes, secrets, time
+import mimetypes, os, secrets, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -285,3 +285,108 @@ async def delete_hardlink_group(req:GroupDeleteRequest):
   for path in paths:_assert_safe_path(path,hardlinks,'硬链接文件')
   d,f=_collect_chain_delete_targets(source,paths,code=req.code,source_roots=sources,hardlink_roots=hardlinks);dirs.update(d);files.update(f)
  return {'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else _execute_delete_targets(dirs,files)
+
+# Compatibility re-exports for code written against the pre-split media_library API.
+def sort_key(item: dict) -> tuple:
+    path = item.get("file_path") or ""
+    name = item.get("name") or item.get("label") or ""
+    return (bool(path), -len(os.path.basename(path)) if path else 0, name.lower())
+
+
+async def delete_media_item_chain(req):
+    return await delete_item_chain(req)
+
+
+async def get_duplicate_actors(limit: int = 2000):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.actor_duplicates(limit=limit)
+
+
+async def get_actor_profile(actor_id: str, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.get_actor(actor_id, lang=lang)
+
+
+async def update_actor_profile(actor_id: str, req, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.update_actor(actor_id, req, lang=lang)
+
+
+async def diagnose_actor_delete(actor_id: str):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.actor_delete_diagnostics(actor_id)
+
+
+async def delete_actor_profile(actor_id: str):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.delete_actor(actor_id)
+
+
+async def get_actor_mapping_status():
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.actor_mapping_status()
+
+
+async def get_actor_mapping_matches(limit: int = 5000, only_candidates: bool = False, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.actor_mapping_matches(limit=limit, only_candidates=only_candidates, lang=lang)
+
+
+async def get_actor_tmdb_backfill_progress(progress_key: str):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.actor_tmdb_backfill_progress(progress_key)
+
+
+async def get_actor_name_sync_progress(progress_key: str):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.actor_name_sync_progress(progress_key)
+
+
+async def get_actor_mapping_merge_plan(mapping_id: str, target_name: str | None = None, target_actor_id: str | None = None, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.actor_mapping_merge_plan(mapping_id=mapping_id, target_name=target_name, target_actor_id=target_actor_id, lang=lang)
+
+
+async def execute_actor_mapping_merge_batch(req, lang: str | None = None):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.execute_actor_mapping_batch(req, lang=lang)
+
+
+async def upload_actor_mapping(file):
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.upload_actor_mapping(file)
+
+
+async def get_latest_actor_mapping_upload():
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.get_latest_actor_mapping_upload()
+
+
+async def sync_online_actor_mapping():
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.sync_online_actor_mapping()
+
+
+async def import_latest_actor_mapping():
+    from app.api.endpoints import actors as actor_api
+    return await actor_api.import_latest_actor_mapping()
+
+
+MediaItemDeleteRequest = ItemChainDeleteRequest
+
+_ACTOR_COMPAT_EXPORTS = {
+    "ActorAvatarUrlRequest",
+    "ActorMappingMergeBatchRequest",
+    "ActorMappingMergeRequest",
+    "ActorNameSyncRequest",
+    "ActorProfileUpdateRequest",
+    "ActorTmdbApplyRequest",
+    "ActorTmdbBackfillRequest",
+}
+
+
+def __getattr__(name: str):
+    if name in _ACTOR_COMPAT_EXPORTS:
+        from app.api.endpoints import actors as actor_api
+        return getattr(actor_api, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

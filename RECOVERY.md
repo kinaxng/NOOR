@@ -303,6 +303,22 @@ the recovered bytecode modules remain unchanged.
 - The hardlinks page also applies `/files/hardlinks?q=` on mount and reacts to route
   query changes, restoring search deep links without reloading to a different page.
 
+## Media Library Legacy Compatibility (2026-08-23)
+
+- `backend/app/api/endpoints/media_library.py` now re-exports the pre-split public
+  actor-management function names and request models, including actor profile,
+  duplicate detection, mapping matches/status, TMDB/name-sync progress, batch merge,
+  and media-item chain deletion. Older plugin or test imports that referenced the
+  original single-module `media_library` API continue to resolve without circular
+  import failures.
+- `backend/app/api/endpoints/actors.py` restores the four legacy mapping routes:
+  `POST /actors/mapping/upload`, `GET /actors/mapping/latest-upload`,
+  `POST /actors/mapping/import-latest`, and `POST /actors/mapping/sync-online`.
+  `sync-online` intentionally delegates to the current MDC-NG mapping sync so the
+  old route remains compatible without re-introducing the retired online workflow.
+- `backend/tests/test_actor_routes.py` now asserts the full original 43-route media
+  library contract again. The backend suite still passes with 216 tests.
+
 ## Recovery Consistency (2026-08-23)
 
 - Backend `compileall` is clean and the full test suite currently passes: 216 passed.
