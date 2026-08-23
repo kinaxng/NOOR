@@ -214,6 +214,7 @@ export const zh: Record<string, string> = {
   'files.actors.tmdbFill': 'TMDB补全',
   'files.actors.tmdbPreviewTitle': 'TMDB 资料补全',
   'files.actors.tmdbPreviewFailed': '读取 TMDB 资料失败',
+  'files.actors.tmdbNotConfigured': '请先在系统设置中配置 TMDB API Key',
   'files.actors.tmdbApplyFailed': '应用 TMDB 资料失败',
   'files.actors.tmdbApplySuccess': 'TMDB 资料已应用并同步到媒体服务器',
   'files.actors.tmdbApplyAvatarLocalOnly': 'TMDB 资料已应用；头像同步到媒体服务器失败，已先作为 NOOR 本地头像使用',

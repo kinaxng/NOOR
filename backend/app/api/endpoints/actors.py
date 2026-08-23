@@ -1839,6 +1839,16 @@ async def delete_actor(actor_id: str):
     return {"ok": True, "actor_id": actor_id, "diagnostics_before": diagnostics_before}
 
 
+def _tmdb_preview_guard(config: dict[str, Any], actor: dict[str, Any]) -> tuple[bool, str]:
+    api_key = str(config.get("tmdb_api_key") or os.environ.get("TMDB_API_KEY") or "").strip()
+    if not api_key:
+        return False, "请先配置 TMDB API Key"
+    tmdb_id = str(actor.get("tmdb_id") or actor.get("provider_ids", {}).get("Tmdb") or "").strip()
+    if not tmdb_id:
+        return False, "演员缺少 TMDB ID"
+    return True, ""
+
+
 async def _tmdb_person(config: dict[str, Any], actor: dict[str, Any], lang: str) -> dict[str, Any]:
     api_key = str(config.get("tmdb_api_key") or os.environ.get("TMDB_API_KEY") or "").strip()
     if not api_key:
@@ -1902,6 +1912,9 @@ def _tmdb_proposal(person: dict[str, Any], current: dict[str, Any]) -> dict[str,
 async def preview_actor_tmdb_metadata(actor_id: str, lang: str = "zh-CN"):
     config = _require_config()
     current = await _actor_profile(config, actor_id, lang)
+    ready, message = _tmdb_preview_guard(config, current)
+    if not ready:
+        return {"ok": False, "message": message, "current": current, "proposal": None, "diffs": []}
     proposal = _tmdb_proposal(await _tmdb_person(config, current, lang), current)
     labels = {"name": "名称", "overview": "简介", "tmdb_id": "TMDB", "imdb_id": "IMDb", "birthday": "出生日期", "place_of_birth": "出生地", "homepage": "主页", "image_url": "头像"}
     diffs = [{"field": key, "label": label, "current": current.get(key) or "", "proposed": proposal.get(key) or ""} for key, label in labels.items() if (current.get(key) or "") != (proposal.get(key) or "")]
@@ -1911,6 +1924,8 @@ async def preview_actor_tmdb_metadata(actor_id: str, lang: str = "zh-CN"):
 @router.post("/actor/{actor_id}/metadata/tmdb-apply")
 async def apply_actor_tmdb_metadata(actor_id: str, req: ActorTmdbApplyRequest, lang: str = "zh-CN"):
     preview = await preview_actor_tmdb_metadata(actor_id, lang)
+    if not preview.get("ok"):
+        raise HTTPException(status_code=400, detail=preview.get("message", "TMDB 资料补全不可用"))
     current = preview["current"]
     proposal = preview["proposal"]
     current_overview, current_overview_links = _overview_external_urls(current.get("overview"))

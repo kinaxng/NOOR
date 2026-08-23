@@ -27,6 +27,7 @@ const deleting = ref(false)
 const overviewExpanded = ref(false)
 const uploadingAvatar = ref(false)
 const tmdbLoading = ref(false)
+const tmdbConfigured = ref(false)
 const tmdbApplying = ref(false)
 const tmdbModalOpen = ref(false)
 const tmdbPreview = ref<any | null>(null)
@@ -89,6 +90,15 @@ const socialLinks = computed(() => [
   { key: 'homepage', label: 'Homepage', icon: 'externalLink', url: externalUrls.value.homepage || actor.value?.homepage },
 ].filter(item => !!item.url))
 const canFetchTmdb = computed(() => !!(form.value.tmdb.trim() || form.value.imdb.trim() || actor.value?.tmdb_id || actor.value?.imdb_id))
+
+async function loadTmdbConfig() {
+  try {
+    const resp = await api.get('/media-library/config')
+    tmdbConfigured.value = !!String(resp.data?.config?.tmdb_api_key || '').trim()
+  } catch {
+    tmdbConfigured.value = false
+  }
+}
 const overviewTooLong = computed(() => (form.value.overview || '').length > 180)
 const gfriendsSearchName = computed(() => actor.value?.identity_names?.jp || form.value.jp_name || displayName.value || form.value.name)
 const aliasTags = computed(() => form.value.aliases.split(/\n|,/).map(item => item.trim()).filter(Boolean))
@@ -222,6 +232,7 @@ function mergeMissingActorMetadata(current: MediaActor, proposal: any): MediaAct
 
 async function enrichActorFromTmdb(seq: number) {
   if (!actorId.value || !actor.value || editMode.value) return
+  if (!tmdbConfigured.value) return
   if (!actor.value.tmdb_id && !actor.value.imdb_id) return
   try {
     const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/metadata/tmdb-preview`, null, {
@@ -455,6 +466,10 @@ async function selectAvatar(candidate: any) {
 
 async function previewTmdbMetadata() {
   if (!actorId.value || tmdbLoading.value) return
+  if (!tmdbConfigured.value) {
+    toast.error(t('files.actors.tmdbNotConfigured'))
+    return
+  }
   tmdbLoading.value = true
   tmdbPreview.value = null
   try {
@@ -510,6 +525,7 @@ watch(actorId, () => {
 })
 
 onMounted(() => {
+  void loadTmdbConfig()
   loadActor()
   loadMovies()
 })

@@ -638,3 +638,18 @@
   同步清理选中状态；默认面板与全宽面板的图片库都保留删除按钮，并增加原版
   `is-active` 选中样式。
 - 验证：`vue-tsc && vite build` 通过；后端全量 `pytest` 仍为 `240 passed`。
+
+## 运行时 400 收敛（2026-08-24）
+
+- 无头 Chromium 复核 JavDB 演员页与 `/actors/4201` 时发现两个实际 400：
+  Gfriends 未启用仍调用 `gfriends/actions/resolve`，以及 TMDB API Key 未配置
+  仍调用 `tmdb-preview`。
+- Gfriends 头像辅助改为禁用态返回 `200 {"ok":false,"disabled":true}`，
+  `resolve`/`candidates` 不再制造错误响应；JavDB 默认头像/当前封面回退保持可用。
+- TMDB 演员预览新增 `_tmdb_preview_guard`：未配置 API Key 或演员缺少 TMDB ID
+  时返回 `200 {"ok":false,...}`，`tmdb-apply` 继续显式失败；演员详情页自动补全
+  会先读取 `/media-library/config`，未配置 TMDB Key 时直接跳过请求。
+- 新增 `backend/tests/test_actor_routes.py` 的 TMDB guard/preview 断言，以及
+  `backend/tests/test_gfriends_plugin.py` 的禁用态 no-op 断言。
+- 验证：后端全量测试 `243 passed`；前端生产构建通过；插件校验仅保留设计/API
+  建议；Puppeteer 复核两个页面均无 Gfriends/TMDB 400。

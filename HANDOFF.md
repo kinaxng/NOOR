@@ -26,7 +26,8 @@ Last updated: 2026-08-24 Asia/Shanghai
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Stopped hidden sidebar widget polling. The desktop and mobile sidebars no longer mount the widget-system renderer simultaneously, and plugin widgets pause when the browser tab is hidden. System metrics sampling is also throttled for 1 second on the backend.
 - Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
-- Verification: frontend production build passes; backend full pytest passes with `240 passed, 1 warning`.
+- Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.
+- Verification: frontend production build passes; backend full pytest passes with `243 passed, 1 warning`; plugin validation passes with design-only warnings; Puppeteer check shows no Gfriends/TMDB 400 on JavDB actor and actor detail pages.
 
 # Hard Rules
 

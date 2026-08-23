@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from app.main import app
 
 
@@ -62,3 +64,39 @@ def test_media_library_route_parity_matches_original_index() -> None:
         if route.path.startswith("/api/media-library")
     }
     assert actual == expected
+
+def test_tmdb_preview_guard_requires_key_and_tmdb_id(monkeypatch):
+    from app.api.endpoints import actors
+
+    monkeypatch.delenv("TMDB_API_KEY", raising=False)
+    ready, message = actors._tmdb_preview_guard({"tmdb_api_key": ""}, {"tmdb_id": "123"})
+    assert ready is False
+    assert "API Key" in message
+
+    ready, _ = actors._tmdb_preview_guard({"tmdb_api_key": "key"}, {"provider_ids": {"Tmdb": "123"}})
+    assert ready is True
+
+    ready, message = actors._tmdb_preview_guard({"tmdb_api_key": "key"}, {"imdb_id": "nm123"})
+    assert ready is False
+    assert "TMDB ID" in message
+
+
+@pytest.mark.asyncio
+async def test_tmdb_preview_returns_ok_false_without_key(monkeypatch):
+    from app.api.endpoints import actors
+
+    async def fake_profile(config, actor_id, lang):
+        return {"name": "Test Actor", "imdb_id": "nm123"}
+
+    monkeypatch.setattr(actors.media, "_load_config", lambda: {
+        "server_url": "http://emby:8096",
+        "api_key": "secret",
+        "tmdb_api_key": "",
+    })
+    monkeypatch.setattr(actors, "_actor_profile", fake_profile)
+
+    result = await actors.preview_actor_tmdb_metadata("1")
+
+    assert result["ok"] is False
+    assert result["proposal"] is None
+    assert "API Key" in result["message"]

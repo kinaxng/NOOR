@@ -214,6 +214,7 @@ export const en: Record<string, string> = {
   'files.actors.tmdbFill': 'TMDB Fill',
   'files.actors.tmdbPreviewTitle': 'TMDB Metadata Fill',
   'files.actors.tmdbPreviewFailed': 'Failed to load TMDB metadata',
+  'files.actors.tmdbNotConfigured': 'Configure a TMDB API Key in system settings first',
   'files.actors.tmdbApplyFailed': 'Failed to apply TMDB metadata',
   'files.actors.tmdbApplySuccess': 'TMDB metadata applied and synced to the media server',
   'files.actors.tmdbApplyAvatarLocalOnly': 'TMDB metadata applied. Avatar sync to the media server failed, so NOOR is using the TMDB image locally.',
