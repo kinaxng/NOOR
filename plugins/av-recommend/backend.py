@@ -1537,7 +1537,8 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
     if enrich_limit <= 0:
         return warnings
     targets = items[:enrich_limit]
-    semaphore = asyncio.Semaphore(4)
+    concurrency = int(_config_number(config, "resource_enrich_concurrency", 4, 1, 12))
+    semaphore = asyncio.Semaphore(concurrency)
 
     async def enrich_one(item: dict[str, Any]) -> None:
         code = str(item.get("code") or "").strip()

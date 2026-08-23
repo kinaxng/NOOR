@@ -366,7 +366,7 @@ Recommended next implementation order:
    - minimum confidence threshold: done as `minimum_confidence_threshold`
 6. Add performance controls:
    - cache recommendations per profile/config/feedback
-   - limit concurrent JavDB/detail/resource calls
+   - limit concurrent JavDB/detail/resource calls: `resource_enrich_concurrency` added to plugin config
    - avoid plugin calls when dashboard card hidden/unmounted
 
 Latest recommendation verification: full backend pytest passes with

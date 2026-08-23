@@ -78,7 +78,8 @@
   AVDB 页面；当前运行无 HTTP 4xx/5xx、无 console error。
 - 推荐中心补回原版交接中仍待实现的控制项：最低置信度、探索比例、中字/破解
   偏好强度；`exploration_ratio` 和 `minimum_confidence_threshold` 已接入推荐
-  输出，`prefer_*_strength` 对旧布尔配置保持兼容。新增
+  输出，`prefer_*_strength` 对旧布尔配置保持兼容；资源确认并发数改为
+  `resource_enrich_concurrency` 可配置。新增
   `test_av_recommend_recovery.py` 回归覆盖，后端全量测试为 264 项通过。
 
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
