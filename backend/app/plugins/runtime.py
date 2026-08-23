@@ -540,6 +540,7 @@ class PluginRuntime:
         handler = self._handler(plugin_id)
         if handler is None:
             raise LookupError(plugin_id)
+        resolved: dict[str, Any] | None = None
         for name, args in (
             ("resolve_resource_download", (resource, self.get_config(plugin_id))),
             ("resolve_download", (resource, self.get_config(plugin_id))),
@@ -547,10 +548,38 @@ class PluginRuntime:
             try:
                 value = await self._call(handler, name, *args)
                 if isinstance(value, dict):
-                    return value
+                    resolved = value
+                    break
             except (AttributeError, TypeError):
                 continue
-        return {"item": resource, "url": resource.get("url") or resource.get("download_url") or resource.get("magnet") or ""}
+        if resolved is None:
+            resolved = {"item": resource, "url": resource.get("url") or resource.get("download_url") or resource.get("magnet") or ""}
+
+        item = dict(resolved.get("item")) if isinstance(resolved.get("item"), dict) else dict(resource)
+        url = str(resolved.get("url") or item.get("url") or item.get("download_url") or item.get("magnet") or "").strip()
+        if url:
+            resolved["url"] = url
+        requirements = item.get("requirements") if isinstance(item.get("requirements"), dict) else {}
+        requirements = dict(requirements)
+        if not requirements:
+            if url.startswith("magnet:?"):
+                requirements["accepts_public_magnet"] = True
+            elif url.startswith(("http://", "https://")):
+                requirements["accepts_http_torrent"] = True
+        if requirements:
+            item["requirements"] = requirements
+        try:
+            downloader_info = self.resolve_downloaders_for_resource(plugin_id, item)
+        except Exception:
+            downloader_info = {}
+        compatible = [str(x) for x in downloader_info.get("compatible_downloaders") or [] if str(x or "").strip()]
+        preferred = str(downloader_info.get("preferred_downloader") or "").strip() or None
+        if compatible:
+            item["compatible_downloaders"] = compatible
+        if preferred:
+            item["preferred_downloader"] = preferred
+        resolved["item"] = item
+        return resolved
 
     async def submit_download(self, plugin_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         manifest = self.get_manifest(plugin_id)

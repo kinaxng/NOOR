@@ -182,6 +182,47 @@ def test_resource_resolve_download_route_requires_provider():
 
 
 @pytest.mark.asyncio
+async def test_resource_resolve_download_backfills_compatible_downloaders(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.plugins.runtime import runtime
+
+    class FakeHandler:
+        async def resolve_resource_download(self, resource, config):
+            return {
+                "item": {"url": "magnet:?xt=urn:btih:abc"},
+                "url": "magnet:?xt=urn:btih:abc",
+            }
+
+    monkeypatch.setattr(runtime, "_handlers", {"javdb": FakeHandler()})
+    monkeypatch.setattr(
+        runtime,
+        "get_manifest",
+        lambda plugin_id: SimpleNamespace(name="JavDB", type="resource_search"),
+    )
+    monkeypatch.setattr(runtime, "is_enabled", lambda plugin_id: plugin_id == "qbittorrent")
+    monkeypatch.setattr(
+        runtime,
+        "list_enabled_downloaders",
+        lambda: [{
+            "id": "qbittorrent",
+            "name": "qBittorrent",
+            "capabilities": {"accepts_public_magnet": True},
+        }],
+    )
+    monkeypatch.setattr(runtime, "_normalize_plugin_downloader_preferences", lambda plugin_id: [])
+
+    result = await runtime.resolve_resource_download("javdb", {
+        "url": "magnet:?xt=urn:btih:abc",
+    })
+
+    assert result["url"] == "magnet:?xt=urn:btih:abc"
+    assert result["item"]["requirements"] == {"accepts_public_magnet": True}
+    assert result["item"]["compatible_downloaders"] == ["qbittorrent"]
+    assert result["item"]["preferred_downloader"] == "qbittorrent"
+
+
+@pytest.mark.asyncio
 async def test_disabled_read_action_returns_empty_state(monkeypatch):
     from app.plugins.runtime import runtime
 

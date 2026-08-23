@@ -679,3 +679,13 @@
   无 4xx、无 console error，并显示不可用状态。
 - 最终全路由无头浏览器复核：主路由与全部插件路由均无 4xx/5xx、无 console error。
 - JavDB 演员目录在 mount 时读取一次 `/plugins` 判断 Gfriends 是否启用；禁用时不再对每个演员卡片调用 `resolve`。Puppeteer 实测 Gfriends resolve 请求从 9 次降为 0 次，演员列表仍正常加载。
+
+## 资源下载解析收敛（2026-08-24）
+
+- `PluginRuntime.resolve_resource_download()` 不再直接信任旧缓存或第三方插件返回的精简资源：
+  解析后会按最终 URL 补全 requirements，再通过 `resolve_downloaders_for_resource()` 回填
+  当前已启用且兼容的下载器列表与首选下载器。
+- 这避免了订阅中心对旧 `best_resource` 误报“没有已启用的兼容下载器”；即使资源字段缺失
+  `compatible_downloaders` / `preferred_downloader`，只要下载器插件已启用也能正常推送。
+- 新增 `test_resource_resolve_download_backfills_compatible_downloaders` 回归测试。
+- 验证：后端全量 `pytest` 为 `252 passed, 1 warning`；前端生产构建通过。
