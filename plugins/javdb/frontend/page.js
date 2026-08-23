@@ -229,6 +229,7 @@ export async function mount(root, sdk) {
   let tabControl = null
   let resizeTimer = null
   let loadSeq = 0
+  const avatarResolveCache = new Map()
   const initialCode = new URLSearchParams(window.location.search).get('code')?.trim() || ''
   let initialCodeOpened = false
   let syncingRoute = false
@@ -468,7 +469,17 @@ export async function mount(root, sdk) {
     const relation = currentRouteRelation()
     if (relation) {
       const current = state.relation || {}
-      if (current.relType === relation.relType && current.relId === relation.relId && current.label === relation.label) return
+      if (current.relType === relation.relType && current.relId === relation.relId && current.label === relation.label) {
+        if (relation.relType === 'actor' && state.tab !== 'actors') {
+          state.tab = 'actors'
+          renderTabs()
+        }
+        if (relation.relType === 'series' && state.tab !== 'series') {
+          state.tab = 'series'
+          renderTabs()
+        }
+        return
+      }
       setRelation(relation.relType, relation.relId, relation.label, { syncRoute: false })
       renderTabs()
       return
@@ -904,10 +915,155 @@ export async function mount(root, sdk) {
     return `${option.label} ${state.videosOrder === 'asc' ? '↑' : '↓'}`
   }
 
+  function actorAvatarNames(actorName, meta = {}) {
+    return [actorName, meta.name_zht, meta.name, meta.other_name, meta.label]
+      .flatMap(value => String(value || '').split(/[、,，/／|]/))
+      .map(value => value.trim())
+      .filter(Boolean)
+      .filter((value, index, list) => list.indexOf(value) === index)
+  }
+
+  function renderActorAvatar(avatar, actorName, currentUrl = '', meta = {}) {
+    const applyImage = url => {
+      avatar.innerHTML = ''
+      const img = el('img')
+      img.src = url
+      img.alt = actorName
+      avatar.appendChild(img)
+    }
+    const applyFallback = () => {
+      avatar.innerHTML = ''
+      avatar.textContent = String(actorName || '?').slice(0, 1).toUpperCase()
+    }
+    if (currentUrl) applyImage(currentUrl)
+    else applyFallback()
+
+    if (!sdk.avatar?.resolve || !actorName) return
+    const names = actorAvatarNames(actorName, meta)
+    const cacheKey = names.join('|')
+    if (!cacheKey) return
+    let pending = avatarResolveCache.get(cacheKey)
+    if (!pending) {
+      pending = sdk.avatar.resolve({ name: names[0], aliases: names.slice(1) })
+        .then(result => result?.ok && result?.url ? result.url : '')
+        .catch(() => '')
+      avatarResolveCache.set(cacheKey, pending)
+    }
+    pending.then(url => {
+      if (url && avatar.isConnected) applyImage(url)
+    })
+  }
+
+  function renderActorRelationPanel(chip, select) {
+    void ensureVideoActors()
+    const selectBadge = (label, value, options, onChange) => {
+      const current = String(value || '')
+      const selected = (Array.isArray(options) ? options : []).find(option => String(option.value) === current)
+      const badge = el('label', 'javdb-actor-select-badge')
+      if (current) badge.classList.add('is-active')
+      badge.append(
+        el('span', 'javdb-actor-select-badge__label', label),
+        el('strong', 'javdb-actor-select-badge__value', selected?.label || options?.[0]?.label || ''),
+        el('span', 'javdb-actor-select-badge__caret'),
+      )
+      const native = el('select', 'javdb-actor-select-badge__native noor-plugin-select')
+      ;(Array.isArray(options) ? options : []).forEach(option => {
+        const item = el('option')
+        item.value = option.value
+        item.textContent = option.label
+        native.appendChild(item)
+      })
+      native.value = current
+      native.addEventListener('change', event => onChange(event.target.value))
+      badge.appendChild(native)
+      return badge
+    }
+    const actor = currentActorMeta()
+    const panel = el('section', 'javdb-actor-panel')
+    const identity = el('div', 'javdb-actor-panel__identity')
+    const avatar = el('div', 'javdb-actor-panel__avatar')
+    const actorName = actor?.name_zht || actor?.label || actor?.name || state.relation.label
+    const avatarUrl = actor?.avatar_url || ''
+    renderActorAvatar(avatar, actorName, avatarUrl, actor || {})
+
+    const bio = el('div', 'javdb-actor-panel__bio')
+    bio.appendChild(el('strong', '', actorName))
+    const aliasText = [actor?.name, actor?.other_name].filter(Boolean).join(' · ')
+    if (aliasText) bio.appendChild(el('span', '', aliasText))
+    identity.append(avatar, bio)
+
+    const controls = el('div', 'javdb-actor-panel__controls')
+    const quick = el('div', 'javdb-actor-panel__group')
+    quick.appendChild(el('span', 'javdb-actor-panel__label', '快速筛选'))
+    const quickItems = el('div', 'javdb-actor-panel__items')
+    quickItems.appendChild(chip('全部', state.relationActorSelectedFilters.length === 0 && !state.relationActorSingleFilter, () => {
+      state.relationActorSelectedFilters = []
+      state.relationActorSingleFilter = false
+      state.page = 1
+      rerenderCurrentList()
+    }))
+    relationActorBadgeFilters.forEach(([value, label]) => {
+      quickItems.appendChild(chip(label, state.relationActorSelectedFilters.includes(value), () => {
+        state.relationActorSelectedFilters = state.relationActorSelectedFilters.includes(value)
+          ? state.relationActorSelectedFilters.filter(x => x !== value)
+          : [...state.relationActorSelectedFilters, value]
+        state.page = 1
+        rerenderCurrentList()
+      }))
+    })
+    quickItems.appendChild(chip('单人', state.relationActorSingleFilter, () => {
+      state.relationActorSingleFilter = !state.relationActorSingleFilter
+      state.page = 1
+      rerenderCurrentList()
+    }))
+
+    const yearOptions = [{ label: '全部年份', value: '' }, ...actorRelationYears().map(year => ({ label: year, value: year }))]
+    const relationYearSelect = selectBadge('年份', state.relationActorYear, yearOptions, value => {
+      state.relationActorYear = String(value || '')
+      state.page = 1
+      rerenderCurrentList()
+    })
+    const relationSortSelect = selectBadge('排序', state.relationActorSort, relationActorSortOptions, value => {
+      state.relationActorSort = String(value || 'release_desc')
+      state.page = 1
+      rerenderCurrentList()
+    })
+    quickItems.appendChild(relationYearSelect)
+    quickItems.appendChild(relationSortSelect)
+    quick.appendChild(quickItems)
+    controls.appendChild(quick)
+
+    const genreFilters = actorRelationGenres()
+    if (genreFilters.length) {
+      const genres = el('div', 'javdb-actor-panel__group javdb-actor-panel__group--genres')
+      genres.appendChild(el('span', 'javdb-actor-panel__label', '类型/标签'))
+      const genreItems = el('div', 'javdb-actor-panel__items')
+      genreItems.appendChild(chip('全部', relationActorGenreFilters.length === 0, () => {
+        relationActorGenreFilters = []
+        state.page = 1
+        rerenderCurrentList()
+      }))
+      genreFilters.forEach(item => {
+        genreItems.appendChild(chip(`${item.name} ${item.count}`, relationActorGenreFilters.includes(item.name), () => {
+          relationActorGenreFilters = relationActorGenreFilters.includes(item.name)
+            ? relationActorGenreFilters.filter(name => name !== item.name)
+            : [...relationActorGenreFilters, item.name]
+          state.page = 1
+          rerenderCurrentList()
+        }))
+      })
+      genres.appendChild(genreItems)
+      controls.appendChild(genres)
+    }
+
+    panel.append(identity, controls)
+    panelWrap.appendChild(panel)
+  }
+
   function renderFilterPanel() {
     panelWrap.innerHTML = ''
     const panelFactory = sdk.ui?.filterPanel || sdk.ui?.controlPanel
-    if (!panelFactory || !sdk.ui?.chip) return
+    if (!sdk.ui?.chip) return
     const rows = []
     const chip = (label, active, onClick) => sdk.ui.chip({ label, active, className: 'noor-plugin-chip--soft', onClick })
     const select = (value, options, onChange) => sdk.ui?.select
@@ -918,87 +1074,28 @@ export async function mount(root, sdk) {
       if (valid.length) rows.push({ sections: valid })
     }
 
+    if (state.relation?.relType === 'actor') {
+      renderActorRelationPanel(chip, select)
+      return
+    }
+
+    if (!panelFactory) return
+
     if (state.relation) {
-      if (state.relation.relType === 'actor') {
-        void ensureVideoActors()
-        const actor = currentActorMeta()
-        const profile = el('div', 'javdb-actor-profile')
-        const avatar = el('div', 'javdb-actor-profile__avatar')
-        const avatarUrl = actor?.avatar_url || ''
-        if (avatarUrl) {
-          const img = el('img')
-          img.src = avatarUrl
-          img.alt = actor?.name_zht || actor?.label || actor?.name || state.relation.label
-          avatar.appendChild(img)
-        } else {
-          avatar.textContent = String(actor?.name_zht || actor?.label || actor?.name || state.relation.label || '?').slice(0, 1).toUpperCase()
-        }
-        const info = el('div', 'javdb-actor-profile__info')
-        info.appendChild(el('strong', '', actor?.name_zht || actor?.label || actor?.name || state.relation.label))
-        const aliases = [...new Set([actor?.name, actor?.other_name].filter(Boolean).map(value => String(value).trim()))]
-        if (aliases.length) info.appendChild(el('span', '', aliases.join(' · ')))
-        profile.append(avatar, info)
-        pushRow([buildPanelSection('演员', [profile])])
-        pushRow([
-          buildPanelSection('筛选', [
-            chip('全部', state.relationActorSelectedFilters.length === 0, () => {
-              state.relationActorSelectedFilters = []
-              state.page = 1
-              rerenderCurrentList()
-            }),
-            ...relationActorBadgeFilters.map(([value, label]) => chip(label, state.relationActorSelectedFilters.includes(value), () => {
-              state.relationActorSelectedFilters = state.relationActorSelectedFilters.includes(value)
-                ? state.relationActorSelectedFilters.filter(x => x !== value)
-                : [...state.relationActorSelectedFilters, value]
-              state.page = 1
-              rerenderCurrentList()
-            })),
-            chip('单人', state.relationActorSingleFilter, () => {
-              state.relationActorSingleFilter = !state.relationActorSingleFilter
-              state.page = 1
-              rerenderCurrentList()
-            }),
-          ]),
-        ])
-        const yearOptions = [{ label: '全部年份', value: '' }, ...actorRelationYears().map(year => ({ label: year, value: year }))]
-        const relationYearSelect = select(state.relationActorYear, yearOptions, value => {
-          state.relationActorYear = String(value || '')
-          state.page = 1
-          rerenderCurrentList()
-        })
-        const relationSortSelect = select(state.relationActorSort, relationActorSortOptions, value => {
-          state.relationActorSort = String(value || 'release_desc')
-          state.page = 1
-          rerenderCurrentList()
-        })
-        pushRow([
-          relationYearSelect ? buildPanelSection('年份', [relationYearSelect]) : null,
-          relationSortSelect ? buildPanelSection('排序', [relationSortSelect]) : null,
-        ])
-        const genreFilters = actorRelationGenres()
-        if (genreFilters.length) {
-          pushRow([
-            buildPanelSection('类型/标签', [
-              chip('全部', relationActorGenreFilters.length === 0, () => {
-                relationActorGenreFilters = []
-                state.page = 1
-                rerenderCurrentList()
-              }),
-              ...genreFilters.map(item => chip(`${item.name} ${item.count}`, relationActorGenreFilters.includes(item.name), () => {
-                relationActorGenreFilters = relationActorGenreFilters.includes(item.name)
-                  ? relationActorGenreFilters.filter(name => name !== item.name)
-                  : [...relationActorGenreFilters, item.name]
-                state.page = 1
-                rerenderCurrentList()
-              })),
-            ]),
-          ])
-        }
-      } else {
-        pushRow([
-          buildPanelSection('当前', [chip(state.relation.label, true, () => {})]),
-        ])
-      }
+      pushRow([
+        buildPanelSection('当前', [
+          chip(`${state.relation.label} · 清除`, true, () => {
+            state.relation = null
+            state.relationActorMeta = null
+            state.relationActorSelectedFilters = []
+            state.relationActorSingleFilter = false
+            relationActorGenreFilters = []
+            state.page = 1
+            loadData()
+            renderTabs()
+          }),
+        ]),
+      ])
     } else if (state.tab === 'latest') {
       pushRow([
         buildPanelSection('类型', latestTypes.map(([value, label]) => chip(label, state.latestType === value, () => {
@@ -1371,12 +1468,7 @@ export async function mount(root, sdk) {
         actorCard.type = 'button'
         actorCard.onclick = () => setRelation('actor', item.id || item.external_id || item.value, actorTitle, { meta: { ...item, value: item.id || item.external_id || item.value, label: actorTitle } })
         const avatar = el('div', 'javdb-actor-avatar')
-        if (item.avatar_url) {
-          const img = el('img')
-          img.src = item.avatar_url
-          img.alt = actorTitle
-          avatar.appendChild(img)
-        }
+        renderActorAvatar(avatar, actorTitle, item.avatar_url || '', item)
         actorCard.appendChild(avatar)
         actorCard.appendChild(el('div', 'javdb-actor-name', actorTitle))
         actorCard.appendChild(el('div', 'javdb-actor-meta', actorMeta || ''))

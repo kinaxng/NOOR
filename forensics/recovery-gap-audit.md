@@ -290,6 +290,11 @@
 - 新增 `test_whisper_translator.py`，并在 `test_whisper_runtime.py` 补三条补翻
   回归测试；新增 `test_job_phases.py` 锁定 `facefusion_restore` 阶段文案/默认值；
   硬链接兼容测试补回 `legacy_hardlink_groups_path_impl()` 导出。
+
+- 按 2026-06-09/10 的 JavDB 最终 diff 序列恢复演员专用面板：进入演员关系后不再使用
+  通用筛选面板，而是渲染头像、简介、快速筛选、胶囊式年份/排序和类型/标签；刷新
+  `/actor/...` 路由时保持 actors tab；头像统一走 `sdk.avatar.resolve` 候选解析并带
+  缓存。对应 `javdb-actor-panel`、`javdb-actor-select-badge` 样式已从会话 diff 恢复。
 - 本轮后端全量测试为 223 项通过，前端生产构建和插件校验均通过。
 
 

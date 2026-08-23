@@ -439,6 +439,14 @@ the recovered bytecode modules remain unchanged.
   exported `legacy_hardlink_groups_path_impl()` compatibility helper, with regression
   coverage in `backend/tests/test_job_phases.py` and
   `backend/tests/test_media_library_hardlinks.py`.
+
+- Restored the final JavDB actor panel from the June session-diff sequence: actor
+  routing keeps the actors tab active on refresh, actor pages render a dedicated
+  avatar/bio panel with quick filters, capsule year/sort badges, and genre chips,
+  and both relation-panel and actor-list avatars consult `sdk.avatar.resolve` with
+  a per-name cache before falling back to the provided URL or initial.
+  The final `javdb-actor-select-badge` styles and dark native option styling were
+  also restored from the archived session diffs.
 - Full verification currently passes: 223 backend tests, frontend production build,
   and plugin validation.
 

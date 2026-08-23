@@ -188,6 +188,172 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+.javdb-actor-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: var(--color-bg-surface, rgb(26,31,55));
+}
+.javdb-actor-panel__identity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+.javdb-actor-panel__avatar {
+  width: 92px;
+  height: 92px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.055);
+  color: rgba(255,255,255,.78);
+  font-size: 34px;
+  font-weight: 850;
+}
+.javdb-actor-panel__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.javdb-actor-panel__bio {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.javdb-actor-panel__bio strong {
+  color: var(--color-text-primary,#fff);
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 850;
+}
+.javdb-actor-panel__bio span,
+.javdb-actor-panel__bio em {
+  min-width: 0;
+  color: var(--color-text-muted,rgba(255,255,255,.55));
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.javdb-actor-panel__controls {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.javdb-actor-panel__group {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.javdb-actor-panel__label {
+  color: var(--color-text-secondary,rgba(255,255,255,.72));
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+.javdb-actor-panel__items {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.javdb-actor-select-badge {
+  position: relative;
+  min-width: 0;
+  min-height: 1.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .32rem .68rem;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  background: rgba(255,255,255,.04);
+  color: var(--color-text-primary,#fff);
+  font-size: .76rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color .18s ease, background .18s ease, color .18s ease;
+}
+.javdb-actor-select-badge:hover {
+  border-color: color-mix(in srgb, var(--color-brand,#0075ff) 45%, transparent);
+  background: color-mix(in srgb, var(--color-brand,#0075ff) 10%, transparent);
+}
+.javdb-actor-select-badge.is-active {
+  border-color: color-mix(in srgb, var(--color-brand,#0075ff) 58%, transparent);
+  background: color-mix(in srgb, var(--color-brand,#0075ff) 20%, transparent);
+  color: color-mix(in srgb, var(--color-brand,#0075ff) 30%, white);
+}
+.javdb-actor-select-badge__label {
+  flex: none;
+  color: inherit;
+  opacity: .72;
+  font-size: inherit;
+  font-weight: 650;
+}
+.javdb-actor-select-badge__value {
+  min-width: 0;
+  color: currentColor;
+  opacity: .86;
+  font-size: inherit;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.javdb-actor-select-badge__caret {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: .22rem solid transparent;
+  border-right: .22rem solid transparent;
+  border-top: .28rem solid currentColor;
+  opacity: .65;
+}
+.javdb-actor-select-badge__native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.javdb-actor-select-badge__native option {
+  background: var(--color-bg-elevated, rgb(30,37,68));
+  color: #fff;
+}
+@media (max-width: 860px) {
+  .javdb-actor-panel {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .javdb-actor-panel {
+    padding: 14px;
+  }
+  .javdb-actor-panel__identity {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .javdb-actor-panel__avatar {
+    width: 72px;
+    height: 72px;
+    font-size: 28px;
+  }
+  .javdb-actor-select-badge {
+    width: 100%;
+  }
+}
 .javdb-actor-profile {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
