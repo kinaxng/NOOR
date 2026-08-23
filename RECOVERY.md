@@ -356,6 +356,13 @@ the recovered bytecode modules remain unchanged.
 ## Recovery Consistency (2026-08-23)
 
 - Backend `compileall` is clean and the full test suite currently passes: 216 passed.
+- An isolated runtime smoke was run against the recovered tree on temporary ports:
+  backend health/settings/plugins/jobs endpoints returned 200 and OpenAPI exposed
+  150 paths; CDP browser smoke rendered the main app, plugins list, M-Team, hardlinks,
+  actors, jobs, history, recommendation, JavDB, and Gfriends pages with no runtime
+  exceptions. The two 400 responses on `/plugins/gfriends` are expected because the
+  plugin is disabled in this recovery worktree and its host actions return
+  `plugin disabled`.
 - The recovered media-library recovery endpoints now have stable OpenAPI
   `operation_id` values, and the final replayed `Jobs.vue` is archived and
   verified byte-for-byte in `forensics/recovered-sources/`.

@@ -266,6 +266,16 @@
   插件 widget 指标，PluginHost 下载器逻辑已迁移到 `useDownloaderDialog`，
   SystemSettings 本地字幕库已迁移到 `LocalSubtitleLibrarySettings`，
   ResourceSearch 的旧 `openItem` 由当前 `openWork` 等价覆盖。
+- 对恢复树做了一次隔离运行冒烟：后端启动在临时端口后
+  `/api/health`、`/api/settings`、`/api/plugins`、`/api/jobs` 均返回 200，
+  OpenAPI 暴露 150 条路径；前端开发服务器启动后，CDP 浏览器依次打开
+  `/`、`/plugins`、`/plugins/mteam-plugin`、`/files/hardlinks`、`/actors`、
+  `/jobs`、`/history`、`/plugins/av-recommend`、`/plugins/javdb`、
+  `/plugins/gfriends`，页面均渲染且没有运行时异常。
+- Gfriends 页面打开时会出现两条 `POST .../actions/stats` 和
+  `POST .../actions/sync` 的 400，原因是恢复工作区没有启用该插件，
+  插件宿主按契约返回 `plugin disabled`；这是当前隔离验证环境的预期行为，
+  不是前端或插件源码缺口。
 
 ## 明确差距
 
