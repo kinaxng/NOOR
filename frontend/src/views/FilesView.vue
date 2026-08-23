@@ -40,6 +40,7 @@ function switchTab(tab: FileTab) {
 <template>
   <div class="files-page animate-fade-in">
     <header class="files-header" :aria-label="t('files.title')">
+      <h1 class="files-title">{{ t('files.title') }}</h1>
       <div class="files-tabs" role="tablist" :aria-label="t('files.title')">
         <button
           v-for="tab in tabs"
@@ -75,6 +76,13 @@ function switchTab(tab: FileTab) {
   align-items: center;
   justify-content: flex-start;
   gap: 1rem;
+}
+
+.files-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .files-tabs {
@@ -115,6 +123,7 @@ function switchTab(tab: FileTab) {
 @media (max-width: 720px) {
   .files-header {
     align-items: stretch;
+    flex-direction: column;
   }
 
   .files-tabs {

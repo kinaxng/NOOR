@@ -31,7 +31,9 @@ Last updated: 2026-08-24 Asia/Shanghai
 - JAVDB actor panels now keep 快速筛选 and 年份/排序 in the same capsule row with a visible divider, matching the requested DBOnline-style compact control bar. Browser smoke also now exercises subscription edit/compare/cancel and JAVDB actor relation deep-link refresh.
 - Recommendation exclusion is now locked by a regression test: both live Emby codes and subscription codes are removed before scoring, and a real latest-mode response returns no subscribed `CJOD-528` item.
 - Reverted `HardlinkView.vue` to the original MDC-NG direct action path from the 2026-08-23 read evidence. The recovery-time generic `hardlink_source_actions` loader and `/files/hardlinks?q=` route handling were removed; the confirmed duplicate `summary.total_groups` fix is kept, and `test_hardlink_view_source_evidence.py` locks the final source shape.
-- Verification: frontend production build passes; backend full pytest passes with `264 passed, 6 skipped`; restored-page smoke reports no HTTP errors and no console errors.
+- Re-checked all three 2026-08-23 HardlinkView read snapshots segment-by-segment; the only remaining difference from the preserved original segments is the confirmed duplicate `summary.total_groups` deletion.
+- Restored the visible `文件` page title in `FilesView.vue` and its mobile layout behavior from the original early evidence, while keeping the current `/files` route normalization and actor tab. Added `backend/tests/test_files_view_contract.py` so the `文件 -> 硬链接/演员管理` structure and `/hardlinks` redirect cannot drift back silently.
+- Verification: frontend production build passes; backend full pytest passes with `266 passed, 6 skipped`; restored-page smoke covers `/files` plus all main/plugin routes and reports no HTTP errors and no console errors.
 
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Restored repo-level `AGENTS.md` with the NOOR recovery search boundaries and runtime commands.

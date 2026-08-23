@@ -462,6 +462,19 @@ the recovered bytecode modules remain unchanged.
 - Full verification currently passes: 223 backend tests, frontend production build,
   and plugin validation.
 
+## 2026-08-24 FilesView Original Structure Recovery
+
+- `FilesView.vue` restored the visible `文件` page title and mobile heading/tab
+  stacking from the original early evidence. `/files` still canonicalizes to
+  `/files/hardlinks`, and the 演员管理 tab remains under the same Files page.
+- Added `backend/tests/test_files_view_contract.py` to lock the Files tabs,
+  `/files/:fileTab?` route, `/hardlinks` redirect, and sidebar `文件` entry.
+- HardlinkView was re-checked against all three 2026-08-23 read snapshots;
+  the only difference from the preserved segments is the intentional duplicate
+  `summary.total_groups` deletion.
+- Full backend pytest: `266 passed, 6 skipped`; frontend production build passes;
+  restored-page smoke covers `/files` and still reports no HTTP/console errors.
+
 
 The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
