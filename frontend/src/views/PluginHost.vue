@@ -482,6 +482,14 @@ function makeFilterPanelGroup(options: any = {}) {
   return group
 }
 
+function makeControlPanelRow(options: any = {}) {
+  const row = document.createElement('div')
+  row.className = ['noor-control-panel__row', options.className || ''].filter(Boolean).join(' ')
+  const children = options.sections || options.items || options.children
+  for (const item of (Array.isArray(children) ? children : [children]).filter(Boolean)) row.appendChild(item)
+  return row
+}
+
 function makeFilterPanel(options: any = {}) {
   const panel = document.createElement('section')
   panel.className = ['noor-control-panel', options.className || '', options.collapsible ? 'is-collapsible' : ''].filter(Boolean).join(' ')
@@ -728,21 +736,34 @@ function sdkFor(id: string) {
     }
   }
   const downloads = createSharedDownloaderDialogContext(id)
-  const pluginSubPath = () => {
-    const value = route.params.pluginPath
-    return (Array.isArray(value) ? value.join('/') : String(value || '')).replace(/^\/+|\/+$/g, '')
+  const basePath = `/plugins/${id}`
+  const routeSubPath = () => {
+    const path = route.path.startsWith(basePath) ? route.path.slice(basePath.length) : ''
+    return path.replace(/^\/+/, '')
+  }
+  const pluginPath = (subPath = '') => {
+    const clean = String(subPath || '').replace(/^\/+/, '')
+    return clean ? `${basePath}/${clean}` : basePath
   }
   return {
     pluginId: id,
     navigate: (to: any) => router.push(to),
     route: {
-      get subPath() { return pluginSubPath() },
-      push: (path: string) => router.push(`/plugins/${id}/${String(path || '').replace(/^\/+/, '')}`),
-      replace: (path: string) => router.replace(`/plugins/${id}/${String(path || '').replace(/^\/+/, '')}`),
-      onChange: (handler: () => void) => {
-        const stop = watch(() => route.fullPath, () => handler())
-        sdkDisposers.push(stop)
-        return stop
+      basePath,
+      get path() { return route.path },
+      get fullPath() { return route.fullPath },
+      get subPath() { return routeSubPath() },
+      push: (subPath = '', options: any = {}) => router.push({ path: pluginPath(subPath), query: options.query ?? route.query }),
+      replace: (subPath = '', options: any = {}) => router.replace({ path: pluginPath(subPath), query: options.query ?? route.query }),
+      onChange: (handler: (payload: any) => void) => {
+        const onRoute = (event: Event) => {
+          const detail = (event as CustomEvent).detail || {}
+          if (!detail.pluginId || detail.pluginId === id) handler(detail)
+        }
+        window.addEventListener('noor-plugin-route-change', onRoute)
+        const cleanup = () => window.removeEventListener('noor-plugin-route-change', onRoute)
+        const off = onUnmount(cleanup)
+        return () => { cleanup(); off() }
       },
     },
     api: {
@@ -850,6 +871,8 @@ function sdkFor(id: string) {
       controlPanelGroup: makeFilterPanelGroup,
       filterPanelSection: makeFilterPanelSection,
       controlPanelSection: makeFilterPanelSection,
+      filterPanelRow: makeControlPanelRow,
+      controlPanelRow: makeControlPanelRow,
       submitButton: makeSubmitButton,
       topBar: makeTopBar,
       actionRow: makeActionRow,
@@ -911,6 +934,15 @@ async function mountPlugin() {
 
 onMounted(mountPlugin)
 watch(pluginId, mountPlugin)
+watch(() => route.fullPath, () => {
+  window.dispatchEvent(new CustomEvent('noor-plugin-route-change', {
+    detail: {
+      path: route.path,
+      fullPath: route.fullPath,
+      pluginId: pluginId.value,
+    },
+  }))
+})
 onBeforeUnmount(clearMounted)
 </script>
 
