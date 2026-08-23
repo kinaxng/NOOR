@@ -810,6 +810,26 @@ function sdkFor(id: string) {
     subscription: {
       open: (options: any) => openSubscriptionDialog(options),
     },
+    avatar: {
+      resolve: async (options: any = {}) => {
+        const response = await pluginFetch('/actions/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload: options }),
+        })
+        if (!response.ok) throw new Error('Gfriends resolve failed')
+        return response.json()
+      },
+      candidates: async (options: any = {}) => {
+        const response = await pluginFetch('/actions/candidates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload: options }),
+        })
+        if (!response.ok) throw new Error('Gfriends candidates failed')
+        return response.json()
+      },
+    },
     ui: {
       button: makeButton,
       input: makeInput,

@@ -12,6 +12,17 @@
 - `missing`：原版历史中出现，但当前恢复树没有对应路径。
 - `intentional`：按用户后续要求或恢复策略有意不复原/改为不同实现。
 
+## 恢复说明
+
+- `frontend/src/views/PluginHost.vue` 已恢复 `sdk.avatar.resolve` /
+  `sdk.avatar.candidates`。原版最终提交使用插件宿主 POST helper；当前重建用
+  `pluginFetch('/actions/resolve')` / `pluginFetch('/actions/candidates')`
+  提供等价能力，前端构建与 Gfriends 插件语法检查均通过。
+
+- `frontend/src/views/HardlinkView.vue` 已按最终 rollout 证据恢复通用插件源文件动作：
+  `hardlink_source_actions` 贡献、`requires_test` 可用性检查、通用动作提交，以及
+  `?q=` 路由搜索参数。前端生产构建通过。
+
 ## 清单
 
 | 路径 | 原版提交数 | 状态 | 原版最后提交 | 当前最后提交 |
@@ -89,7 +100,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | b53b875 Restore byte-level frontend matches from cache evidence |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 9d52763 Restore additional byte-level frontend evidence |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |

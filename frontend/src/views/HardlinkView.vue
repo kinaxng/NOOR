@@ -1,7 +1,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { useMediaLibraryStore } from '../stores/mediaLibrary'
 import { useToast } from '../composables/useToast'
@@ -22,6 +22,7 @@ type FilterKey = 'all' | 'withSource' | 'withHardlink' | 'issueOnly' | 'multiSou
 const mediaStore = useMediaLibraryStore()
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
 const { confirm } = useConfirm()
 const { t, i18nVersion } = useI18n()
 
@@ -36,7 +37,8 @@ const deletingSourcePaths = ref<Set<string>>(new Set())
 const deletingGroupCodes = ref<Set<string>>(new Set())
 const reorganizingSourcePaths = ref<Set<string>>(new Set())
 const previewVideoPath = ref('')
-const mdcManualAvailable = ref(false)
+type HardlinkSourceAction = { id: string; pluginId: string; action: string; label: string; tone?: string }
+const hardlinkSourceActions = ref<HardlinkSourceAction[]>([])
 
 const pageTitle = computed(() => { void i18nVersion.value; return t('hardlinks.title') })
 const scanBtnLabel = computed(() => { void i18nVersion.value; return t('hardlinks.scan') })
@@ -318,28 +320,51 @@ function isReorganizingSource(path?: string | null) {
   return !!path && reorganizingSourcePaths.value.has(path)
 }
 
-async function loadMdcManualAvailability() {
-  mdcManualAvailable.value = false
+async function loadHardlinkSourceActions() {
+  hardlinkSourceActions.value = []
   try {
     const pluginsResp = await api.get('/plugins')
     const plugins = Array.isArray(pluginsResp.data)
       ? pluginsResp.data
       : (Array.isArray(pluginsResp.data?.items) ? pluginsResp.data.items : [])
-    const plugin = plugins.find((item: any) => item?.id === 'mdc-ng-manual')
-    if (!plugin?.enabled) return
-    const testResp = await api.post('/plugins/mdc-ng-manual/test')
-    mdcManualAvailable.value = !!testResp.data?.ok
+    const actions: HardlinkSourceAction[] = []
+    for (const plugin of plugins) {
+      if (!plugin?.enabled) continue
+      const contributed = plugin?.contributions?.hardlink_source_actions
+      if (!Array.isArray(contributed)) continue
+      let available = true
+      if (contributed.some((item: any) => item?.requires_test)) {
+        try {
+          const testResp = await api.post(`/plugins/${plugin.id}/test`)
+          available = !!testResp.data?.ok
+        } catch {
+          available = false
+        }
+      }
+      if (!available) continue
+      for (const item of contributed) {
+        if (!item?.action) continue
+        actions.push({
+          id: String(item.id || `${plugin.id}:${item.action}`),
+          pluginId: String(plugin.id),
+          action: String(item.action),
+          label: String(item.label || reorganizeLabel.value),
+          tone: item.tone ? String(item.tone) : 'secondary',
+        })
+      }
+    }
+    hardlinkSourceActions.value = actions
   } catch {
-    mdcManualAvailable.value = false
+    hardlinkSourceActions.value = []
   }
 }
 
-async function reorganizeSource(entry: HardlinkEntry) {
+async function runHardlinkSourceAction(entry: HardlinkEntry, action: HardlinkSourceAction) {
   const path = entry.source_path
   if (!path || isReorganizingSource(path)) return
   reorganizingSourcePaths.value = new Set(reorganizingSourcePaths.value).add(path)
   try {
-    const { data } = await api.post('/plugins/mdc-ng-manual/actions/create', {
+    const { data } = await api.post(`/plugins/${action.pluginId}/actions/${action.action}`, {
       payload: { source_paths: path },
     })
     if (!data?.ok) throw new Error(data?.message || t('hardlinks.reorganizeFailed'))
@@ -546,6 +571,14 @@ async function previewGroupDelete(group: HardlinkGroup) {
   }
 }
 
+function applyRouteSearchQuery() {
+  const q = String(route.query.q || '')
+  if (q && q !== searchQuery.value) {
+    searchQuery.value = q
+    currentPage.value = 1
+  }
+}
+
 function goPage(page: number) {
   currentPage.value = Math.min(Math.max(1, page), totalPages.value)
 }
@@ -555,10 +588,15 @@ function openSettings() {
 }
 
 onMounted(async () => {
+  applyRouteSearchQuery()
   await Promise.all([
     mediaStore.loadHardlinkGroups(),
-    loadMdcManualAvailability(),
+    loadHardlinkSourceActions(),
   ])
+})
+
+watch(() => route.query.q, () => {
+  applyRouteSearchQuery()
 })
 </script>
 
@@ -764,16 +802,19 @@ onMounted(async () => {
                   >{{ entry.source_path }}</span>
                   <span v-if="entry.source_size != null" class="hl-row__size">{{ formatBytes(entry.source_size) }}</span>
                   <span v-else class="hl-row__empty font-mono text-xs">{{ t('hardlinks.missingSource') }}</span>
-                  <button
-                    v-if="entry.source_path && mdcManualAvailable"
-                    type="button"
-                    class="row-action-btn row-action-btn--secondary row-action-btn--hover-only"
-                    :class="{ 'row-action-btn--loading': isReorganizingSource(entry.source_path) }"
-                    :disabled="isReorganizingSource(entry.source_path)"
-                    @click.stop="reorganizeSource(entry)"
-                  >
-                    {{ isReorganizingSource(entry.source_path) ? processingLabel : reorganizeLabel }}
-                  </button>
+                  <template v-if="entry.source_path && hardlinkSourceActions.length">
+                    <button
+                      v-for="action in hardlinkSourceActions"
+                      :key="action.id"
+                      type="button"
+                      class="row-action-btn row-action-btn--secondary row-action-btn--hover-only"
+                      :class="{ 'row-action-btn--loading': isReorganizingSource(entry.source_path) }"
+                      :disabled="isReorganizingSource(entry.source_path)"
+                      @click.stop="runHardlinkSourceAction(entry, action)"
+                    >
+                      {{ isReorganizingSource(entry.source_path) ? processingLabel : action.label }}
+                    </button>
+                  </template>
                   <button
                     v-if="entry.source_path"
                     type="button"

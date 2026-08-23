@@ -286,6 +286,23 @@ the recovered bytecode modules remain unchanged.
   Emby `stream_url` from the detail payload and falls back to the local
   hardlink preview endpoint when streaming fails.
 
+## Plugin SDK Recovery (2026-08-23)
+
+- `frontend/src/views/PluginHost.vue` now exposes `sdk.avatar.resolve` and
+  `sdk.avatar.candidates` again, based on the final rollout evidence.
+  The original final session used the old `sdkPost` helper; this recovery uses the
+  same host's `pluginFetch('/actions/...')` so Gfriends avatar candidates remain
+  available to actor editing without relying on the retired helper.
+
+## Hardlink Source Actions Recovery (2026-08-23)
+
+- `HardlinkView.vue` now loads `hardlink_source_actions` contributions from all
+  enabled plugins, tests plugins that declare `requires_test`, and renders each
+  contributed action on hardlink source rows. Source actions are submitted through
+  `/plugins/{pluginId}/actions/{action}` with `{ payload: { source_paths } }`.
+- The hardlinks page also applies `/files/hardlinks?q=` on mount and reacts to route
+  query changes, restoring search deep links without reloading to a different page.
+
 ## Recovery Consistency (2026-08-23)
 
 - Backend `compileall` is clean and the full test suite currently passes: 216 passed.

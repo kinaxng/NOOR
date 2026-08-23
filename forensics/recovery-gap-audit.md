@@ -189,6 +189,16 @@
   `GET /api/settings/ui`，返回 `{"ui": {"cover_blur_enabled": bool}}`，
   与设置页 PUT 契约一致。新增 `test_settings_api.py` 两条读取契约测试。
 
+- 已从最终 rollout 证据补回 `PluginHost.vue` 的 `sdk.avatar` 插件能力：
+  `resolve` 调用 `/actions/resolve`，`candidates` 调用 `/actions/candidates`。
+  原版会话中该能力由旧 `sdkPost` helper 暴露；当前恢复树没有该 helper，因此用
+  同一插件宿主内的 `pluginFetch('/actions/...')` 等价实现，Gfriends 演员编辑头像
+  候选选择链路已可继续使用。
+- `HardlinkView.vue` 已恢复通用 `hardlink_source_actions`：插件贡献的动作会统一
+  渲染在源文件行，支持 `requires_test` 检查并按插件动作路由提交；同时补回
+  `/files/hardlinks?q=` 路由搜索参数。原版 MDC 专有 `mdcManualAvailable` /
+  `reorganizeSource` 已替换为通用 `loadHardlinkSourceActions` /
+  `runHardlinkSourceAction`。
 - 从原始 rollout 的 `git status` 快照提取 `forensics/original-status-inventory.tsv`，
   覆盖 617 个唯一状态行、114 个源码路径，补上 `dd000a8` 那次 710 文件 checkpoint
   未记录 `staged_paths` 的路径缺口；Docker、运行时数据与插件缓存路径按恢复策略保留
