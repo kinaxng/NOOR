@@ -16,7 +16,7 @@
 
 | 路径 | 原版提交数 | 状态 | 原版最后提交 | 当前最后提交 |
 | --- | ---: | --- | --- | --- |
-| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | b29c8d6 Restore media library legacy helper compatibility |
+| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | 2515e4d Restore media library legacy helper compatibility |
 | `backend/app/pipeline/whisper/decoupled/qwen3.py` | 2 | intentional | c96ca5d Share Whisper cache path candidates | - |
 | `backend/app/pipeline/whisper/preprocess.py` | 2 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
 | `backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py` | 1 | intentional | 17602ad Organize AI runtime storage paths | - |
@@ -24,7 +24,7 @@
 | `backend/tests/test_whisper_preprocess.py` | 1 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
 | `frontend/src/i18n/zh.ts` | 39 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 9aa7963 Restore task diagnostics and archive late frontend snapshots |
 | `frontend/src/i18n/en.ts` | 37 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 9aa7963 Restore task diagnostics and archive late frontend snapshots |
-| `backend/tests/test_media_library_api.py` | 31 | verified | 7c44237 Import TMDB actor aliases and clean overview links | b29c8d6 Restore media library legacy helper compatibility |
+| `backend/tests/test_media_library_api.py` | 31 | verified | 7c44237 Import TMDB actor aliases and clean overview links | 2515e4d Restore media library legacy helper compatibility |
 | `frontend/src/views/ActorManagementView.vue` | 28 | verified | 9c49a79 Use MDC-NG actor mapping source | 2a7fe62 Restore exact historical actor workspace sources |
 | `frontend/src/components/noor/FaceFusionPanel.vue` | 25 | verified | 301d3d8 feat(facefusion): expose face tracker score | 86c250d Restore FaceFusion tracker score |
 | `backend/app/api/settings_response.py` | 21 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
