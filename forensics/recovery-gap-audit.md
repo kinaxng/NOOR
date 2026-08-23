@@ -653,3 +653,13 @@
   `backend/tests/test_gfriends_plugin.py` 的禁用态 no-op 断言。
 - 验证：后端全量测试 `243 passed`；前端生产构建通过；插件校验仅保留设计/API
   建议；Puppeteer 复核两个页面均无 Gfriends/TMDB 400。
+
+## AVDB 后端插件页面 404 收敛（2026-08-24）
+
+- 全页面无头 Chromium 复核发现 `/plugins/avdb` 请求
+  `/api/plugins/avdb/assets/page.js?t=...` 返回 404；AVDB 是纯资源提供插件，
+  `plugin.json` 没有 `frontend.entry`，恢复说明也明确不再做成独立页面。
+- `PluginHost.vue` 改为仅在有 `frontend.entry` 时加载插件前端；无入口时显示
+  资源提供插件提示并记录 info，不再加载默认 `page.js`。
+- 验证：前端生产构建通过；Puppeteer 复核 `/plugins/avdb` 无 4xx/console error，
+  页面显示无独立页面提示。

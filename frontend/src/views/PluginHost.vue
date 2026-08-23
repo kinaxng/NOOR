@@ -994,6 +994,18 @@ async function mountPlugin() {
   try {
     const info = await api.get(`/plugins/${pluginId.value}/config`, { signal: controller.signal }).then(r => r.data)
     if (currentMount !== mountSeq) return
+    const entry = info?.plugin?.frontend?.entry
+    if (!entry) {
+      if (host.value) {
+        host.value.innerHTML = ''
+        const notice = document.createElement('div')
+        notice.className = 'noor-plugin-state'
+        notice.textContent = '该插件没有独立页面，请通过资源搜索使用。'
+        host.value.appendChild(notice)
+      }
+      pluginDiagnostic('info', '插件没有独立前端页面', pluginId.value)
+      return
+    }
     const style = info?.plugin?.frontend?.style
     if (style) {
       const bust = Date.now()
@@ -1002,7 +1014,6 @@ async function mountPlugin() {
       styleEl.href = `/api/plugins/${pluginId.value}/assets/${style.replace(/^frontend\//, '')}?t=${bust}`
       document.head.appendChild(styleEl)
     }
-    const entry = info?.plugin?.frontend?.entry || 'frontend/page.js'
     const mod = await import(/* @vite-ignore */ `/api/plugins/${pluginId.value}/assets/${entry.replace(/^frontend\//, '')}?t=${Date.now()}`)
     if (currentMount !== mountSeq) return
     await nextTick()
