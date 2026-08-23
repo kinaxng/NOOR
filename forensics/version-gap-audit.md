@@ -82,7 +82,7 @@
 | `backend/app/pipeline/whisper/types.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/tasks/job_phases.py` | 2 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 18410b1 Restore Whisper line-retry and session diff evidence |
 | `backend/app/tasks/manager_helpers.py` | 2 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 7e565dd Unify recommendation resource quality features |
+| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 0870e2a Guard byte-level match manifest with regression test |
 | `backend/tests/test_lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 6ba66c2 Recover original session reads and storage env contracts |
 | `backend/tests/test_lada_runner_cancel.py` | 2 | verified | e436cc0 Split LADA runtime cache directories | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_runtime_cleanup.py` | 2 | verified | 1a02e32 Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
@@ -100,7 +100,7 @@
 | `plugins/av-recommend/backend.py` | 2 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 7e565dd Unify recommendation resource quality features |
 | `plugins/av-recommend/frontend/style.css` | 2 | verified | 6ab498a Refine recommendation detail panel layout | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/gfriends/backend.py` | 2 | verified | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
-| `plugins/qbittorrent/frontend/page.js` | 2 | verified | fd44ab3 Support qBittorrent API key auth | 2ccee44 Return empty state for disabled plugin reads |
+| `plugins/qbittorrent/frontend/page.js` | 2 | verified | fd44ab3 Support qBittorrent API key auth | 924a5b9 Migrate qBittorrent dialogs to sdk modal |
 | `plugins/subscription-core/backend.py` | 2 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | ba4a75e Restore final UI details and plugin runtime data paths |
 | `backend/app/api/endpoints/media_library_hardlinks.py` | 1 | verified | ddbf4c0 Move hardlink groups into runtime data | 18410b1 Restore Whisper line-retry and session diff evidence |
 | `backend/app/api/jobs.py` | 1 | verified | 806de25 Add FaceFusion crack processing integration | 3c30e8f Verify remaining rollout paths and restore job type allowlist |
