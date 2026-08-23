@@ -19,8 +19,9 @@
     "sidebar": {
       "label": "AV 图谱",
       "route": "/plugins/av-graph",
-      "icon": "plugin"
-    }
+      "icon": "icons/service.svg"
+    },
+    "icon": "icons/service.svg"
   },
   "frontend": {
     "type": "module",
