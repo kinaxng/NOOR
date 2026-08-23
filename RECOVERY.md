@@ -7,6 +7,11 @@ As of 2026-08-24 the restored application source is also mirrored to
 does not carry the large `forensics/` recovery archive; the isolated workspace
 remains the authoritative recovery/history tree.
 
+The frontend and backend now run from `/home/kinax/noor` through tmux sessions
+`noor-original-frontend` and `noor-original-backend`. The current recovery runtime
+data was copied into `/home/kinax/noor/data`, and the pre-restore data was backed
+up at `/home/kinax/noor-data-original-20260824`.
+
 ## Evidence-Preserving Files
 
 - `backend/app/**/*.pyc` contains 45 Python 3.13 modules recovered directly from the
