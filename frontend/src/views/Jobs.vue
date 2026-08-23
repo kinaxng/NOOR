@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useJobsStore } from '../stores/jobs'
 import { useRoute, useRouter } from 'vue-router'
-import type { BackgroundTask, Job, SSEEvent } from '../api/types'
+import type { BackgroundTask, Job, RecommendedDiagnostics, RecommendedDiagnosticsSegment, SSEEvent } from '../api/types'
 import api from '../api'
 import LogViewer from '../components/noor/LogViewer.vue'
 import BaseIcon from '../components/noor/BaseIcon.vue'
@@ -299,6 +299,57 @@ const selectedJobChain = computed(() => {
 const selectedJobHeaderName = computed(() => selectedJob.value ? getJobDisplayName.value(selectedJob.value) : '')
 const selectedJobHeaderMeta = computed(() => selectedJob.value ? getJobHeaderMetaTokens.value(selectedJob.value) : [] as string[])
 const selectedJobStrategyHint = computed(() => selectedJob.value ? getWhisperStrategyHint.value(selectedJob.value) : '')
+const selectedJobRecommendedDiagnostics = computed<RecommendedDiagnostics | null>(() => {
+  const data = selectedJob.value?.result_metadata?.recommended_diagnostics
+  if (!data || typeof data !== 'object') return null
+  return data as RecommendedDiagnostics
+})
+const diagnosticsTitleLabel = computed(() => t('jobs.diagnosticsTitle'))
+const diagnosticsEmptyLabel = computed(() => t('jobs.diagnosticsEmpty'))
+const selectedJobDiagnosticSummary = computed(() => {
+  const diagnostics = selectedJobRecommendedDiagnostics.value
+  if (!diagnostics) return [] as string[]
+  return [
+    `${t('jobs.diagnosticsAligned')} ${diagnostics.aligned_segments}/${diagnostics.segment_count}`,
+    `${t('jobs.diagnosticsLargeV3')} ${diagnostics.large_v3_retry_segments}`,
+    `${t('jobs.diagnosticsFallback')} ${diagnostics.qwen_retry_segments}`,
+    `${t('jobs.diagnosticsStepdown')} ${diagnostics.stepdown_segments}`,
+  ]
+})
+const selectedJobDiagnosticCleanup = computed(() => {
+  const cleanup = selectedJobRecommendedDiagnostics.value?.cleanup
+  if (!cleanup) return [] as string[]
+  return [
+    `${t('jobs.diagnosticsDeduped')} ${cleanup.deduped_segments}`,
+    `${t('jobs.diagnosticsNoise')} ${cleanup.noise_only_segments}`,
+    `${t('jobs.diagnosticsTrimmed')} ${cleanup.trimmed_noise_chars}`,
+    `${t('jobs.diagnosticsParticle')} ${cleanup.particle_merged_segments}`,
+    `${t('jobs.diagnosticsEcho')} ${cleanup.window_echo_segments}`,
+  ]
+})
+function diagnosticSegmentLine(segment: RecommendedDiagnosticsSegment) {
+  const parts: string[] = [
+    `${t('jobs.diagnosticsSegment')} ${segment.index}`,
+    `${segment.subtitle_count ?? 0} ${t('jobs.diagnosticsSubtitles')}`,
+  ]
+  if (segment.large_v3_retry) parts.push(t('jobs.diagnosticsLargeV3'))
+  if (segment.qwen_retry) parts.push(t('jobs.diagnosticsFallback'))
+  if (segment.stepdown) {
+    const windows = segment.stepdown_window_count ? ` · ${segment.stepdown_window_count} ${t('jobs.diagnosticsWindows')}` : ''
+    parts.push(`${t('jobs.diagnosticsStepdown')}${windows}`)
+  }
+  if (segment.aligner_empty) parts.push('aligner_empty')
+  if (segment.hardened) parts.push('hardening')
+  return parts.join(' · ')
+}
+function diagnosticReasonLabel(reason?: string) {
+  if (!reason) return ''
+  const normalized = reason.trim()
+  if (!normalized) return ''
+  return normalized
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase())
+}
 const { currentTabJobCards, selectedJobStatusLabel, selectedJobActivityLine, selectedJobChainFlow, selectedJobChainSummary, selectedJobChainModels } = useJobRuntimePresentation({
   allJobs,
   jobStatuses,
@@ -414,6 +465,73 @@ function selectChainMember(jobId: string) {
             :members="selectedJobChainModels"
             @select="selectChainMember"
           />
+          <div v-if="selectedJobId && selectedJobRecommendedDiagnostics" class="jobs-diagnostics">
+            <div class="jobs-diagnostics__head">
+              <div class="jobs-diagnostics__title-wrap">
+                <div class="jobs-diagnostics__icon">
+                  <BaseIcon name="jobs" class="w-4 h-4" />
+                </div>
+                <div class="min-w-0">
+                  <p class="jobs-diagnostics__title">{{ diagnosticsTitleLabel }}</p>
+                  <p class="jobs-diagnostics__summary">{{ selectedJobDiagnosticSummary.join(' · ') }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="jobs-diagnostics__stats">
+              <div class="jobs-diagnostics__stat">
+                <span class="jobs-diagnostics__stat-label">{{ t('jobs.diagnosticsAligned') }}</span>
+                <strong class="jobs-diagnostics__stat-value">
+                  {{ selectedJobRecommendedDiagnostics.aligned_segments }}/{{ selectedJobRecommendedDiagnostics.segment_count }}
+                </strong>
+              </div>
+              <div class="jobs-diagnostics__stat">
+                <span class="jobs-diagnostics__stat-label">{{ t('jobs.diagnosticsLargeV3') }}</span>
+                <strong class="jobs-diagnostics__stat-value">{{ selectedJobRecommendedDiagnostics.large_v3_retry_segments }}</strong>
+              </div>
+              <div class="jobs-diagnostics__stat">
+                <span class="jobs-diagnostics__stat-label">{{ t('jobs.diagnosticsFallback') }}</span>
+                <strong class="jobs-diagnostics__stat-value">{{ selectedJobRecommendedDiagnostics.qwen_retry_segments }}</strong>
+              </div>
+              <div class="jobs-diagnostics__stat">
+                <span class="jobs-diagnostics__stat-label">{{ t('jobs.diagnosticsStepdown') }}</span>
+                <strong class="jobs-diagnostics__stat-value">{{ selectedJobRecommendedDiagnostics.stepdown_segments }}</strong>
+              </div>
+              <div class="jobs-diagnostics__stat">
+                <span class="jobs-diagnostics__stat-label">Hardening</span>
+                <strong class="jobs-diagnostics__stat-value">{{ selectedJobRecommendedDiagnostics.hardened_segments }}</strong>
+              </div>
+            </div>
+            <div v-if="selectedJobDiagnosticCleanup.length" class="jobs-diagnostics__chips">
+              <span v-for="item in selectedJobDiagnosticCleanup" :key="item" class="jobs-diagnostics__chip">{{ item }}</span>
+            </div>
+            <div class="jobs-diagnostics__list">
+              <div v-for="segment in selectedJobRecommendedDiagnostics.segments || []" :key="segment.index" class="jobs-diagnostics__item">
+                <p class="jobs-diagnostics__item-title">{{ diagnosticSegmentLine(segment) }}</p>
+                <p v-if="segment.chain_state" class="jobs-diagnostics__item-meta">{{ segment.chain_state }}</p>
+                <div
+                  v-if="segment.large_v3_retry_reason || segment.qwen_retry_reason || segment.stepdown_reason"
+                  class="jobs-diagnostics__reason-list"
+                >
+                  <p v-if="segment.large_v3_retry_reason" class="jobs-diagnostics__reason">
+                    <span class="jobs-diagnostics__reason-label">large-v3 · {{ t('jobs.diagnosticsReason') }}</span>
+                    <span>{{ diagnosticReasonLabel(segment.large_v3_retry_reason) }}</span>
+                  </p>
+                  <p v-if="segment.qwen_retry_reason" class="jobs-diagnostics__reason">
+                    <span class="jobs-diagnostics__reason-label">Qwen · {{ t('jobs.diagnosticsReason') }}</span>
+                    <span>{{ diagnosticReasonLabel(segment.qwen_retry_reason) }}</span>
+                  </p>
+                  <p v-if="segment.stepdown_reason" class="jobs-diagnostics__reason">
+                    <span class="jobs-diagnostics__reason-label">Step-down · {{ t('jobs.diagnosticsReason') }}</span>
+                    <span>{{ diagnosticReasonLabel(segment.stepdown_reason) }}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="selectedJobId && selectedJob?.job_type === 'whisper' && !selectedJobRecommendedDiagnostics" class="jobs-diagnostics jobs-diagnostics--empty">
+            <p class="jobs-diagnostics__title">{{ diagnosticsTitleLabel }}</p>
+            <p class="jobs-log-empty__hint">{{ diagnosticsEmptyLabel }}</p>
+          </div>
           <div v-if="!selectedJobId" class="jobs-log-empty">
             <div class="jobs-log-empty__icon">
               <BaseIcon name="terminal" class="w-5 h-5" />
@@ -605,6 +723,147 @@ function selectChainMember(jobId: string) {
     min-height: 14rem;
   }
 
+  .jobs-diagnostics__stats {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+.jobs-diagnostics {
+  padding: 0.95rem 1rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.018);
+}
+
+.jobs-diagnostics--empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.jobs-diagnostics__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.jobs-diagnostics__title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.jobs-diagnostics__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(0,117,255,0.2);
+  background: rgba(0,117,255,0.09);
+  color: rgba(255,255,255,0.78);
+  flex-shrink: 0;
+}
+
+.jobs-diagnostics__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.82);
+}
+
+.jobs-diagnostics__summary {
+  font-size: 11px;
+  color: rgba(255,255,255,0.42);
+}
+
+.jobs-diagnostics__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+}
+
+.jobs-diagnostics__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.026);
+}
+
+.jobs-diagnostics__stat-label {
+  font-size: 10px;
+  color: rgba(255,255,255,0.38);
+}
+
+.jobs-diagnostics__stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.84);
+}
+
+.jobs-diagnostics__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.jobs-diagnostics__chip {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.025);
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+}
+
+.jobs-diagnostics__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+}
+
+.jobs-diagnostics__item {
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.75rem;
+  background: rgba(255,255,255,0.024);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.jobs-diagnostics__item-title {
+  font-size: 11px;
+  color: rgba(255,255,255,0.64);
+}
+
+.jobs-diagnostics__item-meta {
+  margin-top: 0.22rem;
+  font-size: 11px;
+  color: rgba(255,255,255,0.34);
+}
+
+.jobs-diagnostics__reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  margin-top: 0.35rem;
+}
+
+.jobs-diagnostics__reason {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 10px;
+  color: rgba(255,255,255,0.46);
+}
+
+.jobs-diagnostics__reason-label {
+  color: rgba(255,255,255,0.3);
 }
 
 </style>

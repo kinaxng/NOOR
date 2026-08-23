@@ -234,6 +234,41 @@ export interface Job {
   completed_at?: string
 }
 
+export interface RecommendedDiagnosticsSegment {
+  index: number
+  subtitle_count?: number
+  large_v3_retry?: boolean
+  qwen_retry?: boolean
+  stepdown?: boolean
+  stepdown_window_count?: number
+  aligner_empty?: boolean
+  hardened?: boolean
+  chain_state?: string
+  large_v3_retry_reason?: string
+  qwen_retry_reason?: string
+  stepdown_reason?: string
+}
+
+export interface RecommendedDiagnostics {
+  segment_count: number
+  aligned_segments: number
+  large_v3_retry_segments: number
+  qwen_retry_segments: number
+  stepdown_segments: number
+  aligner_empty_segments: number
+  hardened_segments: number
+  cleanup?: {
+    before_segments: number
+    after_segments: number
+    deduped_segments: number
+    noise_only_segments: number
+    trimmed_noise_chars: number
+    particle_merged_segments: number
+    window_echo_segments: number
+  }
+  segments?: RecommendedDiagnosticsSegment[]
+}
+
 export interface BackgroundTask {
   plugin_id: string
   plugin_name: string

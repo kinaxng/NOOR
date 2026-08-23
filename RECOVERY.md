@@ -248,13 +248,17 @@ the recovered bytecode modules remain unchanged.
 - Gfriends was verified as the final avatar-library helper: it no longer takes over
   every avatar, and its plugin page/plugin host expose searchable candidate avatars
   for actor editing.
-- Browser Vite source maps from `/tmp/chromium-shared` and `/tmp/cdp-v1WmoE`
-  were extracted and archived under `forensics/frontend-snapshots/`. This added
-  122 original frontend source files as byte-level evidence, including the May
-  component tree, `GlobalSearch.vue`, and early `ResourceSearch.vue`.
+- Browser Vite source maps from `/tmp/chromium-shared`, `/tmp/cdp-v1WmoE`,
+  and the Chrome DevTools profile were extracted and archived under
+  `forensics/frontend-snapshots/`. This added original frontend source files as
+  byte-level evidence, including the May component tree, `GlobalSearch.vue`,
+  early `ResourceSearch.vue`, and late `Home.vue` / `AppSidebar.vue` /
+  `FaceFusionPanel.vue` versions.
 - The task history page was restored from original May source plus the June/July
   rollout patches. It now includes the original expandable report card: task
   duration, score, metadata, diagnostics summary, and `/jobs/{id}/logs` tail.
+  The jobs page also recovers the original Whisper recommended-chain diagnostics
+  panel and the corresponding `RecommendedDiagnostics` TypeScript contract.
 - `MediaDetailPanel.vue` now uses the original genre filter that removes code,
   studio, series, and actor duplicate tags. Preview playback also prefers the
   Emby `stream_url` from the detail payload and falls back to the local

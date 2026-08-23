@@ -1,0 +1,74 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { SiblingItem } from '../../../api/types'
+import { useI18n } from '../../../composables/useI18n'
+
+const { t } = useI18n()
+
+const props = defineProps<{
+  filePath?: string
+  siblingPaths?: SiblingItem[]
+  modelValue: string
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+}>()
+
+// All available paths (current + siblings)
+const allPaths = computed(() => {
+  const paths: { path: string; id?: string }[] = []
+  if (props.filePath) {
+    paths.push({ path: props.filePath })
+  }
+  if (props.siblingPaths) {
+    for (const s of props.siblingPaths) {
+      if (s.file_path && !paths.some(p => p.path === s.file_path)) {
+        paths.push({ path: s.file_path, id: s.id })
+      }
+    }
+  }
+  return paths
+})
+
+function onSelect(path: string) {
+  emit('update:modelValue', path)
+}
+</script>
+
+<template>
+  <div class="ui-card">
+    <span class="text-[10px] text-text-muted uppercase tracking-wider">{{ t('detail.selectFile') }}</span>
+    <div class="mt-1">
+      <select
+        v-if="allPaths.length > 1"
+        :value="modelValue"
+        @change="onSelect(($event.target as HTMLSelectElement).value)"
+        class="w-full bg-bg-elevated text-text-primary text-xs font-mono border border-border-subtle rounded px-2 py-1.5 focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+      >
+        <option
+          v-for="p in allPaths"
+          :key="p.path"
+          :value="p.path"
+        >
+          {{ p.path.split('/').pop() }}
+        </option>
+      </select>
+      <div v-else-if="modelValue" class="file-path-selector__path text-xs text-text-muted font-mono">
+        {{ modelValue }}
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.file-path-selector__path {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+</style>

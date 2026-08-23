@@ -1,0 +1,663 @@
+{
+  "cache_dir": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data",
+  "candidate_count": 50,
+  "selected_count": 14,
+  "candidates": [
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/060b0175a6ef282f_0",
+      "cache_mtime": 1783673650.8510866,
+      "content_sha256": "230a83e6b0468fbdda035b875133308c1ce47dd914a4c871f5ff217c3b86f24b",
+      "content_size": 6905,
+      "line_count": 265,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/060b0175a6ef282f_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/FaceFusionPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/0cd40eb9d61013cf_0",
+      "cache_mtime": 1783602008.922341,
+      "content_sha256": "9b3f9e58af38e64781897761c458e642d5fc1237b67bb6abeb1e009e57186329",
+      "content_size": 121408,
+      "line_count": 2889,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/0cd40eb9d61013cf_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/SystemLogPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/0e163be42f16e4dd_0",
+      "cache_mtime": 1783673626.6109095,
+      "content_sha256": "6b114d32e3fcb01edf28f6868f1ad70e4ee3129364dab288a146d28089c6522e",
+      "content_size": 9023,
+      "line_count": 354,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/0e163be42f16e4dd_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/AppSidebar.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/10ec7d8f7789de85_0",
+      "cache_mtime": 1783673626.6549096,
+      "content_sha256": "0a86303f939caed0242d1e3d1f8cc040a24e15a4d1635e3b3a54584a3acf194d",
+      "content_size": 11273,
+      "line_count": 424,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/10ec7d8f7789de85_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/FaceFusionPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/161fa62eb9c1621b_0",
+      "cache_mtime": 1783673650.8950868,
+      "content_sha256": "9b3f9e58af38e64781897761c458e642d5fc1237b67bb6abeb1e009e57186329",
+      "content_size": 121408,
+      "line_count": 2889,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/161fa62eb9c1621b_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/AppSidebar.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/19b8fe3ea92883ee_0",
+      "cache_mtime": 1785524133.4730017,
+      "content_sha256": "0a86303f939caed0242d1e3d1f8cc040a24e15a4d1635e3b3a54584a3acf194d",
+      "content_size": 11273,
+      "line_count": 424,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/19b8fe3ea92883ee_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/PanelHeader.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/1f9852c84d33303f_0",
+      "cache_mtime": 1783673626.6549096,
+      "content_sha256": "4ae54ebca6d1fc958b4a4d15527c8019d76d4885cf2e401eedf28a79adf44d0e",
+      "content_size": 5717,
+      "line_count": 180,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/1f9852c84d33303f_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/249b26b61f6499f7_0",
+      "cache_mtime": 1783673650.8550866,
+      "content_sha256": "e55b02cffce072738f0a5f775612a86f645aadd4c7bd79e5735795e087ecc67a",
+      "content_size": 23760,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/249b26b61f6499f7_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/29144440603b7d3a_0",
+      "cache_mtime": 1783676850.3045337,
+      "content_sha256": "e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd",
+      "content_size": 23762,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/29144440603b7d3a_0-0.vue"
+    },
+    {
+      "source_path": "src/App.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/3334c96a92cbc577_0",
+      "cache_mtime": 1783673626.6109095,
+      "content_sha256": "985c62f1583e446077a8e1a1f794ac6c0125e2f5a65bc7c23a19777fca2c8734",
+      "content_size": 18316,
+      "line_count": 556,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/3334c96a92cbc577_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/SystemLogPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/356e04c65af87ef9_0",
+      "cache_mtime": 1783601966.9460466,
+      "content_sha256": "6b114d32e3fcb01edf28f6868f1ad70e4ee3129364dab288a146d28089c6522e",
+      "content_size": 9023,
+      "line_count": 354,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/356e04c65af87ef9_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/36a1db4ee42a7d83_0",
+      "cache_mtime": 1783676850.3765342,
+      "content_sha256": "961afd973fb3ae67a555e3bc1616517fe571d0b1b5458330de30550aa40456a6",
+      "content_size": 6956,
+      "line_count": 266,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/36a1db4ee42a7d83_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/FaceFusionPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/4424e6052d65ad1d_0",
+      "cache_mtime": 1783673626.6309094,
+      "content_sha256": "9b3f9e58af38e64781897761c458e642d5fc1237b67bb6abeb1e009e57186329",
+      "content_size": 121408,
+      "line_count": 2889,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/4424e6052d65ad1d_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/FilePathSelector.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/454153c4d313db32_0",
+      "cache_mtime": 1783602008.9583414,
+      "content_sha256": "e199a5465bab969277cdaf1921e06114fc6e9f235ad185005047a8eac2bc6448",
+      "content_size": 1958,
+      "line_count": 75,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/454153c4d313db32_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/47bf79737e7b943e_0",
+      "cache_mtime": 1783601968.7260592,
+      "content_sha256": "40a16097d22e40d840047c68a76c71b5775580905fcd5236657f111f91281afb",
+      "content_size": 23337,
+      "line_count": 724,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/47bf79737e7b943e_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/51cc4de03cbf598d_0",
+      "cache_mtime": 1785524134.0610206,
+      "content_sha256": "e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd",
+      "content_size": 23762,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/51cc4de03cbf598d_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/ConfirmDialog.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/51e7d7715f018089_0",
+      "cache_mtime": 1785524133.4650013,
+      "content_sha256": "63158987e94b534d18dd1a2d904dd8d8263c4fc6be32b59ebffb5887bebdd0b0",
+      "content_size": 3779,
+      "line_count": 151,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/51e7d7715f018089_0-0.vue"
+    },
+    {
+      "source_path": "src/components/ui/SubmitButton.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/522fb730aa72fafc_0",
+      "cache_mtime": 1783602008.9463413,
+      "content_sha256": "079195bd1452cbb0bdb220034d97d8a9c2a0c57a6a45efdf7554f2ab8230f73f",
+      "content_size": 3285,
+      "line_count": 119,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/522fb730aa72fafc_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/59bfbfa00f42bb6d_0",
+      "cache_mtime": 1783673589.3786383,
+      "content_sha256": "230a83e6b0468fbdda035b875133308c1ce47dd914a4c871f5ff217c3b86f24b",
+      "content_size": 6905,
+      "line_count": 265,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/59bfbfa00f42bb6d_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/ConfirmDialog.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/5ed1f5c5bf48a0cf_0",
+      "cache_mtime": 1783601966.9380465,
+      "content_sha256": "63158987e94b534d18dd1a2d904dd8d8263c4fc6be32b59ebffb5887bebdd0b0",
+      "content_size": 3779,
+      "line_count": 151,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/5ed1f5c5bf48a0cf_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/6666769c4e667474_0",
+      "cache_mtime": 1783544979.681586,
+      "content_sha256": "40a16097d22e40d840047c68a76c71b5775580905fcd5236657f111f91281afb",
+      "content_size": 23337,
+      "line_count": 724,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/6666769c4e667474_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/FilePathSelector.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/6bc8f6d1de90db15_0",
+      "cache_mtime": 1783673626.6549096,
+      "content_sha256": "e199a5465bab969277cdaf1921e06114fc6e9f235ad185005047a8eac2bc6448",
+      "content_size": 1958,
+      "line_count": 75,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/6bc8f6d1de90db15_0-0.vue"
+    },
+    {
+      "source_path": "src/App.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/6c40a8ade334ebe6_0",
+      "cache_mtime": 1785524133.4169998,
+      "content_sha256": "985c62f1583e446077a8e1a1f794ac6c0125e2f5a65bc7c23a19777fca2c8734",
+      "content_size": 18316,
+      "line_count": 556,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/6c40a8ade334ebe6_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/SystemLogPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/6e37f154a2727ebf_0",
+      "cache_mtime": 1785524133.477002,
+      "content_sha256": "6b114d32e3fcb01edf28f6868f1ad70e4ee3129364dab288a146d28089c6522e",
+      "content_size": 9023,
+      "line_count": 354,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/6e37f154a2727ebf_0-0.vue"
+    },
+    {
+      "source_path": "src/components/ui/ActivityCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/78cb6d62e85302ef_0",
+      "cache_mtime": 1783544843.2724822,
+      "content_sha256": "320eb42e42a27f48822f085746c0e9ecc396dd4faebd7867f7faa81c4f37b27a",
+      "content_size": 1108,
+      "line_count": 56,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/78cb6d62e85302ef_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/8104945974ee9efd_0",
+      "cache_mtime": 1783673626.5989094,
+      "content_sha256": "e55b02cffce072738f0a5f775612a86f645aadd4c7bd79e5735795e087ecc67a",
+      "content_size": 23760,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/8104945974ee9efd_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/PanelHeader.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/8e3cd7cc00564018_0",
+      "cache_mtime": 1783673650.911087,
+      "content_sha256": "4ae54ebca6d1fc958b4a4d15527c8019d76d4885cf2e401eedf28a79adf44d0e",
+      "content_size": 5717,
+      "line_count": 180,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/8e3cd7cc00564018_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/9fd989fc1c32e414_0",
+      "cache_mtime": 1783673807.7442431,
+      "content_sha256": "e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd",
+      "content_size": 23762,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/9fd989fc1c32e414_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/9fe9411a0711d6ce_0",
+      "cache_mtime": 1783675023.8628812,
+      "content_sha256": "961afd973fb3ae67a555e3bc1616517fe571d0b1b5458330de30550aa40456a6",
+      "content_size": 6956,
+      "line_count": 266,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/9fe9411a0711d6ce_0-0.vue"
+    },
+    {
+      "source_path": "src/App.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/a187ae19b721f033_0",
+      "cache_mtime": 1783601966.9060464,
+      "content_sha256": "985c62f1583e446077a8e1a1f794ac6c0125e2f5a65bc7c23a19777fca2c8734",
+      "content_size": 18316,
+      "line_count": 556,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/a187ae19b721f033_0-0.vue"
+    },
+    {
+      "source_path": "src/components/ui/Pagination.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/a64489be19289d12_0",
+      "cache_mtime": 1783673626.6549096,
+      "content_sha256": "0e60eb3263ff0af0bb76b123999ad8dba1b7ac68578947c94267af12b64233db",
+      "content_size": 3365,
+      "line_count": 109,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/a64489be19289d12_0-0.vue"
+    },
+    {
+      "source_path": "src/components/ui/Pagination.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/a79ff5259512b0a2_0",
+      "cache_mtime": 1783601968.7940595,
+      "content_sha256": "0e60eb3263ff0af0bb76b123999ad8dba1b7ac68578947c94267af12b64233db",
+      "content_size": 3365,
+      "line_count": 109,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/a79ff5259512b0a2_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/FilePathSelector.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/ab574b02a00a50ec_0",
+      "cache_mtime": 1783673650.915087,
+      "content_sha256": "e199a5465bab969277cdaf1921e06114fc6e9f235ad185005047a8eac2bc6448",
+      "content_size": 1958,
+      "line_count": 75,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/ab574b02a00a50ec_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/BaseToast.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/abf788b8b0fde532_0",
+      "cache_mtime": 1785524133.4570012,
+      "content_sha256": "da68f1d302e378481d63b653b7f8db2dfa6aeb680bf32a88e9ab6d24a0333c1f",
+      "content_size": 7355,
+      "line_count": 272,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/abf788b8b0fde532_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/FilePathSelector.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/ad080a3b74c65085_0",
+      "cache_mtime": 1783544992.1656868,
+      "content_sha256": "8f635da85312c160b6e68fa9e609c95eb9c8926c4082c434b5293319018674df",
+      "content_size": 1719,
+      "line_count": 63,
+      "complete_vue": false,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/ad080a3b74c65085_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/ae815f9e6edc1afc_0",
+      "cache_mtime": 1783674996.6426504,
+      "content_sha256": "e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd",
+      "content_size": 23762,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/ae815f9e6edc1afc_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/bc976abf74ed4dbb_0",
+      "cache_mtime": 1783674996.7786517,
+      "content_sha256": "230a83e6b0468fbdda035b875133308c1ce47dd914a4c871f5ff217c3b86f24b",
+      "content_size": 6905,
+      "line_count": 265,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/bc976abf74ed4dbb_0-0.vue"
+    },
+    {
+      "source_path": "src/components/ui/Pagination.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/be7a9fa8b20e8b79_0",
+      "cache_mtime": 1785524134.0970216,
+      "content_sha256": "0e60eb3263ff0af0bb76b123999ad8dba1b7ac68578947c94267af12b64233db",
+      "content_size": 3365,
+      "line_count": 109,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/be7a9fa8b20e8b79_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/ca73f1e5851f4290_0",
+      "cache_mtime": 1783544863.5726466,
+      "content_sha256": "40a16097d22e40d840047c68a76c71b5775580905fcd5236657f111f91281afb",
+      "content_size": 23337,
+      "line_count": 724,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/ca73f1e5851f4290_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/PanelHeader.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/ccae5c917f21f690_0",
+      "cache_mtime": 1783602008.9583414,
+      "content_sha256": "4ae54ebca6d1fc958b4a4d15527c8019d76d4885cf2e401eedf28a79adf44d0e",
+      "content_size": 5717,
+      "line_count": 180,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/ccae5c917f21f690_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/FaceFusionPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/d63c13ea0df7f027_0",
+      "cache_mtime": 1783544877.8367622,
+      "content_sha256": "3a2dfbb1bd1019667a0d79ed5ee8679b0b435db9d4cb97e0ef5722fd5372e60a",
+      "content_size": 121277,
+      "line_count": 2881,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/d63c13ea0df7f027_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/d940516d25e6fb93_0",
+      "cache_mtime": 1783673626.5989094,
+      "content_sha256": "230a83e6b0468fbdda035b875133308c1ce47dd914a4c871f5ff217c3b86f24b",
+      "content_size": 6905,
+      "line_count": 265,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/d940516d25e6fb93_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/e3f49d1ad5fcbea4_0",
+      "cache_mtime": 1783673458.0496926,
+      "content_sha256": "eab3a4f5041df8501a56a734f444f527f39c91b07defdc158a0f90b34255742f",
+      "content_size": 6408,
+      "line_count": 243,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/e3f49d1ad5fcbea4_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Dashboard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/e460390d6e96b566_0",
+      "cache_mtime": 1783544842.8604789,
+      "content_sha256": "1d96280e0cb06b424d1e2d9f80e2e17b579b3c918e731d785a98206a402093bc",
+      "content_size": 76876,
+      "line_count": 2639,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/e460390d6e96b566_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/AppSidebar.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/e70c8b976608397a_0",
+      "cache_mtime": 1783601966.9460466,
+      "content_sha256": "0a86303f939caed0242d1e3d1f8cc040a24e15a4d1635e3b3a54584a3acf194d",
+      "content_size": 11273,
+      "line_count": 424,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/e70c8b976608397a_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/ConfirmDialog.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/f4f40483b2de4845_0",
+      "cache_mtime": 1783673626.6109095,
+      "content_sha256": "63158987e94b534d18dd1a2d904dd8d8263c4fc6be32b59ebffb5887bebdd0b0",
+      "content_size": 3779,
+      "line_count": 151,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/f4f40483b2de4845_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/f6588fb4f3f2771c_0",
+      "cache_mtime": 1785524134.1330228,
+      "content_sha256": "961afd973fb3ae67a555e3bc1616517fe571d0b1b5458330de30550aa40456a6",
+      "content_size": 6956,
+      "line_count": 266,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/f6588fb4f3f2771c_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/fc547c0ce470a429_0",
+      "cache_mtime": 1783601968.7940595,
+      "content_sha256": "ed193833e52b021c29bd90561c91f8c8b79a0b12f44bfee5cd501e08440318da",
+      "content_size": 5721,
+      "line_count": 221,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/fc547c0ce470a429_0-0.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/fd4668e5f4abfd8a_0",
+      "cache_mtime": 1783673589.3026378,
+      "content_sha256": "e55b02cffce072738f0a5f775612a86f645aadd4c7bd79e5735795e087ecc67a",
+      "content_size": 23760,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/fd4668e5f4abfd8a_0-0.vue"
+    },
+    {
+      "source_path": "src/components/noor/FaceFusionPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/ff01ae3b6976e63e_0",
+      "cache_mtime": 1783544992.1376867,
+      "content_sha256": "9b3f9e58af38e64781897761c458e642d5fc1237b67bb6abeb1e009e57186329",
+      "content_size": 121408,
+      "line_count": 2889,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/ff01ae3b6976e63e_0-0.vue"
+    }
+  ],
+  "selected": [
+    {
+      "source_path": "src/App.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/6c40a8ade334ebe6_0",
+      "cache_mtime": 1785524133.4169998,
+      "content_sha256": "985c62f1583e446077a8e1a1f794ac6c0125e2f5a65bc7c23a19777fca2c8734",
+      "content_size": 18316,
+      "line_count": 556,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/6c40a8ade334ebe6_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/App.vue"
+    },
+    {
+      "source_path": "src/components/noor/AppSidebar.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/19b8fe3ea92883ee_0",
+      "cache_mtime": 1785524133.4730017,
+      "content_sha256": "0a86303f939caed0242d1e3d1f8cc040a24e15a4d1635e3b3a54584a3acf194d",
+      "content_size": 11273,
+      "line_count": 424,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/19b8fe3ea92883ee_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/AppSidebar.vue"
+    },
+    {
+      "source_path": "src/components/noor/BaseToast.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/abf788b8b0fde532_0",
+      "cache_mtime": 1785524133.4570012,
+      "content_sha256": "da68f1d302e378481d63b653b7f8db2dfa6aeb680bf32a88e9ab6d24a0333c1f",
+      "content_size": 7355,
+      "line_count": 272,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/abf788b8b0fde532_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/BaseToast.vue"
+    },
+    {
+      "source_path": "src/components/noor/ConfirmDialog.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/51e7d7715f018089_0",
+      "cache_mtime": 1785524133.4650013,
+      "content_sha256": "63158987e94b534d18dd1a2d904dd8d8263c4fc6be32b59ebffb5887bebdd0b0",
+      "content_size": 3779,
+      "line_count": 151,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/51e7d7715f018089_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/ConfirmDialog.vue"
+    },
+    {
+      "source_path": "src/components/noor/FaceFusionPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/161fa62eb9c1621b_0",
+      "cache_mtime": 1783673650.8950868,
+      "content_sha256": "9b3f9e58af38e64781897761c458e642d5fc1237b67bb6abeb1e009e57186329",
+      "content_size": 121408,
+      "line_count": 2889,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/161fa62eb9c1621b_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/FaceFusionPanel.vue"
+    },
+    {
+      "source_path": "src/components/noor/MediaCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/f6588fb4f3f2771c_0",
+      "cache_mtime": 1785524134.1330228,
+      "content_sha256": "961afd973fb3ae67a555e3bc1616517fe571d0b1b5458330de30550aa40456a6",
+      "content_size": 6956,
+      "line_count": 266,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/f6588fb4f3f2771c_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/MediaCard.vue"
+    },
+    {
+      "source_path": "src/components/noor/SystemLogPanel.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/6e37f154a2727ebf_0",
+      "cache_mtime": 1785524133.477002,
+      "content_sha256": "6b114d32e3fcb01edf28f6868f1ad70e4ee3129364dab288a146d28089c6522e",
+      "content_size": 9023,
+      "line_count": 354,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/6e37f154a2727ebf_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/SystemLogPanel.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/FilePathSelector.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/ab574b02a00a50ec_0",
+      "cache_mtime": 1783673650.915087,
+      "content_sha256": "e199a5465bab969277cdaf1921e06114fc6e9f235ad185005047a8eac2bc6448",
+      "content_size": 1958,
+      "line_count": 75,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/ab574b02a00a50ec_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/panels/FilePathSelector.vue"
+    },
+    {
+      "source_path": "src/components/noor/panels/PanelHeader.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/8e3cd7cc00564018_0",
+      "cache_mtime": 1783673650.911087,
+      "content_sha256": "4ae54ebca6d1fc958b4a4d15527c8019d76d4885cf2e401eedf28a79adf44d0e",
+      "content_size": 5717,
+      "line_count": 180,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/8e3cd7cc00564018_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/noor/panels/PanelHeader.vue"
+    },
+    {
+      "source_path": "src/components/ui/ActivityCard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/78cb6d62e85302ef_0",
+      "cache_mtime": 1783544843.2724822,
+      "content_sha256": "320eb42e42a27f48822f085746c0e9ecc396dd4faebd7867f7faa81c4f37b27a",
+      "content_size": 1108,
+      "line_count": 56,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/78cb6d62e85302ef_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/ui/ActivityCard.vue"
+    },
+    {
+      "source_path": "src/components/ui/Pagination.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/be7a9fa8b20e8b79_0",
+      "cache_mtime": 1785524134.0970216,
+      "content_sha256": "0e60eb3263ff0af0bb76b123999ad8dba1b7ac68578947c94267af12b64233db",
+      "content_size": 3365,
+      "line_count": 109,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/be7a9fa8b20e8b79_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/ui/Pagination.vue"
+    },
+    {
+      "source_path": "src/components/ui/SubmitButton.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/522fb730aa72fafc_0",
+      "cache_mtime": 1783602008.9463413,
+      "content_sha256": "079195bd1452cbb0bdb220034d97d8a9c2a0c57a6a45efdf7554f2ab8230f73f",
+      "content_size": 3285,
+      "line_count": 119,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/522fb730aa72fafc_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/components/ui/SubmitButton.vue"
+    },
+    {
+      "source_path": "src/views/Dashboard.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/e460390d6e96b566_0",
+      "cache_mtime": 1783544842.8604789,
+      "content_sha256": "1d96280e0cb06b424d1e2d9f80e2e17b579b3c918e731d785a98206a402093bc",
+      "content_size": 76876,
+      "line_count": 2639,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/e460390d6e96b566_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/views/Dashboard.vue"
+    },
+    {
+      "source_path": "src/views/Home.vue",
+      "cache_file": "/home/kinax/.cache/chrome-devtools-profile/Default/Cache/Cache_Data/51cc4de03cbf598d_0",
+      "cache_mtime": 1785524134.0610206,
+      "content_sha256": "e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd",
+      "content_size": 23762,
+      "line_count": 736,
+      "complete_vue": true,
+      "output_file": "/tmp/noor-frontend-extract-devtools/candidates/51cc4de03cbf598d_0-0.vue",
+      "latest_file": "/tmp/noor-frontend-extract-devtools/latest/src/views/Home.vue"
+    }
+  ]
+}
