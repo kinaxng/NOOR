@@ -22,8 +22,8 @@
 | `backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py` | 1 | intentional | 17602ad Organize AI runtime storage paths | - |
 | `backend/app/pipeline/whisper/enhancer.py` | 1 | intentional | 0458364 Tighten AI runtime path tests | - |
 | `backend/tests/test_whisper_preprocess.py` | 1 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
-| `frontend/src/i18n/zh.ts` | 39 | verified | b2aa1f6 Refine FaceFusion media badge behavior | fc04ada Restore missing Whisper connection error copy and recovery audit |
-| `frontend/src/i18n/en.ts` | 37 | verified | b2aa1f6 Refine FaceFusion media badge behavior | a26b01a Restore missing English dashboard welcome copy |
+| `frontend/src/i18n/zh.ts` | 39 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 9aa7963 Restore task diagnostics and archive late frontend snapshots |
+| `frontend/src/i18n/en.ts` | 37 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 9aa7963 Restore task diagnostics and archive late frontend snapshots |
 | `backend/tests/test_media_library_api.py` | 31 | verified | 7c44237 Import TMDB actor aliases and clean overview links | b29c8d6 Restore media library legacy helper compatibility |
 | `frontend/src/views/ActorManagementView.vue` | 28 | verified | 9c49a79 Use MDC-NG actor mapping source | 2a7fe62 Restore exact historical actor workspace sources |
 | `frontend/src/components/noor/FaceFusionPanel.vue` | 25 | verified | 301d3d8 feat(facefusion): expose face tracker score | 86c250d Restore FaceFusion tracker score |
@@ -33,7 +33,7 @@
 | `backend/app/core/config.py` | 17 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
 | `frontend/src/components/noor/LadaPanel.vue` | 17 | verified | 77c8bb2 Split FaceFusion into dedicated panel | 0ab46ad Recover original LADA panel |
 | `backend/app/pipeline/facefusion/runner.py` | 16 | verified | 301d3d8 feat(facefusion): expose face tracker score | 24f438b Restore configured FaceFusion model routing |
-| `frontend/src/api/types.ts` | 13 | verified | 301d3d8 feat(facefusion): expose face tracker score | ba4a75e Restore final UI details and plugin runtime data paths |
+| `frontend/src/api/types.ts` | 13 | verified | 301d3d8 feat(facefusion): expose face tracker score | 9aa7963 Restore task diagnostics and archive late frontend snapshots |
 | `backend/app/api/settings_updates.py` | 11 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/facefusion.py` | 9 | verified | 301d3d8 feat(facefusion): expose face tracker score | 24f438b Restore configured FaceFusion model routing |
 | `frontend/src/views/ActorDetailView.vue` | 8 | verified | 3bf46cc Allow removing actor provider IDs | 2a7fe62 Restore exact historical actor workspace sources |
@@ -89,7 +89,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | e1e31d8 Restore media detail filtering and stream fallback |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 9aa7963 Restore task diagnostics and archive late frontend snapshots |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
