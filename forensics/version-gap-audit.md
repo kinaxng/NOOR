@@ -16,7 +16,7 @@
 
 | 路径 | 原版提交数 | 状态 | 原版最后提交 | 当前最后提交 |
 | --- | ---: | --- | --- | --- |
-| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | e76dc33 Complete media library legacy symbol compatibility |
+| `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | 184d3dc Align legacy media library private signatures |
 | `backend/app/pipeline/whisper/decoupled/qwen3.py` | 2 | intentional | c96ca5d Share Whisper cache path candidates | - |
 | `backend/app/pipeline/whisper/preprocess.py` | 2 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
 | `backend/app/pipeline/whisper/decoupled/anime_qwen3_chain.py` | 1 | intentional | 17602ad Organize AI runtime storage paths | - |
@@ -64,7 +64,7 @@
 | `plugins/av-recommend/frontend/page.js` | 3 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/qbittorrent/backend.py` | 3 | verified | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | verified | 7d9120d Simplify Xunlei residual cleanup flow | ba4a75e Restore final UI details and plugin runtime data paths |
-| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | e76dc33 Complete media library legacy symbol compatibility |
+| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 184d3dc Align legacy media library private signatures |
 | `backend/app/api/endpoints/media_library_item_detail.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | cba9c12 Restore media library detail and Emby proxy-safe calls |
 | `backend/app/api/settings_helpers.py` | 2 | verified | 106df4b Prefer bundled LADA python path | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/settings_status_helpers.py` | 2 | verified | a382063 Add FaceFusion model management settings tab | 76ea151 Restore final LADA runtime and settings helpers |
@@ -82,7 +82,7 @@
 | `backend/app/pipeline/whisper/types.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/tasks/job_phases.py` | 2 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 18410b1 Restore Whisper line-retry and session diff evidence |
 | `backend/app/tasks/manager_helpers.py` | 2 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | e76dc33 Complete media library legacy symbol compatibility |
+| `backend/tests` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 184d3dc Align legacy media library private signatures |
 | `backend/tests/test_lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 6ba66c2 Recover original session reads and storage env contracts |
 | `backend/tests/test_lada_runner_cancel.py` | 2 | verified | e436cc0 Split LADA runtime cache directories | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_runtime_cleanup.py` | 2 | verified | 1a02e32 Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
