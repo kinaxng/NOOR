@@ -236,6 +236,9 @@ the recovered bytecode modules remain unchanged.
 - FaceFusion source upgrade verification now covers both TensorRT cache routing and
   NOOR's content-analysis skip patch, including idempotent preservation on an already
   patched 3.8-style source.
+- qBittorrent and Xunlei Remote plugin contracts were verified against final rollout:
+  qBittorrent supports 5.2+ Bearer API-key auth and start/stop control, while Xunlei
+  residual cleanup is the simplified delete-then-search flow for `.xltd/.xtld` files.
 
 ## Recovery Consistency (2026-08-23)
 

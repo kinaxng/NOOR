@@ -48,6 +48,8 @@
   `/api/media-library/actor/*`、`/api/media-library/actors/*` 均由当前
   `endpoints/actors.py` 挂载，历史 `/actor/emby/:actorId` 会重定向到
   `/actors/:actorId` 详情页。
+- 下载插件已核对最终行为：qBittorrent 支持 5.2+ Bearer API Key 与 start/stop
+  控制；迅雷远程残留处理为 `.xltd/.xtld` 删除后按番号跳转搜索页。
 
 ## 本轮一致性收敛（2026-08-23）
 

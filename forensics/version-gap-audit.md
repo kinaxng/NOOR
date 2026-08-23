@@ -31,8 +31,6 @@
 | `backend/app/core/runtime_paths.py` | 4 | pending | 72d45aa Share default data dir constant | 616866a Preserve recovered NOOR backend artifacts |
 | `backend/app/pipeline/whisper/engine.py` | 4 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/tests/test_settings_response.py` | 4 | pending | 217a5e8 Embed FaceFusion runtime in NOOR | 558869c Restore settings contract and media library API tests |
-| `plugins/xunlei-remote/backend.py` | 4 | pending | 1feffc1 Change Xunlei residual handling to search and delete | ef1f76c Recover Xunlei download path management |
-| `plugins/xunlei-remote/frontend/page.js` | 4 | pending | 7d9120d Simplify Xunlei residual cleanup flow | 5ced5cf Recover Xunlei remote management frontend |
 | `backend/app/api/local_library.py` | 3 | pending | 2ecda9d Migrate legacy subtitle indexes | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/settings_directories.py` | 3 | pending | 41153cc Simplify AI storage path settings | 6b5139e Recover settings directory helpers |
 | `backend/app/pipeline/facefusion/preview.py` | 3 | pending | 6a71cd1 Skip FaceFusion content blur in previews | 616866a Preserve recovered NOOR backend artifacts |
@@ -60,7 +58,7 @@
 | `backend/app/pipeline/whisper/types.py` | 2 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/tasks/job_phases.py` | 2 | pending | 20f4ce8 Remove remaining Whisper legacy UI remnants | 7a9f55e Restore external plugin task integration |
 | `backend/app/tasks/manager_helpers.py` | 2 | pending | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | b29c8d6 Restore media library legacy helper compatibility |
+| `backend/tests` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | f858014 Lock actor route compatibility with API tests |
 | `backend/tests/test_lada_paths.py` | 2 | pending | 65d39f1 Align Docker runtime paths | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_lada_runner_cancel.py` | 2 | pending | e436cc0 Split LADA runtime cache directories | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_runtime_cleanup.py` | 2 | pending | 1a02e32 Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
@@ -128,9 +126,7 @@
 | `plugins/javdb/frontend/page.js` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
 | `plugins/javdb/frontend/style.css` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
 | `plugins/mteam-plugin/backend.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | cd825be Recover complete M-Team integration |
-| `plugins/qbittorrent/plugin.json` | 1 | pending | fd44ab3 Support qBittorrent API key auth | 81940de Restore original plugin service icons |
 | `plugins/subscription-core/frontend/page.js` | 1 | pending | 8ecd4a3 Add fallback image loading for recommendation cards | 587ea15 Restore subscription cover persistence |
-| `plugins/xunlei-remote/plugin.json` | 1 | pending | 15f6ac8 Add Xunlei residual task restore | 81940de Restore original plugin service icons |
 | `backend/app/api/endpoints/media_library.py` | 43 | intentional | 2decd18 Exclude ignored ghost actors from merge candidates | b29c8d6 Restore media library legacy helper compatibility |
 | `backend/app/pipeline/whisper/decoupled/qwen3.py` | 2 | intentional | c96ca5d Share Whisper cache path candidates | - |
 | `backend/app/pipeline/whisper/preprocess.py` | 2 | intentional | ebb5c7e Apply Whisper preprocessing runtime paths | - |
@@ -150,5 +146,9 @@
 | `frontend/src/views/settings/StorageSettings.vue` | 5 | verified | 41153cc Simplify AI storage path settings | d8f7414 Restore final AI storage settings and verify settings panels |
 | `frontend/src/components/noor/MediaCard.vue` | 4 | verified | 4dd6c51 Aggregate FaceFusion variant badge state | 84bb8a7 Recover original media card and tabs |
 | `frontend/src/views/Home.vue` | 4 | verified | b2aa1f6 Refine FaceFusion media badge behavior | 3e4cdc0 Recover original media library view |
-| `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | b3dd5ac Restore FaceFusion upstream revision tracking |
+| `plugins/xunlei-remote/backend.py` | 4 | verified | 1feffc1 Change Xunlei residual handling to search and delete | ef1f76c Recover Xunlei download path management |
+| `plugins/xunlei-remote/frontend/page.js` | 4 | verified | 7d9120d Simplify Xunlei residual cleanup flow | 5ced5cf Recover Xunlei remote management frontend |
+| `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | 0ab32de Verify FaceFusion upgrade content patch |
 | `frontend/src/components/noor/SubtitlePanel.vue` | 3 | verified | 0184022 Add Whisper runtime tier selection | ad7302e Recover plugin-based subtitle providers |
+| `plugins/qbittorrent/plugin.json` | 1 | verified | fd44ab3 Support qBittorrent API key auth | 81940de Restore original plugin service icons |
+| `plugins/xunlei-remote/plugin.json` | 1 | verified | 15f6ac8 Add Xunlei residual task restore | 81940de Restore original plugin service icons |
