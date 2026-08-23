@@ -1,0 +1,166 @@
+    config = _require_config()
+    candidates = await _tmdb_backfill_candidates(config, lang)
+    selected = set(req.actor_ids or [])
+    if selected:
+        candidates = [item for item in candidates if item["actor_id"] in selected]
+    elif req.only_high_confidence:
+        candidates = [item for item in candidates if item["confidence"] == "high"]
+    key = str(req.progress_key or "").strip()
+    progress = {"ok": True, "status": "running", "processed": 0, "total": len(candidates), "applied_count": 0, "skipped_count": 0, "current_actor": "", "failures": []}
+    if key:
+        _tmdb_backfill_progress[key] = progress
+    for item in candidates:
+        progress["current_actor"] = item["display_name"] or item["actor_name"]
+        if req.dry_run or item["conflict_actors"]:
+            progress["skipped_count"] += 1
+        else:
+            try:
+                result = await update_actor(item["actor_id"], ActorProfileUpdateRequest(provider_ids={"Tmdb": item["tmdb_id"]}), lang)
+            except Exception as exc:
+                progress["failures"].append({"actor_id": item["actor_id"], "name": progress["current_actor"], "error": str(exc)})
+                result = {}
+            if result.get("synced"):
+                progress["applied_count"] += 1
+            else:
+                progress["skipped_count"] += 1
+        progress["processed"] += 1
+    progress.update({"status": "completed", "current_actor": ""})
+    return progress
+
+
+@router.get("/actors/tmdb-backfill/progress/{progress_key}")
+async def actor_tmdb_backfill_progress(progress_key: str):
+    return _tmdb_backfill_progress.get(progress_key) or {"ok": True, "status": "idle", "processed": 0, "total": 0, "applied_count": 0, "skipped_count": 0}
+
+
+async def _name_sync_candidates(config: dict[str, Any], lang: str) -> dict[str, Any]:
+    actors, total = await _list_actors(config, limit=5000, offset=0, query=None, sort_by="SortName", sort_order="Ascending", lang=lang)
+    index = _mapping_index(config)
+    owners: dict[str, list[dict[str, Any]]] = {}
+    for actor in actors:
+        owners.setdefault(_normalize_name(actor.get("name")), []).append(actor)
+    updates: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    for actor in actors:
+        record = index.get(_normalize_name(actor.get("name"))) or index.get(_normalize_name(actor.get("sort_name")))
+        target = _mapping_display_name(record, lang) if record else ""
+        if not target or target == actor.get("name"):
+            continue
+        conflict_actors = [item for item in owners.get(_normalize_name(target), []) if item["id"] != actor["id"]]
+        item = {"actor": actor, "actor_id": actor["id"], "current_name": actor.get("name"), "target_name": target, "target_source": _lang_key(lang), "conflict_actors": conflict_actors, "has_conflict": bool(conflict_actors)}
+        (conflicts if conflict_actors else updates).append(item)
+    return {"updates": updates, "conflicts": conflicts, "summary": {"actors_scanned": total, "update_count": len(updates) + len(conflicts), "safe_update_count": len(updates), "conflict_count": len(conflicts)}}
+
+
+@router.get("/actors/name-sync/preview")
+async def preview_actor_name_sync(lang: str = "zh-CN"):
+    return {"ok": True, **await _name_sync_candidates(_require_config(), lang)}
+
+
+@router.post("/actors/name-sync/apply")
+async def apply_actor_name_sync(req: ActorNameSyncRequest, lang: str = "zh-CN"):
+    preview = await _name_sync_candidates(_require_config(), lang)
+    candidates = preview["updates"] + ([] if req.skip_conflicts else preview["conflicts"])
+    selected = set(req.actor_ids or [])
+    if selected:
+        candidates = [item for item in candidates if item["actor_id"] in selected]
+    key = str(req.progress_key or "").strip()
+    progress = {"ok": True, "status": "running", "processed": 0, "total": len(candidates), "applied_count": 0, "skipped_count": 0, "current_actor": "", "current_target": "", "failures": []}
+    if key:
+        _name_sync_progress[key] = progress
+    for item in candidates:
+        progress.update({"current_actor": item["current_name"], "current_target": item["target_name"]})
+        if req.dry_run:
+            progress["skipped_count"] += 1
+        else:
+            try:
+                result = await update_actor(item["actor_id"], ActorProfileUpdateRequest(name=item["target_name"]), lang)
+            except Exception as exc:
+                progress["failures"].append({"actor_id": item["actor_id"], "name": item["current_name"], "target": item["target_name"], "error": str(exc)})
+                result = {}
+            progress["applied_count" if result.get("synced") else "skipped_count"] += 1
+        progress["processed"] += 1
+    progress.update({"status": "completed", "current_actor": "", "current_target": ""})
+    return progress
+
+
+@router.get("/actors/name-sync/progress/{progress_key}")
+async def actor_name_sync_progress(progress_key: str):
+    return _name_sync_progress.get(progress_key) or {"ok": True, "status": "idle", "processed": 0, "total": 0, "applied_count": 0, "skipped_count": 0}
+
+
+async def _mapping_group(config: dict[str, Any], mapping_id: str, lang: str, target_actor_id: str | None = None) -> dict[str, Any]:
+    result = await actor_mapping_matches(limit=5000, only_candidates=False, lang=lang)
+    group = next((item for item in result["groups"] if str(item.get("mapping_id")) == str(mapping_id)), None)
+    if not group:
+        raise HTTPException(status_code=404, detail="未找到演员映射组")
+    if target_actor_id and not any(str(actor["id"]) == str(target_actor_id) for actor in group["actors"]):
+        raise HTTPException(status_code=400, detail="目标演员不在当前映射组")
+    return group
+
+
+async def _related_movies(client: httpx.AsyncClient, config: dict[str, Any], actor_id: str) -> list[dict[str, Any]]:
+    response = await client.get(
+        f"{_base_url(config)}/emby/Items",
+        headers=_headers(config),
+        params={"PersonIds": actor_id, "Recursive": "true", "IncludeItemTypes": "Movie", "Fields": "Path,ProviderIds,People,ImageTags", "Limit": 5000},
+    )
+    response.raise_for_status()
+    return [item for item in response.json().get("Items") or [] if isinstance(item, dict)]
+
+
+async def _related_items_for_delete(client: httpx.AsyncClient, config: dict[str, Any], actor_id: str) -> tuple[int, list[dict[str, Any]]]:
+    response = await client.get(
+        f"{_base_url(config)}/emby/Items",
+        headers=_headers(config),
+        params={
+            "PersonIds": actor_id,
+            "Recursive": "true",
+            "Fields": "Path,ProviderIds,People,ImageTags",
+            "StartIndex": 0,
+            "Limit": 25,
+        },
+    )
+    response.raise_for_status()
+    payload = response.json()
+    items = [item for item in payload.get("Items") or [] if isinstance(item, dict)]
+    return int(payload.get("TotalRecordCount") or len(items)), [
+        {
+            "id": str(item.get("Id") or ""),
+            "name": str(item.get("Name") or ""),
+            "type": str(item.get("Type") or item.get("MediaType") or ""),
+            "path": str(item.get("Path") or ""),
+            "provider_ids": item.get("ProviderIds") or {},
+        }
+        for item in items
+    ]
+
+
+async def _raw_actor_for_delete(client: httpx.AsyncClient, config: dict[str, Any], actor_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    user_id = str(config.get("user_id") or "").strip()
+    paths = []
+    if user_id:
+        paths.append(f"/emby/Users/{quote(user_id)}/Items/{quote(actor_id)}")
+    paths.append(f"/emby/Items/{quote(actor_id)}")
+    last_error: dict[str, Any] | None = None
+    for path in paths:
+        response = await client.get(
+            f"{_base_url(config)}{path}",
+            headers=_headers(config),
+            params={"Fields": "Overview,ProviderIds,ImageTags,DateCreated,SortName,CanDelete,Path"},
+        )
+        if response.status_code == 404:
+            last_error = {"status_code": 404, "body": response.text[:1000], "path": path}
+            continue
+        if response.is_error:
+            return None, {"status_code": response.status_code, "body": response.text[:1000], "path": path}
+        return response.json(), None
+    return None, last_error
+
+
+async def _actor_delete_diagnostics(config: dict[str, Any], actor_id: str) -> dict[str, Any]:
+    overrides = _load_profile_overrides()
+    async with httpx.AsyncClient(timeout=45, trust_env=False) as client:
+        raw, person_error = await _raw_actor_for_delete(client, config, actor_id)
+        try:
+            related_total, related_items = await _related_items_for_delete(client, config, actor_id)

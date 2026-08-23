@@ -346,3 +346,25 @@
    都能通过当前 `endpoints/actors.py` 得到原版行为。
 3. 把 Whisper 旧链路的 `.py` 源码从历史会话/反编译中重建，或以文档形式明确退役。
 4. 每恢复一个模块，更新本文件并提交，避免再次丢失。
+
+
+## 原始读取快照与 exec 补丁提取（2026-08-23 晚）
+
+- 从 6 月主 rollout 提取 688 份原版直接 `sed/read` 文件快照，覆盖 101 个路径，
+  归档到 `forensics/recovered-sources/original-read-snapshots/`。其中
+  `media_library.py`、`FaceFusionPanel.vue`、`ActorManagementView.vue`、
+  `FaceFusionSettings.vue`、`JavDB page.js` 都是后续逐文件核对的原始证据。
+- 发现 6 月主 rollout 的 6 月后段还有 45 个 JavDB 补丁事件被包在 `exec` 的
+  `const patch = "..."` 中，原回放器只扫描直接 `apply_patch`，因此漏掉了
+  8 月 4 日最终系列目录补丁链。已新增
+  `forensics/replay_original_rollout.py`，支持同时扫描直接 `apply_patch` 与
+  exec 内嵌补丁，并把补丁路径改写为相对当前工作树后重放。
+- 尝试从 `/.1panel_clash/.../noor-full-pre-takeover-20260412-160609.tar.gz`
+  作为回放基准时发现：备份时间早于 4 月 12 日主 rollout 首个补丁，但首个补丁
+  期望的 WhisperSettings/i18n 状态不在备份中，说明该备份不是 rollout 的精确
+  起点。因此“全历史线性回放”不能直接成立；后续应改为按文件使用会话内的
+  原始读取快照作为 pre-patch seed，再回放该文件后续成功补丁。
+- 当前恢复树字节级直接匹配证据仍为 31 个路径（`current-byte-level-matches.tsv`），
+  另有大量文件已按源 map/缓存/会话 diff 核对为等价恢复，但不是磁盘原文件。
+- 本轮验证：后端 `pytest` 228 项通过、前端 `vue-tsc && vite build` 通过、
+  插件校验仅剩余已知警告。

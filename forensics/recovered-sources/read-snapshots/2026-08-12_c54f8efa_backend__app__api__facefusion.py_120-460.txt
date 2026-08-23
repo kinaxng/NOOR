@@ -1,0 +1,341 @@
+    cache_dir = _facefusion_setting("facefusion_cache_dir")
+    if cache_dir:
+        return Path(cache_dir) / "uploads"
+    return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "uploads"
+
+
+def _reference_face_root() -> Path:
+    cache_dir = _facefusion_setting("facefusion_cache_dir")
+    if cache_dir:
+        return Path(cache_dir) / "reference_faces"
+    return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "reference_faces"
+
+
+def _deep_swapper_custom_root() -> Path:
+    source = resolve_facefusion_source(_facefusion_setting("facefusion_dir"))
+    return source.source_dir / ".assets" / "models" / "custom"
+
+
+def _deep_swapper_choices_path() -> Path:
+    source = resolve_facefusion_source(_facefusion_setting("facefusion_dir"))
+    return source.source_dir / "facefusion" / "processors" / "modules" / "deep_swapper" / "choices.py"
+
+
+def _known_deep_swapper_model_ids() -> list[str]:
+    choices_path = _deep_swapper_choices_path()
+    try:
+        tree = ast.parse(choices_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise RuntimeError(f"无法读取 Deep Swapper 模型列表: {choices_path}") from exc
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            is_deep_swapper_assignment = any(isinstance(target, ast.Name) and target.id == "deep_swapper_models" for target in node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            is_deep_swapper_assignment = isinstance(node.target, ast.Name) and node.target.id == "deep_swapper_models"
+            value = node.value
+        else:
+            continue
+        if not is_deep_swapper_assignment or value is None:
+            continue
+        try:
+            values = ast.literal_eval(value)
+        except (ValueError, SyntaxError) as exc:
+            raise RuntimeError("无法解析 Deep Swapper 模型列表") from exc
+        return [str(item) for item in values if isinstance(item, str) and "/" in item]
+    return []
+
+
+def _deep_swapper_builtin_paths(model_id: str) -> tuple[Path, Path]:
+    scope, name = _split_builtin_model_id(model_id)
+    source = resolve_facefusion_source(facefusion_settings(get_settings()).facefusion_dir)
+    model_root = source.source_dir / ".assets" / "models" / scope
+    return model_root / f"{name}.dfm", model_root / f"{name}.hash"
+
+
+def _split_builtin_model_id(model_id: str) -> tuple[str, str]:
+    parts = [part.strip() for part in model_id.split("/", 1)]
+    if len(parts) != 2 or not parts[0] or not parts[1] or parts[0] == "custom":
+        raise HTTPException(status_code=400, detail="非法 Deep 模型 ID")
+    return parts[0], parts[1]
+
+
+def _deep_swapper_download_status(model_id: str) -> dict[str, Any]:
+    with _deep_swapper_download_lock:
+        return dict(_deep_swapper_downloads.get(model_id) or {})
+
+
+def _set_deep_swapper_download_status(model_id: str, **updates: Any) -> None:
+    with _deep_swapper_download_lock:
+        current = dict(_deep_swapper_downloads.get(model_id) or {})
+        current.update(updates)
+        _deep_swapper_downloads[model_id] = current
+
+
+def _deep_swapper_download_urls(model_id: str, suffix: str) -> list[str]:
+    scope, name = _split_builtin_model_id(model_id)
+    repo = f"facefusion/deepfacelive-models-{scope}"
+    filename = f"{name}{suffix}"
+    endpoints: list[str] = []
+    settings = get_settings()
+    if settings.hf_mirror:
+        endpoints.append(settings.hf_mirror.rstrip("/"))
+    if os.environ.get("HF_ENDPOINT"):
+        endpoints.append(os.environ["HF_ENDPOINT"].rstrip("/"))
+    endpoints.extend(["https://hf-mirror.com", "https://huggingface.co"])
+
+    urls: list[str] = []
+    for endpoint in endpoints:
+        url = f"{endpoint}/{repo}/resolve/main/{filename}"
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+def _download_file_with_progress(model_id: str, urls: list[str], target_path: Path, progress_start: int, progress_end: int) -> None:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target_path.with_suffix(f"{target_path.suffix}.part")
+    token = os.environ.get("HF_TOKEN")
+    last_error = ""
+
+    for url in urls:
+        try:
+            headers = {"User-Agent": "NOOR FaceFusion Model Downloader"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            request = Request(url, headers=headers)
+            with urlopen(request, timeout=30) as response, temp_path.open("wb") as handle:
+                total = int(response.headers.get("Content-Length") or 0)
+                downloaded = 0
+                while True:
+                    chunk = response.read(FACEFUSION_DEEP_SWAPPER_DOWNLOAD_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                    downloaded += len(chunk)
+                    if total:
+                        progress = progress_start + int((progress_end - progress_start) * min(downloaded / total, 1))
+                        _set_deep_swapper_download_status(
+                            model_id,
+                            status="running",
+                            progress=progress,
+                            message=f"正在下载 {target_path.name} · {downloaded / 1024 / 1024:.1f}/{total / 1024 / 1024:.1f} MB",
+                        )
+            temp_path.replace(target_path)
+            return
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            last_error = str(exc)
+            with suppress(FileNotFoundError):
+                temp_path.unlink()
+            continue
+
+    raise RuntimeError(last_error or "下载失败")
+
+
+def _download_deep_swapper_model(model_id: str) -> None:
+    model_path, hash_path = _deep_swapper_builtin_paths(model_id)
+    try:
+        settings = get_settings()
+        settings.apply_network_env()
+        _set_deep_swapper_download_status(model_id, status="running", progress=2, message="准备下载 Deep 模型")
+        _download_file_with_progress(model_id, _deep_swapper_download_urls(model_id, ".dfm"), model_path, 5, 92)
+        with suppress(Exception):
+            _set_deep_swapper_download_status(model_id, status="running", progress=94, message="正在下载 hash")
+            _download_file_with_progress(model_id, _deep_swapper_download_urls(model_id, ".hash"), hash_path, 94, 98)
+        stat = model_path.stat()
+        _set_deep_swapper_download_status(
+            model_id,
+            status="completed",
+            progress=100,
+            message="下载完成",
+            size=stat.st_size,
+        )
+    except Exception as exc:
+        _set_deep_swapper_download_status(model_id, status="failed", progress=0, message=str(exc))
+
+
+def _safe_model_stem(filename: str) -> str:
+    stem = Path(filename or "model").stem.strip()
+    safe = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in stem)
+    safe = safe.strip("._")
+    if not safe:
+        safe = f"model_{uuid4().hex[:8]}"
+    return safe[:96]
+
+
+def _source_image_path(image_id: str) -> Path:
+    if not image_id or len(image_id) > 64 or not all(ch in "0123456789abcdef" for ch in image_id):
+        raise HTTPException(status_code=400, detail="非法源脸图片 ID")
+
+    upload_root = _upload_root()
+    for suffix in FACEFUSION_SOURCE_IMAGE_EXTENSIONS:
+        path = upload_root / f"{image_id}{suffix}"
+        if path.exists():
+            return path
+    raise HTTPException(status_code=404, detail="源脸图片不存在")
+
+
+def _source_image_payload(path: Path) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "id": path.stem,
+        "name": path.name,
+        "path": str(path),
+        "preview_url": f"/api/facefusion/source-images/{path.stem}",
+        "size": stat.st_size,
+        "updated_at": stat.st_mtime,
+    }
+
+
+def _reference_face_image_path(face_id: str) -> Path:
+    if not face_id or len(face_id) > 96 or not all(ch in "0123456789abcdef_-" for ch in face_id):
+        raise HTTPException(status_code=400, detail="非法参考人脸 ID")
+    key, _, position = face_id.partition("_")
+    if not key or not position.isdigit():
+        raise HTTPException(status_code=400, detail="非法参考人脸 ID")
+    root = _reference_face_root().resolve()
+    path = root / key / f"{position}.jpg"
+    try:
+        resolved = path.resolve()
+        if root not in resolved.parents:
+            raise HTTPException(status_code=400, detail="非法参考人脸路径")
+    except FileNotFoundError:
+        resolved = path
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail="参考人脸不存在")
+    return resolved
+
+
+def _stable_reference_faces_key(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:32]
+
+
+def _build_reference_face_cli_args(input_path: str, job_settings: dict[str, Any], frame_number: int) -> tuple[list[str], str, dict[str, str]]:
+    settings = facefusion_settings(get_settings())
+    configured_dir = job_settings.get("facefusion_dir")
+    if configured_dir is None:
+        configured_dir = settings.facefusion_dir
+    source = resolve_facefusion_source(configured_dir)
+    python_path = resolve_facefusion_python(
+        source.source_dir,
+        job_settings.get("facefusion_python_path") or settings.facefusion_python_path,
+    )
+    facefusion_cache_dir = str(Path(job_settings.get("facefusion_cache_dir") or settings.facefusion_cache_dir or _preview_root().parent))
+    facefusion_temp_dir = str(Path(job_settings.get("facefusion_temp_dir") or settings.facefusion_temp_dir or _preview_root().parent / "temp"))
+    resolve_facefusion_model_dir(
+        source.source_dir,
+        job_settings.get("facefusion_model_dir") or getattr(settings, "facefusion_model_dir", ""),
+    )
+
+    cli_args = ["run", "-t", input_path]
+    if facefusion_temp_dir:
+        cli_args += ["--temp-path", facefusion_temp_dir]
+    if facefusion_cache_dir:
+        cli_args += ["--jobs-path", str(Path(facefusion_cache_dir) / "jobs")]
+
+    providers = _execution_providers(job_settings)
+    if providers:
+        cli_args += ["--execution-providers", *providers]
+    device_ids = _split_words(job_settings.get("device_ids", settings.facefusion_device_ids), ["0"])
+    if device_ids:
+        cli_args += ["--execution-device-ids", *device_ids]
+    cli_args += ["--execution-thread-count", str(job_settings.get("thread_count", settings.facefusion_thread_count))]
+    cli_args += ["--video-memory-strategy", str(job_settings.get("video_memory_strategy", settings.facefusion_video_memory_strategy))]
+    download_providers = _split_words(job_settings.get("download_providers", settings.facefusion_download_providers), [])
+    if download_providers:
+        cli_args += ["--download-providers", *download_providers]
+
+    cli_args += ["--face-detector-model", str(job_settings.get("face_detector_model", settings.facefusion_face_detector_model))]
+    cli_args += ["--face-detector-size", str(job_settings.get("face_detector_size", settings.facefusion_face_detector_size))]
+    cli_args += ["--face-detector-score", str(job_settings.get("face_detector_score", settings.facefusion_face_detector_score))]
+    detector_angles = _split_words(job_settings.get("face_detector_angles", settings.facefusion_face_detector_angles), ["0"])
+    if detector_angles:
+        cli_args += ["--face-detector-angles", *detector_angles]
+    detector_margin = _split_words(job_settings.get("face_detector_margin", settings.facefusion_face_detector_margin), [])
+    if detector_margin:
+        cli_args += ["--face-detector-margin", *detector_margin]
+    cli_args += ["--face-landmarker-model", str(job_settings.get("face_landmarker_model", settings.facefusion_face_landmarker_model))]
+    cli_args += ["--face-landmarker-score", str(job_settings.get("face_landmarker_score", settings.facefusion_face_landmarker_score))]
+    cli_args += ["--face-selector-mode", "reference"]
+    selector_order = job_settings.get("face_selector_order", settings.facefusion_face_selector_order)
+    if selector_order:
+        cli_args += ["--face-selector-order", str(selector_order)]
+    gender = job_settings.get("face_selector_gender", settings.facefusion_face_selector_gender)
+    if gender:
+        cli_args += ["--face-selector-gender", str(gender)]
+    age_start = job_settings.get("face_selector_age_start", settings.facefusion_face_selector_age_start)
+    if age_start not in (None, ""):
+        cli_args += ["--face-selector-age-start", str(age_start)]
+    age_end = job_settings.get("face_selector_age_end", settings.facefusion_face_selector_age_end)
+    if age_end not in (None, ""):
+        cli_args += ["--face-selector-age-end", str(age_end)]
+    race = job_settings.get("face_selector_race", settings.facefusion_face_selector_race)
+    if race:
+        cli_args += ["--face-selector-race", str(race)]
+    cli_args += ["--reference-frame-number", str(frame_number)]
+    cli_args += ["--reference-face-position", str(job_settings.get("reference_face_position", settings.facefusion_reference_face_position))]
+    cli_args += ["--reference-face-distance", str(job_settings.get("reference_face_distance", settings.facefusion_reference_face_distance))]
+    cli_args += ["--log-level", str(job_settings.get("log_level", settings.facefusion_log_level))]
+
+    env = build_facefusion_python_env(source.source_dir, _build_env(
+        facefusion_cache_dir=facefusion_cache_dir,
+        facefusion_temp_dir=facefusion_temp_dir,
+    ))
+    return [python_path, *cli_args], str(source.source_dir), env
+
+
+def _deep_swapper_model_payload(path: Path) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "id": f"custom/{path.stem}",
+        "name": path.stem,
+        "filename": path.name,
+        "path": str(path),
+        "source": "custom",
+        "size": stat.st_size,
+        "updated_at": stat.st_mtime,
+        "downloaded": True,
+        "downloading": False,
+        "progress": 100,
+    }
+
+
+def _deep_swapper_builtin_payload(model_id: str) -> dict[str, Any]:
+    model_path, hash_path = _deep_swapper_builtin_paths(model_id)
+    downloaded = model_path.is_file() and model_path.stat().st_size > 0
+    status = _deep_swapper_download_status(model_id)
+    size = model_path.stat().st_size if downloaded else status.get("size")
+    return {
+        "id": model_id,
+        "name": model_id,
+        "filename": model_path.name,
+        "path": str(model_path) if downloaded else "",
+        "hash_path": str(hash_path) if hash_path.exists() else "",
+        "source": "known",
+        "size": size,
+        "updated_at": model_path.stat().st_mtime if downloaded else None,
+        "downloaded": downloaded,
+        "downloading": status.get("status") == "running",
+        "download_status": status.get("status") or ("completed" if downloaded else "missing"),
+        "progress": 100 if downloaded else int(status.get("progress") or 0),
+        "message": status.get("message") or ("已下载" if downloaded else "未下载"),
+    }
+
+
+@router.get("/deep-swapper-models")
+async def list_facefusion_deep_swapper_models():
+    try:
+        custom_root = _deep_swapper_custom_root()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    custom_root.mkdir(parents=True, exist_ok=True)
+    custom_models = [
+        _deep_swapper_model_payload(path)
+        for path in sorted(custom_root.iterdir(), key=lambda item: item.name.lower())
+        if path.is_file() and path.suffix.lower() in FACEFUSION_DEEP_SWAPPER_MODEL_EXTENSIONS
+    ]
+    known_models = [_deep_swapper_builtin_payload(model_id) for model_id in _known_deep_swapper_model_ids()]
+    return {
+        "success": True,

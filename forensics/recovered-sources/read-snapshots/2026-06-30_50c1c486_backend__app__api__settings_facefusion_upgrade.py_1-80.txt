@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from importlib import metadata
+from pathlib import Path
+from typing import Any
+
+from fastapi import HTTPException
+
+from app.api.settings_lada_upgrade import github_mirror_url
+from app.core.config import PROJECT_ROOT
+from app.core.facefusion_paths import resolve_embedded_facefusion_source
+
+
+FACEFUSION_UPSTREAM_REPO = "https://github.com/facefusion/facefusion.git"
+FACEFUSION_UPSTREAM_MANIFEST = "NOOR_UPSTREAM.json"
+FACEFUSION_SYNC_EXCLUDES = {
+    ".git",
+    ".github",
+    ".assets",
+    ".caches",
+    ".claude",
+    ".idea",
+    ".jobs",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "facefusion.ini",
+    FACEFUSION_UPSTREAM_MANIFEST,
+    "temp",
+}
+
+
+def facefusion_runtime_update_root(settings: Any) -> Path:
+    cache_dir = Path(getattr(settings, "facefusion_cache_dir", "") or PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache")
+    return cache_dir / "updater"
+
+
+def get_facefusion_source_dir() -> Path:
+    source = resolve_embedded_facefusion_source()
+    if not source:
+        raise RuntimeError("NOOR 内置 FaceFusion 源码不存在")
+    return source.source_dir
+
+
+def get_facefusion_version(source_dir: Path | None = None) -> str | None:
+    source_dir = source_dir or get_facefusion_source_dir()
+    metadata_path = source_dir / "facefusion" / "metadata.py"
+    if not metadata_path.exists():
+        return None
+    namespace: dict[str, Any] = {}
+    try:
+        exec(metadata_path.read_text(encoding="utf-8"), namespace)
+        metadata = namespace.get("METADATA") or {}
+        version = metadata.get("version")
+        return str(version) if version else None
+    except Exception:
+        return None
+
+
+def get_facefusion_upstream_manifest(source_dir: Path | None = None) -> dict[str, Any]:
+    source_dir = source_dir or get_facefusion_source_dir()
+    manifest_path = source_dir / FACEFUSION_UPSTREAM_MANIFEST
+    if not manifest_path.exists():
+        return {}
+    try:
+        value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_facefusion_upstream_manifest(
+    source_dir: Path,
+    *,
+    revision: str | None,

@@ -1,0 +1,41 @@
+const submitProgress = ref(0)
+const previewLoading = ref(false)
+const previewUrl = ref('')
+const previewError = ref('')
+const previewStale = ref(false)
+const previewFrameNumber = ref(0)
+const previewFrameTotal = ref(0)
+const previewMetadataLoading = ref(false)
+const sourceUploadLoading = ref(false)
+const uploadedSourceImages = ref<Array<{ id: string; name: string; path: string; preview_url: string }>>([])
+const sourceLibraryOpen = ref(false)
+const sourceLibraryLoading = ref(false)
+const sourceLibraryImages = ref<Array<{ id: string; name: string; path: string; preview_url: string; updated_at?: number }>>([])
+const selectedLibraryImageIds = ref<string[]>([])
+const deepModelDialogOpen = ref(false)
+const deepModelLoading = ref(false)
+const deepModelUploading = ref(false)
+const deepSwapperModels = ref<Array<{
+  id: string
+  name: string
+  filename?: string
+  source: string
+  size?: number | null
+  updated_at?: number | null
+  downloaded?: boolean
+  downloading?: boolean
+  download_status?: string
+  progress?: number
+  message?: string
+}>>([])
+let deepModelPollTimer: number | null = null
+
+const facefusionSettings = ref<JobSettings>({
+  source_path: '',
+  preview_mode: 'default',
+  preview_resolution: '768x768',
+  execution_provider: 'cuda',
+  device_ids: '0',
+  thread_count: 8,
+  video_memory_strategy: 'strict',
+  system_memory_limit: 0,

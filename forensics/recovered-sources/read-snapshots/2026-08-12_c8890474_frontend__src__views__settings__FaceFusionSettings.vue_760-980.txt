@@ -1,0 +1,221 @@
+                class="processor-chip"
+                :class="{ 'is-active': hasToken(processors, processor.id) }"
+                @click="processors = toggleToken(processors, processor.id)"
+              >
+                <span>{{ processor.label }}</span>
+                <small>{{ processor.id }}</small>
+                <em :class="{ 'is-cuda': processor.acceleration === 'cuda', 'is-muted': processor.acceleration === 'none' }">
+                  {{ processor.acceleration === 'tensorrt' ? 'TRT 推荐' : processor.acceleration === 'cuda' ? 'CUDA 推荐' : '无推理加速' }}
+                </em>
+              </button>
+            </div>
+          </FieldRow>
+
+          <div v-if="selectedProcessors.includes('face_swapper')" class="processor-options">
+            <div class="processor-options__head">face_swapper</div>
+            <FieldRow label="换脸模型" description="FaceFusion face-swapper-model">
+              <select v-model="faceSwapperModel" class="settings-input">
+                <option v-for="model in faceSwapperModelOptions" :key="model" :value="model">{{ model }}</option>
+              </select>
+            </FieldRow>
+            <FieldRow label="Pixel boost" description="可选范围随换脸模型变化">
+              <select v-model="faceSwapperPixelBoost" class="settings-input">
+                <option v-for="size in faceSwapperPixelBoostOptions" :key="size" :value="size">{{ size }}</option>
+              </select>
+            </FieldRow>
+            <FieldRow label="换脸权重" description="0-1">
+              <div class="range-control">
+                <input v-model.number="faceSwapperWeight" type="range" min="0" max="1" step="0.05" />
+                <span>{{ Number(faceSwapperWeight).toFixed(2) }}</span>
+              </div>
+            </FieldRow>
+          </div>
+
+          <div v-if="selectedProcessors.includes('face_enhancer')" class="processor-options">
+            <div class="processor-options__head">face_enhancer</div>
+            <FieldRow label="增强模型" description="FaceFusion face-enhancer-model">
+              <select v-model="faceEnhancerModel" class="settings-input">
+                <option v-for="model in faceEnhancerModelOptions" :key="model" :value="model">{{ model }}</option>
+              </select>
+            </FieldRow>
+            <FieldRow label="增强混合" description="0-100">
+              <div class="range-control">
+                <input v-model.number="faceEnhancerBlend" type="range" min="0" max="100" step="1" />
+                <span>{{ faceEnhancerBlend }}</span>
+              </div>
+            </FieldRow>
+            <FieldRow label="增强权重" description="0-1">
+              <div class="range-control">
+                <input v-model.number="faceEnhancerWeight" type="range" min="0" max="1" step="0.05" />
+                <span>{{ Number(faceEnhancerWeight).toFixed(2) }}</span>
+              </div>
+            </FieldRow>
+          </div>
+
+          <div v-if="selectedProcessors.includes('frame_enhancer')" class="processor-options">
+            <div class="processor-options__head">frame_enhancer</div>
+            <FieldRow label="帧增强模型" description="FaceFusion frame-enhancer-model">
+              <select v-model="frameEnhancerModel" class="settings-input">
+                <option v-for="model in frameEnhancerModelOptions" :key="model" :value="model">{{ model }}</option>
+              </select>
+            </FieldRow>
+            <FieldRow label="帧增强混合" description="0-100">
+              <div class="range-control">
+                <input v-model.number="frameEnhancerBlend" type="range" min="0" max="100" step="1" />
+                <span>{{ frameEnhancerBlend }}</span>
+              </div>
+            </FieldRow>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="activeSection === 'detection'" class="facefusion-section">
+        <h2 class="settings-card__title">检测与选择</h2>
+
+        <div class="settings-form mt-4">
+          <FieldRow label="人脸检测模型" description="FaceFusion face-detector-model">
+            <select v-model="faceDetectorModel" class="settings-input">
+              <option value="many">many</option>
+              <option value="retinaface">retinaface</option>
+              <option value="scrfd">scrfd</option>
+              <option value="yolo_face">yolo_face</option>
+              <option value="yunet">yunet</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow label="检测尺寸" description="当前内置 FaceFusion 支持 640x640">
+            <select v-model="faceDetectorSize" class="settings-input">
+              <option value="640x640">640x640</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow label="检测分数" description="0-1">
+            <div class="range-control">
+              <input v-model.number="faceDetectorScore" type="range" min="0" max="1" step="0.05" />
+              <span>{{ Number(faceDetectorScore).toFixed(2) }}</span>
+            </div>
+          </FieldRow>
+
+          <FieldRow label="检测角度" description="多个角度可用空格或逗号分隔">
+            <div class="choice-chips">
+              <button
+                v-for="angle in detectorAngleOptions"
+                :key="angle"
+                type="button"
+                :class="{ 'is-active': hasToken(faceDetectorAngles, angle) }"
+                @click="faceDetectorAngles = toggleToken(faceDetectorAngles, angle)"
+              >
+                {{ angle }}
+              </button>
+            </div>
+          </FieldRow>
+
+          <FieldRow label="检测边距" description="上 右 下 左">
+            <div class="quad-control">
+              <label>
+                <span>上</span>
+                <input :value="quadPart(faceDetectorMargin, 0)" type="number" min="0" max="100" step="1" @input="faceDetectorMargin = updateQuadPart(faceDetectorMargin, 0, inputValue($event))" />
+              </label>
+              <label>
+                <span>右</span>
+                <input :value="quadPart(faceDetectorMargin, 1)" type="number" min="0" max="100" step="1" @input="faceDetectorMargin = updateQuadPart(faceDetectorMargin, 1, inputValue($event))" />
+              </label>
+              <label>
+                <span>下</span>
+                <input :value="quadPart(faceDetectorMargin, 2)" type="number" min="0" max="100" step="1" @input="faceDetectorMargin = updateQuadPart(faceDetectorMargin, 2, inputValue($event))" />
+              </label>
+              <label>
+                <span>左</span>
+                <input :value="quadPart(faceDetectorMargin, 3)" type="number" min="0" max="100" step="1" @input="faceDetectorMargin = updateQuadPart(faceDetectorMargin, 3, inputValue($event))" />
+              </label>
+            </div>
+          </FieldRow>
+
+          <FieldRow label="特征点模型" description="FaceFusion face-landmarker-model">
+            <select v-model="faceLandmarkerModel" class="settings-input">
+              <option value="many">many</option>
+              <option value="2dfan4">2dfan4</option>
+              <option value="peppa_wutz">peppa_wutz</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow label="特征点分数" description="0-1">
+            <div class="range-control">
+              <input v-model.number="faceLandmarkerScore" type="range" min="0" max="1" step="0.05" />
+              <span>{{ Number(faceLandmarkerScore).toFixed(2) }}</span>
+            </div>
+          </FieldRow>
+
+          <FieldRow label="人脸选择模式" description="默认 reference，适合指定参考帧和参考人脸位置">
+            <select v-model="faceSelectorMode" class="settings-input">
+              <option value="reference">Reference</option>
+              <option value="one">One</option>
+              <option value="many">Many</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow label="人脸排序" description="检测到多张脸时的选择顺序">
+            <select v-model="faceSelectorOrder" class="settings-input">
+              <option value="large-small">large-small</option>
+              <option value="small-large">small-large</option>
+              <option value="left-right">left-right</option>
+              <option value="right-left">right-left</option>
+              <option value="top-bottom">top-bottom</option>
+              <option value="bottom-top">bottom-top</option>
+              <option value="best-worst">best-worst</option>
+              <option value="worst-best">worst-best</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow label="性别筛选" description="FaceFusion face-selector-gender">
+            <div class="choice-chips">
+              <button
+                v-for="gender in genderOptions"
+                :key="gender || 'any'"
+                type="button"
+                :class="{ 'is-active': faceSelectorGender === gender }"
+                @click="faceSelectorGender = gender"
+              >
+                {{ gender || '不限' }}
+              </button>
+            </div>
+          </FieldRow>
+
+          <FieldRow label="年龄筛选" description="FaceFusion face-selector-age-start / end">
+            <div class="paired-control">
+              <input v-model="faceSelectorAgeStart" type="number" min="0" max="100" step="1" placeholder="0" class="settings-input" />
+              <span>-</span>
+              <input v-model="faceSelectorAgeEnd" type="number" min="0" max="100" step="1" placeholder="100" class="settings-input" />
+            </div>
+          </FieldRow>
+
+          <FieldRow label="种族筛选" description="FaceFusion face-selector-race">
+            <div class="choice-chips">
+              <button
+                v-for="race in raceOptions"
+                :key="race || 'any'"
+                type="button"
+                :class="{ 'is-active': faceSelectorRace === race }"
+                @click="faceSelectorRace = race"
+              >
+                {{ race || '不限' }}
+              </button>
+            </div>
+          </FieldRow>
+
+          <FieldRow label="参考帧" description="目标视频里用于创建参考人脸的帧号">
+            <input v-model.number="referenceFrameNumber" type="number" min="0" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow label="人脸位置" description="参考帧中使用第几个检测到的人脸">
+            <input v-model.number="referenceFacePosition" type="number" min="0" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow label="匹配距离" description="reference 模式下的人脸匹配距离">
+            <div class="range-control">
+              <input v-model.number="referenceFaceDistance" type="range" min="0" max="1" step="0.05" />
+              <span>{{ Number(referenceFaceDistance).toFixed(2) }}</span>
+            </div>
+          </FieldRow>
+        </div>
+      </div>

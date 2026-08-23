@@ -1,0 +1,130 @@
+export async function mount(el, sdk = {}) {
+  const pluginId = sdk.pluginId || 'xunlei-remote'
+  const api = (path, init) => sdk.api?.plugin ? sdk.api.plugin(path, init) : fetch(`/api/plugins/${pluginId}${path}`, init)
+  const toast = (type, msg) => sdk.toast?.[type]?.(msg)
+  const state = {
+    loading: false,
+    error: '',
+    tasks: [],
+    device: null,
+    about: null,
+    config: null,
+    dailyLimit: null,
+    trySpeed: null,
+    mobile: null,
+    filter: 'all',
+    query: '',
+    searchOpen: false,
+    page: 1,
+    pageSize: 10,
+    actioning: new Set(),
+    timer: null,
+    destroyed: false,
+    renderedTabsKey: '',
+    tableSignature: '',
+    statsSignature: '',
+    submitModal: null,
+    submitStatus: 'idle',
+    submitProgress: 0,
+    trySpeedApplying: false,
+    trySpeedAppliedKey: '',
+  }
+
+  el.innerHTML = `
+    <div class="xunlei-remote-page">
+      <div class="noor-plugin-topbar xunlei-remote-toolbar">
+        <div data-role="tabs" class="noor-plugin-topbar__tabs"></div>
+        <div class="noor-plugin-topbar__actions xunlei-remote-actions">
+          <span data-role="dailyLimit" class="xunlei-remote-badge xunlei-remote-badge--warning" style="display:none"></span>
+          <span data-role="mobile" class="xunlei-remote-badge">移动端检查中</span>
+          <span data-role="device" class="xunlei-remote-badge">未连接</span>
+          <span data-role="newTaskHost"></span>
+          <span data-role="accountProbeHost"></span>
+          <span data-role="refreshHost"></span>
+        </div>
+      </div>
+      <div class="xunlei-remote-overview-row">
+        <div class="xunlei-remote-summary" data-role="stats"></div>
+        <div class="xunlei-remote-task-tools">
+          <div data-role="searchToggle" class="xunlei-remote-search-card xunlei-remote-stat" title="点击搜索任务名称 / 保存路径 / 链接"><span>搜索</span><strong data-role="searchLabel">任务</strong><input data-role="search" class="xunlei-remote-search-inline" placeholder="输入关键词" style="display:none"><span data-role="clearSearchHost"></span></div>
+        </div>
+      </div>
+      <div data-role="state" class="xunlei-remote-state" style="display:none"></div>
+      <div class="xunlei-remote-table-card">
+        <div class="xunlei-remote-table-wrap">
+          <table class="xunlei-remote-table">
+            <thead><tr><th>名称</th><th>状态</th><th>进度</th><th>速度</th><th>大小</th><th>时间</th><th class="xunlei-remote-right">操作</th></tr></thead>
+            <tbody data-role="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div data-role="pager" class="xunlei-remote-pager"></div>
+    </div>
+  `
+
+  const $ = role => el.querySelector(`[data-role="${role}"]`)
+  const tabsHost = $('tabs')
+  const dailyLimit = $('dailyLimit')
+  const mobileBadge = $('mobile')
+  const device = $('device')
+  let refreshHost = $('refreshHost')
+  let newTaskHost = $('newTaskHost')
+  let accountProbeHost = $('accountProbeHost')
+  let refresh = null
+  let newTask = null
+  let accountProbe = null
+  const stats = $('stats')
+  const search = $('search')
+  const searchToggle = $('searchToggle')
+  const searchLabel = $('searchLabel')
+  let clearSearchHost = $('clearSearchHost')
+  let clearSearch = null
+  const stateBox = $('state')
+  const tbody = $('tbody')
+  const pager = $('pager')
+
+  const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
+  const fmtBytes = n => { n = Number(n || 0); if (!n) return '0 B'; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ } return `${n.toFixed(i >= 3 ? 2 : 1)} ${u[i]}` }
+  const fmtSpeed = n => Number(n || 0) ? `${fmtBytes(n)}/s` : '0 B/s'
+  const fmtTime = s => { if (!s) return '-'; const d = new Date(s); return Number.isNaN(d.getTime()) ? s : `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+  const fmtRemain = sec => { sec = Number(sec || 0); if (sec <= 0) return '已过期'; const h = Math.floor(sec / 3600); const m = Math.floor((sec % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m` }
+  const pct = n => `${Math.round(Number(n || 0) * 1000) / 10}%`
+  const phaseText = p => ({ PHASE_TYPE_PENDING: '等待中', PHASE_TYPE_RUNNING: '下载中', PHASE_TYPE_PAUSED: '暂停', PHASE_TYPE_COMPLETE: '完成', PHASE_TYPE_ERROR: '错误' }[p] || p || '-')
+  const phaseTone = p => p === 'PHASE_TYPE_COMPLETE' ? 'success' : p === 'PHASE_TYPE_ERROR' ? 'error' : p === 'PHASE_TYPE_PAUSED' ? 'muted' : p === 'PHASE_TYPE_RUNNING' ? 'info' : 'warning'
+  const trySpeedLabel = ts => {
+    if (!ts) return ''
+    const remain = Number(ts.usage_remaining || 0)
+    const total = Number(ts.usage_total || 0)
+    const prefix = remain > 0 ? '加速可用' : (String(ts.status) === '1' ? '加速中' : '加速用完')
+    return `${prefix} ${remain}/${total}`
+  }
+
+  function initUiKitTopbar() {
+    const mkBtn = (label, cls, tone, title) => {
+      if (sdk.ui?.button) return sdk.ui.button({ label, tone, className: cls, title })
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = cls
+      btn.textContent = label
+      if (title) btn.title = title
+      return btn
+    }
+    newTask = mkBtn('新建任务', 'xunlei-remote-btn xunlei-remote-btn--primary', 'primary')
+    newTask.dataset.role = 'newTask'
+    newTaskHost.replaceWith(newTask)
+    accountProbe = mkBtn('账号探针', 'xunlei-remote-btn', 'default')
+    accountProbe.dataset.role = 'accountProbe'
+    accountProbeHost.replaceWith(accountProbe)
+    refresh = mkBtn('刷新', 'xunlei-remote-btn xunlei-remote-btn--primary', 'primary')
+    refresh.dataset.role = 'refresh'
+    refreshHost.replaceWith(refresh)
+    clearSearch = mkBtn('×', 'xunlei-remote-search-clear', 'default', '清除搜索')
+    clearSearch.dataset.role = 'clearSearch'
+    clearSearch.style.display = 'none'
+    clearSearchHost.replaceWith(clearSearch)
+  }
+  initUiKitTopbar()
+
+
+  function modalApi(options) {
+    if (sdk.ui?.modal) return sdk.ui.modal(options)

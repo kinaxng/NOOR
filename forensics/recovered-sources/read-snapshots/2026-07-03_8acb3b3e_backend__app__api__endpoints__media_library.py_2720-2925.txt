@@ -1,0 +1,206 @@
+        return True
+    return False
+
+
+def _paginate_filter(all_items: list, filter_str: str | None, q: str | None, offset: int, limit: int):
+    filtered = [i for i in all_items if _item_matches_filter(i, filter_str)] if filter_str else list(all_items)
+    filtered = [i for i in filtered if _item_matches_query(i, q)] if q else filtered
+    total = len(filtered)
+    return {"items": filtered[offset:offset + limit], "total": total}
+
+
+@router.get("/actors")
+async def get_actors(
+    limit: int = 60,
+    offset: int = 0,
+    q: str | None = None,
+    sort_by: str = "SortName",
+    sort_order: str = "Ascending",
+    lang: str | None = None,
+):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        actors, total = await _list_actors(
+            config,
+            limit=limit,
+            offset=offset,
+            q=q,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            lang=lang,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取演员失败: {e}")
+
+    return {"actors": actors, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/actors/duplicates")
+async def get_duplicate_actors(limit: int = 2000):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        groups = await _detect_duplicate_actors(config, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"检测重名演员失败: {e}")
+
+    return {"groups": groups, "total": len(groups)}
+
+
+@router.get("/actor/{actor_id}/movies")
+async def get_actor_movies(actor_id: str, limit: int = 120, offset: int = 0):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+            movies = await _emby_related_movies_for_actor(client, config, actor_id, limit=5000)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"获取演员作品失败: {exc}")
+    items = [_parse_item(item, config) for item in movies]
+    items = _deduplicate_items(items)
+    total = len(items)
+    return {"items": items[offset:offset + max(1, min(limit, 500))], "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/actor/{actor_id}")
+async def get_actor_profile(actor_id: str, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return {"ok": True, "actor": await _get_actor_profile(config, actor_id, lang=lang)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"获取演员详情失败: {exc}")
+
+
+@router.post("/actor/{actor_id}")
+async def update_actor_profile(actor_id: str, req: ActorProfileUpdateRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _update_actor_profile(config, actor_id, req, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"保存演员详情失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员资料已保存: {actor_id} · Emby 同步 {'成功' if result.get('synced') else '失败'}",
+        source="media_library.actors",
+    )
+    return result
+
+
+@router.post("/actor/{actor_id}/avatar")
+async def upload_actor_avatar(actor_id: str, file: UploadFile = File(...), lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "image/jpeg"
+    if not str(content_type).startswith("image/"):
+        raise HTTPException(status_code=400, detail="请上传图片文件")
+    content = await file.read()
+    try:
+        result = await _set_actor_avatar_bytes(config, actor_id, content, content_type=content_type, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"上传演员头像失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员头像已上传: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actor/{actor_id}/avatar-url")
+async def set_actor_avatar_from_url(actor_id: str, req: ActorAvatarUrlRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _set_actor_avatar_from_url(config, actor_id, req.url, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"设置演员头像失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员头像已从 URL 设置: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actor/{actor_id}/metadata/tmdb-preview")
+async def preview_actor_tmdb_metadata(actor_id: str, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return await _preview_actor_tmdb_metadata(config, actor_id, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"读取 TMDB 演员资料失败: {exc}")
+
+
+@router.post("/actor/{actor_id}/metadata/tmdb-apply")
+async def apply_actor_tmdb_metadata(actor_id: str, req: ActorTmdbApplyRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _apply_actor_tmdb_metadata(config, actor_id, req, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"应用 TMDB 演员资料失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员 TMDB 资料已应用: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.delete("/actor/{actor_id}")
+async def delete_actor_profile(actor_id: str):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _delete_actor_profile(config, actor_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"删除演员失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "warning",
+        f"[MediaLibrary] 演员已删除: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actors/mapping/upload")
+async def upload_actor_mapping(file: UploadFile = File(...)):
+    filename = _safe_upload_filename(file.filename)
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(content) > 30 * 1024 * 1024:

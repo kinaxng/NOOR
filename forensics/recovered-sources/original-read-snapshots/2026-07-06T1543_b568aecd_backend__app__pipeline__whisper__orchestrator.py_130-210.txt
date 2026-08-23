@@ -1,0 +1,81 @@
+        """
+        output_dir = self._get_output_dir()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._raise_if_cancelled()
+
+        if not video_name:
+            video_name = Path(video_path).stem
+
+        audio_path = output_dir / f"{video_name}_audio.wav"
+
+        # ========== 需要模型验证和场景检测 ==========
+        # Pre-flight: verify all required models are downloaded
+        self._validate_required_models()
+        self._raise_if_cancelled()
+
+        # Phase 1: 音频提取
+        self.log("=" * 50)
+        self.log("Phase 1: 提取音频")
+        self.log("=" * 50)
+
+        try:
+            _, duration = AudioExtractor.extract(
+                str(video_path),
+                str(audio_path),
+                sample_rate=16000,
+                cancel_callback=self.cancel_callback,
+            )
+            self.log(f"音频提取完成，时长: {duration:.1f}s", 5)
+        except Exception as e:
+            self.log(f"音频提取失败: {e}")
+            raise
+
+        # Phase 1.25: 实验性音频前处理（当前推荐链路默认关闭）
+        preprocess_mode = getattr(self.config, "audio_preprocess_mode", "none")
+        preprocess_model = getattr(self.config, "audio_preprocess_model", "vocal_balanced")
+        if (preprocess_mode or "none") != "none":
+            self.log("=" * 50)
+            self.log(f"Phase 1.25: 音频前处理 [{preprocess_mode}:{preprocess_model}]")
+            self.log("音频前处理属于实验功能，默认链路不建议开启")
+            self.log("=" * 50)
+            try:
+                self._raise_if_cancelled()
+                preprocessed_path = preprocess_audio(
+                    str(audio_path),
+                    mode=preprocess_mode,
+                    model=preprocess_model,
+                    output_dir=output_dir,
+                    progress_callback=self.progress_callback,
+                    cancel_callback=self.cancel_callback,
+                )
+                if preprocessed_path != str(audio_path):
+                    self.log(f"音频前处理完成: {preprocessed_path}", 7)
+                    audio_path = Path(preprocessed_path)
+                else:
+                    self.log("音频前处理未修改音频（使用原始音频）", 7)
+            except AudioPreprocessError as e:
+                self.log(f"音频前处理失败: {e}")
+                raise
+            except Exception as e:
+                self.log(f"音频前处理异常: {e}")
+                raise
+
+        # Phase: 场景检测 / smart VAD chunk
+        all_segments: list[tuple[str, float, float]] = []  # (audio_path, start, end)
+        if getattr(self.config, "chunker", "") == "smart_vad_chunk" and duration > max(10.0, self.config.target_chunk_duration_s):
+            self.log("=" * 50)
+            self.log(f"Smart VAD Chunk: {self.config.vad_backend} · target {self.config.target_chunk_duration_s:.0f}s")
+            self.log("=" * 50)
+            try:
+                self._raise_if_cancelled()
+                vad_backend = str(getattr(self.config, "vad_backend", "energy") or "energy").strip().lower()
+                if vad_backend == "whisper_vad_onnx":
+                    try:
+                        detector = WhisperVadOnnxSceneDetector(
+                            repo_dir=self._whisper_vad_onnx_cache_dir(),
+                            threshold=0.5,
+                            min_speech_duration_ms=300,
+                            min_silence_duration_ms=100,
+                            speech_pad_ms=200,
+                            min_segment_duration=max(3.0, min(10.0, self.config.target_chunk_duration_s * 0.35)),
+                            max_segment_duration=self.config.max_chunk_duration_s or self.config.target_chunk_duration_s,

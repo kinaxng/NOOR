@@ -1,0 +1,76 @@
+        if item_type in ("movies", "tvshows") or collection_type in ("movies", "tvshows"):
+            poster_url = None
+            if item.get("ImageTags"):
+                tag = item["ImageTags"].get("Primary")
+                if tag:
+                    poster_url = f"{_server_url(config)}/emby/Items/{item['Id']}/Images/Primary?tag={tag}"
+            libraries.append({
+                "id": item["Id"],
+                "name": item["Name"],
+                "type": collection_type or item_type or "unknown",
+                "poster_url": poster_url,
+            })
+    return libraries
+
+
+_VARIANT_MARKER_RE = re.compile(r'(^|[-_.\s])(restored-u|u\d*|c\d*|chs|cht|cn|tw|zh|字幕|中文|破解|流出|uncensored|leaked)(?=$|[-_.\s])', re.IGNORECASE)
+
+
+def _item_variant_penalty(item: dict) -> int:
+    path = (item.get("path") or "").lower()
+    name = (item.get("name") or "").lower()
+    tags = item.get("tags", {}) or {}
+    penalty = 0
+
+    basename = os.path.splitext(os.path.basename(path))[0] if path else name
+    if _VARIANT_MARKER_RE.search(basename):
+        penalty += 60
+    if '.restored-u' in path:
+        penalty += 120
+    if tags.get('is_cracked'):
+        penalty += 40
+    if tags.get('is_leaked'):
+        penalty += 20
+    if tags.get('has_chinese'):
+        penalty += 5
+    return penalty
+
+
+def _merge_group_metadata(representative: dict, group: list[dict]) -> dict:
+    merged = dict(representative)
+    merged_tags = dict((representative.get('tags') or {}))
+
+    if any((item.get('tags') or {}).get('is_cracked') for item in group):
+        merged_tags['is_cracked'] = True
+    if any((item.get('tags') or {}).get('has_chinese') for item in group):
+        merged_tags['has_chinese'] = True
+    if any((item.get('tags') or {}).get('has_facefusion') for item in group):
+        merged_tags['has_facefusion'] = True
+    if any((item.get('tags') or {}).get('is_leaked') for item in group):
+        merged_tags['is_leaked'] = True
+
+    release_type_key = None
+    if any((item.get('tags') or {}).get('release_type_key') == 'leaked' for item in group):
+        release_type_key = 'leaked'
+    elif any((item.get('tags') or {}).get('release_type_key') == 'uncensored' for item in group):
+        release_type_key = 'uncensored'
+
+    if release_type_key == 'leaked':
+        merged_tags['release_type_key'] = 'leaked'
+        merged_tags['release_type'] = '流出'
+    elif release_type_key == 'uncensored':
+        merged_tags['release_type_key'] = 'uncensored'
+        merged_tags['release_type'] = '无码'
+
+    merged['tags'] = merged_tags
+    merged['subtitle_count'] = max((item.get('subtitle_count') or 0) for item in group)
+    merged['variant_count'] = len(group)
+    return merged
+
+
+def _pick_group_representative(group: list[dict]) -> dict:
+    def sort_key(item: dict) -> tuple:
+        path = item.get('path') or ''
+        name = item.get('name') or ''
+        return (
+            bool(path),

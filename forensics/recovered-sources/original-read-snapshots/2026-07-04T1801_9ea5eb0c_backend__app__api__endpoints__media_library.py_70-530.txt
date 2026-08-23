@@ -1,0 +1,461 @@
+_sync_version = 0
+_last_invalidated_at: float | None = None
+_last_webhook_at: float | None = None
+_actor_mapping_records_cache: tuple[float, list[dict]] | None = None
+_actor_mapping_name_index_cache: tuple[int, dict[str, dict]] | None = None
+_actor_mapping_tmdb_index_cache: tuple[int, dict[str, dict]] | None = None
+_actor_mapping_auto_update_task: asyncio.Task | None = None
+
+ACTOR_MAPPING_GITHUB_PAGE_URL = "https://github.com/li-peifeng/Jav-Actors-Mapping/blob/main/actor-mapping.xml"
+ACTOR_MAPPING_RAW_URL = "https://raw.githubusercontent.com/li-peifeng/Jav-Actors-Mapping/main/actor-mapping.xml"
+ACTOR_MAPPING_API_URL = "https://api.github.com/repos/li-peifeng/Jav-Actors-Mapping/contents/actor-mapping.xml?ref=main"
+
+
+class HardlinkDeleteRequest(BaseModel):
+    file_path: str
+    remove_nfo: bool = True
+    dry_run: bool = False
+
+
+class SourceChainDeleteRequest(BaseModel):
+    source_path: str
+    hardlink_paths: list[str] = []
+    code: str | None = None
+    dry_run: bool = False
+
+
+class HardlinkEntryDeletePayload(BaseModel):
+    source_path: str | None = None
+    hardlink_paths: list[str] = []
+
+
+class GroupDeleteRequest(BaseModel):
+    code: str
+    entries: list[HardlinkEntryDeletePayload]
+    dry_run: bool = False
+
+
+class MediaItemDeleteRequest(BaseModel):
+    item_id: str
+    dry_run: bool = False
+
+
+class ActorMappingMergeRequest(BaseModel):
+    mapping_id: str
+    target_name: str | None = None
+    target_actor_id: str | None = None
+    dry_run: bool = False
+
+
+class ActorMappingMergeBatchRequest(BaseModel):
+    target_actor_ids: dict[str, str] = {}
+    skip_conflicts: bool = True
+    dry_run: bool = False
+
+
+class ActorTmdbBackfillRequest(BaseModel):
+    actor_ids: list[str] | None = None
+    only_high_confidence: bool = True
+    dry_run: bool = False
+    progress_key: str | None = None
+
+
+class ActorNameSyncRequest(BaseModel):
+    actor_ids: list[str] | None = None
+    skip_conflicts: bool = True
+    dry_run: bool = False
+    progress_key: str | None = None
+
+
+class ActorProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    sort_name: str | None = None
+    jp_name: str | None = None
+    zh_cn_name: str | None = None
+    zh_tw_name: str | None = None
+    aliases: list[str] | None = None
+    overview: str | None = None
+    provider_ids: dict[str, str] | None = None
+    birthday: str | None = None
+    deathday: str | None = None
+    place_of_birth: str | None = None
+    gender: str | None = None
+    known_for_department: str | None = None
+    popularity: float | None = None
+    homepage: str | None = None
+    external_urls: dict[str, str] | None = None
+
+
+class ActorAvatarUrlRequest(BaseModel):
+    url: str
+
+
+class ActorTmdbApplyRequest(BaseModel):
+    apply_name: bool = False
+    apply_overview: bool = True
+    apply_provider_ids: bool = True
+    apply_avatar: bool = False
+
+
+def _actor_mapping_upload_dir() -> Path:
+    path = data_path() / "media_actor_mapping_uploads"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _safe_upload_filename(filename: str | None) -> str:
+    raw = Path(filename or "actor_mapping").name.strip() or "actor_mapping"
+    return re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fffぁ-んァ-ン一-龯]", "_", raw)[:120]
+
+
+def _actor_mapping_upload_info(path: Path, size: int | None = None) -> dict:
+    stat = path.stat()
+    return {
+        "filename": path.name,
+        "size": size if size is not None else stat.st_size,
+        "format": path.suffix.lower().lstrip(".") or "unknown",
+        "saved_path": str(path),
+        "uploaded_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+    }
+
+
+def _actor_mapping_store_path() -> Path:
+    path = data_path() / "media_actor_mappings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _actor_mapping_online_state_path() -> Path:
+    path = data_path() / "media_actor_mapping_online_state.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _load_actor_mapping_online_state() -> dict:
+    path = _actor_mapping_online_state_path()
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_actor_mapping_online_state(payload: dict) -> None:
+    path = _actor_mapping_online_state_path()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _actor_merge_backup_dir() -> Path:
+    path = data_path() / "actor_merge_backups"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _actor_merge_ignored_ghosts_path() -> Path:
+    path = data_path() / "actor_merge_ignored_ghosts.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _load_actor_merge_ignored_ghosts() -> set[str]:
+    path = _actor_merge_ignored_ghosts_path()
+    if not path.is_file():
+        return set()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    if isinstance(payload, list):
+        return {str(item) for item in payload if str(item).strip()}
+    if isinstance(payload, dict):
+        return {str(item) for item in payload.get("actor_ids", []) if str(item).strip()}
+    return set()
+
+
+def _save_actor_merge_ignored_ghosts(actor_ids: set[str]) -> None:
+    _actor_merge_ignored_ghosts_path().write_text(
+        json.dumps(
+            {"actor_ids": sorted(actor_ids), "updated_at": datetime.now(timezone.utc).isoformat()},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _actor_profile_overrides_path() -> Path:
+    path = data_path() / "actor_profile_overrides.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _load_actor_profile_overrides() -> dict[str, dict]:
+    path = _actor_profile_overrides_path()
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_actor_profile_overrides(overrides: dict[str, dict]) -> None:
+    _actor_profile_overrides_path().write_text(json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _latest_actor_mapping_upload_path() -> Path | None:
+    latest = _actor_mapping_upload_dir() / "latest"
+    if not latest.is_file():
+        return None
+    path = Path(latest.read_text(encoding="utf-8").strip())
+    return path if path.is_file() else None
+
+
+def _split_mapping_keywords(value: str | None) -> list[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    # Spaces are part of many English names, so only explicit list separators split aliases.
+    parts = re.split(r"[,，、;；|/]+", raw)
+    out: list[str] = []
+    for part in parts:
+        name = part.strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def _normalize_mapping_record(attrs: dict[str, str]) -> dict:
+    zh_cn = str(attrs.get("zh_cn") or "").strip()
+    zh_tw = str(attrs.get("zh_tw") or "").strip()
+    jp = str(attrs.get("jp") or "").strip()
+    keyword_names = _split_mapping_keywords(attrs.get("keyword"))
+    names: list[str] = []
+    for name in [jp, zh_cn, zh_tw, *keyword_names]:
+        if name and name not in names:
+            names.append(name)
+    tmdb_id = str(attrs.get("tmdb_id") or "").strip()
+    key_source = tmdb_id or jp or zh_cn or zh_tw or (names[0] if names else "")
+    return {
+        "id": tmdb_id or _normalize_actor_key(key_source),
+        "jp": jp,
+        "zh_cn": zh_cn,
+        "zh_tw": zh_tw,
+        "aliases": [name for name in names if name not in {jp, zh_cn, zh_tw}],
+        "names": names,
+        "tmdb_id": tmdb_id,
+        "verified": str(attrs.get("verified") or "").strip() in {"1", "true", "True", "yes"},
+    }
+
+
+def _parse_actor_mapping_xml(path: Path) -> tuple[list[dict], dict]:
+    records: list[dict] = []
+    missing: dict[str, int] = {"keyword": 0, "tmdb_id": 0, "verified": 0}
+    verified_count = 0
+    for _event, elem in ET.iterparse(path, events=("end",)):
+        tag = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+        if tag != "a":
+            elem.clear()
+            continue
+        attrs = {key: value for key, value in elem.attrib.items()}
+        record = _normalize_mapping_record(attrs)
+        records.append(record)
+        if not attrs.get("keyword"):
+            missing["keyword"] += 1
+        if not attrs.get("tmdb_id"):
+            missing["tmdb_id"] += 1
+        if not attrs.get("verified"):
+            missing["verified"] += 1
+        if record["verified"]:
+            verified_count += 1
+        elem.clear()
+    stats = {
+        "total": len(records),
+        "verified": verified_count,
+        "missing": missing,
+        "with_tmdb": len(records) - missing["tmdb_id"],
+    }
+    return records, stats
+
+
+def _save_actor_mapping_records(records: list[dict], source_path: Path, stats: dict) -> dict:
+    global _actor_mapping_records_cache, _actor_mapping_name_index_cache, _actor_mapping_tmdb_index_cache
+    payload = {
+        "version": 1,
+        "source_path": str(source_path),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "stats": stats,
+        "records": records,
+    }
+    path = _actor_mapping_store_path()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+    try:
+        mtime = path.stat().st_mtime
+        _actor_mapping_records_cache = (mtime, records)
+    except OSError:
+        _actor_mapping_records_cache = None
+    _actor_mapping_name_index_cache = None
+    _actor_mapping_tmdb_index_cache = None
+    return {
+        "path": str(path),
+        "updated_at": payload["updated_at"],
+        "stats": stats,
+    }
+
+
+def _clear_actor_mapping_records() -> dict:
+    global _actor_mapping_records_cache, _actor_mapping_name_index_cache, _actor_mapping_tmdb_index_cache
+    removed: list[str] = []
+    for path in (_actor_mapping_store_path(), _actor_mapping_online_state_path()):
+        if path.exists():
+            path.unlink()
+            removed.append(str(path))
+    _actor_mapping_records_cache = None
+    _actor_mapping_name_index_cache = None
+    _actor_mapping_tmdb_index_cache = None
+    return {"ok": True, "removed": removed}
+
+
+def _actor_mapping_download_attempts(settings) -> list[dict]:
+    attempts: list[dict] = []
+    mirror = str(getattr(settings, "github_mirror", "") or "").strip().rstrip("/")
+    if mirror:
+        attempts.append({"kind": "raw", "label": "raw-mirror", "url": f"{mirror}/{ACTOR_MAPPING_RAW_URL}", "proxy": ""})
+        attempts.append({"kind": "raw", "label": "github-page-mirror", "url": github_mirror_url(mirror, ACTOR_MAPPING_GITHUB_PAGE_URL).replace("/blob/", "/raw/"), "proxy": ""})
+    proxy = str(getattr(settings, "http_proxy", "") or "").strip()
+    if proxy:
+        attempts.append({"kind": "raw", "label": "raw-proxy", "url": ACTOR_MAPPING_RAW_URL, "proxy": proxy})
+        attempts.append({"kind": "api", "label": "github-api-proxy", "url": ACTOR_MAPPING_API_URL, "proxy": proxy})
+    attempts.extend([
+        {"kind": "raw", "label": "raw-direct", "url": ACTOR_MAPPING_RAW_URL, "proxy": ""},
+        {"kind": "api", "label": "github-api-direct", "url": ACTOR_MAPPING_API_URL, "proxy": ""},
+    ])
+    seen: set[tuple[str, str, str]] = set()
+    out: list[dict] = []
+    for item in attempts:
+        key = (item["kind"], item["url"], item.get("proxy") or "")
+        if item["url"] and key not in seen:
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+async def _download_actor_mapping_xml() -> tuple[bytes, dict]:
+    settings = get_settings()
+    headers = {"Accept": "application/xml,text/xml,application/vnd.github+json", "User-Agent": "NOOR-ActorMapping/1.0"}
+    token = str(getattr(settings, "github_token", "") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    errors: list[str] = []
+    for attempt in _actor_mapping_download_attempts(settings):
+        kwargs: dict[str, Any] = {"timeout": 15.0, "follow_redirects": True, "trust_env": False}
+        if attempt.get("proxy"):
+            kwargs["proxy"] = attempt["proxy"]
+        try:
+            async with httpx.AsyncClient(**kwargs) as client:
+                resp = await client.get(attempt["url"], headers=headers)
+                resp.raise_for_status()
+                if attempt["kind"] == "api":
+                    payload = resp.json()
+                    content = str(payload.get("content") or "")
+                    if not content:
+                        raise ValueError("GitHub API 响应缺少 content")
+                    data = base64.b64decode(content)
+                else:
+                    data = resp.content
+                if b"<" not in data[:200] or b"<a " not in data[:4096]:
+                    raise ValueError("下载内容不像演员映射 XML")
+                return data, {"source_url": attempt["url"], "source_label": attempt["label"], "proxy": bool(attempt.get("proxy"))}
+        except Exception as exc:
+            errors.append(f"{attempt['label']}: {exc}")
+    raise RuntimeError("在线映射表下载失败: " + " / ".join(errors[-4:]))
+
+
+async def _sync_actor_mapping_online(*, force: bool = False) -> dict:
+    state = _load_actor_mapping_online_state()
+    now = datetime.now(timezone.utc)
+    state.update({"last_attempt_at": now.isoformat(), "running": True})
+    _save_actor_mapping_online_state(state)
+    try:
+        content, meta = await _download_actor_mapping_xml()
+        upload_dir = _actor_mapping_upload_dir()
+        target = upload_dir / "online_actor_mapping.xml"
+        target.write_bytes(content)
+        (_actor_mapping_upload_dir() / "latest").write_text(str(target), encoding="utf-8")
+        records, stats = _parse_actor_mapping_xml(target)
+        result = _save_actor_mapping_records(records, target, {**stats, "online": True, **meta})
+        state = {
+            "enabled": bool(getattr(get_settings(), "actor_mapping_auto_update", False)),
+            "running": False,
+            "last_attempt_at": now.isoformat(),
+            "last_success_at": datetime.now(timezone.utc).isoformat(),
+            "last_error": "",
+            "source_url": meta.get("source_url"),
+            "source_label": meta.get("source_label"),
+            "stats": stats,
+        }
+        _save_actor_mapping_online_state(state)
+        SystemLogManager.get_instance().add_log(
+            "info",
+            f"[MediaLibrary] 在线演员映射表已同步: {stats.get('total', 0)} 条 · {meta.get('source_label')}",
+            source="media_library.actors",
+        )
+        return {"ok": True, "mapping": result, "online": state}
+    except Exception as exc:
+        state.update({"running": False, "last_error": str(exc)})
+        _save_actor_mapping_online_state(state)
+        SystemLogManager.get_instance().add_log("error", f"[MediaLibrary] 在线演员映射表同步失败: {exc}", source="media_library.actors")
+        if force:
+            raise
+        return {"ok": False, "error": str(exc), "online": state}
+
+
+def _maybe_schedule_actor_mapping_auto_update() -> None:
+    global _actor_mapping_auto_update_task
+    try:
+        settings = get_settings()
+        if not bool(getattr(settings, "actor_mapping_auto_update", False)):
+            return
+        state = _load_actor_mapping_online_state()
+        if state.get("running"):
+            return
+        if _actor_mapping_auto_update_task and not _actor_mapping_auto_update_task.done():
+            return
+        last_success = str(state.get("last_success_at") or "")
+        if last_success:
+            try:
+                last_dt = datetime.fromisoformat(last_success.replace("Z", "+00:00"))
+                if (datetime.now(timezone.utc) - last_dt).total_seconds() < 24 * 3600:
+                    return
+            except Exception:
+                pass
+        _actor_mapping_auto_update_task = asyncio.create_task(_sync_actor_mapping_online(force=False))
+    except RuntimeError:
+        return
+
+
+def _load_actor_mapping_status() -> dict:
+    path = _actor_mapping_store_path()
+    if not path.is_file():
+        return {"imported": False}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"imported": False, "error": "映射表文件无法读取"}
+    records = payload.get("records") if isinstance(payload, dict) else []
+    return {
+        "imported": True,
+        "path": str(path),
+        "source_path": payload.get("source_path"),
+        "updated_at": payload.get("updated_at"),
+        "stats": payload.get("stats") or {"total": len(records or [])},
+    }
+
+

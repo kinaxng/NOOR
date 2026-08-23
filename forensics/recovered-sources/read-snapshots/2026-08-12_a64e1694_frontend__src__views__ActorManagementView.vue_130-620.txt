@@ -1,0 +1,491 @@
+  const mappingId = String(group?.mapping_id || '')
+  const actorId = String(actor?.id || '')
+  if (!mappingId || !actorId) return
+  selectedMergeTargets.value = { ...selectedMergeTargets.value, [mappingId]: actorId }
+  const nextPlans = { ...mergePlans.value }
+  delete nextPlans[mappingId]
+  mergePlans.value = nextPlans
+}
+
+function changedPeopleLabel(movie: any) {
+  return (movie?.changed_people || []).map((person: any) => person.name).filter(Boolean).join(' / ')
+}
+
+function mergePlanActionable(plan: any) {
+  return !!((plan?.movie_count || 0) > 0 || (plan?.empty_source_actor_ids || []).length)
+}
+
+function mergePlanEmptyActorCount(plan: any) {
+  return (plan?.empty_source_actor_ids || []).length
+}
+
+function batchMergeableGroups() {
+  return (mappingMatches.value?.groups || []).filter((group: any) => !group?.has_tmdb_conflict && selectedMergeTargetId(group))
+}
+
+function batchConflictCount() {
+  return (mappingMatches.value?.groups || []).filter((group: any) => group?.has_tmdb_conflict).length
+}
+
+function rejectedReasonLabel(reason: string) {
+  if (reason === 'tmdb_conflict_alias') return t('files.actors.rejectedReasonTmdbConflict')
+  if (reason === 'ignored_empty_non_target_person') return t('files.actors.rejectedReasonIgnoredEmpty')
+  if (reason === 'ignored_person') return t('files.actors.rejectedReasonIgnoredPerson')
+  return reason || t('files.actors.rejectedReasonUnknown')
+}
+
+function deleteFailedSummary(items: any[]) {
+  return (items || [])
+    .slice(0, 3)
+    .map((item: any) => `${item.id || '-'}: ${item.error || ''}`.trim())
+    .join(' / ')
+}
+
+async function loadActors() {
+  loading.value = true
+  try {
+    const resp = await api.get('/media-library/actors', {
+      params: {
+        limit: pageSize,
+        offset: (page.value - 1) * pageSize,
+        q: query.value.trim() || undefined,
+        sort_by: sortBy.value,
+        sort_order: sortOrder.value,
+        lang: actorNameLang.value,
+      },
+    })
+    actors.value = resp.data.actors || []
+    total.value = resp.data.total || 0
+  } catch (error: any) {
+    actors.value = []
+    total.value = 0
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.loadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadDuplicates() {
+  duplicateLoading.value = true
+  await previewMappingMatches()
+  duplicateLoading.value = false
+}
+
+async function loadMappingStatus() {
+  try {
+    const resp = await api.get('/media-library/actors/mapping/status')
+    mappingStatus.value = resp.data.imported ? resp.data : null
+  } catch {
+    mappingStatus.value = null
+  }
+}
+
+async function syncMdcNgMapping() {
+  mappingUploading.value = true
+  try {
+    const resp = await api.post('/media-library/actors/mapping/sync-mdc-ng')
+    mappingStatus.value = { imported: true, ...(resp.data.mapping || {}), mdc_ng: resp.data.mdc_ng || {} }
+    toast.success(t('files.actors.mappingImportSuccess'))
+    await loadMappingStatus()
+    loadActors()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingImportFailed'))
+  } finally {
+    mappingUploading.value = false
+  }
+}
+
+async function clearMapping() {
+  const ok = await confirm({
+    title: t('files.actors.clearMapping'),
+    message: t('files.actors.clearMappingConfirm'),
+    confirmText: t('common.delete'),
+    danger: true,
+  })
+  if (!ok) return
+  mappingUploading.value = true
+  try {
+    await api.delete('/media-library/actors/mapping')
+    mappingStatus.value = null
+    mappingMatches.value = null
+    showMappingMatches.value = false
+    showRejectedMatches.value = false
+    toast.success(t('files.actors.clearMappingSuccess'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.clearMappingFailed'))
+  } finally {
+    mappingUploading.value = false
+  }
+}
+
+async function previewMappingMatches() {
+  mappingMatching.value = true
+  try {
+    const resp = await api.get('/media-library/actors/mapping/matches', {
+      params: { only_candidates: true, lang: actorNameLang.value },
+    })
+    mappingMatches.value = resp.data || null
+    showMappingMatches.value = true
+    showRejectedMatches.value = false
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingMatchFailed'))
+  } finally {
+    mappingMatching.value = false
+  }
+}
+
+async function previewTmdbBackfill() {
+  tmdbBackfillLoading.value = true
+  if (!tmdbBackfillApplying.value) tmdbBackfillResult.value = null
+  try {
+    const resp = await api.get('/media-library/actors/tmdb-backfill/preview', {
+      params: { lang: actorNameLang.value },
+    })
+    tmdbBackfill.value = resp.data || null
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbBackfillPreviewFailed'))
+  } finally {
+    tmdbBackfillLoading.value = false
+  }
+}
+
+async function previewNameSync() {
+  nameSyncLoading.value = true
+  if (!nameSyncApplying.value) nameSyncResult.value = null
+  try {
+    const resp = await api.get('/media-library/actors/name-sync/preview', {
+      params: { lang: actorNameLang.value },
+    })
+    nameSyncPreview.value = resp.data || null
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.nameSyncPreviewFailed'))
+  } finally {
+    nameSyncLoading.value = false
+  }
+}
+
+function stopNameSyncProgressPolling() {
+  if (nameSyncProgressTimer) {
+    window.clearInterval(nameSyncProgressTimer)
+    nameSyncProgressTimer = null
+  }
+}
+
+function startNameSyncProgressPolling(progressKey: string) {
+  stopNameSyncProgressPolling()
+  const poll = async () => {
+    try {
+      const resp = await api.get(`/media-library/actors/name-sync/progress/${encodeURIComponent(progressKey)}`)
+      nameSyncProgress.value = resp.data || null
+      const status = String(resp.data?.status || '')
+      if (status === 'completed' || status === 'failed') stopNameSyncProgressPolling()
+    } catch {
+      // The apply request reports final success/failure.
+    }
+  }
+  void poll()
+  nameSyncProgressTimer = window.setInterval(poll, 900)
+}
+
+async function applyNameSync() {
+  const count = nameSyncPreview.value?.summary?.safe_update_count || 0
+  if (!count || nameSyncApplying.value) return
+  const ok = await confirm({
+    title: t('files.actors.nameSyncApplyTitle'),
+    message: t('files.actors.nameSyncApplyConfirm', {
+      count,
+      conflicts: nameSyncPreview.value?.summary?.conflict_count || 0,
+    }),
+    confirmText: t('files.actors.nameSyncApply'),
+    size: 'md',
+  })
+  if (!ok) return
+  nameSyncApplying.value = true
+  nameSyncResult.value = null
+  nameSyncProgress.value = {
+    status: 'running',
+    processed: 0,
+    total: count,
+    applied_count: 0,
+    skipped_count: 0,
+    current_actor: '',
+    current_target: '',
+  }
+  const progressKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  startNameSyncProgressPolling(progressKey)
+  try {
+    const resp = await api.post('/media-library/actors/name-sync/apply', {
+      skip_conflicts: true,
+      dry_run: false,
+      progress_key: progressKey,
+    }, {
+      params: { lang: actorNameLang.value },
+    })
+    nameSyncResult.value = resp.data || null
+    toast.success(t('files.actors.nameSyncApplySuccess', { count: resp.data.applied_count || 0 }))
+    await previewNameSync()
+    loadActors()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.nameSyncApplyFailed'))
+  } finally {
+    nameSyncApplying.value = false
+    stopNameSyncProgressPolling()
+  }
+}
+
+function stopTmdbBackfillProgressPolling() {
+  if (tmdbBackfillProgressTimer) {
+    window.clearInterval(tmdbBackfillProgressTimer)
+    tmdbBackfillProgressTimer = null
+  }
+}
+
+function startTmdbBackfillProgressPolling(progressKey: string) {
+  stopTmdbBackfillProgressPolling()
+  const poll = async () => {
+    try {
+      const resp = await api.get(`/media-library/actors/tmdb-backfill/progress/${encodeURIComponent(progressKey)}`)
+      tmdbBackfillProgress.value = resp.data || null
+      const status = String(resp.data?.status || '')
+      if (status === 'completed' || status === 'failed') stopTmdbBackfillProgressPolling()
+    } catch {
+      // The apply request still owns the final success/failure result.
+    }
+  }
+  void poll()
+  tmdbBackfillProgressTimer = window.setInterval(poll, 900)
+}
+
+async function applyTmdbBackfill() {
+  const count = tmdbBackfill.value?.summary?.high_confidence_count || 0
+  if (!count || tmdbBackfillApplying.value) return
+  const ok = await confirm({
+    title: t('files.actors.tmdbBackfillApplyTitle'),
+    message: t('files.actors.tmdbBackfillApplyConfirm', { count }),
+    confirmText: t('files.actors.tmdbBackfillApply'),
+    size: 'md',
+  })
+  if (!ok) return
+  tmdbBackfillApplying.value = true
+  tmdbBackfillResult.value = null
+  tmdbBackfillProgress.value = {
+    status: 'running',
+    processed: 0,
+    total: count,
+    applied_count: 0,
+    skipped_count: 0,
+    current_actor: '',
+  }
+  const progressKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  startTmdbBackfillProgressPolling(progressKey)
+  try {
+    const resp = await api.post('/media-library/actors/tmdb-backfill/apply', {
+      only_high_confidence: true,
+      dry_run: false,
+      progress_key: progressKey,
+    }, {
+      params: { lang: actorNameLang.value },
+    })
+    tmdbBackfillResult.value = resp.data || null
+    toast.success(t('files.actors.tmdbBackfillApplySuccess', { count: resp.data.applied_count || 0 }))
+    await previewTmdbBackfill()
+    loadActors()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbBackfillApplyFailed'))
+  } finally {
+    tmdbBackfillApplying.value = false
+    stopTmdbBackfillProgressPolling()
+  }
+}
+
+function tmdbBackfillReviewKey(item: any) {
+  return `${item?.actor_id || ''}-${item?.tmdb_id || ''}`
+}
+
+async function reviewTmdbBackfillCandidate(item: any) {
+  const actorId = String(item?.actor_id || '').trim()
+  const tmdbId = String(item?.tmdb_id || '').trim()
+  if (!actorId || !tmdbId) return
+  const conflictActors = Array.isArray(item?.conflict_actors) ? item.conflict_actors : []
+  const hasConflict = conflictActors.length > 0
+  const ok = await confirm({
+    title: t('files.actors.tmdbBackfillReviewTitle'),
+    message: hasConflict
+      ? t('files.actors.tmdbBackfillReviewConflictMessage', { name: item.display_name || item.actor_name || actorId, tmdb: tmdbId })
+      : t('files.actors.tmdbBackfillReviewApplyMessage', { name: item.display_name || item.actor_name || actorId, tmdb: tmdbId }),
+    confirmText: hasConflict ? t('files.actors.tmdbBackfillReviewOpenActor') : t('files.actors.tmdbBackfillReviewApply'),
+    cancelText: t('common.cancel'),
+    size: 'md',
+    details: [
+      {
+        label: 'TMDB',
+        items: [`${tmdbId} · ${item.mapping_name || item.matched_name || ''}`.trim()],
+      },
+      ...(hasConflict ? [{
+        label: t('files.actors.tmdbBackfillReviewConflicts'),
+        items: conflictActors.map((actor: any) => actor.display_name || actor.name || actor.id).filter(Boolean),
+      }] : []),
+    ],
+  })
+  if (!ok) return
+  if (hasConflict) {
+    openActor(item.actor)
+    return
+  }
+  const key = tmdbBackfillReviewKey(item)
+  tmdbBackfillReviewing.value = { ...tmdbBackfillReviewing.value, [key]: true }
+  try {
+    const resp = await api.post('/media-library/actors/tmdb-backfill/apply', {
+      actor_ids: [actorId],
+      only_high_confidence: false,
+      dry_run: false,
+    }, {
+      params: { lang: actorNameLang.value },
+    })
+    if ((resp.data?.applied_count || 0) > 0) {
+      toast.success(t('files.actors.tmdbBackfillReviewApplySuccess', { name: item.display_name || item.actor_name || actorId }))
+      await previewTmdbBackfill()
+      loadActors()
+    } else {
+      toast.warning(t('files.actors.tmdbBackfillReviewSkipped'))
+    }
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbBackfillApplyFailed'))
+  } finally {
+    const next = { ...tmdbBackfillReviewing.value }
+    delete next[key]
+    tmdbBackfillReviewing.value = next
+  }
+}
+
+async function loadMergePlan(group: any) {
+  const mappingId = String(group?.mapping_id || '')
+  if (!mappingId) return
+  mergePlanLoading.value = { ...mergePlanLoading.value, [mappingId]: true }
+  try {
+    const resp = await api.get('/media-library/actors/mapping/merge-plan', {
+      params: { mapping_id: mappingId, target_actor_id: selectedMergeTargetId(group) || undefined, lang: actorNameLang.value },
+    })
+    mergePlans.value = { ...mergePlans.value, [mappingId]: resp.data }
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mergePlanFailed'))
+  } finally {
+    mergePlanLoading.value = { ...mergePlanLoading.value, [mappingId]: false }
+  }
+}
+
+async function executeMergePlan(group: any) {
+  const mappingId = String(group?.mapping_id || '')
+  if (!mappingId) return
+  const plan = mergePlans.value[mappingId]
+  if (!mergePlanActionable(plan)) return
+  const ok = await confirm({
+    title: t('files.actors.mergeConfirmTitle'),
+    message: t('files.actors.mergeConfirm', {
+      count: plan.movie_count || 0,
+      empty: mergePlanEmptyActorCount(plan),
+      target: plan.target_name || mappingGroupName(group),
+    }),
+    confirmText: t('files.actors.executeMerge'),
+    note: t('files.actors.mergeBackupNote'),
+    size: 'md',
+  })
+  if (!ok) return
+  mergeExecuting.value = { ...mergeExecuting.value, [mappingId]: true }
+  try {
+    const resp = await api.post('/media-library/actors/mapping/merge-execute', {
+      mapping_id: mappingId,
+      target_name: plan.target_name,
+      target_actor_id: plan.target_actor_id || selectedMergeTargetId(group) || undefined,
+      dry_run: false,
+    }, {
+      params: { lang: actorNameLang.value },
+    })
+    toast.success(t('files.actors.mergeSuccess', { count: resp.data.updated_count || 0 }))
+    const deleteFailures = resp.data.delete_failed_actor_ids || []
+    if (deleteFailures.length) {
+      toast.error(`${t('files.actors.mergeDeleteFailed', { count: deleteFailures.length })}: ${deleteFailedSummary(deleteFailures)}`)
+    }
+    await previewMappingMatches()
+    loadActors()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mergeFailed'))
+  } finally {
+    mergeExecuting.value = { ...mergeExecuting.value, [mappingId]: false }
+  }
+}
+
+async function executeBatchMerge() {
+  const groups = batchMergeableGroups()
+  if (!groups.length || batchMerging.value) return
+  const conflictCount = batchConflictCount()
+  const ok = await confirm({
+    title: t('files.actors.batchMergeConfirmTitle'),
+    message: t('files.actors.batchMergeConfirm', { count: groups.length, skipped: conflictCount }),
+    confirmText: t('files.actors.batchMerge'),
+    note: t('files.actors.batchMergeNote'),
+    size: 'md',
+    details: [{
+      label: t('files.actors.batchMergeTargets'),
+      items: groups.slice(0, 20).map((group: any) => `${mappingGroupName(group)} -> ${selectedMergeTargetName(group) || group.target_actor_name || ''}`),
+    }],
+  })
+  if (!ok) return
+
+  batchMerging.value = true
+  try {
+    const targetActorIds: Record<string, string> = {}
+    for (const group of groups) {
+      const mappingId = String(group?.mapping_id || '')
+      const actorId = selectedMergeTargetId(group)
+      if (mappingId && actorId) targetActorIds[mappingId] = actorId
+    }
+    const resp = await api.post('/media-library/actors/mapping/merge-batch', {
+      target_actor_ids: targetActorIds,
+      skip_conflicts: true,
+      dry_run: false,
+    }, {
+      params: { lang: actorNameLang.value },
+    })
+    const result = resp.data || {}
+    toast.success(t('files.actors.batchMergeSuccess', {
+      groups: result.executed_count || 0,
+      count: result.updated_count || 0,
+      deleted: result.deleted_actor_count || 0,
+      skipped: result.skipped_count || 0,
+    }))
+    const failures = result.failures || []
+    if (failures.length) {
+      toast.error(t('files.actors.batchMergeFailed', { count: failures.length }) + `: ${failures.slice(0, 3).map((item: any) => `${item.name || item.mapping_id}: ${item.error}`).join(' / ')}`)
+    }
+    const deleteFailures = result.delete_failed_actor_ids || []
+    if (deleteFailures.length) {
+      toast.error(`${t('files.actors.mergeDeleteFailed', { count: deleteFailures.length })}: ${deleteFailedSummary(deleteFailures)}`)
+    }
+    await previewMappingMatches()
+    loadActors()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mergeFailed'))
+  } finally {
+    batchMerging.value = false
+  }
+}
+
+function setSort(key: SortKey, order: SortOrder) {
+  sortBy.value = key
+  sortOrder.value = order
+  page.value = 1
+  loadActors()
+}
+
+function openActor(actor: MediaActor) {
+  if (!actor.id) return
+  router.push({
+    path: `/actors/${encodeURIComponent(actor.id)}`,
+    query: { returnTo: '/files/actors', actorLang: actorNameLang.value },
+  })
+}

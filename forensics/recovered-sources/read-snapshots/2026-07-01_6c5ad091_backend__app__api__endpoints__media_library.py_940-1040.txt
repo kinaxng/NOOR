@@ -1,0 +1,101 @@
+        return None
+
+
+def _scan_inodes(dir_path: str) -> dict[tuple[int, int], str]:
+    return scan_inodes_impl(dir_path)
+
+
+def _scan_single_group(source_dir: str, hardlink_dir: str) -> list[dict]:
+    return scan_single_group_impl(source_dir, hardlink_dir, scan_inodes_fn=_scan_inodes)
+
+
+def _fetch_emby_item_info(config: dict, emby_id: str | None) -> tuple[str | None, str | None]:
+    return fetch_emby_item_info_impl(
+        config,
+        emby_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+    )
+
+
+def _extract_code_from_path(file_path: str) -> str:
+    return extract_code_from_path_impl(file_path)
+
+
+async def _build_hardlink_groups() -> list[dict]:
+    return await build_hardlink_groups_impl(
+        _load_config(),
+        scan_single_group_fn=_scan_single_group,
+        extract_code_from_path_fn=_extract_code_from_path,
+    )
+
+
+def _save_hardlink_groups(groups: list[dict]) -> None:
+    save_hardlink_groups_impl(groups, hardlink_groups_path_fn=_hardlink_groups_path)
+
+
+def _load_hardlink_groups() -> list[dict]:
+    return load_hardlink_groups_impl(hardlink_groups_path_fn=_hardlink_groups_path)
+
+
+def _enrich_hardlink_groups(groups: list[dict]) -> dict:
+    return enrich_hardlink_groups_impl(groups)
+
+
+# ─── Schemas ──────────────────────────────────────────────────────────────────
+
+class MediaAdapterMeta(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: str
+    author: str
+
+
+class MediaLibraryStatus(BaseModel):
+    available: bool
+    current: MediaAdapterMeta | None
+    message: str | None
+
+
+# ─── API Endpoints ─────────────────────────────────────────────────────────────
+
+@router.get("", response_model=MediaLibraryStatus)
+async def get_status():
+    """Get media library adapter status."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        return MediaLibraryStatus(
+            available=False,
+            current=None,
+            message=_ADAPTER_NOT_ACTIVATED,
+        )
+    return MediaLibraryStatus(
+        available=True,
+        current=MediaAdapterMeta(
+            id="emby",
+            name="Emby / Jellyfin",
+            version="1.0.0",
+            description="连接 Emby 或 Jellyfin 媒体服务器",
+            author="NOOR",
+        ),
+        message=None,
+    )
+
+
+@router.get("/config")
+async def get_config():
+    """Get saved media library configuration."""
+    return {"config": _ensure_webhook_token(_load_config())}
+
+
+@router.post("/config")
+async def save_config(config: dict):
+    """Partially update media library configuration.
+    Only updates the fields provided; all other fields are preserved.
+    """
+    existing = _load_config()
+    existing.update(config)
+    _save_config(existing)
+    state = _bump_sync_state()

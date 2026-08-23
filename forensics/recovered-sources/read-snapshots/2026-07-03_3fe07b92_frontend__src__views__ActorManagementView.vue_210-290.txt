@@ -1,0 +1,81 @@
+  if (!ok) return
+  mappingUploading.value = true
+  try {
+    await api.delete('/media-library/actors/mapping')
+    mappingStatus.value = null
+    mappingMatches.value = null
+    showMappingMatches.value = false
+    showRejectedMatches.value = false
+    toast.success(t('files.actors.clearMappingSuccess'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.clearMappingFailed'))
+  } finally {
+    mappingUploading.value = false
+  }
+}
+
+async function previewMappingMatches() {
+  mappingMatching.value = true
+  try {
+    const resp = await api.get('/media-library/actors/mapping/matches', {
+      params: { only_candidates: true, lang: actorNameLang.value },
+    })
+    mappingMatches.value = resp.data || null
+    showMappingMatches.value = true
+    showRejectedMatches.value = false
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingMatchFailed'))
+  } finally {
+    mappingMatching.value = false
+  }
+}
+
+async function previewTmdbBackfill() {
+  tmdbBackfillLoading.value = true
+  try {
+    const resp = await api.get('/media-library/actors/tmdb-backfill/preview', {
+      params: { lang: actorNameLang.value },
+    })
+    tmdbBackfill.value = resp.data || null
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbBackfillPreviewFailed'))
+  } finally {
+    tmdbBackfillLoading.value = false
+  }
+}
+
+async function applyTmdbBackfill() {
+  const count = tmdbBackfill.value?.summary?.high_confidence_count || 0
+  if (!count || tmdbBackfillApplying.value) return
+  const ok = await confirm({
+    title: t('files.actors.tmdbBackfillApplyTitle'),
+    message: t('files.actors.tmdbBackfillApplyConfirm', { count }),
+    confirmText: t('files.actors.tmdbBackfillApply'),
+    size: 'md',
+  })
+  if (!ok) return
+  tmdbBackfillApplying.value = true
+  try {
+    const resp = await api.post('/media-library/actors/tmdb-backfill/apply', {
+      only_high_confidence: true,
+      dry_run: false,
+    }, {
+      params: { lang: actorNameLang.value },
+    })
+    toast.success(t('files.actors.tmdbBackfillApplySuccess', { count: resp.data.applied_count || 0 }))
+    await previewTmdbBackfill()
+    loadActors()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbBackfillApplyFailed'))
+  } finally {
+    tmdbBackfillApplying.value = false
+  }
+}
+
+async function loadMergePlan(group: any) {
+  const mappingId = String(group?.mapping_id || '')
+  if (!mappingId) return
+  mergePlanLoading.value = { ...mergePlanLoading.value, [mappingId]: true }
+  try {
+    const resp = await api.get('/media-library/actors/mapping/merge-plan', {
+      params: { mapping_id: mappingId, target_actor_id: selectedMergeTargetId(group) || undefined, lang: actorNameLang.value },

@@ -1,0 +1,36 @@
+        titleOnClick: () => openDetail(item),
+        className: 'javdb-card',
+      })
+      const badgeHost = card.querySelector('.noor-plugin-media-card__badges')
+      if (badgeHost) badgeHost.appendChild(subscribeAction)
+      grid.appendChild(card)
+    })
+  }
+
+  function renderPager() {
+    pager.innerHTML = ''
+    let totalItems = Number(state.total || 0)
+    if (state.relation?.relType === 'actor') {
+      totalItems = filteredItems().length
+    } else if (state.tab === 'latest' && state.latestSelectedFilters.length && latestRemoteFilter() === 'all') {
+      totalItems = filteredItems().length
+    }
+    if (totalItems <= state.limit) return
+    pager.appendChild(sdk.ui.pagination({
+      page: state.page,
+      totalPages: Math.ceil(totalItems / state.limit),
+      onPage: next => {
+        state.page = next
+        if (usesRemotePaging()) {
+          loadData()
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          return
+        }
+        renderGrid()
+        renderPager()
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      },
+    }))
+  }
+
+  async function openDetail(item) {

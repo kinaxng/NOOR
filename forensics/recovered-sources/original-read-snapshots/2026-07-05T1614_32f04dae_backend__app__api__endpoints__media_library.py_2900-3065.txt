@@ -1,0 +1,166 @@
+        "delete_blockers": delete_blockers,
+        "can_delete_cleanly": person is None or (person.get("CanDelete") is not False and related_total == 0),
+    }
+
+
+def _actor_merge_apply_people(item: dict, *, source_actor_ids: set[str], target_name: str) -> tuple[dict, list[dict]]:
+    people = item.get("People") if isinstance(item.get("People"), list) else []
+    has_existing_target = any(
+        isinstance(person, dict)
+        and str(person.get("Type") or "") == "Actor"
+        and str(person.get("Name") or "") == target_name
+        and str(person.get("Id") or "") not in source_actor_ids
+        for person in people
+    )
+    next_people: list[dict] = []
+    changed_people: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for person in people:
+        if not isinstance(person, dict):
+            continue
+        next_person = dict(person)
+        person_type = str(next_person.get("Type") or "")
+        person_id = str(next_person.get("Id") or "")
+        if person_type == "Actor" and person_id in source_actor_ids:
+            changed_people.append({
+                "id": person_id,
+                "name": next_person.get("Name") or "",
+                "type": person_type,
+                "primary_image_tag": next_person.get("PrimaryImageTag"),
+            })
+            if has_existing_target:
+                continue
+            next_person["Name"] = target_name
+            next_person["Type"] = "Actor"
+            next_person.pop("Id", None)
+            next_person.pop("PrimaryImageTag", None)
+        dedupe_key = (str(next_person.get("Type") or ""), str(next_person.get("Name") or ""))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        next_people.append(next_person)
+    next_item = dict(item)
+    next_item["People"] = next_people
+    return next_item, changed_people
+
+
+def _actor_merge_remove_source_people(item: dict, *, source_actor_ids: set[str]) -> tuple[dict, list[dict]]:
+    people = item.get("People") if isinstance(item.get("People"), list) else []
+    next_people: list[dict] = []
+    removed: list[dict] = []
+    for person in people:
+        if (
+            isinstance(person, dict)
+            and str(person.get("Type") or "") == "Actor"
+            and str(person.get("Id") or "") in source_actor_ids
+        ):
+            removed.append({
+                "id": person.get("Id"),
+                "name": person.get("Name") or "",
+                "type": person.get("Type") or "",
+                "primary_image_tag": person.get("PrimaryImageTag"),
+            })
+            continue
+        next_people.append(person)
+    next_item = dict(item)
+    next_item["People"] = next_people
+    return next_item, removed
+
+
+async def _build_actor_mapping_merge_plan(
+    config: dict,
+    mapping_id: str,
+    *,
+    target_name: str | None = None,
+    target_actor_id: str | None = None,
+    lang: str | None = None,
+) -> dict:
+    group = await _find_actor_mapping_group(config, mapping_id, lang=lang)
+    target = _actor_group_target_name(group, target_name, lang=lang, target_actor_id=target_actor_id)
+    if not target:
+        raise HTTPException(status_code=400, detail="无法确定目标演员名")
+    source_ids = _actor_group_source_ids(group, target_actor_id=target_actor_id)
+    if target_actor_id:
+        if len(source_ids) < 1:
+            raise HTTPException(status_code=400, detail="当前映射组没有需要合并到目标的演员")
+    elif len(source_ids) < 2:
+        raise HTTPException(status_code=400, detail="当前映射组不足两位演员，无需合并")
+
+    movies_by_id: dict[str, dict] = {}
+    source_counts: dict[str, int] = {}
+    async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+        for actor_id in source_ids:
+            related = await _emby_related_movies_for_actor(client, config, actor_id)
+            source_counts[actor_id] = len(related)
+            for item in related:
+                item_id = str(item.get("Id") or "")
+                if item_id and item_id not in movies_by_id:
+                    movies_by_id[item_id] = item
+
+    source_id_set = set(source_ids)
+    movies: list[dict] = []
+    for item in movies_by_id.values():
+        changed_people = []
+        for person in item.get("People") or []:
+            if isinstance(person, dict) and str(person.get("Type") or "") == "Actor" and str(person.get("Id") or "") in source_id_set:
+                changed_people.append({
+                    "id": person.get("Id"),
+                    "name": person.get("Name") or "",
+                    "type": person.get("Type") or "",
+                    "primary_image_tag": person.get("PrimaryImageTag"),
+                })
+        if changed_people:
+            movies.append({
+                "id": item.get("Id"),
+                "name": item.get("Name") or "",
+                "path": item.get("Path") or "",
+                "changed_people": changed_people,
+                "target_name": target,
+            })
+    movies.sort(key=lambda item: str(item.get("name") or ""))
+    return {
+        "mapping_id": mapping_id,
+        "target_name": target,
+        "target_actor_id": str(target_actor_id or "").strip() or None,
+        "group": group,
+        "source_actor_ids": source_ids,
+        "source_counts": source_counts,
+        "empty_source_actor_ids": [actor_id for actor_id in source_ids if source_counts.get(actor_id, 0) == 0],
+        "movie_count": len(movies),
+        "movies": movies,
+    }
+
+
+async def _execute_actor_mapping_merge(
+    config: dict,
+    req: ActorMappingMergeRequest,
+    *,
+    lang: str | None = None,
+) -> dict:
+    plan = await _build_actor_mapping_merge_plan(
+        config,
+        req.mapping_id,
+        target_name=req.target_name,
+        target_actor_id=req.target_actor_id,
+        lang=lang,
+    )
+    source_ids = set(plan["source_actor_ids"])
+    target_name = str(plan["target_name"])
+    updated: list[dict] = []
+    skipped: list[dict] = []
+    backups: list[dict] = []
+    deleted_actor_ids: list[str] = []
+    delete_failed_actor_ids: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+        for movie in plan["movies"]:
+            item_id = str(movie.get("id") or "")
+            if not item_id:
+                continue
+            item = await _emby_item_for_update(client, config, item_id)
+            next_item, changed_people = _actor_merge_apply_people(item, source_actor_ids=source_ids, target_name=target_name)
+            if not changed_people:
+                skipped.append({"id": item_id, "name": item.get("Name") or "", "reason": "no_matching_people"})
+                continue
+            backups.append({
+                "id": item_id,

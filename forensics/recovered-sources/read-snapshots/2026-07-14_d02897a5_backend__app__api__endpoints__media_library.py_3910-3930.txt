@@ -1,0 +1,21 @@
+        source="media_library.actors",
+    )
+    return {"ok": True, "mapping": result}
+
+
+@router.get("/actors/mapping/matches")
+async def get_actor_mapping_matches(
+    limit: int = 5000,
+    only_candidates: bool = Query(False, description="只返回需要合并确认的候选组"),
+    lang: str | None = None,
+):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _preview_actor_mapping_matches(config, limit=limit, only_candidates=only_candidates, lang=lang)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"匹配演员映射表失败: {exc}")
+    return {"ok": True, **result}
+
+

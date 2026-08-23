@@ -1,0 +1,71 @@
+                      color="secondary"
+                      size="small"
+                      :loading="previewLoading"
+                      :disabled="!selectedSubmitPath || !facefusionSettings.source_path"
+                      @click="handleGenerateFaceFusionPreview"
+                    >
+                      {{ previewUrl ? '刷新预览' : '生成预览' }}
+                    </VuiButton>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">执行后端</label>
+                      <select v-model="facefusionSettings.execution_provider" class="settings-input w-full">
+                        <option value="cuda">CUDA</option>
+                        <option value="cpu">CPU</option>
+                        <option value="tensorrt">TensorRT</option>
+                        <option value="openvino">OpenVINO</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">设备 ID</label>
+                      <input v-model="facefusionSettings.device_ids" class="settings-input w-full" type="text" placeholder="0" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">处理器</label>
+                      <input v-model="facefusionSettings.processors" class="settings-input w-full" type="text" placeholder="留空" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">选择模式</label>
+                      <select v-model="facefusionSettings.face_selector_mode" class="settings-input w-full">
+                        <option value="reference">Reference</option>
+                        <option value="one">One</option>
+                        <option value="many">Many</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">参考帧</label>
+                      <input v-model.number="facefusionSettings.reference_frame_number" class="settings-input w-full" type="number" min="0" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">人脸位置</label>
+                      <input v-model.number="facefusionSettings.reference_face_position" class="settings-input w-full" type="number" min="0" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">匹配距离</label>
+                      <input v-model.number="facefusionSettings.reference_face_distance" class="settings-input w-full" type="number" min="0" max="1" step="0.05" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">视频编码</label>
+                      <select v-model="facefusionSettings.output_video_encoder" class="settings-input w-full">
+                        <option value="libx264">libx264</option>
+                        <option value="libx265">libx265</option>
+                        <option value="h264_nvenc">h264_nvenc</option>
+                        <option value="hevc_nvenc">hevc_nvenc</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">编码预设</label>
+                      <select v-model="facefusionSettings.output_video_preset" class="settings-input w-full">
+                        <option value="ultrafast">ultrafast</option>
+                        <option value="veryfast">veryfast</option>
+                        <option value="fast">fast</option>
+                        <option value="medium">medium</option>
+                        <option value="slow">slow</option>
+                      </select>

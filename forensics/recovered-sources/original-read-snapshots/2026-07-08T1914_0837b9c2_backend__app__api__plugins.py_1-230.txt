@@ -1,0 +1,230 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import asyncio
+import time
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+
+from app.plugins.runtime import PLUGINS_DIR, runtime
+from app.plugins.handlers import get_plugin_handler
+from app.api.system import SystemLogManager
+
+router = APIRouter(prefix="/api/plugins", tags=["plugins"])
+NOISY_PLUGIN_ACTIONS = {
+    "metrics",
+    "overview",
+    "status",
+    "refresh-status",
+    "refresh_status",
+    "stats",
+}
+NOISY_PLUGIN_PATH_PARTS = (
+    "/ws/overview",
+    "/ws/metrics",
+)
+
+
+def _plugin_log(level: str, plugin_id: str, message: str, *, source: str | None = None):
+    try:
+        SystemLogManager.get_instance().add_log(level, message, source=source or f"plugin.{plugin_id}")
+    except Exception:
+        pass
+
+
+def _payload_hint(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return type(payload).__name__
+    keys = ", ".join(list(payload.keys())[:8])
+    more = "" if len(payload) <= 8 else f", +{len(payload) - 8}"
+    return f"keys=[{keys}{more}]"
+
+
+def _request_hint(request: Request | None) -> str:
+    if not request:
+        return ""
+    referer = str(request.headers.get("referer") or "")
+    ua = str(request.headers.get("user-agent") or "")
+    client = request.client.host if request.client else ""
+    parts = []
+    if client:
+        parts.append(f"client={client}")
+    if referer:
+        # Keep only path/query for same-origin referers to avoid noisy full URLs.
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            ref = f"{parsed.path}{('?' + parsed.query) if parsed.query else ''}" or referer
+        except Exception:
+            ref = referer
+        parts.append(f"referer={ref}")
+    if ua:
+        parts.append(f"ua={ua[:60]}")
+    return " ".join(parts)
+
+
+def _is_noisy_plugin_action(action: str) -> bool:
+    value = str(action or "").lower().strip()
+    return value in NOISY_PLUGIN_ACTIONS or value.endswith("_status") or value.endswith("-status")
+
+
+def _status_to_background_status(value: Any) -> str:
+    status = str(value or "idle").lower()
+    if status in {"running", "queued", "pending"}:
+        return "running"
+    if status in {"failed", "error"}:
+        return "failed"
+    if status in {"completed", "done", "success"}:
+        return "idle"
+    return "idle"
+
+
+def _progress_value(value: Any) -> int:
+    try:
+        return max(0, min(int(value or 0), 100))
+    except Exception:
+        return 0
+
+
+def _short_text(value: Any, limit: int = 180) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+async def _get_core_background_tasks() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+
+    try:
+        from app.api.settings_status_helpers import read_install_status_response, read_model_download_status_response
+
+        download = read_model_download_status_response()
+        download_status = _status_to_background_status(download.get("status"))
+        download_progress = _progress_value(download.get("progress"))
+        model = str(download.get("model") or "")
+        items.append({
+            "id": "noor-core.whisper-model-download",
+            "plugin_id": "noor-core",
+            "plugin_name": "NOOR",
+            "title": "Whisper 模型下载",
+            "status": download_status,
+            "enabled": True,
+            "progress": download_progress if download_status == "running" else (100 if str(download.get("status") or "") == "completed" else 0),
+            "summary": _short_text(download.get("message") or ("模型下载待命" if not model else f"{model} 下载状态")),
+            "detail": _short_text(download.get("output") or download.get("message") or "", 320),
+            "metrics": {
+                "进度": download_progress,
+            },
+            "can_run": False,
+        })
+
+        install = read_install_status_response()
+        install_status = _status_to_background_status(install.get("status"))
+        install_progress = _progress_value(install.get("progress"))
+        current_package = str(install.get("current_package") or "")
+        items.append({
+            "id": "noor-core.whisper-runtime-install",
+            "plugin_id": "noor-core",
+            "plugin_name": "NOOR",
+            "title": "Whisper 运行时依赖安装",
+            "status": install_status,
+            "enabled": True,
+            "progress": install_progress if install_status == "running" else (100 if str(install.get("status") or "") == "completed" else 0),
+            "summary": _short_text(install.get("message") or "运行时依赖安装待命"),
+            "detail": _short_text(install.get("output") or "", 320),
+            "metrics": {
+                "进度": install_progress,
+                "当前包": current_package,
+            },
+            "can_run": False,
+        })
+    except Exception as exc:
+        items.append({
+            "id": "noor-core.whisper-background-status",
+            "plugin_id": "noor-core",
+            "plugin_name": "NOOR",
+            "title": "Whisper 后台状态",
+            "status": "failed",
+            "enabled": True,
+            "summary": "Whisper 后台状态读取失败",
+            "detail": str(exc),
+            "metrics": {},
+            "can_run": False,
+        })
+
+    try:
+        from app.core import database
+        from app.knowledge.repository import KnowledgeRepository
+
+        async with database.async_session_maker() as db:
+            run = await KnowledgeRepository(db).latest_run()
+        stats = run.stats if run and isinstance(run.stats, dict) else {}
+        status = _status_to_background_status(run.status if run else "idle")
+        progress = _progress_value(stats.get("percent"))
+        processed = int(stats.get("processed") or 0) if isinstance(stats, dict) else 0
+        total = int(stats.get("total") or 0) if isinstance(stats, dict) else 0
+        items.append({
+            "id": "noor-core.knowledge-rebuild",
+            "plugin_id": "noor-core",
+            "plugin_name": "NOOR",
+            "title": "Knowledge Core 重建",
+            "status": status,
+            "enabled": True,
+            "last_run_at": run.started_at.isoformat() if run and run.started_at else "",
+            "last_started_at": run.started_at.isoformat() if run and run.started_at else "",
+            "last_finished_at": run.completed_at.isoformat() if run and run.completed_at else "",
+            "progress": progress if status == "running" else (100 if run and run.status == "completed" else progress),
+            "summary": run.message if run else "知识库重建待命",
+            "detail": str(stats.get("phase") or "") if isinstance(stats, dict) else "",
+            "metrics": {
+                "已处理": processed,
+                "总数": total,
+                "进度": progress,
+            },
+            "can_run": False,
+        })
+    except Exception as exc:
+        items.append({
+            "id": "noor-core.knowledge-rebuild",
+            "plugin_id": "noor-core",
+            "plugin_name": "NOOR",
+            "title": "Knowledge Core 重建",
+            "status": "failed",
+            "enabled": True,
+            "summary": "Knowledge Core 状态读取失败",
+            "detail": str(exc),
+            "metrics": {},
+            "can_run": False,
+        })
+
+    return items
+
+
+class ConfigPayload(BaseModel):
+    config: dict[str, Any]
+
+
+class DownloadPayload(BaseModel):
+    payload: dict[str, Any]
+
+
+class FeedPushPayload(BaseModel):
+    item: dict[str, Any]
+
+
+class PluginActionPayload(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class MarketRepoPayload(BaseModel):
+    repo_url: str
+
+
+class MarketInstallPayload(BaseModel):
+    repo_url: str
+    plugin_id: str
+

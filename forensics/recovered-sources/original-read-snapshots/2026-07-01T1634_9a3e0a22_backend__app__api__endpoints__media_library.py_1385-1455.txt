@@ -1,0 +1,71 @@
+            })
+            if not req.dry_run:
+                resp = await client.post(
+                    f"{_server_url(config)}/emby/Items/{quote(item_id, safe='')}",
+                    headers={**_headers(config.get("api_key", "")), "Content-Type": "application/json"},
+                    json=next_item,
+                )
+                resp.raise_for_status()
+                verify_item = await _emby_item_for_update(client, config, item_id)
+                cleanup_item, cleanup_people = _actor_merge_remove_source_people(verify_item, source_actor_ids=source_ids)
+                if cleanup_people:
+                    cleanup_resp = await client.post(
+                        f"{_server_url(config)}/emby/Items/{quote(item_id, safe='')}",
+                        headers={**_headers(config.get("api_key", "")), "Content-Type": "application/json"},
+                        json=cleanup_item,
+                    )
+                    cleanup_resp.raise_for_status()
+                else:
+                    cleanup_people = []
+            else:
+                cleanup_people = []
+            updated.append({
+                "id": item_id,
+                "name": item.get("Name") or "",
+                "path": item.get("Path") or "",
+                "changed_people": changed_people,
+                "cleanup_people": cleanup_people,
+                "target_name": target_name,
+            })
+
+        before_counts = dict(plan.get("source_counts") or {})
+        after_counts = {}
+        if not req.dry_run:
+            for actor_id in plan["source_actor_ids"]:
+                related = await _emby_related_movies_for_actor(client, config, actor_id, limit=5000)
+                after_counts[actor_id] = len(related)
+
+    backup_path = None
+    if backups and not req.dry_run:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        backup_path_obj = _actor_merge_backup_dir() / f"{timestamp}_{_safe_upload_filename(req.mapping_id)}.json"
+        backup_path_obj.write_text(
+            json.dumps({
+                "mapping_id": req.mapping_id,
+                "target_name": target_name,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "backups": backups,
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        backup_path = str(backup_path_obj)
+
+    return {
+        "ok": True,
+        "dry_run": req.dry_run,
+        "plan": plan,
+        "updated_count": len(updated),
+        "updated": updated,
+        "skipped": skipped,
+        "backup_path": backup_path,
+        "after_counts": after_counts,
+        "before_counts": before_counts,
+    }
+
+
+def _item_matches_query(item: dict, query: str | None) -> bool:
+    if not query:
+        return True
+    q = query.strip().lower()
+    if not q:
+        return True

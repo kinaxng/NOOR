@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useI18n } from '../../composables/useI18n'
+import BaseIcon from '../../components/noor/BaseIcon.vue'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+
+const toast = useToast()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+
+const sourceDir = ref('')
+const outputDir = ref('')
+const outputDirManuallyEdited = ref(false)
+const noorDataDir = ref('')
+const databasePath = ref('')
+const whisperModelDir = ref('')
+const whisperCacheDir = ref('')
+const whisperTempDir = ref('')
+const audioSeparatorModelDir = ref('')
+const reazonModelDir = ref('')
+const reazonNemoModelPath = ref('')
+const ladaModelDir = ref('')
+const ladaCacheDir = ref('')
+const ladaTempDir = ref('')
+const facefusionModelDir = ref('')
+const facefusionCacheDir = ref('')
+const facefusionTempDir = ref('')
+
+// Emby path mapping
+const embyPathPrefix = ref('')
+
+// Scan groups
+interface ScanGroup {
+  name: string
+  source_dir: string
+  hardlink_dir: string
+}
+const scanGroups = ref<ScanGroup[]>([])
+
+// Directory picker
+const showDirPicker = ref(false)
+type DirPickerTarget =
+  | 'sourceDir'
+  | 'outputDir'
+  | 'noorDataDir'
+  | 'whisperModelDir'
+  | 'whisperCacheDir'
+  | 'whisperTempDir'
+  | 'audioSeparatorModelDir'
+  | 'reazonModelDir'
+  | 'ladaModelDir'
+  | 'ladaCacheDir'
+  | 'ladaTempDir'
+  | 'facefusionModelDir'
+  | 'facefusionCacheDir'
+  | 'facefusionTempDir'
+  | 'scanGroupSource'
+  | 'scanGroupHardlink'
+
+const dirPickerTarget = ref<DirPickerTarget>('sourceDir')
+const dirPickerGroupIndex = ref<number | null>(null)
+const dirPickerPath = ref('')
+const dirPickerParent = ref<string | null>(null)
+const dirPickerEntries = ref<{ name: string; path: string; is_dir: boolean }[]>([])
+const dirPickerLoading = ref(false)
+const dirPickerError = ref('')
+
+onMounted(async () => {
+  await loadSettings()
+})
+
+watch(sourceDir, (newVal) => {
+  if (!outputDirManuallyEdited.value) {
+    outputDir.value = newVal
+  }
+})
+
+function onSourceDirInput() {
+  if (!outputDirManuallyEdited.value) {
+    outputDir.value = sourceDir.value
+  }
+}
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    const data = resp.data
+
+    sourceDir.value = data.storage?.source_dir || ''
+    outputDir.value = data.storage?.output_dir || data.storage?.source_dir || ''
+    noorDataDir.value = data.storage?.noor_data_dir || ''
+    databasePath.value = data.storage?.database_path || ''
+    whisperModelDir.value = data.storage?.whisper_model_dir || ''
+    whisperCacheDir.value = data.storage?.whisper_cache_dir || ''
+    whisperTempDir.value = data.storage?.whisper_temp_dir || ''
+    audioSeparatorModelDir.value = data.storage?.audio_separator_model_dir || ''
+    reazonModelDir.value = data.storage?.reazon_model_dir || ''
+    reazonNemoModelPath.value = data.storage?.reazon_nemo_model_path || ''
+    ladaModelDir.value = data.storage?.lada_model_weights_dir || data.storage?.lada_model_dir || ''
+    ladaCacheDir.value = data.storage?.lada_cache_dir || ''
+    ladaTempDir.value = data.storage?.lada_temp_dir || ''
+    facefusionModelDir.value = data.storage?.facefusion_model_dir || ''
+    facefusionCacheDir.value = data.storage?.facefusion_cache_dir || ''
+    facefusionTempDir.value = data.storage?.facefusion_temp_dir || ''
+
+    // Also load Emby path prefix config
+    try {
+      const mlResp = await api.get('/media-library/config')
+      const mlCfg = mlResp.data.config || {}
+      embyPathPrefix.value = mlCfg.path_prefix || '/data/media'
+      scanGroups.value = mlCfg.scan_groups || []
+    } catch {
+      // ignore
+    }
+  } catch (e: any) {
+    toast.error(t('settings.storage.loadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveStorage() {
+  saving.value = true
+  try {
+    await api.put('/settings/storage', {
+      source_dir: sourceDir.value,
+      output_dir: outputDir.value,
+      noor_data_dir: noorDataDir.value,
+      whisper_model_dir: whisperModelDir.value,
+      whisper_cache_dir: whisperCacheDir.value,
+      whisper_temp_dir: whisperTempDir.value,
+      audio_separator_model_dir: audioSeparatorModelDir.value,
+      reazon_model_dir: reazonModelDir.value,
+      reazon_nemo_model_path: reazonNemoModelPath.value,
+      lada_model_weights_dir: ladaModelDir.value,
+      lada_cache_dir: ladaCacheDir.value,
+      lada_temp_dir: ladaTempDir.value,
+      facefusion_model_dir: facefusionModelDir.value,
+      facefusion_cache_dir: facefusionCacheDir.value,
+      facefusion_temp_dir: facefusionTempDir.value,
+    })
+    // Also save Emby path prefix and scan_groups to media-library config
+    await api.post('/media-library/config', {
+      path_prefix: embyPathPrefix.value,
+      local_path_prefix: sourceDir.value,
+      scan_groups: scanGroups.value,
+    })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+// Scan group management
+function addScanGroup() {
+  scanGroups.value.push({ name: '', source_dir: '', hardlink_dir: '' })
+}
+
+function removeScanGroup(index: number) {
+  scanGroups.value.splice(index, 1)
+}
+
+// Directory picker
+function currentDirPickerPath(target: DirPickerTarget): string {
+  const values: Record<DirPickerTarget, string> = {
+    sourceDir: sourceDir.value,
+    outputDir: outputDir.value,
+    noorDataDir: noorDataDir.value,
+    whisperModelDir: whisperModelDir.value,
+    whisperCacheDir: whisperCacheDir.value,
+    whisperTempDir: whisperTempDir.value,
+    audioSeparatorModelDir: audioSeparatorModelDir.value,
+    reazonModelDir: reazonModelDir.value,
+    ladaModelDir: ladaModelDir.value,
+    ladaCacheDir: ladaCacheDir.value,
+    ladaTempDir: ladaTempDir.value,
+    facefusionModelDir: facefusionModelDir.value,
+    facefusionCacheDir: facefusionCacheDir.value,
+    facefusionTempDir: facefusionTempDir.value,
+    scanGroupSource: '',
+    scanGroupHardlink: '',
+  }
+  return values[target] || ''
+}
+
+async function openDirPicker(target: Exclude<DirPickerTarget, 'scanGroupSource' | 'scanGroupHardlink'>) {
+  dirPickerTarget.value = target
+  dirPickerGroupIndex.value = null
+  dirPickerError.value = ''
+  const currentPath = currentDirPickerPath(target)
+  await loadDirPicker(currentPath)
+  showDirPicker.value = true
+}
+
+async function openScanGroupDirPicker(target: 'scanGroupSource' | 'scanGroupHardlink', groupIndex: number) {
+  dirPickerTarget.value = target
+  dirPickerGroupIndex.value = groupIndex
+  dirPickerError.value = ''
+  const currentPath = target === 'scanGroupSource'
+    ? scanGroups.value[groupIndex].source_dir
+    : scanGroups.value[groupIndex].hardlink_dir
+  await loadDirPicker(currentPath)
+  showDirPicker.value = true
+}
+
+async function loadDirPicker(path: string) {
+  dirPickerLoading.value = true
+  dirPickerError.value = ''
+  try {
+    const resp = await api.get(`/settings/directories?path=${encodeURIComponent(path)}`)
+    dirPickerPath.value = resp.data.path
+    dirPickerParent.value = resp.data.parent
+    dirPickerEntries.value = resp.data.entries
+  } catch (e: any) {
+    dirPickerError.value = e?.response?.data?.detail || t('settings.dirPicker.loadDirFailed')
+    dirPickerEntries.value = []
+  } finally {
+    dirPickerLoading.value = false
+  }
+}
+
+async function onDirEntryClick(entry: { name: string; path: string; is_dir: boolean }) {
+  if (entry.is_dir) {
+    await loadDirPicker(entry.path)
+  }
+}
+
+async function onDirPickerGoUp() {
+  if (dirPickerParent.value) {
+    await loadDirPicker(dirPickerParent.value)
+  }
+}
+
+function confirmDirPicker() {
+  const path = dirPickerPath.value
+  if (dirPickerTarget.value === 'sourceDir') {
+    sourceDir.value = path
+    if (!outputDirManuallyEdited.value) outputDir.value = path
+  } else if (dirPickerTarget.value === 'outputDir') {
+    outputDir.value = path
+    outputDirManuallyEdited.value = true
+  } else if (dirPickerTarget.value === 'noorDataDir') {
+    noorDataDir.value = path
+  } else if (dirPickerTarget.value === 'whisperModelDir') {
+    whisperModelDir.value = path
+  } else if (dirPickerTarget.value === 'whisperCacheDir') {
+    whisperCacheDir.value = path
+  } else if (dirPickerTarget.value === 'whisperTempDir') {
+    whisperTempDir.value = path
+  } else if (dirPickerTarget.value === 'audioSeparatorModelDir') {
+    audioSeparatorModelDir.value = path
+  } else if (dirPickerTarget.value === 'reazonModelDir') {

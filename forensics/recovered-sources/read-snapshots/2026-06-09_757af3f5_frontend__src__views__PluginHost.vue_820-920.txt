@@ -1,0 +1,101 @@
+        const timer = window.setTimeout(handler, timeout, ...args)
+        const off = onUnmount(() => window.clearTimeout(timer))
+        return { id: timer, clear: () => { window.clearTimeout(timer); off() } }
+      },
+      setInterval: (handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        ensureActive()
+        const timer = window.setInterval(handler, timeout, ...args)
+        const off = onUnmount(() => window.clearInterval(timer))
+        return { id: timer, clear: () => { window.clearInterval(timer); off() } }
+      },
+    },
+    events: {
+      on: (target: EventTarget, type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean) => {
+        ensureActive()
+        target.addEventListener(type, listener, options)
+        const cleanup = () => target.removeEventListener(type, listener, options)
+        const off = onUnmount(cleanup)
+        return () => { cleanup(); off() }
+      },
+    },
+    net: {
+      webSocket: (path: string) => {
+        ensureActive()
+        const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`
+        const ws = new WebSocket(url)
+        onUnmount(() => {
+          try { ws.close() } catch {}
+        })
+        return ws
+      },
+    },
+    toast: {
+      success: (msg: string) => toast.success(msg),
+      error: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.error(msg) },
+      info: (msg: string) => toast.info(msg),
+      warning: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.warning(msg) },
+    },
+    downloads: downloads,
+    subscription: {
+      open: (options: any) => openSubscriptionDialog(options),
+    },
+    ui: {
+      button: makeButton,
+      input: makeInput,
+      select: makeSelect,
+      field: makeField,
+      modal: makeModal,
+      panel: makePanel,
+      tabs: makeTabs,
+      pagination: makePagination,
+      submitButton: makeSubmitButton,
+      topBar: makeTopBar,
+      filterPanel: makeControlPanel,
+      filterPanelGroup: makeControlPanelGroup,
+      filterPanelSection: makeControlPanelSection,
+      filterPanelRow: makeControlPanelRow,
+      controlPanel: makeControlPanel,
+      controlPanelGroup: makeControlPanelGroup,
+      controlPanelSection: makeControlPanelSection,
+      controlPanelRow: makeControlPanelRow,
+      actionRow: makeActionRow,
+      statCard: makeStatCard,
+      statGrid: makeStatGrid,
+      mediaCard: makeMediaCard,
+      loadingState: makeLoadingState,
+      badge: (o: any) => { const b = document.createElement(o.onClick ? 'button' : 'span'); b.className = ['noor-plugin-badge', o.tone ? `noor-plugin-badge--${o.tone}` : '', o.className || ''].filter(Boolean).join(' '); b.textContent = o.label || ''; if (o.onClick) (b as HTMLButtonElement).onclick = o.onClick; return b },
+      chip: makeChip,
+      notice: (o: any) => { const d = document.createElement('div'); d.className = `noor-plugin-notice noor-plugin-notice--${o.tone || 'info'}`; d.textContent = o.text || ''; return d },
+      emptyState: (o: any) => { const d = document.createElement('div'); d.className = 'noor-plugin-state'; d.textContent = o.text || '暂无内容'; return d },
+      errorState: (o: any) => { const d = document.createElement('div'); d.className = 'noor-plugin-state noor-plugin-state--error'; d.textContent = o.text || '加载失败'; return d },
+      skeletonCard: (o: any) => { const d = document.createElement('div'); d.className = `noor-plugin-skeleton ${o.className || ''}`; return d },
+      card: (o: any) => { const a = document.createElement(o.href ? 'a' : 'div'); a.className = `noor-plugin-card ${o.className || ''}`; if (o.href) { (a as HTMLAnchorElement).href = o.href; (a as HTMLAnchorElement).target = o.target || '_self' }; return a },
+      confirm: (o: any) => confirm.confirm({ title: o.title || '确认操作', message: o.message || '', confirmText: o.confirmText || '确认', danger: !!o.danger }),
+    },
+  }
+}
+
+async function mountPlugin() {
+  clearMounted()
+  const currentPluginId = pluginId.value
+  const seq = ++mountSeq
+  if (!currentPluginId || !host.value) return
+  loading.value = true
+  error.value = ''
+  const start = performance.now()
+  pluginDiagnostic('info', '插件页面开始加载', currentPluginId)
+  try {
+    const info = await api.get(`/plugins/${currentPluginId}/config`).then(r => r.data)
+    if (seq !== mountSeq) return
+    const style = info?.plugin?.frontend?.style
+    if (style) {
+      const bust = Date.now()
+      styleEl = document.createElement('link')
+      styleEl.rel = 'stylesheet'
+      styleEl.href = `/api/plugins/${currentPluginId}/assets/${style.replace(/^frontend\//, '')}?t=${bust}`
+      if (seq === mountSeq) document.head.appendChild(styleEl)
+    }
+    const entry = info?.plugin?.frontend?.entry || 'frontend/page.js'
+    const mod = await import(/* @vite-ignore */ `/api/plugins/${currentPluginId}/assets/${entry.replace(/^frontend\//, '')}?t=${Date.now()}`)
+    if (seq !== mountSeq) return
+    await nextTick()

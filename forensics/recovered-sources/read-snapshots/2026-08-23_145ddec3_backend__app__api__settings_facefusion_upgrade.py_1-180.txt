@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import os
+import json
+import re
+import shutil
+import subprocess
+import sys
+from importlib import metadata
+from pathlib import Path
+from typing import Any
+
+from fastapi import HTTPException
+
+from app.api.settings_lada_upgrade import github_mirror_url
+from app.core.config import PROJECT_ROOT
+from app.core.facefusion_paths import resolve_embedded_facefusion_source
+
+
+FACEFUSION_UPSTREAM_REPO = "https://github.com/facefusion/facefusion.git"
+FACEFUSION_UPSTREAM_MANIFEST = "NOOR_UPSTREAM.json"
+FACEFUSION_SYNC_EXCLUDES = {
+    ".git",
+    ".github",
+    ".assets",
+    ".caches",
+    ".claude",
+    ".idea",
+    ".jobs",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "facefusion.ini",
+    FACEFUSION_UPSTREAM_MANIFEST,
+    "temp",
+}
+
+
+def facefusion_runtime_update_root(settings: Any) -> Path:
+    cache_dir = Path(getattr(settings, "facefusion_cache_dir", "") or PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache")
+    return cache_dir / "updater"
+
+
+def get_facefusion_source_dir() -> Path:
+    source = resolve_embedded_facefusion_source()
+    if not source:
+        raise RuntimeError("NOOR 内置 FaceFusion 源码不存在")
+    return source.source_dir
+
+
+def get_facefusion_version(source_dir: Path | None = None) -> str | None:
+    source_dir = source_dir or get_facefusion_source_dir()
+    metadata_path = source_dir / "facefusion" / "metadata.py"
+    if not metadata_path.exists():
+        return None
+    namespace: dict[str, Any] = {}
+    try:
+        exec(metadata_path.read_text(encoding="utf-8"), namespace)
+        metadata = namespace.get("METADATA") or {}
+        version = metadata.get("version")
+        return str(version) if version else None
+    except Exception:
+        return None
+
+
+def get_facefusion_upstream_manifest(source_dir: Path | None = None) -> dict[str, Any]:
+    source_dir = source_dir or get_facefusion_source_dir()
+    manifest_path = source_dir / FACEFUSION_UPSTREAM_MANIFEST
+    if not manifest_path.exists():
+        return {}
+    try:
+        value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_facefusion_upstream_manifest(
+    source_dir: Path,
+    *,
+    revision: str | None,
+    version: str | None,
+    updated_at: str | None,
+) -> None:
+    revision_value = revision or "unknown"
+    manifest = {
+        "repo": FACEFUSION_UPSTREAM_REPO,
+        "revision": revision_value,
+        "short_revision": revision_value[:12] if revision_value != "unknown" else "unknown",
+        "version": version,
+        "updated_at": updated_at,
+    }
+    (source_dir / FACEFUSION_UPSTREAM_MANIFEST).write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _git_stdout(cwd: Path, args: list[str], timeout: int = 15) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _package_version(package_name: str) -> str | None:
+    try:
+        return metadata.version(package_name)
+    except Exception:
+        return None
+
+
+def get_facefusion_runtime_info() -> dict[str, Any]:
+    onnxruntime_version = _package_version("onnxruntime") or _package_version("onnxruntime-gpu")
+    providers: list[str] = []
+    try:
+        import onnxruntime
+
+        onnxruntime_version = str(getattr(onnxruntime, "__version__", "") or onnxruntime_version or "") or None
+        providers = list(onnxruntime.get_available_providers())
+    except Exception:
+        providers = []
+    return {
+        "versions": {
+            "python": ".".join(str(part) for part in sys.version_info[:3]),
+            "onnxruntime": onnxruntime_version,
+            "onnx": _package_version("onnx"),
+            "numpy": _package_version("numpy"),
+            "opencv": _package_version("opencv-python") or _package_version("opencv-python-headless"),
+            "scipy": _package_version("scipy"),
+            "tqdm": _package_version("tqdm"),
+            "gradio": _package_version("gradio"),
+        },
+        "execution_providers": providers,
+        "python_executable": sys.executable,
+    }
+
+
+def get_facefusion_installation_info(settings: Any) -> dict[str, Any]:
+    source_dir = get_facefusion_source_dir()
+    is_docker = os.path.exists("/.dockerenv")
+    runtime_info = get_facefusion_runtime_info()
+    upstream_manifest = get_facefusion_upstream_manifest(source_dir)
+    return {
+        "version": get_facefusion_version(source_dir),
+        "upstream_manifest": upstream_manifest,
+        "upstream_revision": upstream_manifest.get("revision"),
+        "upstream_short_revision": upstream_manifest.get("short_revision"),
+        "upstream_updated_at": upstream_manifest.get("updated_at"),
+        "runtime_versions": runtime_info["versions"],
+        "execution_providers": runtime_info["execution_providers"],
+        "python_executable": runtime_info["python_executable"],
+        "source_mode": "embedded",
+        "source_dir": str(source_dir),
+        "is_docker": is_docker,
+        "can_self_upgrade": not is_docker,
+        "upgrade_strategy": "controlled-upstream-sync" if not is_docker else "docker-rebuild",
+        "upgrade_hint": (
+            "当前使用 NOOR 内置 FaceFusion，可从上游拉取源码、套用 NOOR 路径补丁并验证 CLI。"
+            if not is_docker
+            else "Docker 模式下不建议在容器内直接升级 FaceFusion。请更新镜像后重建容器。"
+        ),
+        "upstream_repo": FACEFUSION_UPSTREAM_REPO,
+        "update_work_dir": str(facefusion_runtime_update_root(settings)),
+    }
+
+
+def _copy_source_tree(src: Path, dst: Path) -> None:
+    for item in src.iterdir():
+        if item.name in FACEFUSION_SYNC_EXCLUDES:
+            continue

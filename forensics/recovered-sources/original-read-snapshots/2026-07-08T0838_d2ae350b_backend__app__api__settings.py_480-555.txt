@@ -1,0 +1,76 @@
+            log_mgr.add_log("success", f"[FaceFusion] 模型校验通过：{result['valid_count']} 个模型")
+        return {"success": True, "models": result}
+    except Exception as e:
+        log_mgr.add_log("error", f"[FaceFusion] 模型校验失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/facefusion/models/download")
+async def download_facefusion_models(req: FaceFusionModelDownloadRequest):
+    scope = req.scope or "lite"
+    status_file = facefusion_model_status_path()
+    current = read_facefusion_model_status_response()
+    if current.get("status") == "running":
+        return {"success": True, "message": "FaceFusion 模型预下载已在运行"}
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", f"[FaceFusion] 正在预下载模型 scope={scope}...")
+    write_status_file(status_file, build_status_payload(
+        status="running",
+        progress=0,
+        message=f"FaceFusion 模型预下载已开始 ({scope})",
+        scope=scope,
+        output="",
+    ))
+
+    def run_download() -> None:
+        bg_log_mgr = SystemLogManager.get_instance()
+
+        def update(status: str, progress: int, message: str, output: str = "") -> None:
+            write_status_file(status_file, build_status_payload(
+                status=status,
+                progress=progress,
+                message=message,
+                scope=scope,
+                output=output[-8000:],
+            ))
+
+        try:
+            settings = get_settings()
+            settings.apply_network_env()
+            python_path, source_dir, env, model_dir = _facefusion_model_context()
+            cmd = [
+                python_path,
+                "facefusion.py",
+                "force-download",
+                "--download-scope",
+                scope,
+                "--log-level",
+                "info",
+            ]
+            providers = [item.strip() for item in str(settings.facefusion_download_providers or "github huggingface").replace(",", " ").split() if item.strip()]
+            if providers:
+                cmd += ["--download-providers", *providers]
+            update("running", 5, f"正在下载 FaceFusion 模型到 {model_dir}")
+            proc = subprocess.Popen(
+                cmd,
+                cwd=source_dir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            output_lines: list[str] = []
+            if proc.stdout:
+                for line in proc.stdout:
+                    line = line.rstrip()
+                    if not line:
+                        continue
+                    output_lines.append(line)
+                    if len(output_lines) > 160:
+                        output_lines = output_lines[-160:]
+                    lowered = line.lower()
+                    progress = 50
+                    match = re.search(r"(\d{1,3})%", line)
+                    if match:

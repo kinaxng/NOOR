@@ -1,0 +1,176 @@
+                        </label>
+                        <label>
+                          <span>audio quality {{ facefusionSettings.output_audio_quality }}</span>
+                          <input v-model.number="facefusionSettings.output_audio_quality" type="range" min="0" max="100" step="1" class="facefusion-range" />
+                        </label>
+                        <label>
+                          <span>temp frame format</span>
+                          <select v-model="facefusionSettings.temp_frame_format" class="settings-input w-full">
+                            <option v-for="item in facefusionTempFrameFormatOptions" :key="item" :value="item">{{ item }}</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <div v-else class="ui-card">
+                <span class="text-[10px] text-text-muted uppercase tracking-wider">FACEFUSION</span>
+                <div class="facefusion-panel-layout mt-3" :class="{ 'facefusion-panel-layout--wide': isFullWidth }">
+                  <div class="facefusion-panel-column">
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">源脸图片</label>
+                    <div class="facefusion-source-manager">
+                      <label class="facefusion-source-upload-card">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          :disabled="sourceUploadLoading"
+                          @change="handleSourceImageUpload"
+                        />
+                        <span class="facefusion-source-upload-card__plus">+</span>
+                        <span>{{ sourceUploadLoading ? '上传中' : '上传图片' }}</span>
+                      </label>
+                      <button type="button" class="facefusion-source-upload-card facefusion-source-library-card" @click="toggleSourceLibrary">
+                        <span class="facefusion-source-upload-card__plus">LIB</span>
+                        <span>{{ sourceLibraryOpen ? '收起图片库' : '图片库' }}</span>
+                      </button>
+                      <div v-for="source in uploadedSourceImages" :key="source.path" class="facefusion-source-card">
+                        <img
+                          v-if="source.preview_url"
+                          :src="source.preview_url"
+                          :alt="source.name"
+                          loading="lazy"
+                        />
+                        <div v-else class="facefusion-source-card__placeholder">IMG</div>
+                        <div class="facefusion-source-card__meta">
+                          <span>{{ source.name }}</span>
+                          <button type="button" @click="removeUploadedSourceImage(source)">删除</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="sourceLibraryOpen" class="facefusion-source-library">
+                      <div class="facefusion-source-library__head">
+                        <span>{{ sourceLibraryLoading ? '读取中' : `图片库 · ${sourceLibraryImages.length}` }}</span>
+                        <div>
+                          <button type="button" @click="loadSourceImageLibrary">刷新</button>
+                          <button type="button" :disabled="!selectedLibraryImageIds.length" @click="addSelectedLibraryImages">
+                            使用选中 {{ selectedLibraryImageIds.length || '' }}
+                          </button>
+                        </div>
+                      </div>
+                      <div v-if="!sourceLibraryLoading && !sourceLibraryImages.length" class="facefusion-source-library__empty">暂无缓存图片</div>
+                      <div v-else class="facefusion-source-library__grid">
+                        <button
+                          v-for="image in sourceLibraryImages"
+                          :key="image.id"
+                          type="button"
+                          class="facefusion-source-library__item"
+                          :class="{ 'is-active': selectedLibraryImageIds.includes(image.id), 'is-used': isSourceSelected(image.path) }"
+                          :disabled="isSourceSelected(image.path)"
+                          @click="toggleLibraryImage(image)"
+                        >
+                          <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
+                          <span>{{ isSourceSelected(image.path) ? '已使用' : selectedLibraryImageIds.includes(image.id) ? '已选择' : '选择' }}</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="facefusion-source-count">{{ facefusionSourcePaths.length }} 张源脸图</div>
+                  </div>
+                  <div>
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">预览帧</label>
+                      <input
+                        v-model.number="previewFrameNumber"
+                        class="settings-input w-full"
+                        type="number"
+                        min="0"
+                        :max="previewFrameMax"
+                        step="1"
+                        :disabled="previewLoading"
+                        @input="markPreviewFrameChanged"
+                        @change="handlePreviewSliderCommit"
+                      />
+                    </div>
+                  </div>
+                  <div class="facefusion-subpanel">
+                    <span>人脸选择</span>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">人脸选择模式</label>
+                        <select v-model="facefusionSettings.face_selector_mode" class="settings-input w-full">
+                          <option v-for="mode in facefusionSelectorModeOptions" :key="mode" :value="mode">{{ mode }}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">人脸排序</label>
+                        <select v-model="facefusionSettings.face_selector_order" class="settings-input w-full">
+                          <option v-for="order in facefusionSelectorOrderOptions" :key="order" :value="order">{{ order }}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div v-if="facefusionReferenceMode" class="facefusion-reference-box">
+                      <div class="facefusion-reference-box__frame">
+                        <img v-if="previewUrl" :src="previewUrl" alt="Reference frame" />
+                        <span v-else>参考帧</span>
+                        <i>{{ facefusionSettings.reference_face_position ?? 0 }}</i>
+                      </div>
+                      <div class="facefusion-reference-box__controls">
+                        <label>
+                          <span>参考帧</span>
+                          <input v-model.number="facefusionSettings.reference_frame_number" type="number" min="0" class="settings-input" />
+                        </label>
+                        <label>
+                          <span>参考人脸</span>
+                          <input v-model.number="facefusionSettings.reference_face_position" type="number" min="0" class="settings-input" />
+                        </label>
+                        <label>
+                          <span>匹配距离 {{ Number(facefusionSettings.reference_face_distance || 0).toFixed(2) }}</span>
+                          <input v-model.number="facefusionSettings.reference_face_distance" type="range" min="0" max="1" step="0.05" class="facefusion-range" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">执行后端</label>
+                      <select v-model="facefusionSettings.execution_provider" class="settings-input w-full">
+                        <option v-for="provider in facefusionExecutionProviderOptions" :key="provider" :value="provider">{{ provider }}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">人脸检测模型</label>
+                      <select v-model="facefusionSettings.face_detector_model" class="settings-input w-full">
+                        <option v-for="model in facefusionDetectorModelOptions" :key="model" :value="model">{{ model }}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">处理器</label>
+                    <div class="facefusion-choice-chips">
+                      <button
+                        v-for="processor in facefusionProcessorOptions"
+                        :key="processor.id"
+                        type="button"
+                        class="processor-chip"
+                        :class="{ 'is-active': hasFacefusionToken('processors', processor.id) }"
+                        @click="toggleFacefusionToken('processors', processor.id)"
+                      >
+                        <span>{{ processor.label }}</span>
+                        <small>{{ processor.id }}</small>
+                        <em :class="{ 'is-cuda': processor.acceleration === 'cuda', 'is-muted': processor.acceleration === 'none' }">
+                          {{ processor.acceleration === 'tensorrt' ? 'TRT 推荐' : processor.acceleration === 'cuda' ? 'CUDA 推荐' : '无推理加速' }}
+                        </em>
+                      </button>
+                    </div>
+                  </div>
+                  </div>
+
+                  <div class="facefusion-panel-column">
+
+                  <div v-if="selectedFacefusionProcessors.includes('face_swapper')" class="facefusion-subpanel">
+                    <span>face_swapper</span>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">

@@ -1,0 +1,53 @@
+        meta.appendChild(el('span', 'javdb-skeleton-meta'))
+        meta.appendChild(el('span', 'javdb-skeleton-meta javdb-skeleton-meta--short'))
+        body.appendChild(meta)
+        const badges = el('div', 'noor-plugin-media-card__badges')
+        badges.appendChild(el('span', 'noor-plugin-badge javdb-skeleton-badge'))
+        badges.appendChild(el('span', 'noor-plugin-badge javdb-skeleton-badge javdb-skeleton-badge--short'))
+        body.appendChild(badges)
+        card.appendChild(body)
+        grid.appendChild(card)
+      }
+    }
+  }
+
+  async function loadData() {
+    const seq = ++loadSeq
+    estimatePageSize()
+    const hadContent = state.hasLoadedOnce && state.items.length > 0
+    state.loading = true
+    state.loadError = ''
+    renderLoadingStatus()
+    renderFilters()
+    renderGrid()
+    try {
+      const remoteLatestFilter = latestRemoteFilter()
+      const action = state.relation
+        ? 'related_movies'
+        : (
+          state.tab === 'rankings'
+            ? (state.rankingMode === 'actors' ? 'actors' : state.rankingMode === 'top250' ? 'top250' : 'rankings')
+            : state.tab === 'actors' ? 'actor_options'
+            : state.tab
+        )
+      const payload = {
+        page: state.page,
+        limit: state.limit,
+        ...(state.relation ? { rel_type: state.relation.relType, rel_id: state.relation.relId } : {}),
+        ...(state.tab === 'latest' ? { type: state.latestType, filter_by: remoteLatestFilter, filters: [...state.latestSelectedFilters], sort_by: state.latestSort || 'update' } : {}),
+        ...(state.tab === 'videos'
+        ? {
+              ...(state.videosFilter ? { filter: state.videosFilter } : {}),
+              sort: state.videosSort,
+              order: state.videosOrder,
+              ...(state.videosActorId ? { actor_id: state.videosActorId } : {}),
+              ...(state.videosMinScore ? { min_score: state.videosMinScore } : {}),
+              ...(state.videosCategoryIds.length ? { category_ids: [...state.videosCategoryIds] } : {}),
+            }
+          : {}),
+        ...(state.tab === 'rankings' && ['daily', 'weekly', 'monthly'].includes(state.rankingMode)
+          ? { type: state.rankingType, period: state.rankingMode, filters: [...state.rankingSelectedFilters] }
+          : {}),
+        ...(state.tab === 'rankings' && state.rankingMode === 'top250'
+          ? { type_value: state.top250Year || String(state.rankingType), filters: [...state.rankingSelectedFilters] }
+          : {}),

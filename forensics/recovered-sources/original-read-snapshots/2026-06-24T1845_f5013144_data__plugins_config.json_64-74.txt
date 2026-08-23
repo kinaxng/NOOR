@@ -1,0 +1,11 @@
+    "knowledge_search_code_limit": 20,
+    "knowledge_search_concurrency": 4,
+    "knowledge_search_per_code": 3
+  },
+  "qbittorrent": {
+    "base_url": "http://192.168.31.10:8089",
+    "username": "KINAX",
+    "password": "7272526",
+    "api_key": "",
+    "category": "默认",
+    "savepath": "/downloads",

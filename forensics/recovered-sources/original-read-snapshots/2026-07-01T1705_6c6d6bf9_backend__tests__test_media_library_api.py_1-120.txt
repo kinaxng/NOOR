@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import time
+import pytest
+from fastapi import HTTPException
+from starlette.requests import Request
+
+from app.api.endpoints import media_library
+from app.api.endpoints import media_library_item_detail as media_item_detail
+
+
+class FakeResponse:
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f'HTTP {self.status_code}')
+
+
+class FakeAsyncClient:
+    def __init__(self, responder, *args, **kwargs):
+        self._responder = responder
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, url, headers=None, params=None):
+        return self._responder('GET', url, headers or {}, params or {}, None)
+
+    async def post(self, url, headers=None, params=None, json=None):
+        return self._responder('POST', url, headers or {}, params or {}, json)
+
+    def build_request(self, method, url, headers=None):
+        return {'method': method, 'url': url, 'headers': headers or {}}
+
+    async def send(self, request, stream=False):
+        return self._responder(request.get('method', 'GET'), request['url'], request.get('headers', {}), {}, None)
+
+    async def aclose(self):
+        return None
+
+
+def make_request(range_header: str | None = None) -> Request:
+    headers = []
+    if range_header:
+        headers.append((b'range', range_header.encode()))
+    scope = {
+        'type': 'http',
+        'method': 'GET',
+        'path': '/api/media-library/hardlinks/preview-file',
+        'headers': headers,
+    }
+    return Request(scope)
+
+
+def test_parse_actor_mapping_xml_uses_uploaded_attribute_shape(tmp_path):
+    path = tmp_path / "actor-mapping.xml"
+    path.write_text(
+        """<actor-mapping><actor>
+<a zh_cn="水卜樱" zh_tw="水卜櫻" jp="水卜さくら" keyword="水卜櫻,水卜さくら,水トさくら,Sakura Miura" tmdb_id="2599695" verified="1"/>
+<a zh_cn="神宫寺奈绪" zh_tw="神宮寺奈緒" jp="神宮寺ナオ" keyword="神宮寺奈緒,神宮寺ナオ,Nao Jinguji" tmdb_id="2409300"/>
+</actor><actor-blacklist /></actor-mapping>""",
+        encoding="utf-8",
+    )
+
+    records, stats = media_library._parse_actor_mapping_xml(path)
+
+    assert stats == {
+        "total": 2,
+        "verified": 1,
+        "missing": {"keyword": 0, "tmdb_id": 0, "verified": 1},
+        "with_tmdb": 2,
+    }
+    assert records[0]["id"] == "2599695"
+    assert records[0]["jp"] == "水卜さくら"
+    assert "水トさくら" in records[0]["aliases"]
+    assert "Sakura Miura" in records[0]["aliases"]
+
+
+def test_actor_merge_apply_people_rewrites_source_actor_and_deduplicates():
+    item = {
+        "People": [
+            {"Name": "三原ほのか", "Id": "15088", "Type": "Actor", "PrimaryImageTag": "old"},
+            {"Name": "三原ほのか", "Id": "4258", "Type": "Actor", "PrimaryImageTag": "target"},
+            {"Name": "Director", "Id": "d1", "Type": "Director"},
+        ]
+    }
+
+    next_item, changed = media_library._actor_merge_apply_people(item, source_actor_ids={"15088"}, target_name="三原ほのか")
+
+    assert changed == [{"id": "15088", "name": "三原ほのか", "type": "Actor", "primary_image_tag": "old"}]
+    actors = [person for person in next_item["People"] if person["Type"] == "Actor"]
+    assert actors == [{"Name": "三原ほのか", "Id": "4258", "Type": "Actor", "PrimaryImageTag": "target"}]
+    assert next_item["People"][-1]["Type"] == "Director"
+
+
+def test_actor_merge_remove_source_people_cleans_residual_actor():
+    item = {
+        "People": [
+            {"Name": "南いろは", "Id": "15155", "Type": "Actor", "PrimaryImageTag": "old"},
+            {"Name": "佐野夏", "Id": "10057", "Type": "Actor"},
+            {"Name": "Director", "Id": "d1", "Type": "Director"},
+        ]
+    }
+
+    next_item, removed = media_library._actor_merge_remove_source_people(item, source_actor_ids={"15155"})
+
+    assert removed == [{"id": "15155", "name": "南いろは", "type": "Actor", "primary_image_tag": "old"}]
+    assert [person["Name"] for person in next_item["People"]] == ["佐野夏", "Director"]
+
+
+def test_actor_group_target_name_follows_noor_language():

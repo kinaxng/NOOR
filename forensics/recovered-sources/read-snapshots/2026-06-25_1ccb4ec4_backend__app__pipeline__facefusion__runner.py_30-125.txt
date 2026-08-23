@@ -1,0 +1,96 @@
+        "detail": detail,
+    }
+
+
+def _resolve_python(facefusion_dir: str, configured_python: str) -> str:
+    configured = (configured_python or "").strip()
+    if configured:
+        return configured
+    for rel in (".venv/bin/python", "venv/bin/python"):
+        candidate = Path(facefusion_dir) / rel
+        if candidate.exists():
+            return str(candidate)
+    return sys.executable
+
+
+def _split_words(value: str | list[str] | None, fallback: list[str]) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        items = [item.strip() for item in re.split(r"[\s,]+", value) if item.strip()]
+        return items or fallback
+    return fallback
+
+
+def _build_command(input_path: str, output_path: str, job_settings: dict) -> tuple[list[str], str]:
+    settings = get_settings()
+    facefusion_dir = (job_settings.get("facefusion_dir") or settings.facefusion_dir or "").strip()
+    if not facefusion_dir:
+        raise RuntimeError("FaceFusion 目录未配置")
+    facefusion_py = Path(facefusion_dir) / "facefusion.py"
+    if not facefusion_py.exists():
+        raise RuntimeError(f"FaceFusion CLI 不存在: {facefusion_py}")
+
+    source_paths = job_settings.get("source_paths") or job_settings.get("source_path") or []
+    if isinstance(source_paths, str):
+        source_paths = [source_paths]
+    source_paths = [str(path).strip() for path in source_paths if str(path).strip()]
+    if not source_paths:
+        raise RuntimeError("FaceFusion 需要至少一个源脸图片路径")
+
+    python_path = _resolve_python(facefusion_dir, job_settings.get("facefusion_python_path") or settings.facefusion_python_path)
+    cmd = [python_path, str(facefusion_py), "headless-run"]
+    cmd += ["-s", *source_paths]
+    cmd += ["-t", input_path]
+    cmd += ["-o", output_path]
+
+    processors = _split_words(
+        job_settings.get("processors"),
+        _split_words(settings.facefusion_processors, []),
+    )
+    if processors:
+        cmd += ["--processors", *processors]
+
+    provider = job_settings.get("execution_provider", settings.facefusion_execution_provider)
+    if provider:
+        cmd += ["--execution-providers", str(provider)]
+    device_ids = _split_words(job_settings.get("device_ids", settings.facefusion_device_ids), ["0"])
+    if device_ids:
+        cmd += ["--execution-device-ids", *device_ids]
+    cmd += ["--execution-thread-count", str(job_settings.get("thread_count", settings.facefusion_thread_count))]
+    cmd += ["--video-memory-strategy", str(job_settings.get("video_memory_strategy", settings.facefusion_video_memory_strategy))]
+    system_memory_limit = int(job_settings.get("system_memory_limit", settings.facefusion_system_memory_limit) or 0)
+    if system_memory_limit > 0:
+        cmd += ["--system-memory-limit", str(system_memory_limit)]
+    download_providers = _split_words(job_settings.get("download_providers", settings.facefusion_download_providers), [])
+    if download_providers:
+        cmd += ["--download-providers", *download_providers]
+
+    cmd += ["--face-detector-model", str(job_settings.get("face_detector_model", settings.facefusion_face_detector_model))]
+    cmd += ["--face-detector-size", str(job_settings.get("face_detector_size", settings.facefusion_face_detector_size))]
+    cmd += ["--face-detector-score", str(job_settings.get("face_detector_score", settings.facefusion_face_detector_score))]
+    detector_angles = _split_words(job_settings.get("face_detector_angles", settings.facefusion_face_detector_angles), ["0"])
+    if detector_angles:
+        cmd += ["--face-detector-angles", *detector_angles]
+    cmd += ["--face-landmarker-model", str(job_settings.get("face_landmarker_model", settings.facefusion_face_landmarker_model))]
+    cmd += ["--face-landmarker-score", str(job_settings.get("face_landmarker_score", settings.facefusion_face_landmarker_score))]
+    cmd += ["--face-selector-mode", str(job_settings.get("face_selector_mode", settings.facefusion_face_selector_mode))]
+    selector_order = job_settings.get("face_selector_order", settings.facefusion_face_selector_order)
+    if selector_order:
+        cmd += ["--face-selector-order", str(selector_order)]
+    cmd += ["--reference-frame-number", str(job_settings.get("reference_frame_number", settings.facefusion_reference_frame_number))]
+    cmd += ["--reference-face-position", str(job_settings.get("reference_face_position", settings.facefusion_reference_face_position))]
+    cmd += ["--reference-face-distance", str(job_settings.get("reference_face_distance", settings.facefusion_reference_face_distance))]
+
+    mask_types = _split_words(job_settings.get("face_mask_types", settings.facefusion_face_mask_types), ["box"])
+    if mask_types:
+        cmd += ["--face-mask-types", *mask_types]
+    cmd += ["--face-mask-blur", str(job_settings.get("face_mask_blur", settings.facefusion_face_mask_blur))]
+    mask_padding = _split_words(job_settings.get("face_mask_padding", settings.facefusion_face_mask_padding), [])
+    if mask_padding:
+        cmd += ["--face-mask-padding", *mask_padding]
+    cmd += ["--face-occluder-model", str(job_settings.get("face_occluder_model", settings.facefusion_face_occluder_model))]
+    cmd += ["--face-parser-model", str(job_settings.get("face_parser_model", settings.facefusion_face_parser_model))]
+
+    cmd += ["--output-video-encoder", str(job_settings.get("output_video_encoder", settings.facefusion_output_video_encoder))]
+    cmd += ["--output-video-preset", str(job_settings.get("output_video_preset", settings.facefusion_output_video_preset))]

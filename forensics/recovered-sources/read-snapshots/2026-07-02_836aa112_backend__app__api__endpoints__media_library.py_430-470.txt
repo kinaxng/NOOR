@@ -1,0 +1,41 @@
+    mapping_tmdb = str(record.get("tmdb_id") or "").strip()
+    return not (actor_tmdb and mapping_tmdb and actor_tmdb == mapping_tmdb)
+
+
+def _provider_id(provider_ids: dict, *keys: str) -> str | None:
+    if not isinstance(provider_ids, dict):
+        return None
+    wanted = {key.lower() for key in keys}
+    for key, value in provider_ids.items():
+        if str(key).lower() in wanted and str(value or "").strip():
+            return str(value).strip()
+    return None
+
+
+def _localized_mapping_name(record: dict | None, fallback: str, lang: str | None = None) -> str:
+    if not record:
+        return fallback
+    normalized_lang = str(lang or "").lower()
+    if normalized_lang in {"zh-tw", "zh_hant", "zht", "tw"}:
+        return str(record.get("zh_tw") or record.get("zh_cn") or record.get("jp") or fallback)
+    if normalized_lang.startswith("zh") or normalized_lang in {"cn", "zh-cn"}:
+        return str(record.get("zh_cn") or record.get("zh_tw") or record.get("jp") or fallback)
+    return str(record.get("jp") or record.get("zh_cn") or record.get("zh_tw") or fallback)
+
+
+def _enrich_actor_display_names(actors: list[dict], *, lang: str | None = None) -> list[dict]:
+    records = _load_actor_mapping_records()
+    if not records:
+        return [{**actor, "display_name": actor.get("name") or ""} for actor in actors]
+    name_index = _actor_mapping_name_index(records)
+    out: list[dict] = []
+    for actor in actors:
+        name = str(actor.get("name") or "")
+        match = name_index.get(_normalize_actor_key(name))
+        record = _mapping_match_record(match)
+        if record and _should_reject_actor_mapping_match(actor, record, match):
+            record = None
+        out.append({
+            **actor,
+            "display_name": _localized_mapping_name(record, name, lang),
+            "mapping_id": record.get("id") if record else None,

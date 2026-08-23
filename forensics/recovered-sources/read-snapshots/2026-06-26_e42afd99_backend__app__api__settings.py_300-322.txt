@@ -1,0 +1,23 @@
+                "version": version,
+            }
+    except _get_httpx().HTTPError as e:
+        log_mgr.add_log("error", f"[Emby] 连接失败 — {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Emby connection failed: {str(e)}")
+
+
+@router.put("/storage")
+async def update_storage_config(config: StorageConfig):
+    """Update storage directories configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存存储路径配置...")
+    try:
+        set_env_values(build_storage_env_updates(config, LADA_MODEL_WEIGHTS_ENV))
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] 存储路径配置已保存")
+        return {"success": True, "message": "Storage settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 存储路径配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+class DirectoryEntry(BaseModel):

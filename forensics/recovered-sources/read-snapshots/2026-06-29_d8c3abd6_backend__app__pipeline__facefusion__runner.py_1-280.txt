@@ -1,0 +1,280 @@
+from __future__ import annotations
+
+import asyncio
+import concurrent.futures
+import os
+import re
+import signal
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+from app.core.config import get_settings
+from app.core.runtime_paths import ensure_directory
+from app.tasks.job_phases import get_phase_label
+
+
+def _progress_event(
+    *,
+    progress: int,
+    phase_key: str,
+    phase_progress: int,
+    detail: str | None = None,
+) -> dict:
+    return {
+        "type": "progress",
+        "progress": max(0, min(100, int(progress))),
+        "phase_key": phase_key,
+        "phase_label": get_phase_label(phase_key, "FaceFusion 处理中"),
+        "phase_progress": max(0, min(100, int(phase_progress))),
+        "detail": detail,
+    }
+
+
+def _resolve_python(facefusion_dir: str, configured_python: str) -> str:
+    configured = (configured_python or "").strip()
+    if configured:
+        return configured
+    for rel in (".venv/bin/python", "venv/bin/python"):
+        candidate = Path(facefusion_dir) / rel
+        if candidate.exists():
+            return str(candidate)
+    return sys.executable
+
+
+def _split_words(value: str | list[str] | None, fallback: list[str]) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        items = [item.strip() for item in re.split(r"[\s,]+", value) if item.strip()]
+        return items or fallback
+    return fallback
+
+
+def _build_env(*, facefusion_cache_dir: str, facefusion_temp_dir: str) -> dict[str, str]:
+    env = os.environ.copy()
+    if facefusion_cache_dir:
+        cache_root = Path(facefusion_cache_dir)
+        xdg_cache_dir = cache_root / "xdg"
+        tensorrt_cache_dir = cache_root / "onnxruntime" / "tensorrt"
+        cuda_cache_dir = cache_root / "cuda"
+        for path in (xdg_cache_dir, tensorrt_cache_dir, cuda_cache_dir):
+            path.mkdir(parents=True, exist_ok=True)
+        env["XDG_CACHE_HOME"] = str(xdg_cache_dir)
+        env["ORT_TENSORRT_CACHE_PATH"] = str(tensorrt_cache_dir)
+        env["CUDA_CACHE_PATH"] = str(cuda_cache_dir)
+    if facefusion_temp_dir:
+        env["TMPDIR"] = facefusion_temp_dir
+    return env
+
+
+def _build_command(input_path: str, output_path: str, job_settings: dict) -> tuple[list[str], str, dict[str, str], str, str]:
+    settings = get_settings()
+    facefusion_dir = (job_settings.get("facefusion_dir") or settings.facefusion_dir or "").strip()
+    if not facefusion_dir:
+        raise RuntimeError("FaceFusion 目录未配置")
+    facefusion_py = Path(facefusion_dir) / "facefusion.py"
+    if not facefusion_py.exists():
+        raise RuntimeError(f"FaceFusion CLI 不存在: {facefusion_py}")
+
+    source_paths = job_settings.get("source_paths") or job_settings.get("source_path") or []
+    if isinstance(source_paths, str):
+        source_paths = [source_paths]
+    source_paths = [str(path).strip() for path in source_paths if str(path).strip()]
+    if not source_paths:
+        raise RuntimeError("FaceFusion 需要至少一个源脸图片路径")
+
+    python_path = _resolve_python(facefusion_dir, job_settings.get("facefusion_python_path") or settings.facefusion_python_path)
+    facefusion_cache_dir = ensure_directory(job_settings.get("facefusion_cache_dir", settings.facefusion_cache_dir) or "")
+    facefusion_temp_dir = ensure_directory(job_settings.get("facefusion_temp_dir", settings.facefusion_temp_dir) or "")
+    native_model_dir = str(Path(facefusion_dir) / ".assets" / "models")
+    cmd = [python_path, str(facefusion_py), "headless-run"]
+    cmd += ["-s", *source_paths]
+    cmd += ["-t", input_path]
+    cmd += ["-o", output_path]
+    cmd += ["--temp-path", facefusion_temp_dir]
+
+    processors = _split_words(
+        job_settings.get("processors"),
+        _split_words(settings.facefusion_processors, []),
+    )
+    if processors:
+        cmd += ["--processors", *processors]
+
+    providers = _split_words(job_settings.get("execution_provider", settings.facefusion_execution_provider), [])
+    if providers:
+        cmd += ["--execution-providers", *providers]
+    device_ids = _split_words(job_settings.get("device_ids", settings.facefusion_device_ids), ["0"])
+    if device_ids:
+        cmd += ["--execution-device-ids", *device_ids]
+    cmd += ["--execution-thread-count", str(job_settings.get("thread_count", settings.facefusion_thread_count))]
+    cmd += ["--video-memory-strategy", str(job_settings.get("video_memory_strategy", settings.facefusion_video_memory_strategy))]
+    system_memory_limit = int(job_settings.get("system_memory_limit", settings.facefusion_system_memory_limit) or 0)
+    if system_memory_limit > 0:
+        cmd += ["--system-memory-limit", str(system_memory_limit)]
+    download_providers = _split_words(job_settings.get("download_providers", settings.facefusion_download_providers), [])
+    if download_providers:
+        cmd += ["--download-providers", *download_providers]
+
+    cmd += ["--face-detector-model", str(job_settings.get("face_detector_model", settings.facefusion_face_detector_model))]
+    cmd += ["--face-detector-size", str(job_settings.get("face_detector_size", settings.facefusion_face_detector_size))]
+    cmd += ["--face-detector-score", str(job_settings.get("face_detector_score", settings.facefusion_face_detector_score))]
+    detector_angles = _split_words(job_settings.get("face_detector_angles", settings.facefusion_face_detector_angles), ["0"])
+    if detector_angles:
+        cmd += ["--face-detector-angles", *detector_angles]
+    detector_margin = _split_words(job_settings.get("face_detector_margin", settings.facefusion_face_detector_margin), [])
+    if detector_margin:
+        cmd += ["--face-detector-margin", *detector_margin]
+    cmd += ["--face-landmarker-model", str(job_settings.get("face_landmarker_model", settings.facefusion_face_landmarker_model))]
+    cmd += ["--face-landmarker-score", str(job_settings.get("face_landmarker_score", settings.facefusion_face_landmarker_score))]
+    cmd += ["--face-selector-mode", str(job_settings.get("face_selector_mode", settings.facefusion_face_selector_mode))]
+    selector_order = job_settings.get("face_selector_order", settings.facefusion_face_selector_order)
+    if selector_order:
+        cmd += ["--face-selector-order", str(selector_order)]
+    gender = job_settings.get("face_selector_gender", settings.facefusion_face_selector_gender)
+    if gender:
+        cmd += ["--face-selector-gender", str(gender)]
+    age_start = job_settings.get("face_selector_age_start", settings.facefusion_face_selector_age_start)
+    if age_start not in (None, ""):
+        cmd += ["--face-selector-age-start", str(age_start)]
+    age_end = job_settings.get("face_selector_age_end", settings.facefusion_face_selector_age_end)
+    if age_end not in (None, ""):
+        cmd += ["--face-selector-age-end", str(age_end)]
+    race = job_settings.get("face_selector_race", settings.facefusion_face_selector_race)
+    if race:
+        cmd += ["--face-selector-race", str(race)]
+    cmd += ["--reference-frame-number", str(job_settings.get("reference_frame_number", settings.facefusion_reference_frame_number))]
+    cmd += ["--reference-face-position", str(job_settings.get("reference_face_position", settings.facefusion_reference_face_position))]
+    cmd += ["--reference-face-distance", str(job_settings.get("reference_face_distance", settings.facefusion_reference_face_distance))]
+
+    mask_types = _split_words(job_settings.get("face_mask_types", settings.facefusion_face_mask_types), ["box"])
+    if mask_types:
+        cmd += ["--face-mask-types", *mask_types]
+    mask_areas = _split_words(job_settings.get("face_mask_areas", settings.facefusion_face_mask_areas), [])
+    if mask_areas:
+        cmd += ["--face-mask-areas", *mask_areas]
+    mask_regions = _split_words(job_settings.get("face_mask_regions", settings.facefusion_face_mask_regions), [])
+    if mask_regions:
+        cmd += ["--face-mask-regions", *mask_regions]
+    cmd += ["--face-mask-blur", str(job_settings.get("face_mask_blur", settings.facefusion_face_mask_blur))]
+    mask_padding = _split_words(job_settings.get("face_mask_padding", settings.facefusion_face_mask_padding), [])
+    if mask_padding:
+        cmd += ["--face-mask-padding", *mask_padding]
+    cmd += ["--face-occluder-model", str(job_settings.get("face_occluder_model", settings.facefusion_face_occluder_model))]
+    cmd += ["--face-parser-model", str(job_settings.get("face_parser_model", settings.facefusion_face_parser_model))]
+
+    cmd += ["--output-video-encoder", str(job_settings.get("output_video_encoder", settings.facefusion_output_video_encoder))]
+    cmd += ["--output-video-preset", str(job_settings.get("output_video_preset", settings.facefusion_output_video_preset))]
+    cmd += ["--output-video-quality", str(job_settings.get("output_video_quality", settings.facefusion_output_video_quality))]
+    output_video_scale = job_settings.get("output_video_scale", settings.facefusion_output_video_scale)
+    if output_video_scale:
+        cmd += ["--output-video-scale", str(output_video_scale)]
+    output_video_fps = job_settings.get("output_video_fps", settings.facefusion_output_video_fps)
+    if output_video_fps:
+        cmd += ["--output-video-fps", str(output_video_fps)]
+    cmd += ["--output-audio-encoder", str(job_settings.get("output_audio_encoder", settings.facefusion_output_audio_encoder))]
+    cmd += ["--output-audio-quality", str(job_settings.get("output_audio_quality", settings.facefusion_output_audio_quality))]
+    cmd += ["--output-audio-volume", str(job_settings.get("output_audio_volume", settings.facefusion_output_audio_volume))]
+    cmd += ["--output-image-quality", str(job_settings.get("output_image_quality", settings.facefusion_output_image_quality))]
+    output_image_scale = job_settings.get("output_image_scale", settings.facefusion_output_image_scale)
+    if output_image_scale:
+        cmd += ["--output-image-scale", str(output_image_scale)]
+    cmd += ["--temp-frame-format", str(job_settings.get("temp_frame_format", settings.facefusion_temp_frame_format))]
+    cmd += ["--log-level", str(job_settings.get("log_level", settings.facefusion_log_level))]
+
+    env = _build_env(
+        facefusion_cache_dir=facefusion_cache_dir,
+        facefusion_temp_dir=facefusion_temp_dir,
+    )
+    return cmd, facefusion_dir, env, native_model_dir, facefusion_cache_dir
+
+
+async def run_facefusion_restoration(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    job_settings: dict,
+    progress_queue: asyncio.Queue,
+    cancel_event: asyncio.Event | None = None,
+) -> bool:
+    cmd, cwd, env, native_model_dir, facefusion_cache_dir = _build_command(input_path, output_path, job_settings)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    await progress_queue.put(_progress_event(
+        progress=1,
+        phase_key="prepare",
+        phase_progress=10,
+        detail="初始化 FaceFusion CLI",
+    ))
+    await progress_queue.put({"type": "log", "line": f"Starting command: {' '.join(cmd)}"})
+    await progress_queue.put({"type": "log", "line": f"FaceFusion model directory: {native_model_dir}"})
+    await progress_queue.put({"type": "log", "line": f"FaceFusion working directory: {cwd}"})
+    await progress_queue.put({"type": "log", "line": f"FaceFusion runtime cache directory: {facefusion_cache_dir}"})
+
+    result = {"returncode": None, "cancelled": False}
+    proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
+    proc_lock = threading.Lock()
+    terminate_requested = threading.Event()
+    progress_state = {"overall": 1}
+    state_lock = threading.Lock()
+
+    def push(item: dict) -> None:
+        try:
+            progress_queue.put_nowait(item)
+        except Exception:
+            pass
+
+    def publish(progress: int, phase_key: str, phase_progress: int, detail: str | None = None) -> None:
+        progress = max(0, min(100, int(progress)))
+        with state_lock:
+            if progress < int(progress_state["overall"]):
+                return
+            progress_state["overall"] = progress
+        push(_progress_event(
+            progress=progress,
+            phase_key=phase_key,
+            phase_progress=phase_progress,
+            detail=detail,
+        ))
+
+    def terminate_process_tree(proc: subprocess.Popen | None) -> None:
+        if proc is None or proc.poll() is not None:
+            return
+        result["cancelled"] = True
+        terminate_requested.set()
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+    def kill_process_tree(proc: subprocess.Popen | None) -> None:
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    def run_in_thread() -> None:
+        creation_kwargs = {"start_new_session": True} if os.name == "posix" else {}
+        proc = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,

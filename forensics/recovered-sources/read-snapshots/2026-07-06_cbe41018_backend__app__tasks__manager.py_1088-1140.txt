@@ -1,0 +1,53 @@
+        settings_dict = job_data.settings.model_dump() if hasattr(job_data, 'settings') else {}
+        execution_plan = build_whisper_execution_plan(
+            settings_dict,
+            settings_dict.get("strategy") or settings_dict.get("preset"),
+        )
+        settings_dict = execution_plan.runtime_settings
+        settings_dict["translate_to"] = None
+        strategy_name = execution_plan.strategy
+
+        event_queue = self.get_event_queue(job_id)
+
+        # 构建 Whisper 配置
+        model_str = settings_dict.get("model", "chickenrice-zh")
+        pipeline_mode_str = settings_dict.get("pipeline_mode", "faster")
+
+        config = WhisperConfig(
+            strategy=strategy_name or "chickenrice",
+            executor_key=execution_plan.executor_key,
+            subtitle_profile=settings_dict.get("subtitle_profile", "standard"),
+            model_backend=settings_dict.get("model_backend") or model_str,
+            whisper_task=settings_dict.get("whisper_task") or ("translate" if model_str == "chickenrice-zh" else "transcribe"),
+            vad_backend=settings_dict.get("vad_backend", "energy"),
+            chunker=settings_dict.get("chunker", "smart_vad_chunk"),
+            target_chunk_duration_s=float(settings_dict.get("target_chunk_duration_s") or 30.0),
+            max_chunk_duration_s=float(settings_dict.get("max_chunk_duration_s") or 30.0),
+            segment_merge_max_gap_ms=int(settings_dict.get("segment_merge_max_gap_ms") or 2000),
+            segment_merge_max_duration_ms=int(settings_dict.get("segment_merge_max_duration_ms") or 20000),
+            model=WhisperModel(model_str),
+            pipeline_mode=PipelineMode(pipeline_mode_str),
+            language=settings_dict.get("language", "ja"),
+            sensitivity=Sensitivity(settings_dict.get("sensitivity", "balanced")),
+            # 翻译设置
+            translate_to=settings_dict.get("translate_to"),
+            translate_base_url=settings_dict.get("translate_base_url", "https://api.openai.com/v1"),
+            translate_api_key=settings_dict.get("translate_api_key", ""),
+            translate_model=settings_dict.get("translate_model", "llama3.2"),
+            translate_style=settings_dict.get("translate_style", "adult_explicit"),
+        )
+
+        # 日志记录 pipeline 架构和配置
+        actual_model = config.model.value
+        await self.add_log(job_id, "Whisper 架构: NOOR Whisper Pipeline")
+        if strategy_name:
+            await self.add_log(job_id, f"  策略: {strategy_name}")
+        await self.add_log(job_id, f"  模式: {execution_plan.summary}")
+        for detail_line in execution_plan.detail_lines:
+            await self.add_log(job_id, f"  {detail_line}")
+        await self.add_log(job_id, f"  后端: {config.pipeline_mode.value} | 模型: {actual_model} | 任务: {config.whisper_task}")
+        if config.translate_to:
+            await self.add_log(job_id, f"  翻译: {config.translate_model} → {config.translate_to} | 风格: {config.translate_style}")
+        await self.add_log(job_id, "开始 Whisper 字幕生成...")
+        await self._ensure_gpu_memory_for_job(job_id, "whisper", "Whisper", settings_dict)
+

@@ -1,0 +1,420 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const upgrading = ref(false)
+const activeSection = ref<'runtime' | 'execution' | 'detection' | 'masking' | 'output'>('runtime')
+
+const sections = [
+  { key: 'runtime', label: '源码与路径' },
+  { key: 'execution', label: '执行' },
+  { key: 'detection', label: '检测选择' },
+  { key: 'masking', label: '遮罩' },
+  { key: 'output', label: '输出' },
+] as const
+
+const executionProviderOptions = ['cpu', 'cuda', 'tensorrt', 'openvino', 'directml', 'rocm', 'coreml']
+const downloadProviderOptions = ['github', 'huggingface']
+const processorOptions = [
+  'age_modifier',
+  'background_remover',
+  'deep_swapper',
+  'expression_restorer',
+  'face_debugger',
+  'face_editor',
+  'face_enhancer',
+  'face_swapper',
+  'frame_colorizer',
+  'frame_enhancer',
+  'lip_syncer',
+]
+const detectorAngleOptions = ['0', '90', '180', '270']
+const maskTypeOptions = ['box', 'occlusion', 'area', 'region']
+const maskAreaOptions = ['upper-face', 'lower-face', 'mouth']
+const maskRegionOptions = ['skin', 'left-eyebrow', 'right-eyebrow', 'left-eye', 'right-eye', 'glasses', 'nose', 'mouth', 'upper-lip', 'lower-lip']
+const genderOptions = ['', 'female', 'male']
+const raceOptions = ['', 'white', 'black', 'latino', 'asian', 'indian', 'arabic']
+const scaleOptions = Array.from({ length: 32 }, (_, index) => {
+  const value = (index + 1) * 0.25
+  return Number.isInteger(value) ? value.toFixed(1) : String(value)
+})
+
+const facefusionDir = ref('')
+const facefusionPythonPath = ref('')
+const nativeModelDir = ref('')
+const resolvedFacefusionDir = ref('')
+const facefusionSourceMode = ref('')
+const facefusionVersion = ref('')
+const facefusionCanSelfUpgrade = ref(false)
+const facefusionUpgradeHint = ref('')
+const facefusionUpstreamRepo = ref('')
+const executionProvider = ref('cuda')
+const deviceIds = ref('0')
+const threadCount = ref(8)
+const videoMemoryStrategy = ref('strict')
+const systemMemoryLimit = ref(0)
+const logLevel = ref('info')
+const downloadProviders = ref('github huggingface')
+const haltOnError = ref(false)
+const processors = ref('')
+const faceDetectorModel = ref('yolo_face')
+const faceDetectorSize = ref('640x640')
+const faceDetectorScore = ref(0.5)
+const faceDetectorAngles = ref('0')
+const faceDetectorMargin = ref('0 0 0 0')
+const faceLandmarkerModel = ref('2dfan4')
+const faceLandmarkerScore = ref(0.5)
+const faceSelectorMode = ref('reference')
+const faceSelectorOrder = ref('large-small')
+const faceSelectorGender = ref('')
+const faceSelectorAgeStart = ref('')
+const faceSelectorAgeEnd = ref('')
+const faceSelectorRace = ref('')
+const referenceFrameNumber = ref(0)
+const referenceFacePosition = ref(0)
+const referenceFaceDistance = ref(0.3)
+const faceMaskTypes = ref('box')
+const faceMaskAreas = ref('')
+const faceMaskRegions = ref('')
+const faceMaskBlur = ref(0.3)
+const faceMaskPadding = ref('0 0 0 0')
+const faceOccluderModel = ref('xseg_1')
+const faceParserModel = ref('bisenet_resnet_34')
+const outputVideoEncoder = ref('libx264')
+const outputVideoPreset = ref('veryfast')
+const outputVideoQuality = ref(80)
+const outputVideoScale = ref('1.0')
+const outputVideoFps = ref('')
+const outputAudioEncoder = ref('aac')
+const outputAudioQuality = ref(80)
+const outputAudioVolume = ref(100)
+const outputImageQuality = ref(80)
+const outputImageScale = ref('1.0')
+const tempFrameFormat = ref('png')
+
+function splitTokens(value: string) {
+  return String(value || '').split(/[\s,]+/).map(item => item.trim()).filter(Boolean)
+}
+
+function hasToken(value: string, token: string) {
+  return splitTokens(value).includes(token)
+}
+
+function toggleToken(value: string, token: string) {
+  const items = splitTokens(value)
+  const next = items.includes(token) ? items.filter(item => item !== token) : [...items, token]
+  return next.join(' ')
+}
+
+function quadPart(value: string, index: number) {
+  return splitTokens(value)[index] || '0'
+}
+
+function updateQuadPart(value: string, index: number, nextValue: string) {
+  const items = ['0', '0', '0', '0']
+  splitTokens(value).slice(0, 4).forEach((item, itemIndex) => {
+    items[itemIndex] = item
+  })
+  items[index] = nextValue === '' ? '0' : String(nextValue)
+  return items.join(' ')
+}
+
+function inputValue(event: Event) {
+  return (event.target as HTMLInputElement).value
+}
+
+onMounted(async () => {
+  await loadSettings()
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    const data = resp.data
+    facefusionDir.value = data.facefusion?.dir || ''
+    facefusionPythonPath.value = data.facefusion?.python_path || ''
+    nativeModelDir.value = data.facefusion?.native_model_dir || ''
+    resolvedFacefusionDir.value = data.facefusion?.resolved_dir || ''
+    facefusionSourceMode.value = data.facefusion?.source_mode || ''
+    facefusionVersion.value = data.facefusion?.version || ''
+    facefusionCanSelfUpgrade.value = data.facefusion?.can_self_upgrade || false
+    facefusionUpgradeHint.value = data.facefusion?.upgrade_hint || ''
+    facefusionUpstreamRepo.value = data.facefusion?.upstream_repo || ''
+    if (data.facefusion_defaults) {
+      executionProvider.value = data.facefusion_defaults.execution_provider || 'cuda'
+      deviceIds.value = data.facefusion_defaults.device_ids || '0'
+      threadCount.value = data.facefusion_defaults.thread_count ?? 8
+      videoMemoryStrategy.value = data.facefusion_defaults.video_memory_strategy || 'strict'
+      systemMemoryLimit.value = data.facefusion_defaults.system_memory_limit ?? 0
+      logLevel.value = data.facefusion_defaults.log_level || 'info'
+      downloadProviders.value = data.facefusion_defaults.download_providers || 'github huggingface'
+      haltOnError.value = data.facefusion_defaults.halt_on_error ?? false
+      processors.value = data.facefusion_defaults.processors || ''
+      faceDetectorModel.value = data.facefusion_defaults.face_detector_model || 'yolo_face'
+      faceDetectorSize.value = data.facefusion_defaults.face_detector_size || '640x640'
+      faceDetectorScore.value = data.facefusion_defaults.face_detector_score ?? 0.5
+      faceDetectorAngles.value = data.facefusion_defaults.face_detector_angles || '0'
+      faceDetectorMargin.value = data.facefusion_defaults.face_detector_margin || '0 0 0 0'
+      faceLandmarkerModel.value = data.facefusion_defaults.face_landmarker_model || '2dfan4'
+      faceLandmarkerScore.value = data.facefusion_defaults.face_landmarker_score ?? 0.5
+      faceSelectorMode.value = data.facefusion_defaults.face_selector_mode || 'reference'
+      faceSelectorOrder.value = data.facefusion_defaults.face_selector_order || 'large-small'
+      faceSelectorGender.value = data.facefusion_defaults.face_selector_gender || ''
+      faceSelectorAgeStart.value = data.facefusion_defaults.face_selector_age_start || ''
+      faceSelectorAgeEnd.value = data.facefusion_defaults.face_selector_age_end || ''
+      faceSelectorRace.value = data.facefusion_defaults.face_selector_race || ''
+      referenceFrameNumber.value = data.facefusion_defaults.reference_frame_number ?? 0
+      referenceFacePosition.value = data.facefusion_defaults.reference_face_position ?? 0
+      referenceFaceDistance.value = data.facefusion_defaults.reference_face_distance ?? 0.3
+      faceMaskTypes.value = data.facefusion_defaults.face_mask_types || 'box'
+      faceMaskAreas.value = data.facefusion_defaults.face_mask_areas || ''
+      faceMaskRegions.value = data.facefusion_defaults.face_mask_regions || ''
+      faceMaskBlur.value = data.facefusion_defaults.face_mask_blur ?? 0.3
+      faceMaskPadding.value = data.facefusion_defaults.face_mask_padding || '0 0 0 0'
+      faceOccluderModel.value = data.facefusion_defaults.face_occluder_model || 'xseg_1'
+      faceParserModel.value = data.facefusion_defaults.face_parser_model || 'bisenet_resnet_34'
+      outputVideoEncoder.value = data.facefusion_defaults.output_video_encoder || 'libx264'
+      outputVideoPreset.value = data.facefusion_defaults.output_video_preset || 'veryfast'
+      outputVideoQuality.value = data.facefusion_defaults.output_video_quality ?? 80
+      outputVideoScale.value = data.facefusion_defaults.output_video_scale || '1.0'
+      outputVideoFps.value = data.facefusion_defaults.output_video_fps || ''
+      outputAudioEncoder.value = data.facefusion_defaults.output_audio_encoder || 'aac'
+      outputAudioQuality.value = data.facefusion_defaults.output_audio_quality ?? 80
+      outputAudioVolume.value = data.facefusion_defaults.output_audio_volume ?? 100
+      outputImageQuality.value = data.facefusion_defaults.output_image_quality ?? 80
+      outputImageScale.value = data.facefusion_defaults.output_image_scale || '1.0'
+      tempFrameFormat.value = data.facefusion_defaults.temp_frame_format || 'png'
+    }
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveRuntime() {
+  saving.value = true
+  try {
+    await api.put('/settings/facefusion', {
+      dir: facefusionDir.value,
+      python_path: facefusionPythonPath.value,
+    })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function upgradeFaceFusion() {
+  if (!facefusionCanSelfUpgrade.value) {
+    toast.error(facefusionUpgradeHint.value || '当前环境不支持 FaceFusion 自升级')
+    return
+  }
+  if (!await confirm({ message: '从上游拉取并升级 NOOR 内置 FaceFusion？升级会先验证，失败会恢复旧源码。' })) return
+  upgrading.value = true
+  try {
+    const resp = await api.post('/settings/facefusion/upgrade')
+    facefusionVersion.value = resp.data.version || ''
+    toast.success(`FaceFusion 已升级到 ${resp.data.version || '未知版本'}`)
+    await loadSettings()
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || 'FaceFusion 升级失败')
+  } finally {
+    upgrading.value = false
+  }
+}
+
+async function saveDefaults() {
+  saving.value = true
+  try {
+    await api.put('/settings/facefusion/defaults', {
+      execution_provider: executionProvider.value,
+      device_ids: deviceIds.value,
+      thread_count: threadCount.value,
+      video_memory_strategy: videoMemoryStrategy.value,
+      system_memory_limit: systemMemoryLimit.value,
+      log_level: logLevel.value,
+      download_providers: downloadProviders.value,
+      halt_on_error: haltOnError.value,
+      processors: processors.value,
+      face_detector_model: faceDetectorModel.value,
+      face_detector_size: faceDetectorSize.value,
+      face_detector_score: faceDetectorScore.value,
+      face_detector_angles: faceDetectorAngles.value,
+      face_detector_margin: faceDetectorMargin.value,
+      face_landmarker_model: faceLandmarkerModel.value,
+      face_landmarker_score: faceLandmarkerScore.value,
+      face_selector_mode: faceSelectorMode.value,
+      face_selector_order: faceSelectorOrder.value,
+      face_selector_gender: faceSelectorGender.value,
+      face_selector_age_start: faceSelectorAgeStart.value,
+      face_selector_age_end: faceSelectorAgeEnd.value,
+      face_selector_race: faceSelectorRace.value,
+      reference_frame_number: referenceFrameNumber.value,
+      reference_face_position: referenceFacePosition.value,
+      reference_face_distance: referenceFaceDistance.value,
+      face_mask_types: faceMaskTypes.value,
+      face_mask_areas: faceMaskAreas.value,
+      face_mask_regions: faceMaskRegions.value,
+      face_mask_blur: faceMaskBlur.value,
+      face_mask_padding: faceMaskPadding.value,
+      face_occluder_model: faceOccluderModel.value,
+      face_parser_model: faceParserModel.value,
+      output_video_encoder: outputVideoEncoder.value,
+      output_video_preset: outputVideoPreset.value,
+      output_video_quality: outputVideoQuality.value,
+      output_video_scale: outputVideoScale.value,
+      output_video_fps: outputVideoFps.value,
+      output_audio_encoder: outputAudioEncoder.value,
+      output_audio_quality: outputAudioQuality.value,
+      output_audio_volume: outputAudioVolume.value,
+      output_image_quality: outputImageQuality.value,
+      output_image_scale: outputImageScale.value,
+      temp_frame_format: tempFrameFormat.value,
+    })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-else>
+      <div class="facefusion-shell ui-card">
+        <div class="facefusion-card-head">
+          <div>
+            <h2 class="settings-card__title">FaceFusion</h2>
+            <p class="settings-card__desc">内置源码路径、升级与默认处理参数。</p>
+          </div>
+          <div class="facefusion-head-actions">
+            <VuiButton
+              v-if="activeSection === 'runtime'"
+              variant="contained"
+              color="secondary"
+              size="small"
+              customClass="settings-secondary-btn"
+              :loading="upgrading"
+              :disabled="!facefusionCanSelfUpgrade"
+              @click="upgradeFaceFusion"
+            >
+              {{ upgrading ? '升级中' : '升级 FaceFusion' }}
+            </VuiButton>
+            <VuiButton
+              v-if="activeSection !== 'runtime'"
+              variant="gradient"
+              color="info"
+              size="small"
+              customClass="settings-primary-btn"
+              :loading="saving"
+              @click="saveDefaults"
+            >
+              保存默认参数
+            </VuiButton>
+          </div>
+        </div>
+
+        <div class="facefusion-tabbar">
+          <div class="facefusion-tabs" role="tablist">
+            <button
+              v-for="section in sections"
+              :key="section.key"
+              type="button"
+              :class="{ 'is-active': activeSection === section.key }"
+              @click="activeSection = section.key"
+            >
+              {{ section.label }}
+            </button>
+          </div>
+        </div>
+
+      <div v-if="activeSection === 'runtime'" class="facefusion-section">
+        <h2 class="settings-card__title">源码与路径</h2>
+        <p class="settings-card__desc">默认使用 NOOR 内置 FaceFusion 源码；仅在需要临时覆盖时填写外部目录。</p>
+
+        <div class="settings-form mt-4">
+          <FieldRow label="当前版本" description="NOOR 内置 FaceFusion 源码版本">
+            <input :value="facefusionVersion || '未知'" type="text" class="settings-input" readonly />
+          </FieldRow>
+
+          <FieldRow label="上游仓库" description="升级时从该仓库拉取源码并套用 NOOR 适配">
+            <input :value="facefusionUpstreamRepo" type="text" class="settings-input" readonly />
+          </FieldRow>
+
+          <FieldRow label="外部 FaceFusion 目录" description="留空使用 NOOR 内置源码；填写时目录下应存在 facefusion.py">
+            <input v-model="facefusionDir" type="text" placeholder="留空使用 NOOR 内置 FaceFusion" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow label="当前源码目录" description="实际运行 headless-run 的源码入口">
+            <input :value="resolvedFacefusionDir" type="text" class="settings-input" readonly />
+          </FieldRow>
+
+          <FieldRow label="源码模式" description="embedded 为 NOOR 内置，external 为外部覆盖">
+            <input :value="facefusionSourceMode" type="text" class="settings-input" readonly />
+          </FieldRow>
+
+          <FieldRow label="Python 路径" description="可留空，NOOR 会优先查找 FaceFusion 目录下的 .venv/venv，再回退到当前 Python">
+            <input v-model="facefusionPythonPath" type="text" placeholder="/path/to/python" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow label="模型目录" description="FaceFusion 原生模型目录；当前由 .assets/models 提供">
+            <input :value="nativeModelDir" type="text" class="settings-input" readonly />
+          </FieldRow>
+
+          <div class="settings-actions mt-2">
+            <VuiButton variant="gradient" color="info" size="small" customClass="settings-primary-btn" :loading="saving" @click="saveRuntime">
+              保存源码设置
+            </VuiButton>
+          </div>
+          <p v-if="facefusionUpgradeHint" class="facefusion-upgrade-hint">{{ facefusionUpgradeHint }}</p>
+        </div>
+      </div>
+
+      <div v-if="activeSection === 'execution'" class="facefusion-section">
+        <h2 class="settings-card__title">执行与处理器</h2>
+        <p class="settings-card__desc">这些参数将作为媒体库破解面板中 FaceFusion tab 的默认值。</p>
+
+        <div class="settings-form mt-4">
+          <FieldRow label="执行后端" description="FaceFusion headless-run 的 execution provider">
+            <div class="choice-chips">
+              <button
+                v-for="provider in executionProviderOptions"
+                :key="provider"
+                type="button"
+                :class="{ 'is-active': hasToken(executionProvider, provider) }"
+                @click="executionProvider = toggleToken(executionProvider, provider)"
+              >
+                {{ provider }}
+              </button>
+            </div>
+          </FieldRow>
+
+          <FieldRow label="设备 ID" description="多个设备可用空格或逗号分隔">
+            <input v-model="deviceIds" type="text" placeholder="0" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow label="线程数" description="FaceFusion execution-thread-count">
+            <div class="range-control">
+              <input v-model.number="threadCount" type="range" min="1" max="32" step="1" />
+              <span>{{ threadCount }}</span>

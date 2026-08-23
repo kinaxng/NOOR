@@ -1,0 +1,16 @@
+watch(page, () => {
+  loadActors()
+})
+
+watch(currentLang, () => {
+  loadActors()
+})
+
+watch(actorNameLang, () => {
+  page.value = 1
+  loadActors()
+  if (showMappingMatches.value) void previewMappingMatches()
+  if (tmdbBackfill.value) void previewTmdbBackfill()
+})
+
+onMounted(() => {

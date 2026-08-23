@@ -1,0 +1,90 @@
+from functools import lru_cache
+from typing import List, Tuple
+
+import numpy
+from tqdm import tqdm
+
+from facefusion import inference_manager, state_manager, translator
+from facefusion.common_helper import is_macos
+from facefusion.download import conditional_download_hashes, conditional_download_sources, resolve_download_url
+from facefusion.execution import has_execution_provider
+from facefusion.filesystem import resolve_relative_path
+from facefusion.thread_helper import conditional_thread_semaphore
+from facefusion.types import Detection, DownloadScope, DownloadSet, ExecutionProvider, Fps, InferencePool, ModelSet, VisionFrame
+from facefusion.vision import detect_video_fps, fit_contain_frame, read_image, read_video_frame
+
+STREAM_COUNTER = 0
+
+
+@lru_cache()
+def create_static_model_set(download_scope : DownloadScope) -> ModelSet:
+	return\
+	{
+		'nsfw_1':
+		{
+			'__metadata__':
+			{
+				'vendor': 'EraX',
+				'license': 'Apache-2.0',
+				'year': 2024
+			},
+			'hashes':
+			{
+				'content_analyser':
+				{
+					'url': resolve_download_url('models-3.3.0', 'nsfw_1.hash'),
+					'path': resolve_relative_path('../.assets/models/nsfw_1.hash')
+				}
+			},
+			'sources':
+			{
+				'content_analyser':
+				{
+					'url': resolve_download_url('models-3.3.0', 'nsfw_1.onnx'),
+					'path': resolve_relative_path('../.assets/models/nsfw_1.onnx')
+				}
+			},
+			'size': (640, 640),
+			'mean': (0.0, 0.0, 0.0),
+			'standard_deviation': (1.0, 1.0, 1.0)
+		},
+		'nsfw_2':
+		{
+			'__metadata__':
+			{
+				'vendor': 'Marqo',
+				'license': 'Apache-2.0',
+				'year': 2024
+			},
+			'hashes':
+			{
+				'content_analyser':
+				{
+					'url': resolve_download_url('models-3.3.0', 'nsfw_2.hash'),
+					'path': resolve_relative_path('../.assets/models/nsfw_2.hash')
+				}
+			},
+			'sources':
+			{
+				'content_analyser':
+				{
+					'url': resolve_download_url('models-3.3.0', 'nsfw_2.onnx'),
+					'path': resolve_relative_path('../.assets/models/nsfw_2.onnx')
+				}
+			},
+			'size': (384, 384),
+			'mean': (0.5, 0.5, 0.5),
+			'standard_deviation': (0.5, 0.5, 0.5)
+		},
+		'nsfw_3':
+		{
+			'__metadata__':
+			{
+				'vendor': 'Freepik',
+				'license': 'MIT',
+				'year': 2025
+			},
+			'hashes':
+			{
+				'content_analyser':
+				{

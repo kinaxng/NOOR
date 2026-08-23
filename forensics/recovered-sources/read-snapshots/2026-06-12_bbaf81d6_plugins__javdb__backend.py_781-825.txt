@@ -1,0 +1,45 @@
+async def _video(config: dict[str, Any], code: str, *, refresh: bool = False) -> dict[str, Any]:
+    code_key = str(code or "").strip().upper()
+    cache_key = (_base(config), code_key)
+    if not refresh:
+        cached = _cache_get(VIDEO_DETAIL_CACHE, cache_key, VIDEO_DETAIL_CACHE_TTL)
+        if cached is not None:
+            return dict(cached)
+    path = f"/video/{code}"
+    params = {"refresh": "true"} if refresh else None
+    data = _data(await _request(config, "GET", path, params=params))
+    if not isinstance(data, dict):
+        return {}
+    out = dict(data)
+    out["cover_url"] = _abs(config, out.get("cover_url"))
+    out["thumb_url"] = _abs(config, out.get("thumb_url"))
+    out["previews"] = [_abs(config, x) for x in (out.get("previews") or [])]
+    _cache_set(VIDEO_DETAIL_CACHE, cache_key, out)
+    return dict(out)
+
+
+async def _related_movies(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    rel_type = str(payload.get("rel_type") or "").strip()
+    rel_id = str(payload.get("rel_id") or payload.get("id") or "").strip()
+    page = max(1, int(payload.get("page") or 1))
+    limit = max(1, min(int(payload.get("limit") or 24), 48))
+    sort_by = payload.get("sort_by") or "release"
+    order_by = payload.get("order_by") or "desc"
+    path_map = {
+        "actor": "/actors/{id}/movies",
+        "series": "/series/{id}/movies",
+        "maker": "/makers/{id}/movies",
+        "publisher": "/publishers/{id}/movies",
+        "director": "/directors/{id}/movies",
+        "list": "/lists/{id}/movies",
+    }
+    if rel_type == "category":
+        data = _data(await _request(config, "GET", "/videos/filter", params={"category_id": rel_id, "page": page, "limit": limit}))
+    elif rel_type in path_map:
+        data = _data(await _request(config, "GET", path_map[rel_type].format(id=rel_id), params={"page": page, "limit": limit, "sort_by": sort_by, "order_by": order_by, "filter": payload.get("filter") or ""}))
+    else:
+        raise ValueError(f"unsupported relation type: {rel_type}")
+    items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
+    total = int(data.get("total") or data.get("total_count") or 0) if isinstance(data, dict) else 0
+    if not total:
+        # DBOnline's relation endpoint returns current_page/movies but no

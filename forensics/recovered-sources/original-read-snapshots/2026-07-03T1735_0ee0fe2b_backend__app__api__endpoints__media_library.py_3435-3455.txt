@@ -1,0 +1,21 @@
+            source="media_library.actors",
+        )
+    return result
+
+
+@router.get("/actors/mapping/merge-plan")
+async def get_actor_mapping_merge_plan(
+    mapping_id: str,
+    target_name: str | None = None,
+    target_actor_id: str | None = None,
+    lang: str | None = None,
+):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return {
+            "ok": True,
+            **await _build_actor_mapping_merge_plan(
+                config,
+                mapping_id,

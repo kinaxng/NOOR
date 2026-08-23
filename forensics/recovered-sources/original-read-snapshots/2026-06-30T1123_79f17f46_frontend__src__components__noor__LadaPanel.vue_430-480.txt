@@ -1,0 +1,51 @@
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.restorationModel') }}</label>
+                    <select v-model="settings.restoration_model" class="settings-input w-full">
+                      <option v-for="m in mergedRestorationModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.encodingPreset') }}</label>
+                    <select v-model="settings.encoding_preset" class="settings-input w-full">
+                      <option v-for="p in mergedEncodingPresets" :key="p.id" :value="p.id">{{ p.name }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="ui-card">
+                <span class="text-[10px] text-text-muted uppercase tracking-wider">FACEFUSION</span>
+                <div class="space-y-3 mt-3">
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">源脸图片</label>
+                    <input v-model="facefusionSettings.source_path" class="settings-input w-full" type="text" placeholder="/path/to/source-face.jpg" />
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">预览帧</label>
+                      <input
+                        v-model.number="previewFrameNumber"
+                        class="settings-input w-full"
+                        type="number"
+                        min="0"
+                        :max="previewFrameMax"
+                        step="1"
+                        @input="markPreviewFrameChanged"
+                      />
+                    </div>
+                    <VuiButton
+                      variant="outlined"
+                      color="secondary"
+                      size="small"
+                      :loading="previewLoading"
+                      :disabled="!selectedSubmitPath || !facefusionSettings.source_path"
+                      @click="handleGenerateFaceFusionPreview"
+                    >
+                      {{ previewUrl ? '刷新预览' : '生成预览' }}
+                    </VuiButton>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">执行后端</label>
+                      <select v-model="facefusionSettings.execution_provider" class="settings-input w-full">
+                        <option value="cuda">CUDA</option>
+                        <option value="cpu">CPU</option>

@@ -1,0 +1,36 @@
+  nfo?: MediaNFO
+  siblings?: SiblingItem[]
+  main_nfo?: string
+  variant_count?: number
+}
+
+export interface MediaActor {
+  id: string
+  name: string
+  sort_name?: string
+  overview?: string
+  image_url?: string
+  emby_url?: string
+  provider_ids?: Record<string, string>
+  tmdb_id?: string
+  imdb_id?: string
+  movie_count?: number | null
+  premiere_date?: string
+  date_created?: string
+}
+
+export interface MediaActorDuplicateGroup {
+  key: string
+  name: string
+  count: number
+  actors: MediaActor[]
+  tmdb_ids: string[]
+}
+
+export interface JobSettings {
+  detection_model?: string
+  restoration_model?: string
+  encoding_preset?: string
+  strategy?: string
+  model?: string
+  pipeline_mode?: string

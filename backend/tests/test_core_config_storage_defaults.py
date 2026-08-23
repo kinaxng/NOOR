@@ -3,11 +3,27 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.core.config import Settings
-from app.core.runtime_paths import data_path, plugin_cache_path, plugin_data_path
+from app.core.runtime_paths import apply_whisper_cache_env, build_whisper_cache_env, data_path, plugin_cache_path, plugin_data_path
 
 
 def test_storage_defaults_derive_from_noor_data_dir():
-    settings = Settings(_env_file=None, noor_data_dir="/noor-data")
+    settings = Settings(
+        _env_file=None,
+        noor_data_dir="/noor-data",
+        whisper_model_dir="",
+        whisper_cache_dir="",
+        whisper_temp_dir="",
+        audio_separator_model_dir="",
+        reazon_model_dir="",
+        reazon_nemo_model_path="",
+        lada_model_dir="",
+        lada_cache_dir="",
+        lada_temp_dir="",
+        facefusion_model_dir="",
+        facefusion_cache_dir="",
+        facefusion_temp_dir="",
+        database_url="",
+    )
 
     assert settings.whisper_model_dir == "/noor-data/models/whisper"
     assert settings.whisper_cache_dir == "/noor-data/runtime/whisper/cache"
@@ -42,3 +58,23 @@ def test_runtime_data_helpers_derive_from_noor_data_dir():
     assert data_path("plugins_config.json", settings=settings) == Path("/noor-data/plugins_config.json")
     assert plugin_cache_path("gfriends", "images", settings=settings) == Path("/noor-data/plugin_cache/gfriends/images")
     assert plugin_data_path("av_recommend", "feedback.json", settings=settings) == Path("/noor-data/av_recommend/feedback.json")
+
+
+def test_whisper_cache_env_uses_current_huggingface_keys():
+    env = build_whisper_cache_env("/models/whisper", "/runtime/whisper/cache")
+
+    assert env["HF_HOME"] == "/models/whisper"
+    assert env["HF_HUB_CACHE"] == "/models/whisper/hub"
+    assert env["TORCH_HOME"] == "/runtime/whisper/cache/torch"
+    assert env["XDG_CACHE_HOME"] == "/runtime/whisper/cache"
+    assert "TRANSFORMERS_CACHE" not in env
+
+def test_apply_whisper_cache_env_removes_deprecated_transformers_cache(monkeypatch):
+    monkeypatch.setenv("TRANSFORMERS_CACHE", "/legacy/cache")
+
+    apply_whisper_cache_env("/models/whisper", "/runtime/whisper/cache")
+
+    import os
+
+    assert os.environ["HF_HOME"] == "/models/whisper"
+    assert "TRANSFORMERS_CACHE" not in os.environ

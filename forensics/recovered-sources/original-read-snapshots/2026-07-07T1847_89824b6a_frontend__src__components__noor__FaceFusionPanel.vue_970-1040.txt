@@ -1,0 +1,71 @@
+                        <label>
+                          <span>video scale</span>
+                          <select v-model="facefusionSettings.output_video_scale" class="settings-input w-full">
+                            <option v-for="scale in facefusionScaleOptions" :key="scale" :value="scale">{{ scale }}x</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>video fps</span>
+                          <input v-model="facefusionSettings.output_video_fps" type="number" min="1" max="240" placeholder="source" class="settings-input w-full" />
+                        </label>
+                        <label>
+                          <span>audio encoder</span>
+                          <select v-model="facefusionSettings.output_audio_encoder" class="settings-input w-full">
+                            <option v-for="item in facefusionAudioEncoderOptions" :key="item" :value="item">{{ item }}</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>audio quality {{ facefusionSettings.output_audio_quality }}</span>
+                          <input v-model.number="facefusionSettings.output_audio_quality" type="range" min="0" max="100" step="1" class="facefusion-range" />
+                        </label>
+                        <label>
+                          <span>temp frame format</span>
+                          <select v-model="facefusionSettings.temp_frame_format" class="settings-input w-full">
+                            <option v-for="item in facefusionTempFrameFormatOptions" :key="item" :value="item">{{ item }}</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <div v-else class="ui-card">
+                <span class="text-[10px] text-text-muted uppercase tracking-wider">FACEFUSION</span>
+                <div class="facefusion-panel-layout mt-3" :class="{ 'facefusion-panel-layout--wide': isFullWidth }">
+                  <div class="facefusion-panel-column">
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">源脸图片</label>
+                    <div class="facefusion-source-manager">
+                      <label class="facefusion-source-upload-card">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          :disabled="sourceUploadLoading"
+                          @change="handleSourceImageUpload"
+                        />
+                        <span class="facefusion-source-upload-card__plus">+</span>
+                        <span>{{ sourceUploadLoading ? '上传中' : '上传图片' }}</span>
+                      </label>
+                      <button type="button" class="facefusion-source-upload-card facefusion-source-library-card" @click="toggleSourceLibrary">
+                        <span class="facefusion-source-upload-card__plus">LIB</span>
+                        <span>{{ sourceLibraryOpen ? '收起图片库' : '图片库' }}</span>
+                      </button>
+                      <div v-for="source in uploadedSourceImages" :key="source.path" class="facefusion-source-card">
+                        <img
+                          v-if="source.preview_url"
+                          :src="source.preview_url"
+                          :alt="source.name"
+                          loading="lazy"
+                        />
+                        <div v-else class="facefusion-source-card__placeholder">IMG</div>
+                        <div class="facefusion-source-card__meta">
+                          <span>{{ source.name }}</span>
+                          <button type="button" @click="removeUploadedSourceImage(source)">删除</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="sourceLibraryOpen" class="facefusion-source-library">
+                      <div class="facefusion-source-library__head">
+                        <span>{{ sourceLibraryLoading ? '读取中' : `图片库 · ${sourceLibraryImages.length}` }}</span>

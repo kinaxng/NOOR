@@ -1,0 +1,240 @@
+function el(tag, className = '', text = '') {
+  const node = document.createElement(tag)
+  if (className) node.className = className
+  if (text) node.textContent = text
+  return node
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
+}
+
+function fmtSizeMb(value) {
+  const mb = Number(value || 0)
+  if (!Number.isFinite(mb) || mb <= 0) return ''
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)}GB`
+  return `${Math.round(mb)}MB`
+}
+
+function fmtBytes(value) {
+  const bytes = Number(value || 0)
+  if (!Number.isFinite(bytes) || bytes <= 0) return ''
+  return fmtSizeMb(bytes / 1024 / 1024)
+}
+
+function badge(label, tone = 'neutral') {
+  const b = el('span', `av-rec-badge av-rec-badge--${tone}`, label)
+  return b
+}
+
+function scoreTone(score) {
+  if (score >= 80) return 'hot'
+  if (score >= 60) return 'good'
+  return 'neutral'
+}
+
+function fmtPool(total, today) {
+  const base = Number(total || 0)
+  const inc = Number(today || 0)
+  if (!Number.isFinite(base) || base <= 0) return inc > 0 ? `0+${inc}` : '0'
+  if (!Number.isFinite(inc) || inc <= 0) return String(base)
+  return `${base}+${inc}`
+}
+
+export async function mount(root, sdk) {
+  const state = {
+    sourceMode: 'latest',
+    loading: false,
+    error: '',
+    data: null,
+  }
+
+  root.innerHTML = ''
+  const page = el('div', 'av-rec-page')
+  const topbar = el('div', 'av-rec-topbar')
+  const title = el('div', 'av-rec-title')
+  title.innerHTML = '<strong>AV 推荐中心</strong><span>根据 JavDB 最新动态、完整候选池、媒体库偏好和资源可用性生成推荐</span>'
+  const actions = el('div', 'av-rec-actions')
+  const modeWrap = el('div', 'av-rec-modes')
+  const refreshBtn = sdk.ui?.button ? sdk.ui.button({ label: '刷新推荐', tone: 'primary', onClick: () => load(true) }) : el('button', 'av-rec-btn', '刷新推荐')
+  if (!sdk.ui?.button) refreshBtn.onclick = () => load(true)
+  actions.append(modeWrap, refreshBtn)
+  topbar.append(title, actions)
+  const profile = el('div', 'av-rec-profile')
+  const notice = el('div', 'av-rec-notice')
+  const grid = el('div', 'av-rec-grid')
+  page.append(topbar, profile, notice, grid)
+  root.appendChild(page)
+
+  function renderModes() {
+    modeWrap.innerHTML = ''
+    const modes = [
+      ['latest', '最新推荐'],
+      ['full', '完整推荐'],
+    ]
+    for (const [value, label] of modes) {
+      const btn = el('button', 'av-rec-mode' + (state.sourceMode === value ? ' is-active' : ''), label)
+      btn.onclick = () => {
+        if (state.sourceMode === value) return
+        state.sourceMode = value
+        load(false)
+      }
+      modeWrap.appendChild(btn)
+    }
+  }
+
+  function renderProfile() {
+    const data = state.data || {}
+    const p = data.profile || {}
+    const stats = data.stats || {}
+    profile.innerHTML = ''
+    const cards = [
+      ['媒体库', p.media_count || 0, '已分析作品'],
+      ['番号', p.code_count || 0, '可识别番号'],
+      ['候选', stats.candidates || 0, '本轮扫描'],
+      ['推荐', data.total || 0, '综合排序'],
+      ['候选池', fmtPool(stats.candidate_pool_total, stats.candidate_pool_today), state.sourceMode === 'full' ? '完整累计+今日' : '历史累计+今日'],
+    ]
+    for (const [name, value, desc] of cards) {
+      const card = el('div', 'av-rec-stat')
+      card.innerHTML = `<span>${escapeHtml(name)}</span><strong>${escapeHtml(value)}</strong><em>${escapeHtml(desc)}</em>`
+      profile.appendChild(card)
+    }
+    const prefs = el('div', 'av-rec-prefs')
+    const groups = [
+      ['演员', p.top_actors || []],
+      ['类型', p.top_genres || []],
+      ['标签', p.top_tags || []],
+    ]
+    for (const [label, items] of groups) {
+      const group = el('div', 'av-rec-pref-group')
+      group.appendChild(el('span', '', label))
+      const chips = el('div')
+      for (const item of items.slice(0, 8)) chips.appendChild(badge(`${item.name} ${item.count}`, 'soft'))
+      if (!items.length) chips.appendChild(badge('暂无', 'muted'))
+      group.appendChild(chips)
+      prefs.appendChild(group)
+    }
+    profile.appendChild(prefs)
+  }
+
+  function renderNotice() {
+    notice.innerHTML = ''
+    if (state.loading) {
+      notice.className = 'av-rec-notice is-loading'
+      notice.textContent = '正在读取媒体库偏好与 JavDB 候选…'
+      return
+    }
+    if (state.error) {
+      notice.className = 'av-rec-notice is-error'
+      notice.textContent = state.error
+      return
+    }
+    const warnings = state.data?.warnings || []
+    if (warnings.length) {
+      notice.className = 'av-rec-notice is-warning'
+      notice.textContent = warnings[0]
+      return
+    }
+    const bg = state.data?.candidate_meta?.pool?.background || {}
+    if (state.sourceMode === 'full' && bg.running) {
+      notice.className = 'av-rec-notice is-loading'
+      notice.textContent = '后台正在增量维护完整候选池，本页先使用已有候选池推荐。'
+      return
+    }
+    notice.className = 'av-rec-notice'
+    notice.textContent = ''
+  }
+
+  function skeleton() {
+    grid.innerHTML = ''
+    for (let i = 0; i < 8; i++) {
+      const card = el('div', 'av-rec-card av-rec-skeleton')
+      card.innerHTML = '<div></div><section><b></b><p></p><p></p></section>'
+      grid.appendChild(card)
+    }
+  }
+
+  async function feedback(item, kind) {
+    try {
+      await sdk.api.post('/plugins/av-recommend/actions/feedback', {
+        payload: {
+          code: item.code,
+          kind,
+          actors: item.actors || [],
+          categories: item.categories || [],
+        },
+      })
+      sdk.toast?.success(kind === 'ignore' ? '已忽略' : kind === 'like' ? '已标记喜欢' : '已标记不感兴趣')
+      await load(true)
+    } catch (e) {
+      sdk.toast?.error(e?.response?.data?.detail || e?.message || '操作失败')
+    }
+  }
+
+  function openDislikePicker(item) {
+    const mask = el('div', 'av-rec-feedback-mask')
+    const modal = el('div', 'av-rec-feedback-modal')
+    mask.appendChild(modal)
+    const tags = [
+      ...(item.actors || []).map(name => ({ type: 'actor', label: name })),
+      ...(item.categories || []).map(name => ({ type: 'category', label: name })),
+    ].filter(x => x.label)
+    const selected = new Set()
+    modal.innerHTML = `
+      <div class="av-rec-feedback-head">
+        <strong>不感兴趣的点</strong>
+        <button type="button" data-action="close">×</button>
+      </div>
+      <div class="av-rec-feedback-body">
+        <p>不选标签则只隐藏这部作品；勾选标签后，后续相似推荐会降权。</p>
+        <div class="av-rec-feedback-tags"></div>
+      </div>
+      <div class="av-rec-feedback-actions">
+        <button type="button" data-action="cancel">取消</button>
+        <button type="button" data-action="save" class="is-primary">确认</button>
+      </div>
+    `
+    const close = () => mask.remove()
+    mask.onclick = event => { if (event.target === mask) close() }
+    modal.querySelector('[data-action="close"]').onclick = close
+    modal.querySelector('[data-action="cancel"]').onclick = close
+    const tagHost = modal.querySelector('.av-rec-feedback-tags')
+    const seen = new Set()
+    for (const tag of tags) {
+      const key = `${tag.type}:${tag.label}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const btn = el('button', `av-rec-feedback-tag av-rec-feedback-tag--${tag.type}`)
+      btn.type = 'button'
+      btn.textContent = tag.label
+      btn.onclick = () => {
+        if (selected.has(key)) selected.delete(key)
+        else selected.add(key)
+        btn.classList.toggle('is-active', selected.has(key))
+      }
+      tagHost.appendChild(btn)
+    }
+    if (!seen.size) tagHost.appendChild(el('span', 'av-rec-feedback-empty', '这部作品没有可用演员/类型标签'))
+    modal.querySelector('[data-action="save"]').onclick = async () => {
+      const actors = []
+      const categories = []
+      for (const key of selected) {
+        const [type, ...rest] = String(key).split(':')
+        const label = rest.join(':')
+        if (type === 'actor') actors.push(label)
+        else if (type === 'category') categories.push(label)
+      }
+      close()
+      await feedback({ ...item, actors, categories }, 'dislike')
+    }
+    document.body.appendChild(mask)
+  }
+
+  function openJavDB(item) {
+    const code = encodeURIComponent(item.code || '')
+    if (code) window.location.href = `/plugins/javdb?code=${code}`
+  }
+
+  function renderItems() {
+    if (state.loading && !state.data) return skeleton()

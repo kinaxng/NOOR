@@ -1,0 +1,59 @@
+
+async def _apply_actor_name_sync(
+    config: dict,
+    req: ActorNameSyncRequest,
+    *,
+    lang: str | None = None,
+) -> dict:
+    preview = await _preview_actor_name_sync(config, lang=lang)
+    allowed_ids = {str(actor_id) for actor_id in (req.actor_ids or []) if str(actor_id).strip()}
+    applied: list[dict] = []
+    skipped: list[dict] = []
+    for item in preview.get("updates") or []:
+        actor_id = str(item.get("actor_id") or "")
+        if allowed_ids and actor_id not in allowed_ids:
+            continue
+        if item.get("has_conflict") and req.skip_conflicts:
+            skipped.append({**item, "skip_reason": "conflict"})
+            continue
+        if not item.get("target_name"):
+            skipped.append({**item, "skip_reason": "missing_target_name"})
+            continue
+        if not req.dry_run:
+            await _update_actor_profile(
+                config,
+                actor_id,
+                ActorProfileUpdateRequest(name=str(item.get("target_name") or "")),
+                lang=lang,
+            )
+        applied.append(item)
+    return {
+        "ok": True,
+        "dry_run": req.dry_run,
+        "lang": lang or "",
+        "applied_count": len(applied),
+        "skipped_count": len(skipped),
+        "applied": applied,
+        "skipped": skipped,
+        "summary": preview.get("summary") or {},
+    }
+
+
+def _actor_group_target_name(
+    group: dict,
+    target_name: str | None = None,
+    *,
+    lang: str | None = None,
+    target_actor_id: str | None = None,
+) -> str:
+    selected_id = str(target_actor_id or "").strip()
+    if selected_id:
+        for actor in group.get("actors") or []:
+            if str(actor.get("id") or "").strip() == selected_id:
+                selected_name = str(actor.get("name") or actor.get("display_name") or "").strip()
+                if selected_name:
+                    return selected_name
+    explicit = str(target_name or "").strip()
+    if explicit:
+        return explicit
+    fallback = str(group.get("display_name") or group.get("canonical_name") or group.get("jp") or group.get("zh_cn") or "").strip()

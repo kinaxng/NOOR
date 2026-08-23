@@ -1,0 +1,91 @@
+def _normalize_actor_key(value: str | None) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[\s\u3000・·._\-]+", "", value).lower()
+
+
+def _actor_emby_aliases(actor: dict) -> set[str]:
+    aliases: set[str] = set()
+    provider_ids = actor.get("provider_ids") if isinstance(actor.get("provider_ids"), dict) else {}
+    for value in provider_ids.values():
+        text = str(value or "").strip()
+        if not text:
+            continue
+        if "?" in text:
+            alias = text.rsplit("?", 1)[-1].strip()
+            if alias:
+                aliases.add(alias)
+    overview = str(actor.get("overview") or "")
+    for alias in re.findall(r"[（(]([^()（）]{2,40})[）)]", overview):
+        alias = alias.strip()
+        if alias:
+            aliases.add(alias)
+    aliases.discard(str(actor.get("name") or "").strip())
+    return aliases
+
+
+def _person_image_url(config: dict, person: dict) -> str | None:
+    person_id = person.get("Id")
+    if not person_id:
+        return None
+    tag = person.get("PrimaryImageTag") or (person.get("ImageTags") or {}).get("Primary")
+    if not tag:
+        return None
+    return f"{_server_url(config)}/emby/Items/{person_id}/Images/Primary?tag={tag}"
+
+
+def _parse_person(config: dict, person: dict) -> dict:
+    provider_ids = person.get("ProviderIds") if isinstance(person.get("ProviderIds"), dict) else {}
+    item_counts = person.get("ItemCounts") if isinstance(person.get("ItemCounts"), dict) else {}
+    movie_count = person.get("MovieCount") or item_counts.get("Movie") or item_counts.get("Movies")
+    return {
+        "id": person.get("Id"),
+        "server_id": person.get("ServerId") or "",
+        "name": person.get("Name") or "Unknown",
+        "sort_name": person.get("SortName") or person.get("Name") or "",
+        "overview": person.get("Overview") or "",
+        "image_url": _person_image_url(config, person),
+        "provider_ids": provider_ids,
+        "tmdb_id": _provider_id(provider_ids, "Tmdb", "TMDB", "tmdb"),
+        "imdb_id": _provider_id(provider_ids, "Imdb", "IMDB", "imdb"),
+        "movie_count": movie_count,
+        "premiere_date": person.get("PremiereDate"),
+        "date_created": person.get("DateCreated"),
+    }
+
+
+def _apply_actor_profile_override(actor: dict, override: dict | None) -> dict:
+    if not isinstance(override, dict):
+        return actor
+    next_actor = dict(actor)
+    for key, actor_key in (("name", "name"), ("sort_name", "sort_name"), ("overview", "overview")):
+        if key in override and override.get(key) is not None:
+            next_actor[actor_key] = override.get(key)
+    if override.get("image_url"):
+        next_actor["image_url"] = override.get("image_url")
+    if isinstance(override.get("provider_ids"), dict):
+        provider_ids = dict(next_actor.get("provider_ids") or {})
+        for key, value in override["provider_ids"].items():
+            key = str(key)
+            text = str(value or "").strip()
+            if text:
+                provider_ids[key] = text
+                continue
+            for existing_key in list(provider_ids.keys()):
+                if existing_key.lower() == key.lower():
+                    provider_ids.pop(existing_key, None)
+        next_actor["provider_ids"] = provider_ids
+        next_actor["tmdb_id"] = _provider_id(provider_ids, "Tmdb", "TMDB", "tmdb")
+        next_actor["imdb_id"] = _provider_id(provider_ids, "Imdb", "IMDB", "imdb")
+    return next_actor
+
+
+async def _media_server_info(config: dict, client: httpx.AsyncClient | None = None) -> dict:
+    close_client = False
+    if client is None:
+        client = httpx.AsyncClient(timeout=10.0, trust_env=False)
+        close_client = True
+    try:
+        data = await _emby_get_json(client, config, "/System/Info")
+        product = str(data.get("ProductName") or data.get("ServerName") or "Emby / Jellyfin")
+        lowered = product.lower()

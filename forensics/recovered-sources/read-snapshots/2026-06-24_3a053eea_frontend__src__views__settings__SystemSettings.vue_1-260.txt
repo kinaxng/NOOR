@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useBlurCover } from '../../composables/useBlurCover'
+import { useI18n } from '../../composables/useI18n'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import BaseIcon from '../../components/noor/BaseIcon.vue'
+import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+
+const toast = useToast()
+const { globalBlurEnabled, syncGlobalBlur } = useBlurCover()
+const { t } = useI18n()
+
+const loading = ref(false)
+const embySaving = ref(false)
+const networkSaving = ref(false)
+const uiSaving = ref(false)
+const testing = ref(false)
+const connectionStatus = ref<{ ok: boolean; message: string } | null>(null)
+
+// Emby / media library settings
+const serverUrl = ref('')
+const apiKey = ref('')
+const userId = ref('')
+const enabledLibraryIds = ref<string[]>([])
+const availableLibraries = ref<{ id: string; name: string }[]>([])
+const librariesLoaded = ref(false)
+
+// Network settings
+const httpProxy = ref('')
+const githubMirror = ref('https://ghproxy.com')
+const githubToken = ref('')
+const hfMirror = ref('https://hf-mirror.com')
+const pipMirror = ref('https://pypi.tuna.tsinghua.edu.cn/simple')
+const hfToken = ref('')
+
+onMounted(async () => {
+  await loadSettings()
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    // Load media library config
+    try {
+      const mlRes = await fetch('/api/media-library/config')
+      if (mlRes.ok) {
+        const mlData = await mlRes.json()
+        const cfg = mlData.config || {}
+        serverUrl.value = cfg.server_url || ''
+        apiKey.value = cfg.api_key || ''
+        userId.value = cfg.user_id || ''
+        const ids = cfg.enabled_library_ids || ''
+        enabledLibraryIds.value = ids ? ids.split(',').map((s: string) => s.trim()).filter(Boolean) : []
+
+        // Auto-fetch libraries if credentials exist
+        if (serverUrl.value && apiKey.value) {
+          await fetchLibraries()
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load media library config:', e)
+    }
+
+    // Load network settings
+    try {
+      const resp = await api.get('/settings')
+      const data = resp.data
+      if (data.network) {
+        httpProxy.value = data.network.http_proxy || ''
+        githubMirror.value = data.network.github_mirror || 'https://ghproxy.com'
+        githubToken.value = data.network.github_token || ''
+        hfMirror.value = data.network.hf_mirror || 'https://hf-mirror.com'
+        pipMirror.value = data.network.pip_mirror || 'https://pypi.tuna.tsinghua.edu.cn/simple'
+        hfToken.value = data.network.hf_token || ''
+      }
+      if (data.ui && typeof data.ui.cover_blur_enabled === 'boolean') {
+        syncGlobalBlur(data.ui.cover_blur_enabled)
+      }
+    } catch (e) {
+      console.error('Failed to load network settings:', e)
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveGlobalBlur(value: boolean) {
+  const previous = globalBlurEnabled.value
+  syncGlobalBlur(value)
+  uiSaving.value = true
+  try {
+    await api.put('/settings/ui', { cover_blur_enabled: value })
+    toast.success(t('settings.saveSuccess'))
+  } catch {
+    syncGlobalBlur(previous)
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    uiSaving.value = false
+  }
+}
+
+async function fetchLibraries() {
+  loadingLibraries.value = true
+  try {
+    const res = await fetch('/api/media-library/libraries')
+    if (res.ok) {
+      const data = await res.json()
+      availableLibraries.value = (data.libraries || []).map((lib: any) => ({
+        id: lib.id,
+        name: lib.name,
+      }))
+      librariesLoaded.value = true
+    } else {
+      console.error('fetchLibraries failed:', res.status, await res.text())
+    }
+  } catch (e) {
+    console.error('fetchLibraries error:', e)
+  } finally {
+    loadingLibraries.value = false
+  }
+}
+
+const loadingLibraries = ref(false)
+
+async function testConnection() {
+  testing.value = true
+  connectionStatus.value = null
+  availableLibraries.value = []
+  librariesLoaded.value = false
+  try {
+    const res = await fetch('/api/media-library/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_url: serverUrl.value,
+        api_key: apiKey.value,
+        user_id: userId.value,
+      })
+    })
+    const data = await res.json()
+    connectionStatus.value = { ok: data.ok, message: data.message }
+
+    if (data.ok) {
+      toast.success(t('settings.system.connectionSuccess'))
+      if (data.libraries && data.libraries.length > 0) {
+        availableLibraries.value = data.libraries
+      }
+      await fetchLibraries()
+    } else {
+      toast.error(data.message || t('settings.system.connectionFailed'))
+    }
+  } catch (e) {
+    connectionStatus.value = { ok: false, message: t('settings.system.connectionFailed') }
+    toast.error(t('settings.system.connectionFailed'))
+  } finally {
+    testing.value = false
+  }
+}
+
+async function saveEmby() {
+  embySaving.value = true
+  try {
+    const res = await fetch('/api/media-library/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_url: serverUrl.value,
+        api_key: apiKey.value,
+        user_id: userId.value,
+        enabled_library_ids: enabledLibraryIds.value.join(','),
+      })
+    })
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(errText || `HTTP ${res.status}`)
+    }
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed', { error: e.message }))
+  } finally {
+    embySaving.value = false
+  }
+}
+
+async function saveNetwork() {
+  networkSaving.value = true
+  try {
+    const effectiveMode = githubMirror.value || hfMirror.value || pipMirror.value
+      ? 'mirror'
+      : httpProxy.value
+        ? 'proxy'
+        : 'none'
+    await api.put('/settings/network', {
+      acceleration_mode: effectiveMode,
+      http_proxy: httpProxy.value,
+      github_mirror: githubMirror.value,
+      github_token: githubToken.value,
+      hf_mirror: hfMirror.value,
+      pip_mirror: pipMirror.value,
+      hf_token: hfToken.value,
+    })
+    toast.success(t('settings.saveNetwork'))
+  } catch {
+    toast.error(t('settings.saveNetworkFailed'))
+  } finally {
+    networkSaving.value = false
+  }
+}
+
+function toggleLibrary(libId: string) {
+  enabledLibraryIds.value = enabledLibraryIds.value[0] === libId ? [] : [libId]
+}
+</script>
+
+<template>
+  <div class="system-settings">
+    <!-- Loading -->
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <div v-else class="settings-cards">
+      <!-- Emby / Jellyfin 媒体库 -->
+      <div class="settings-card">
+        <div class="settings-card__head"><h2 class="settings-card__title">{{ t('settings.system.mediaServerTitle') }}</h2><p class="settings-card__subtitle">连接媒体服务器并选择当前使用的媒体库</p></div>
+
+        <div class="settings-form">
+          <FieldRow :label="t('settings.emby.server')" :description="t('settings.emby.serverDesc')">
+            <input v-model="serverUrl" type="text" placeholder="http://localhost:8096" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow :label="t('settings.emby.apiKey')" :description="t('settings.emby.apiKeyDesc')">
+            <input v-model="apiKey" type="password" :placeholder="t('settings.emby.apiKeyPlaceholder')" class="settings-input" />
+          </FieldRow>
+
+          <FieldRow :label="t('settings.emby.userId')" :description="t('settings.emby.userIdDesc')">
+            <input v-model="userId" type="text" :placeholder="t('settings.emby.userIdPlaceholder')" class="settings-input" />
+          </FieldRow>
+
+          <!-- Test Connection -->
+          <FieldRow :label="t('settings.emby.connectionTest')" :description="t('settings.emby.connectionTestDesc')">
+            <div class="flex items-center gap-3">
+              <VuiButton variant="contained" color="secondary" size="small" customClass="settings-inline-action" :loading="testing" :disabled="!serverUrl || !apiKey" @click="testConnection">
+                {{ testing ? t('settings.testing') : t('settings.emby.testConnection') }}
+              </VuiButton>
+              <VuiBadge
+                v-if="connectionStatus"
+                :color="connectionStatus.ok ? 'success' : 'error'"
+                variant="gradient"
+                size="sm"
+              >
+                {{ connectionStatus.message }}
+              </VuiBadge>
+            </div>
+          </FieldRow>
+

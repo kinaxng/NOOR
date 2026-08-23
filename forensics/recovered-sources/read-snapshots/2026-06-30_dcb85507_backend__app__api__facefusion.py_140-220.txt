@@ -1,0 +1,107 @@
+        pass
+    return {"success": True}
+
+
+@router.post("/preview/metadata")
+async def get_facefusion_preview_metadata(payload: FaceFusionPreviewMetadataRequest):
+    input_path = Path(payload.input_path)
+    if not input_path.exists():
+        raise HTTPException(status_code=404, detail="目标文件不存在")
+
+    capture = cv2.VideoCapture(str(input_path))
+    try:
+        if not capture.isOpened():
+            return {
+                "success": True,
+                "frame_total": 0,
+                "fps": None,
+                "duration": None,
+                "is_video": False,
+            }
+        frame_total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
+        return {
+            "success": True,
+            "frame_total": max(0, frame_total),
+            "fps": fps or None,
+            "duration": (frame_total / fps) if frame_total and fps else None,
+            "is_video": True,
+        }
+    finally:
+        capture.release()
+
+
+@router.post("/preview")
+async def create_facefusion_preview(payload: FaceFusionPreviewRequest):
+    input_path = Path(payload.input_path)
+    if not input_path.exists():
+        raise HTTPException(status_code=404, detail="目标文件不存在")
+    try:
+        result = generate_facefusion_preview(
+            input_path=str(input_path),
+            job_settings=payload.settings or {},
+            frame_number=max(0, int(payload.frame_number or 0)),
+            preview_mode=payload.preview_mode,
+            preview_resolution=payload.preview_resolution,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"FaceFusion 预览失败: {exc}") from exc
+    return {
+        "success": True,
+        "preview_id": result["preview_id"],
+        "preview_url": f"/api/facefusion/preview/{result['preview_id']}",
+        "cached": result["cached"],
+        "generated_at": result["generated_at"],
+    }
+
+
+@router.get("/preview/{preview_id}")
+async def get_facefusion_preview(preview_id: str):
+    if not preview_id or not all(ch in "0123456789abcdef" for ch in preview_id) or len(preview_id) > 64:
+        raise HTTPException(status_code=400, detail="非法预览 ID")
+    path = _preview_root() / f"{preview_id}.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="预览不存在")
+    return FileResponse(path, media_type="image/png")
+/volume1/models/noor-runtime/facefusion/cache/previews/6d4a59d158172973f97a68c3c833ab1c.png: PNG image data, 512 x 288, 8-bit/color RGBA, non-interlaced
+/volume1/models/noor-runtime/facefusion/cache/previews/c4ced8c00b7a5da7232f49ed1bc74c63.png: PNG image data, 306 x 512, 8-bit/color RGBA, non-interlaced
+Image:
+  Filename: /volume1/models/noor-runtime/facefusion/cache/previews/6d4a59d158172973f97a68c3c833ab1c.png
+  Permissions: rw-rw-r--
+  Format: PNG (Portable Network Graphics)
+  Mime type: image/png
+  Class: DirectClass
+  Geometry: 512x288+0+0
+  Units: Undefined
+  Colorspace: sRGB
+  Type: TrueColorAlpha
+  Endianness: Undefined
+  Depth: 8-bit
+  Channels: 4.0
+  Channel depth:
+    Red: 8-bit
+    Green: 8-bit
+    Blue: 8-bit
+    Alpha: 1-bit
+  Channel statistics:
+    Pixels: 147456
+    Red:
+      min: 53  (0.207843)
+      max: 173 (0.678431)
+      mean: 135.342 (0.530752)
+      median: 138 (0.541176)
+      standard deviation: 21.7438 (0.0852698)
+      kurtosis: 1.12389
+      skewness: -0.87728
+      entropy: 0.916432
+    Green:
+      min: 37  (0.145098)
+      max: 161 (0.631373)
+      mean: 102.738 (0.402894)
+      median: 103 (0.403922)
+      standard deviation: 20.8117 (0.0816147)
+      kurtosis: 0.0238238
+      skewness: -0.135879
+      entropy: 0.91685
+    Blue:
+      min: 29  (0.113725)

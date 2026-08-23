@@ -1,0 +1,186 @@
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.facefusion-native-shell {
+  display: grid;
+  gap: 1rem;
+  padding: 0.35rem 0 0;
+}
+
+.facefusion-native-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.facefusion-native-head div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.facefusion-native-head span {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.facefusion-native-head strong {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.facefusion-native-head em {
+  max-width: 34rem;
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  font-style: normal;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.facefusion-native-grid {
+  display: grid;
+  grid-template-columns: minmax(26rem, 0.9fr) minmax(44rem, 1.35fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.facefusion-native-column {
+  display: grid;
+  min-width: 0;
+  gap: 0.85rem;
+}
+
+.facefusion-native-column--source {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.facefusion-native-column--processors {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.facefusion-native-column--right {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.facefusion-native-workspace {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  align-content: start;
+}
+
+.facefusion-native-workspace__lower {
+  display: grid;
+  grid-template-columns: minmax(20rem, 0.85fr) minmax(24rem, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.facefusion-native-group {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.026);
+}
+
+.facefusion-native-group--noor {
+  border-color: rgba(0, 117, 255, 0.18);
+  background: rgba(0, 117, 255, 0.055);
+}
+
+.facefusion-native-group--preview {
+  width: 100%;
+  padding: 0.75rem;
+}
+
+.facefusion-native-group--preview .facefusion-preview {
+  width: 100%;
+  min-height: 0;
+}
+
+.facefusion-native-group__head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.facefusion-native-group__head > span {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.facefusion-native-group h3 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.facefusion-native-fields label > span {
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.facefusion-native-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.facefusion-native-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.facefusion-native-fields label:has(.facefusion-choice-chips) {
+  grid-column: 1 / -1;
+}
+
+.facefusion-native-subgrid {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.facefusion-reference-box--native {
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1fr);
+}
+
+.facefusion-panel-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.facefusion-panel-layout--wide {
+  grid-template-columns: minmax(20rem, 0.9fr) minmax(24rem, 1.1fr) minmax(28rem, 1.2fr);
+  align-items: start;
+}
+
+.facefusion-panel-column {
+  display: flex;
+  min-width: 0;

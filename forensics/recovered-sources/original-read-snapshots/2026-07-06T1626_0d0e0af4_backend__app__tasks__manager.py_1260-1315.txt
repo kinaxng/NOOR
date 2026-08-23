@@ -1,0 +1,56 @@
+                    error_msg = item.get("error") or "Whisper pipeline cancelled"
+
+        async def consume_messages():
+            consume_control_messages()
+
+        cancel_requested = await self._wait_process_exit_with_cancellation(
+            job_id,
+            process=worker_process,
+            worker_cancel_event=worker_cancel_event,
+            consume_messages=consume_messages,
+            cancel_log_message="Whisper 取消请求已收到；等待当前识别线程安全退出...",
+            force_terminate_log_message="Whisper 子进程未及时退出，正在强制终止...",
+            poll_interval=0.5,
+        )
+
+        cancelled = cancel_requested or child_reported_cancelled
+
+        if not cancelled and worker_process.exitcode not in (0, None):
+            error_msg = error_msg or f"Whisper worker exited with code {worker_process.exitcode}"
+
+        if cancelled:
+            success = False
+            output_path = None
+        elif error_msg:
+            success = False
+            output_path = None
+            await self.add_log(job_id, f"错误: {error_msg}")
+        elif child_result_srt_path:
+            srt_path = child_result_srt_path
+        else:
+            success = False
+            output_path = None
+
+        if child_result_srt_path and not cancelled and not error_msg:
+            video_dir = os.path.dirname(input_path)
+            clean_name = re_module.sub(r'[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)', '', os.path.splitext(os.path.basename(input_path))[0], flags=re_module.IGNORECASE)
+            subtitle_lang = "zh" if str(settings_dict.get("whisper_task") or "").strip().lower() == "translate" else "ja"
+            target_srt = os.path.join(video_dir, f"{clean_name}.{subtitle_lang}.srt")
+            if os.path.exists(srt_path):
+                shutil.copy(srt_path, target_srt)
+                await self.add_log(job_id, f"字幕已保存: {target_srt}")
+                success = True
+                output_path = target_srt
+            else:
+                success = False
+                output_path = None
+                error_msg = error_msg or f"Whisper worker reported missing subtitle output: {srt_path}"
+                await self.add_log(job_id, f"错误: {error_msg}")
+
+        # 通知 reader 退出
+        running[0] = False
+        reader.join(timeout=1)
+
+        for closable in (worker_message_queue,):
+            close = getattr(closable, "close", None)
+            if callable(close):

@@ -1,0 +1,81 @@
+
+
+def _mapping_display_name(record: dict[str, Any], lang: str | None) -> str:
+    key = _lang_key(lang)
+    return str(record.get(key) or record.get("zh_cn") or record.get("jp") or record.get("zh_tw") or "")
+
+
+@router.get("/actors/mapping/matches")
+async def actor_mapping_matches(
+    limit: int = 5000,
+    only_candidates: bool = True,
+    lang: str = "zh-CN",
+):
+    config = _require_config()
+    actors, total = await _list_actors(
+        config, limit=min(limit, 5000), offset=0, query=None,
+        sort_by="SortName", sort_order="Ascending", lang=lang,
+    )
+    records = _mapping_records(config)
+    index = _mapping_index(config)
+    ignored_ghost_ids = _load_actor_merge_ignored_ghosts()
+    active_actors = [
+        actor for actor in actors
+        if str(actor.get("id") or "").strip() not in ignored_ghost_ids
+    ]
+    grouped: dict[str, dict[str, Any]] = {}
+    unmatched: list[dict[str, Any]] = []
+    rejected_matches: list[dict[str, Any]] = []
+    for actor in actors:
+        actor_id = str(actor.get("id") or "").strip()
+        record = index.get(_normalize_name(actor.get("name"))) or index.get(_normalize_name(actor.get("sort_name")))
+        if not record:
+            unmatched.append(actor)
+            continue
+        if actor_id in ignored_ghost_ids:
+            rejected = dict(actor)
+            rejected.update({
+                "rejected_reason": "ignored_person",
+                "rejected_mapping_id": str(record.get("id") or ""),
+                "rejected_mapping_name": _mapping_display_name(record, lang),
+                "rejected_mapping_tmdb_id": str(record.get("tmdb_id") or ""),
+            })
+            rejected_matches.append(rejected)
+            continue
+        group = grouped.setdefault(str(record.get("id") or _normalize_name(_mapping_display_name(record, lang))), {
+            "mapping_id": str(record.get("id") or ""),
+            "canonical_name": _mapping_display_name(record, lang),
+            "display_name": _mapping_display_name(record, lang),
+            "jp": record.get("jp", ""),
+            "zh_cn": record.get("zh_cn", ""),
+            "zh_tw": record.get("zh_tw", ""),
+            "tmdb_id": record.get("tmdb_id", ""),
+            "actors": [],
+        })
+        group["actors"].append(actor)
+
+    groups: list[dict[str, Any]] = []
+    conflict_groups = 0
+    for group in grouped.values():
+        actor_tmdb_ids = {str(actor.get("tmdb_id") or "") for actor in group["actors"] if actor.get("tmdb_id")}
+        expected_tmdb = str(group.get("tmdb_id") or "")
+        has_conflict = bool(len(actor_tmdb_ids) > 1 or (expected_tmdb and any(value != expected_tmdb for value in actor_tmdb_ids)))
+        if has_conflict:
+            conflict_groups += 1
+        group.update({
+            "count": len(group["actors"]),
+            "has_tmdb_conflict": has_conflict,
+            "missing_tmdb_count": sum(1 for actor in group["actors"] if not actor.get("tmdb_id")),
+            "missing_image_count": sum(1 for actor in group["actors"] if not actor.get("image_url")),
+            "target_actor_id": next((actor["id"] for actor in group["actors"] if expected_tmdb and str(actor.get("tmdb_id") or "") == expected_tmdb), group["actors"][0]["id"]),
+        })
+        if not only_candidates or len(group["actors"]) > 1:
+            groups.append(group)
+        else:
+            actor = dict(group["actors"][0])
+            actor.update({
+                "rejected_reason": "single_mapped_actor",
+                "rejected_mapping_id": group.get("mapping_id") or "",
+                "rejected_mapping_name": group.get("display_name") or "",
+                "rejected_mapping_tmdb_id": group.get("tmdb_id") or "",
+            })

@@ -1,0 +1,41 @@
+    tabControl.__noorSetValue?.(state.tab)
+  }
+
+  function buildPanelGroup(label, children) {
+    if (sdk.ui?.filterPanelGroup) return sdk.ui.filterPanelGroup({ label, items: children })
+    if (sdk.ui?.controlPanelGroup) return sdk.ui.controlPanelGroup({ label, items: children })
+    const group = el('div', 'noor-control-panel__group')
+    if (label) group.appendChild(el('span', 'noor-control-panel__group-label', label))
+    const items = el('div', 'noor-control-panel__group-items')
+    ;(Array.isArray(children) ? children : [children]).filter(Boolean).forEach(child => items.appendChild(child))
+    group.appendChild(items)
+    return group
+  }
+
+  function buildPanelSection(label, children) {
+    if (sdk.ui?.filterPanelSection) return sdk.ui.filterPanelSection({ label, items: children })
+    if (sdk.ui?.controlPanelSection) return sdk.ui.controlPanelSection({ label, items: children })
+    return buildPanelGroup(label, children)
+  }
+
+  function uniqueValues(values) {
+    const seen = new Set()
+    return (Array.isArray(values) ? values : [])
+      .map(value => String(value || '').trim())
+      .filter(value => value && !seen.has(value) && seen.add(value))
+  }
+
+  function pickerMultiLabel(list, values, emptyLabel, unitLabel = '项') {
+    const selected = uniqueValues(values)
+    if (!selected.length) return emptyLabel
+    const labels = selected
+      .map(value => (Array.isArray(list) ? list : []).find(item => String(item.value) === value)?.label)
+      .filter(Boolean)
+    if (labels.length <= 2) return labels.join(' · ')
+    return `已选 ${labels.length} ${unitLabel}`
+  }
+
+  function pickerSingleLabel(list, value, emptyLabel) {
+    const current = String(value || '').trim()
+    if (!current) return emptyLabel
+    return (Array.isArray(list) ? list : []).find(item => String(item.value) === current)?.label || emptyLabel

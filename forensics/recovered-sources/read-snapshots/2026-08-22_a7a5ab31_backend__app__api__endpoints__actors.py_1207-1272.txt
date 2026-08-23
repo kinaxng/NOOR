@@ -1,0 +1,66 @@
+async def _execute_merge(config: dict[str, Any], req: ActorMappingMergeRequest, lang: str) -> dict[str, Any]:
+    plan = await _merge_plan(config, req.mapping_id, req.target_actor_id, req.target_name, lang)
+    if req.dry_run:
+        return {"ok": True, "dry_run": True, **plan}
+    source_ids = set(plan["source_actor_ids"])
+    updated: list[dict[str, Any]] = []
+    deleted: list[str] = []
+    delete_failed: list[dict[str, str]] = []
+    remaining_source_counts: dict[str, int] = {}
+    async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
+        for movie in plan["movies"]:
+            raw_response = await client.get(f"{_base_url(config)}/emby/Items/{quote(str(movie['id']))}", headers=_headers(config), params={"Fields": "People,ProviderIds,Path"})
+            raw_response.raise_for_status()
+            raw = raw_response.json()
+            people = []
+            target_present = False
+            for person in raw.get("People") or []:
+                person_id = str(person.get("Id") or "")
+                if person_id == plan["target_actor_id"] or str(person.get("Name") or "") == plan["target_name"]:
+                    target_present = True
+                    people.append(person)
+                elif person_id not in source_ids:
+                    people.append(person)
+            if not target_present:
+                people.append({"Name": plan["target_name"], "Type": "Actor", "Id": plan["target_actor_id"]})
+            raw["People"] = people
+            response = await client.post(f"{_base_url(config)}/emby/Items/{quote(str(movie['id']))}", headers={**_headers(config), "Content-Type": "application/json"}, json=raw)
+            response.raise_for_status()
+            updated.append({"id": movie["id"], "name": movie["name"]})
+        for actor_id in source_ids:
+            # Emby can retain a Person row while its visible page shows no
+            # works.  Re-read the live PersonIds relation after the merge and
+            # only request deletion when the source actor is truly empty.
+            try:
+                remaining = await _related_movies(client, config, actor_id)
+                remaining_source_counts[actor_id] = len(remaining)
+            except Exception as exc:
+                delete_failed.append({"id": actor_id, "error": f"无法确认关联作品，跳过删除: {exc}"})
+                continue
+            if remaining_source_counts[actor_id] != 0:
+                delete_failed.append({
+                    "id": actor_id,
+                    "error": f"仍关联 {remaining_source_counts[actor_id]} 部作品，跳过删除",
+                })
+                continue
+            try:
+                response = await client.delete(f"{_base_url(config)}/emby/Items/{quote(actor_id)}", headers=_headers(config))
+                response.raise_for_status()
+                deleted.append(actor_id)
+            except Exception as exc:
+                delete_failed.append({"id": actor_id, "error": str(exc)})
+    if deleted:
+        ignored_ghost_ids = _load_actor_merge_ignored_ghosts()
+        ignored_ghost_ids.update(str(actor_id) for actor_id in deleted)
+        _save_actor_merge_ignored_ghosts(ignored_ghost_ids)
+    return {
+        "ok": True,
+        "updated_count": len(updated),
+        "updated": updated,
+        "deleted_actor_count": len(deleted),
+        "deleted_actor_ids": deleted,
+        "delete_failed_actor_ids": delete_failed,
+        "remaining_source_counts": remaining_source_counts,
+        "plan": plan,
+    }
+

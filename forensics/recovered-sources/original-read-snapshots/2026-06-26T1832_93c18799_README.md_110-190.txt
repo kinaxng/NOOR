@@ -1,0 +1,81 @@
+
+部署前检查（开发 + Docker 冒烟）：
+
+```bash
+./scripts/deploy-precheck.sh
+# 可选：指定开发前端地址与 docker 前端地址
+# ./scripts/deploy-precheck.sh http://127.0.0.1:5173 http://127.0.0.1:19898
+```
+
+### Docker 部署
+
+Docker 版定位为**部署环境**，不是开发环境。
+
+- 使用**单一 `.env`**：Docker Compose 读取它做端口/挂载插值，后端也直接读取并回写它
+- `INSTALL_NEMO=false` 为默认值，避免把实验性的 Reazon / NeMo 运行时打进生产镜像
+- `MEDIA_ROOT / TMP_DIR / CACHE_DIR` 用来决定媒体总根、临时目录、缓存目录挂载位置
+- `MODELS_DIR` 与 `MEDIA_ROOT` 都会以**宿主机原绝对路径**挂进容器
+- `FULL_RUNTIME_IMAGE` 用来指定 full GPU 版的 CUDA/Python 3.12 基底；默认使用官方镜像
+- 设置页修改的业务配置会直接回写项目根 `.env`
+
+```bash
+# 1) 准备部署环境变量
+cp .env.example .env
+
+# 2) 启动
+# 默认部署：前端暴露 19898，后端只在 docker 内网提供服务
+docker compose up -d
+# 或
+# 如需额外直连后端调试，再叠加 backend override（默认 19899）
+# docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d
+
+# 3) 查看日志
+docker compose logs -f
+
+# 4) 验证 GPU
+docker compose exec backend nvidia-smi
+
+# 5) 打开前端后，进入设置页填写：
+#    - Emby / Jellyfin 地址与 API key
+#    - 单个媒体库选择
+#    - 路径映射
+```
+
+持久化约定：
+- SQLite 数据库：`./data/noor.db`
+- 设置页保存配置：`./.env`
+- 临时文件：`${TMP_DIR:-./tmp}/`
+- 缓存目录：`${CACHE_DIR:-./cache}/`
+- 模型总根：`${MODELS_DIR}` 挂载到容器内同一路径 `${MODELS_DIR}`
+- 媒体总根：`${MEDIA_ROOT}` 挂载到容器内同一路径 `${MEDIA_ROOT}`
+
+> Docker 模式升级建议通过更新镜像并重建容器完成，
+> 不建议在运行中的容器内直接执行 LADA 自升级。
+
+详细文档：[DOCKER.md](./DOCKER.md)
+
+## 页面路由
+
+| 路径 | 说明 |
+|------|------|
+| `/` | 单个媒体库海报墙，从 Emby / Jellyfin 浏览并提交任务 |
+| `/jobs` | 实时任务监控，SSE 推送日志与进度 |
+| `/history` | 历史记录，查看完成/失败任务 |
+| `/settings` | 系统设置 |
+
+## 配置 (.env)
+
+```bash
+# LADA
+LADA_CLI_PATH=python3 -m lada.cli.main
+LADA_MODEL_WEIGHTS_DIR=/path/to/lada_model_weights
+
+# Whisper
+HF_HOME=/root/.cache/huggingface
+
+# Emby / Jellyfin
+EMBY_SERVER=http://localhost:8096
+EMBY_API_KEY=your_api_key
+EMBY_USER_ID=optional_user_id
+EMBY_ENABLED_LIBRARY_IDS=library_id
+

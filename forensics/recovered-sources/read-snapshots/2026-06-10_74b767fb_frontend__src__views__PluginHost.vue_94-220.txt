@@ -1,0 +1,127 @@
+  if (host.value) host.value.innerHTML = ''
+}
+
+function makeButton(options: any = {}) {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = ['noor-plugin-btn', options.tone === 'primary' ? 'noor-plugin-btn--primary' : '', options.tone === 'danger' ? 'noor-plugin-btn--danger' : '', options.className || ''].filter(Boolean).join(' ')
+  btn.textContent = options.label || ''
+  if (options.title) btn.title = options.title
+  if (options.disabled) btn.disabled = true
+  if (options.onClick) btn.onclick = options.onClick
+  return btn
+}
+
+function makeInput(options: any = {}) {
+  const input = document.createElement('input')
+  input.className = ['noor-plugin-input', options.className || ''].filter(Boolean).join(' ')
+  input.value = options.value ?? ''
+  input.placeholder = options.placeholder || ''
+  input.readOnly = !!options.readonly
+  input.oninput = () => options.onInput?.(input.value)
+  return input
+}
+
+function makeSelect(options: any = {}) {
+  type SelectItem = { value: string; label: string; disabled: boolean }
+  const items = (Array.isArray(options.options) ? options.options : []).map((item: any) => ({
+    value: String(item?.value ?? ''),
+    label: String(item?.label ?? item?.value ?? ''),
+    disabled: !!item?.disabled,
+  })) as SelectItem[]
+  let current = String(options.value ?? '')
+  let open = false
+  let detachOutside: null | (() => void) = null
+  const wrap = document.createElement('div')
+  wrap.className = ['noor-plugin-select', 'noor-plugin-select--pill', options.className || ''].filter(Boolean).join(' ')
+  if (options.disabled) wrap.classList.add('is-disabled')
+  const trigger = document.createElement('button')
+  trigger.type = 'button'
+  trigger.className = 'noor-plugin-select__trigger'
+  trigger.disabled = !!options.disabled
+  const labelNode = document.createElement('span')
+  labelNode.className = 'noor-plugin-select__label'
+  labelNode.textContent = String(options.label || '')
+  const valueNode = document.createElement('span')
+  valueNode.className = 'noor-plugin-select__value'
+  const caret = document.createElement('span')
+  caret.className = 'noor-plugin-select__caret'
+  caret.setAttribute('aria-hidden', 'true')
+  if (options.label) trigger.appendChild(labelNode)
+  trigger.append(valueNode, caret)
+  const menu = document.createElement('div')
+  menu.className = 'noor-plugin-select__menu'
+  menu.hidden = true
+  const selectedItem = () => items.find(item => item.value === current) || items[0] || { value: '', label: '' }
+  const syncLabel = () => {
+    const selected = selectedItem()
+    valueNode.textContent = selected.label || ''
+    wrap.classList.toggle('is-active', !!current)
+    trigger.title = selected.label || ''
+  }
+  const closeMenu = () => {
+    if (!open) return
+    open = false
+    wrap.classList.remove('is-open')
+    trigger.setAttribute('aria-expanded', 'false')
+    menu.hidden = true
+    detachOutside?.()
+    detachOutside = null
+  }
+  const setValue = (value: string, emit = true) => {
+    current = String(value ?? '')
+    syncLabel()
+    Array.from(menu.children).forEach(child => {
+      const node = child as HTMLElement
+      node.classList.toggle('is-active', node.dataset.value === current)
+    })
+    if (emit) options.onChange?.(current)
+  }
+  const renderOptions = () => {
+    menu.innerHTML = ''
+    for (const item of items) {
+      const option = document.createElement('button')
+      option.type = 'button'
+      option.className = 'noor-plugin-select__option'
+      option.dataset.value = item.value
+      option.textContent = item.label
+      option.disabled = item.disabled
+      option.classList.toggle('is-active', item.value === current)
+      option.onclick = event => {
+        event.stopPropagation()
+        if (item.disabled) return
+        setValue(item.value)
+        closeMenu()
+        trigger.focus()
+      }
+      menu.appendChild(option)
+    }
+  }
+  const openMenu = () => {
+    if (options.disabled || open) return
+    open = true
+    wrap.classList.add('is-open')
+    trigger.setAttribute('aria-expanded', 'true')
+    menu.hidden = false
+    detachOutside = () => document.removeEventListener('pointerdown', onOutside, true)
+    document.addEventListener('pointerdown', onOutside, true)
+  }
+  const onOutside = (event: PointerEvent) => {
+    if (!wrap.contains(event.target as Node)) closeMenu()
+  }
+  const moveSelection = (direction: number) => {
+    const enabled = items.filter((item: SelectItem) => !item.disabled)
+    if (!enabled.length) return
+    const index = Math.max(0, enabled.findIndex((item: SelectItem) => item.value === current))
+    const next = enabled[(index + direction + enabled.length) % enabled.length]
+    setValue(next.value)
+  }
+  trigger.setAttribute('aria-haspopup', 'listbox')
+  trigger.setAttribute('aria-expanded', 'false')
+  trigger.onclick = event => {
+    event.stopPropagation()
+    open ? closeMenu() : openMenu()
+  }
+  trigger.onkeydown = event => {
+    if (event.key === 'Escape') {
+      closeMenu()

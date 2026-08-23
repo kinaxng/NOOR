@@ -1,0 +1,31 @@
+      toast(result.ok ? 'success' : 'error', result.message)
+    } catch (e) {
+      toast('error', e.message || '操作失败')
+      try { await reloadTasksForVerify() } catch (_) {}
+    } finally {
+      state.actioning.delete(id)
+      state.tableSignature = ''
+      render()
+    }
+  }
+
+  refresh.onclick = () => load()
+  newTask.onclick = openNewTaskModal
+  accountProbe.onclick = openAccountProbeModal
+  searchToggle.onclick = e => {
+    if (e.target === clearSearch || e.target === search) return
+    state.searchOpen = true
+    render()
+    setTimeout(() => { search.value = state.query; search.focus(); search.select() }, 0)
+  }
+  search.oninput = e => {
+    state.query = e.target.value
+    state.page = 1
+    state.tableSignature = ''
+    render()
+    setTimeout(() => search.focus(), 0)
+  }
+  search.onkeydown = e => { if (e.key === 'Escape' || e.key === 'Enter') { state.searchOpen = false; render() } }
+  search.onblur = () => { setTimeout(() => { state.searchOpen = false; render() }, 120) }
+  clearSearch.onclick = e => {
+    e.stopPropagation()

@@ -1,0 +1,66 @@
+def clear_and_update_preview_image(preview_mode : PreviewMode, preview_resolution : str, frame_number : int = 0) -> gradio.Image:
+	clear_static_faces()
+	return update_preview_image(preview_mode, preview_resolution, frame_number)
+
+
+def process_preview_frame(reference_vision_frame : VisionFrame, source_vision_frames : List[VisionFrame], source_audio_frame : AudioFrame, source_voice_frame : AudioFrame, target_vision_frame : VisionFrame, preview_mode : PreviewMode, preview_resolution : str) -> VisionFrame:
+	target_vision_frame = restrict_frame(target_vision_frame, unpack_resolution(preview_resolution))
+	temp_vision_frame = target_vision_frame.copy()
+	temp_vision_mask = extract_vision_mask(temp_vision_frame)
+
+	if analyse_frame(target_vision_frame[:, :, :3]):
+		if preview_mode == 'frame-by-frame':
+			temp_vision_frame = obscure_frame(temp_vision_frame[:, :, :3])
+			return numpy.hstack((temp_vision_frame, temp_vision_frame))
+
+		if preview_mode == 'face-by-face':
+			target_crop_vision_frame, output_crop_vision_frame = create_face_by_face(reference_vision_frame, target_vision_frame[:, :, :3], temp_vision_frame[:, :, :3])
+			target_crop_vision_frame = obscure_frame(target_crop_vision_frame)
+			output_crop_vision_frame = obscure_frame(output_crop_vision_frame)
+			return numpy.hstack((target_crop_vision_frame, output_crop_vision_frame))
+
+		temp_vision_frame = obscure_frame(temp_vision_frame)
+		return temp_vision_frame
+
+	for processor_module in get_processors_modules(state_manager.get_item('processors')):
+		logger.disable()
+		if processor_module.pre_process('preview'):
+			logger.enable()
+			temp_vision_frame, temp_vision_mask = processor_module.process_frame(
+			{
+				'reference_vision_frame': reference_vision_frame,
+				'source_audio_frame': source_audio_frame,
+				'source_voice_frame': source_voice_frame,
+				'source_vision_frames': source_vision_frames,
+				'target_vision_frame': target_vision_frame[:, :, :3],
+				'temp_vision_frame': temp_vision_frame[:, :, :3],
+				'temp_vision_mask': temp_vision_mask
+			})
+		logger.enable()
+
+	temp_vision_frame = prepare_output_frame(target_vision_frame, temp_vision_frame, temp_vision_mask)
+
+	if preview_mode == 'frame-by-frame':
+		return numpy.hstack((target_vision_frame, temp_vision_frame))
+
+	if preview_mode == 'face-by-face':
+		target_crop_vision_frame, output_crop_vision_frame = create_face_by_face(reference_vision_frame, target_vision_frame, temp_vision_frame)
+		return numpy.hstack((target_crop_vision_frame, output_crop_vision_frame))
+
+	return temp_vision_frame
+
+
+def create_face_by_face(reference_vision_frame : VisionFrame, target_vision_frame : VisionFrame, temp_vision_frame : VisionFrame) -> Tuple[VisionFrame, VisionFrame]:
+	target_faces = select_faces(reference_vision_frame[:, :, :3], target_vision_frame[:, :, :3])
+	target_face = get_one_face(target_faces)
+
+	if target_face:
+		target_crop_vision_frame = extract_crop_frame(target_vision_frame, target_face)
+		output_crop_vision_frame = extract_crop_frame(temp_vision_frame, target_face)
+
+		if numpy.any(target_crop_vision_frame) and numpy.any(output_crop_vision_frame):
+			target_crop_dimension = min(target_crop_vision_frame.shape[:2])
+			target_crop_vision_frame = fit_cover_frame(target_crop_vision_frame, (target_crop_dimension, target_crop_dimension))
+			output_crop_vision_frame = fit_cover_frame(output_crop_vision_frame, (target_crop_dimension, target_crop_dimension))
+			return target_crop_vision_frame, output_crop_vision_frame
+

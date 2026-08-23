@@ -1,0 +1,181 @@
+
+              <!-- File Selector -->
+              <FilePathSelector
+                :file-path="detail?.file_path"
+                :sibling-paths="detail?.siblings"
+                v-model="selectedSubmitPath"
+                @update:model-value="selectedSubmitId = allSubmitPaths.find(p => p.path === $event)?.id || detail?.id || ''"
+              />
+
+              <div v-if="isFullWidth" class="facefusion-native-shell ui-card">
+                <div class="facefusion-native-head">
+                  <div>
+                    <span>FACEFUSION</span>
+                    <strong>原生参数台</strong>
+                  </div>
+                  <em>顶部保留 NOOR 预览与文件选择；下方按 FaceFusion 原生模块组织参数。</em>
+                </div>
+
+                <div class="facefusion-native-grid">
+                  <section class="facefusion-native-column">
+                    <div class="facefusion-native-group facefusion-native-group--preview">
+                      <h3>Preview</h3>
+                      <div class="facefusion-preview">
+                        <img
+                          v-if="previewUrl"
+                          :src="previewUrl"
+                          class="facefusion-preview__image"
+                          alt="FaceFusion preview"
+                        />
+                        <div v-else class="facefusion-preview__empty">
+                          <span>FaceFusion Preview</span>
+                        </div>
+                        <div class="facefusion-preview__overlay">
+                          <div class="facefusion-preview__controls">
+                            <input
+                              v-model.number="previewFrameNumber"
+                              class="preview-frame-slider"
+                              type="range"
+                              min="0"
+                              :max="previewFrameMax"
+                              step="1"
+                              :disabled="previewLoading || previewMetadataLoading || previewFrameMax <= 0"
+                              @input="markPreviewFrameChanged"
+                              @change="handlePreviewSliderCommit"
+                            />
+                            <span class="facefusion-preview__frame">{{ previewLoading ? '生成中' : previewMetadataLoading ? '读取中' : previewTimeLabel }}</span>
+                          </div>
+                        </div>
+                        <div v-if="previewLoading" class="facefusion-preview__busy">
+                          <span></span>
+                          <strong>正在生成预览</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="facefusion-native-group facefusion-native-group--noor">
+                      <h3>Source</h3>
+                      <div>
+                        <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">源脸图片</label>
+                        <div class="facefusion-source-manager">
+                          <label class="facefusion-source-upload-card">
+                            <input type="file" accept="image/*" multiple :disabled="sourceUploadLoading" @change="handleSourceImageUpload" />
+                            <span class="facefusion-source-upload-card__plus">+</span>
+                            <span>{{ sourceUploadLoading ? '上传中' : '上传图片' }}</span>
+                          </label>
+                          <button type="button" class="facefusion-source-upload-card facefusion-source-library-card" @click="toggleSourceLibrary">
+                            <span class="facefusion-source-upload-card__plus">LIB</span>
+                            <span>{{ sourceLibraryOpen ? '收起图片库' : '图片库' }}</span>
+                          </button>
+                          <div v-for="source in uploadedSourceImages" :key="source.path" class="facefusion-source-card">
+                            <img v-if="source.preview_url" :src="source.preview_url" :alt="source.name" loading="lazy" />
+                            <div v-else class="facefusion-source-card__placeholder">IMG</div>
+                            <div class="facefusion-source-card__meta">
+                              <span>{{ source.name }}</span>
+                              <button type="button" @click="removeUploadedSourceImage(source)">删除</button>
+                            </div>
+                          </div>
+                        </div>
+                        <div v-if="sourceLibraryOpen" class="facefusion-source-library">
+                          <div class="facefusion-source-library__head">
+                            <span>{{ sourceLibraryLoading ? '读取中' : `图片库 · ${sourceLibraryImages.length}` }}</span>
+                            <div>
+                              <button type="button" @click="loadSourceImageLibrary">刷新</button>
+                              <button type="button" :disabled="!selectedLibraryImageIds.length" @click="addSelectedLibraryImages">
+                                使用选中 {{ selectedLibraryImageIds.length || '' }}
+                              </button>
+                            </div>
+                          </div>
+                          <div v-if="!sourceLibraryLoading && !sourceLibraryImages.length" class="facefusion-source-library__empty">暂无缓存图片</div>
+                          <div v-else class="facefusion-source-library__grid">
+                            <button
+                              v-for="image in sourceLibraryImages"
+                              :key="image.id"
+                              type="button"
+                              class="facefusion-source-library__item"
+                              :class="{ 'is-active': selectedLibraryImageIds.includes(image.id), 'is-used': isSourceSelected(image.path) }"
+                              :disabled="isSourceSelected(image.path)"
+                              @click="toggleLibraryImage(image)"
+                            >
+                              <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
+                              <span>{{ isSourceSelected(image.path) ? '已使用' : selectedLibraryImageIds.includes(image.id) ? '已选择' : '选择' }}</span>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="facefusion-source-count">{{ facefusionSourcePaths.length }} 张源脸图</div>
+                      </div>
+                    </div>
+
+                    <div class="facefusion-native-group">
+                      <h3>Processors</h3>
+                      <div class="facefusion-choice-chips">
+                        <button
+                          v-for="processor in facefusionProcessorOptions"
+                          :key="processor.id"
+                          type="button"
+                          class="processor-chip"
+                          :class="{ 'is-active': hasFacefusionToken('processors', processor.id) }"
+                          @click="toggleFacefusionToken('processors', processor.id)"
+                        >
+                          <span>{{ processor.label }}</span>
+                          <small>{{ processor.id }}</small>
+                          <em :class="{ 'is-cuda': processor.acceleration === 'cuda', 'is-muted': processor.acceleration === 'none' }">
+                            {{ processor.acceleration === 'tensorrt' ? 'TRT 推荐' : processor.acceleration === 'cuda' ? 'CUDA 推荐' : '无推理加速' }}
+                          </em>
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="facefusion-native-column">
+                    <div v-if="selectedFacefusionProcessors.includes('face_swapper')" class="facefusion-native-group">
+                      <h3>Face Swapper Options</h3>
+                      <div class="facefusion-native-fields">
+                        <label>
+                          <span>face swapper model</span>
+                          <select v-model="facefusionSettings.face_swapper_model" class="settings-input w-full">
+                            <option v-for="model in facefusionFaceSwapperModelOptions" :key="model" :value="model">{{ model }}</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>face swapper pixel boost</span>
+                          <select v-model="facefusionSettings.face_swapper_pixel_boost" class="settings-input w-full">
+                            <option v-for="size in facefusionPixelBoostOptions" :key="size" :value="size">{{ size }}</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>face swapper weight {{ Number(facefusionSettings.face_swapper_weight || 0).toFixed(2) }}</span>
+                          <input v-model.number="facefusionSettings.face_swapper_weight" type="range" min="0" max="1" step="0.05" class="facefusion-range" />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div v-if="selectedFacefusionProcessors.includes('face_enhancer')" class="facefusion-native-group">
+                      <h3>Face Enhancer Options</h3>
+                      <div class="facefusion-native-fields">
+                        <label>
+                          <span>face enhancer model</span>
+                          <select v-model="facefusionSettings.face_enhancer_model" class="settings-input w-full">
+                            <option v-for="model in facefusionFaceEnhancerModelOptions" :key="model" :value="model">{{ model }}</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>face enhancer blend {{ facefusionSettings.face_enhancer_blend }}</span>
+                          <input v-model.number="facefusionSettings.face_enhancer_blend" type="range" min="0" max="100" step="1" class="facefusion-range" />
+                        </label>
+                        <label>
+                          <span>face enhancer weight {{ Number(facefusionSettings.face_enhancer_weight || 0).toFixed(2) }}</span>
+                          <input v-model.number="facefusionSettings.face_enhancer_weight" type="range" min="0" max="1" step="0.05" class="facefusion-range" />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div v-if="selectedFacefusionProcessors.includes('frame_enhancer')" class="facefusion-native-group">
+                      <h3>Frame Enhancer Options</h3>
+                      <div class="facefusion-native-fields">
+                        <label>
+                          <span>frame enhancer model</span>
+                          <select v-model="facefusionSettings.frame_enhancer_model" class="settings-input w-full">
+                            <option v-for="model in facefusionFrameEnhancerModelOptions" :key="model" :value="model">{{ model }}</option>
+                          </select>
+                        </label>

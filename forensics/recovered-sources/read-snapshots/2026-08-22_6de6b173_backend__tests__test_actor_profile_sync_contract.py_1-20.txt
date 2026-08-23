@@ -1,0 +1,20 @@
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+
+from app.api.endpoints import actors
+
+
+def test_actor_profile_update_does_not_save_override_when_emby_sync_fails(monkeypatch, tmp_path):
+    saved: dict[str, dict] = {}
+
+    monkeypatch.setattr(actors, "_require_config", lambda: {"server_url": "http://emby.test", "api_key": "k"})
+    monkeypatch.setattr(actors, "_profile_overrides_path", lambda: tmp_path / "actor_profile_overrides.json")
+
+    async def fake_raw_actor(config, actor_id):
+        return {"Id": actor_id, "Name": "旧名", "ProviderIds": {}, "ImageTags": {}}
+
+    async def fake_actor_profile(config, actor_id, lang):
+        return {"id": actor_id, "name": "旧名"}
+

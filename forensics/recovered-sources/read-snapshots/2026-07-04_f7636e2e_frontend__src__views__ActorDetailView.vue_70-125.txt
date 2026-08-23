@@ -1,0 +1,56 @@
+const mediaServerName = computed(() => actor.value?.media_server?.name || 'Emby / Jellyfin')
+const externalUrls = computed(() => actor.value?.external_urls || {})
+const backTarget = computed(() => {
+  const value = String(route.query.returnTo || '')
+  return value.startsWith('/') ? value : '/files/actors'
+})
+const tmdbUrl = computed(() => externalUrls.value.tmdb || (actor.value?.tmdb_id ? `https://www.themoviedb.org/person/${encodeURIComponent(actor.value.tmdb_id)}` : ''))
+const imdbUrl = computed(() => externalUrls.value.imdb || (actor.value?.imdb_id ? `https://www.imdb.com/name/${encodeURIComponent(actor.value.imdb_id)}/` : ''))
+const socialLinks = computed(() => [
+  { key: 'media-server', label: mediaServerName.value, icon: 'brandEmby', url: actor.value?.emby_url },
+  { key: 'tmdb', label: 'TMDB', icon: 'brandTmdb', url: tmdbUrl.value },
+  { key: 'imdb', label: 'IMDB', icon: 'brandImdb', url: imdbUrl.value },
+  { key: 'x', label: 'X', icon: 'brandX', url: externalUrls.value.x },
+  { key: 'instagram', label: 'Instagram', icon: 'brandInstagram', url: externalUrls.value.instagram },
+  { key: 'tiktok', label: 'TikTok', icon: 'brandTiktok', url: externalUrls.value.tiktok },
+  { key: 'youtube', label: 'YouTube', icon: 'brandYoutube', url: externalUrls.value.youtube },
+  { key: 'facebook', label: 'Facebook', icon: 'brandFacebook', url: externalUrls.value.facebook },
+  { key: 'wikidata', label: 'Wikidata', icon: 'brandWikidata', url: externalUrls.value.wikidata },
+  { key: 'homepage', label: 'Homepage', icon: 'externalLink', url: externalUrls.value.homepage || actor.value?.homepage },
+].filter(item => !!item.url))
+const canFetchTmdb = computed(() => !!(form.value.tmdb.trim() || form.value.imdb.trim() || actor.value?.tmdb_id || actor.value?.imdb_id))
+const overviewTooLong = computed(() => (form.value.overview || '').length > 180)
+const gfriendsSearchName = computed(() => actor.value?.identity_names?.jp || form.value.jp_name || displayName.value || form.value.name)
+const aliasTags = computed(() => form.value.aliases.split(/\n|,/).map(item => item.trim()).filter(Boolean))
+const actorAliases = computed(() => {
+  const names = [
+    actor.value?.display_name,
+    actor.value?.identity_names?.jp,
+    actor.value?.identity_names?.zh_cn,
+    actor.value?.identity_names?.zh_tw,
+    ...(actor.value?.identity_names?.aliases || []),
+    actor.value?.name,
+    form.value.name,
+    form.value.sort_name,
+  ].filter(Boolean) as string[]
+  return Array.from(new Set(names.filter(name => name !== displayName.value)))
+})
+const diagnosticTypeLabels: Record<string, string> = {
+  Movie: 'Movie',
+  Series: 'Series',
+  Episode: 'Episode',
+  MusicVideo: 'MusicVideo',
+  Video: 'Video',
+  Trailer: 'Trailer',
+  BoxSet: 'BoxSet',
+  Playlist: 'Playlist',
+}
+
+function actorInitial(name: string) {
+  return (name || '?').trim().slice(0, 1).toUpperCase()
+}
+
+function syncForm(nextActor: MediaActor | null) {
+  form.value = {
+    selected_name: nextActor?.identity_names?.selected_name || nextActor?.display_name || nextActor?.name || '',
+    name: nextActor?.name || '',

@@ -1,0 +1,181 @@
+        key="javdb-recommend",
+        title="JavDB 推荐",
+        badge=f"{len(payload_items)} 部",
+        payload={
+            "kind": "media-carousel",
+            "route": "/plugins/javdb",
+            "items": payload_items,
+        },
+    )
+
+
+async def _search(config: dict[str, Any], q: str, page: int = 1, limit: int = 24) -> dict[str, Any]:
+    if not str(q or "").strip():
+        return {"items": [], "total": 0}
+    data = _data(await _request(config, "GET", "/search", params={"q": q, "page": page, "limit": limit}))
+    items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
+    return {"items": items, "total": int(data.get("total") or len(items)) if isinstance(data, dict) else len(items), "raw": data}
+
+
+async def _video(config: dict[str, Any], code: str, *, refresh: bool = False) -> dict[str, Any]:
+    code_key = str(code or "").strip().upper()
+    cache_key = (_base(config), code_key)
+    if not refresh:
+        cached = _cache_get(VIDEO_DETAIL_CACHE, cache_key, VIDEO_DETAIL_CACHE_TTL)
+        if cached is not None:
+            return dict(cached)
+    path = f"/video/{code}"
+    params = {"refresh": "true"} if refresh else None
+    data = _data(await _request(config, "GET", path, params=params))
+    if not isinstance(data, dict):
+        return {}
+    out = dict(data)
+    out["cover_url"] = _abs(config, out.get("cover_url"))
+    out["thumb_url"] = _abs(config, out.get("thumb_url"))
+    out["previews"] = [_abs(config, x) for x in (out.get("previews") or [])]
+    _cache_set(VIDEO_DETAIL_CACHE, cache_key, out)
+    return dict(out)
+
+
+async def _related_movies(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    rel_type = str(payload.get("rel_type") or "").strip()
+    rel_id = str(payload.get("rel_id") or payload.get("id") or "").strip()
+    page = max(1, int(payload.get("page") or 1))
+    limit = max(1, min(int(payload.get("limit") or 24), 80))
+    sort_by = payload.get("sort_by") or "release"
+    order_by = payload.get("order_by") or "desc"
+    path_map = {
+        "actor": "/actors/{id}/movies",
+        "series": "/series/{id}/movies",
+        "maker": "/makers/{id}/movies",
+        "publisher": "/publishers/{id}/movies",
+        "director": "/directors/{id}/movies",
+        "list": "/lists/{id}/movies",
+    }
+    if rel_type == "category":
+        data = _data(await _request(config, "GET", "/videos/filter", params={"category_id": rel_id, "page": page, "limit": limit}))
+    elif rel_type in path_map:
+        data = _data(await _request(config, "GET", path_map[rel_type].format(id=rel_id), params={"page": page, "limit": limit, "sort_by": sort_by, "order_by": order_by, "filter": payload.get("filter") or ""}))
+    else:
+        raise ValueError(f"unsupported relation type: {rel_type}")
+    items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
+    total = int(data.get("total") or data.get("total_count") or len(items)) if isinstance(data, dict) else len(items)
+    return {"ok": True, "items": items, "total": total, "raw": data}
+
+
+async def _list_action(config: dict[str, Any], action: str, payload: dict[str, Any]) -> dict[str, Any]:
+    page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))
+    if action == "rankings":
+        data = _data(await _request(config, "GET", "/rankings", params={"period": payload.get("period") or "daily", "type": int(payload.get("type") or 0)}))
+        items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
+        requested_filters = _normalize_latest_filters(payload.get("filters"), str(payload.get("filter_by") or ""))
+        if requested_filters:
+            return await _filter_ranked_items_page(config, items, requested_filters, page=page, limit=limit)
+    elif action == "videos":
+        requested_filter = str(payload.get("filter") or "").strip()
+        actor_ids = [str(x).strip() for x in (payload.get("actor_ids") or []) if str(x).strip()]
+        if requested_filter in {"library", "not_library"}:
+            # DB Online exposes a filter parameter here, but on the current local
+            # build it returns the same total set for both values. The record set
+            # is small, so normalize the behavior in the plugin by filtering the
+            # cached/opened video records ourselves.
+            wanted = requested_filter == "library"
+            all_items: list[dict[str, Any]] = []
+            scan_page = 1
+            total_pages = 1
+            while scan_page <= total_pages and scan_page <= 50:
+                batch = _data(await _request(config, "GET", "/videos", params={"page": scan_page, "pageSize": 80, "sort": payload.get("sort") or "update", "order": payload.get("order") or "desc"}))
+                if isinstance(batch, dict):
+                    total_pages = int(batch.get("total_pages") or total_pages)
+                for item in _movie_list(batch):
+                    if not isinstance(item, dict):
+                        continue
+                    in_library = bool((item.get("library") or {}).get("in_library")) if isinstance(item.get("library"), dict) else False
+                    if in_library == wanted:
+                        all_items.append(_normalize_movie(config, item))
+                scan_page += 1
+            start = (page - 1) * limit
+            return {"ok": True, "items": all_items[start:start + limit], "total": len(all_items), "raw": {"client_filtered": requested_filter}}
+        if len(actor_ids) > 1:
+            merged: list[dict[str, Any]] = []
+            seen_ids: set[str] = set()
+            for actor_id in actor_ids[:8]:
+                actor_page = 1
+                actor_total_pages = 1
+                while actor_page <= actor_total_pages and actor_page <= 50:
+                    actor_params: dict[str, Any] = {"page": actor_page, "pageSize": 80}
+                    if payload.get("sort"):
+                        actor_params["sort"] = payload.get("sort")
+                    if payload.get("order"):
+                        actor_params["order"] = payload.get("order")
+                    actor_params["actor_id"] = actor_id
+                    for key in ("min_score", "user_score", "filter"):
+                        if payload.get(key) not in (None, ""):
+                            actor_params[key] = payload.get(key)
+                    if isinstance(payload.get("category_ids"), list) and payload.get("category_ids"):
+                        actor_params["category_ids"] = ",".join(str(x) for x in payload.get("category_ids"))
+                    batch = _data(await _request(config, "GET", "/videos", params=actor_params))
+                    if isinstance(batch, dict):
+                        actor_total_pages = int(batch.get("total_pages") or actor_total_pages)
+                    for item in _movie_list(batch):
+                        if not isinstance(item, dict):
+                            continue
+                        normalized = _normalize_movie(config, item)
+                        key = str(normalized.get("id") or normalized.get("code") or "")
+                        if not key or key in seen_ids:
+                            continue
+                        seen_ids.add(key)
+                        merged.append(normalized)
+                    actor_page += 1
+            merged = _sort_video_items(merged, str(payload.get("sort") or "created"), str(payload.get("order") or "desc"))
+            start = (page - 1) * limit
+            return {"ok": True, "items": merged[start:start + limit], "total": len(merged), "raw": {"client_filtered": "actor_ids_union", "actor_ids": actor_ids}}
+        params: dict[str, Any] = {"page": page, "pageSize": limit}
+        if payload.get("sort"):
+            params["sort"] = payload.get("sort")
+        if payload.get("order"):
+            params["order"] = payload.get("order")
+        for key in ("min_score", "user_score", "actor_id", "filter"):
+            if payload.get(key) not in (None, ""):
+                params[key] = payload.get(key)
+        if isinstance(payload.get("category_ids"), list) and payload.get("category_ids"):
+            params["category_ids"] = ",".join(str(x) for x in payload.get("category_ids"))
+        data = _data(await _request(config, "GET", "/videos", params=params))
+    elif action == "latest":
+        requested_filter = str(payload.get("filter_by") or "all").strip() or "all"
+        requested_filters = _normalize_latest_filters(payload.get("filters"), requested_filter)
+        latest_type = payload.get("type") or "all"
+        sort_by = payload.get("sort_by") or "update"
+        if not requested_filters:
+            # Do not scan the full feed on initial page load. Load enough rows
+            # for the current page plus a small lookahead so pagination remains
+            # useful without making the plugin wait on dozens of upstream calls.
+            return await _scan_latest_filtered_page(config, str(latest_type), str(sort_by), [], page=page, limit=limit)
+        else:
+            # DB Online's latest endpoint currently ignores filter_by for several
+            # modes. Scan only until the current page is satisfied so the plugin
+            # returns before the frontend's request timeout.
+            return await _scan_latest_filtered_page(config, str(latest_type), str(sort_by), requested_filters, page=page, limit=limit)
+    elif action == "top250":
+        type_value = str(payload.get("type_value") or "")
+        years = {str(y) for y in range(2008, 2101)}
+        top_type = str(payload.get("type") or "")
+        if not top_type:
+            top_type = "video_type" if type_value in {"0", "1", "2", "3"} else "year" if type_value in years else "all"
+        requested_filters = _normalize_latest_filters(payload.get("filters"), str(payload.get("filter_by") or ""))
+        if requested_filters:
+            scan_items: list[dict[str, Any]] = []
+            seen_ids: set[str] = set()
+            scan_page = 1
+            while scan_page <= 6 and len(scan_items) < max(limit * page * 3, 120):
+                page_movies, batch = await _top250_page_items(
+                    config,
+                    page=scan_page,
+                    limit=48,
+                    top_type=top_type,
+                    type_value=type_value,
+                    ignore_watched=bool(payload.get("ignore_watched") or False),
+                    start_rank=int(payload.get("start_rank") or 1),
+                )
+                if not page_movies:
+                    break

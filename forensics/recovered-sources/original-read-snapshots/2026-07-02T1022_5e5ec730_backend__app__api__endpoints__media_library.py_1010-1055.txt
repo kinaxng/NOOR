@@ -1,0 +1,46 @@
+
+    representative = dict(max(group, key=sort_key))
+    if not representative.get('poster_path'):
+        fallback = next((item.get('poster_path') for item in group if item.get('poster_path')), None)
+        if fallback:
+            representative['poster_path'] = fallback
+    return _merge_group_metadata(representative, group)
+
+
+def _deduplicate_items(items: list[dict]) -> list[dict]:
+    """Merge items in the same folder (e.g. MIDA-368.mp4 and MIDA-368.restored-u.mp4).
+    Groups by parent folder and keeps the main version (most complete metadata) for list display.
+    All versions are still available as siblings in the detail endpoint.
+    """
+    groups: dict[str, list[dict]] = {}
+    result: list[dict] = []
+
+    for item in items:
+        path = item.get("path", "")
+        if not path:
+            result.append(item)
+            continue
+        folder = os.path.dirname(path)
+        if folder not in groups:
+            groups[folder] = []
+        groups[folder].append(item)
+
+    for group in groups.values():
+        if len(group) == 1:
+            result.append(group[0])
+        else:
+            result.append(_pick_group_representative(group))
+    return result
+
+
+async def _list_items(
+    config: dict,
+    library_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    filter: str | None = None,
+    q: str | None = None,
+    force_refresh: bool = False,
+) -> tuple[list[dict], int]:
+    now = time.time()
+    cache_key = library_id

@@ -1,0 +1,36 @@
+                      </div>
+                      <div>
+                        <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">人脸排序</label>
+                        <select v-model="facefusionSettings.face_selector_order" class="settings-input w-full">
+                          <option v-for="order in facefusionSelectorOrderOptions" :key="order" :value="order">{{ order }}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div v-if="facefusionReferenceMode" class="facefusion-reference-box">
+                      <div class="facefusion-reference-box__frame">
+                        <img v-if="previewUrl" :src="previewUrl" alt="Reference frame" />
+                        <span v-else>参考帧</span>
+                        <i>{{ facefusionSettings.reference_face_position ?? 0 }}</i>
+                      </div>
+                      <div class="facefusion-reference-box__controls">
+                        <label>
+                          <span>参考帧</span>
+                          <input v-model.number="facefusionSettings.reference_frame_number" type="number" min="0" class="settings-input" />
+                        </label>
+                        <label>
+                          <span>参考人脸</span>
+                          <input v-model.number="facefusionSettings.reference_face_position" type="number" min="0" class="settings-input" />
+                        </label>
+                        <label>
+                          <span>匹配距离 {{ Number(facefusionSettings.reference_face_distance || 0).toFixed(2) }}</span>
+                          <input v-model.number="facefusionSettings.reference_face_distance" type="range" min="0" max="1" step="0.05" class="facefusion-range" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">执行后端</label>
+                      <select v-model="facefusionSettings.execution_provider" class="settings-input w-full">
+                        <option v-for="provider in facefusionExecutionProviderOptions" :key="provider" :value="provider">{{ provider }}</option>
+                      </select>

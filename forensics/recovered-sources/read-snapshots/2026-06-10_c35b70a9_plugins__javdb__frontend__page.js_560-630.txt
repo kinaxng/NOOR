@@ -1,0 +1,71 @@
+    if (state.videoCategoriesLoaded || state.videoCategoriesLoading) return
+    state.videoCategoriesLoading = true
+    try {
+      const res = await sdk.api.post('/plugins/javdb/actions/categories', { payload: {} })
+      state.videoCategories = normalizeCategoryOptions(res.data?.items || [])
+      state.videoCategoriesLoaded = true
+      renderFilters()
+    } catch {
+      state.videoCategories = []
+      state.videoCategoriesLoaded = false
+    } finally {
+      state.videoCategoriesLoading = false
+    }
+  }
+
+  async function ensureVideoActors() {
+    if (state.videoActorsLoaded || state.videoActorsLoading) return
+    state.videoActorsLoading = true
+    try {
+      const res = await sdk.api.post('/plugins/javdb/actions/actor_options', { payload: {} })
+      state.videoActors = (Array.isArray(res.data?.items) ? res.data.items : [])
+        .map(item => {
+          const value = String(item?.external_id ?? item?.id ?? '').trim()
+          const label = String(item?.name ?? '').trim()
+          return value && label ? { value, label, ...item } : null
+        })
+        .filter(Boolean)
+      state.videoActorsLoaded = true
+      renderFilters()
+    } catch {
+      state.videoActors = []
+      state.videoActorsLoaded = false
+    } finally {
+      state.videoActorsLoading = false
+    }
+  }
+
+  function filteredItems() {
+    if (state.relation?.relType === 'actor') {
+      const list = state.items.filter(item => {
+        if (state.relationActorSelectedFilters.includes('magnets') && Number(item?.magnets_count || 0) <= 0) return false
+        if (state.relationActorSelectedFilters.includes('cnsub') && !(item?.has_cnsub || item?.play_subtitle)) return false
+        if (state.relationActorSelectedFilters.includes('cracked') && !item?.is_cracked) return false
+        if (state.relationActorSingleFilter && Number(item?.actor_count || 0) > 1) return false
+        if (state.relationActorYear && String(item?.release_date || '').slice(0, 4) !== state.relationActorYear) return false
+        if (relationActorGenreFilters.length) {
+          const categories = (item?.categories || []).map(category => typeof category === 'string' ? category : String(category?.name || category?.label || '').trim())
+          if (!relationActorGenreFilters.some(name => categories.includes(name))) return false
+        }
+        return true
+      })
+      const sorted = [...list]
+      if (state.relationActorSort === 'release_desc') sorted.sort((a, b) => String(b.release_date || '').localeCompare(String(a.release_date || '')))
+      else if (state.relationActorSort === 'release_asc') sorted.sort((a, b) => String(a.release_date || '').localeCompare(String(b.release_date || '')))
+      else if (state.relationActorSort === 'magnets_desc') sorted.sort((a, b) => Number(b.magnets_count || 0) - Number(a.magnets_count || 0))
+      else if (state.relationActorSort === 'title_asc') sorted.sort((a, b) => titleOf(a).localeCompare(titleOf(b), 'zh-CN'))
+      return sorted
+    }
+    if (state.tab === 'latest') {
+      return state.items.filter(item => {
+        if (state.latestSelectedFilters.includes('magnets') && Number(item?.magnets_count || 0) <= 0) return false
+        if (state.latestSelectedFilters.includes('cnsub') && !(item?.has_cnsub || item?.play_subtitle)) return false
+        if (state.latestSelectedFilters.includes('cracked') && !item?.is_cracked) return false
+        return true
+      })
+    }
+    if (isActorDirectoryFrame()) {
+      const keyword = state.actorSearch.trim().toLowerCase()
+      return state.items.filter(item => {
+        if (!keyword) return true
+        const text = [item.name, item.name_zht, item.other_name, item.id, item.external_id].filter(Boolean).join(' ').toLowerCase()

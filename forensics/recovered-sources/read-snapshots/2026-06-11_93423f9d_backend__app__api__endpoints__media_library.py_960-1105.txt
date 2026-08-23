@@ -1,0 +1,146 @@
+    start, end = byte_range
+    headers["content-length"] = str(end - start + 1)
+    headers["content-range"] = f"bytes {start}-{end}/{file_size}"
+    return StreamingResponse(
+        _iter_file_range(target, start, end),
+        status_code=206,
+        headers=headers,
+        media_type=media_type,
+    )
+
+
+@router.post("/hardlinks/scan")
+async def scan_hardlinks():
+    """Scan all configured scan_groups for hardlinks and rebuild hardlink_groups.txt.
+    Returns the rebuilt groups.
+    """
+    config = _load_config()
+    scan_groups: list[dict] = config.get("scan_groups", [])
+    if not scan_groups:
+        raise HTTPException(status_code=400, detail="未配置任何扫描组，请在存储设置中添加扫描组")
+
+    # Validate directories
+    for group in scan_groups:
+        for key in ("source_dir", "hardlink_dir"):
+            path = group.get(key, "")
+            if path:
+                try:
+                    os.stat(path)
+                except OSError as e:
+                    raise HTTPException(status_code=400, detail=f"{group.get('name', '未命名')} / {key} 不可访问: {e}")
+
+    groups = await _build_hardlink_groups()
+    _save_hardlink_groups(groups)
+    payload = _enrich_hardlink_groups(groups)
+
+    return {
+        "ok": True,
+        "scan_groups": scan_groups,
+        "total_count": payload["summary"]["total_groups"],
+        "total_entries": payload["summary"]["total_entries"],
+        "groups": payload["groups"],
+        "summary": payload["summary"],
+        "last_scanned_at": _hardlink_groups_last_scanned_at(),
+    }
+
+
+@router.post("/hardlinks/delete-hardlink")
+async def delete_hardlink_file(req: HardlinkDeleteRequest):
+    config = _load_config()
+    source_roots, hardlink_roots = _allowed_scan_roots(config)
+    allowed_roots = source_roots + hardlink_roots
+
+    target = Path(req.file_path).resolve()
+    _assert_safe_path(target, allowed_roots, label="硬链接文件")
+
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"文件不存在: {target}")
+    if not target.is_file():
+        raise HTTPException(status_code=400, detail=f"不是文件: {target}")
+
+    if req.dry_run:
+        planned_files = [str(target)]
+        sibling_nfo = target.with_suffix(".nfo")
+        if req.remove_nfo and sibling_nfo.is_file():
+            planned_files.append(str(sibling_nfo))
+        return {
+            "ok": True,
+            "dry_run": True,
+            "planned_files": planned_files,
+        }
+
+    deleted = _remove_file_and_sibling_nfo(target, remove_nfo=req.remove_nfo)
+    if not deleted:
+        raise HTTPException(status_code=400, detail=f"未删除任何文件: {target}")
+
+    return {
+        "ok": True,
+        "deleted_paths": deleted,
+    }
+
+
+@router.post("/hardlinks/delete-source-chain")
+async def delete_source_chain(req: SourceChainDeleteRequest):
+    config = _load_config()
+    source_roots, hardlink_roots = _allowed_scan_roots(config)
+    if not source_roots and not hardlink_roots:
+        raise HTTPException(status_code=400, detail="未配置扫描组路径，无法执行删除")
+
+    source_path = Path(req.source_path).resolve()
+    _assert_safe_path(source_path, source_roots + hardlink_roots, label="主文件路径")
+    hardlink_paths: list[Path] = []
+    for hardlink_path in req.hardlink_paths:
+        p = Path(hardlink_path).resolve()
+        _assert_safe_path(p, source_roots + hardlink_roots, label="硬链接路径")
+        hardlink_paths.append(p)
+
+    delete_dirs, delete_files = _collect_chain_delete_targets(
+        source_path,
+        hardlink_paths,
+        code=req.code,
+        source_roots=source_roots,
+        hardlink_roots=hardlink_roots,
+    )
+    if req.dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            **_preview_delete_targets(delete_dirs, delete_files),
+        }
+
+    result = _execute_delete_targets(delete_dirs, delete_files)
+
+    return {
+        "ok": True,
+        **result,
+    }
+
+
+@router.post("/hardlinks/delete-group")
+async def delete_hardlink_group(req: GroupDeleteRequest):
+    config = _load_config()
+    source_roots, hardlink_roots = _allowed_scan_roots(config)
+    if not source_roots and not hardlink_roots:
+        raise HTTPException(status_code=400, detail="未配置扫描组路径，无法执行删除")
+
+    delete_dirs: set[Path] = set()
+    delete_files: set[Path] = set()
+
+    for entry in req.entries:
+        source_path = Path(entry.source_path).resolve() if entry.source_path else None
+        if source_path:
+            _assert_safe_path(source_path, source_roots + hardlink_roots, label="主文件路径")
+
+        hardlink_paths: list[Path] = []
+        for hardlink_path in entry.hardlink_paths:
+            p = Path(hardlink_path).resolve()
+            _assert_safe_path(p, source_roots + hardlink_roots, label="硬链接路径")
+            hardlink_paths.append(p)
+
+        e_dirs, e_files = _collect_chain_delete_targets(
+            source_path,
+            hardlink_paths,
+            code=req.code,
+            source_roots=source_roots,
+            hardlink_roots=hardlink_roots,
+        )

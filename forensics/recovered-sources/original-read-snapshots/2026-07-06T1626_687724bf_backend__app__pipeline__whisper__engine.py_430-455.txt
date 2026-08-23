@@ -1,0 +1,26 @@
+
+        return TranscriptionResult(
+            segments=result_segments,
+            language=info.language,
+            duration=info.duration,
+            source="faster-whisper",
+            metadata={"model": model_size}
+        )
+
+
+def generate_srt(segments: list[SubtitleSegment], output_path: str):
+    """生成 SRT 文件"""
+    with open(output_path, "w", encoding="utf-8") as f:
+        for seg in segments:
+            start = _ms_to_srt_time(seg.start_time * 1000)
+            end = _ms_to_srt_time(seg.end_time * 1000)
+            f.write(f"{seg.index}\n")
+            f.write(f"{start} --> {end}\n")
+            f.write(f"{seg.text}\n\n")
+
+
+def _ms_to_srt_time(ms: float) -> str:
+    """毫秒转换为 SRT 时间格式"""
+    total_seconds = ms / 1000
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)

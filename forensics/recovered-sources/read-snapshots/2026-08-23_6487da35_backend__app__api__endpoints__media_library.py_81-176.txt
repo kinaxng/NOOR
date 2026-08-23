@@ -1,0 +1,96 @@
+async def _list_items(config:dict,library_id:str,limit:int=50,offset:int=0,filter:Optional[str]=None,q:Optional[str]=None,force_refresh:bool=False)->tuple[list[dict],int]:
+ async with httpx.AsyncClient(timeout=60.0) as client:
+  resp=await client.get(f'{_server_url(config)}/emby/Items',headers=_headers(config.get('api_key','')),params={'ParentId':library_id,'IncludeItemTypes':'Movie','Recursive':'true','Fields':'MediaSources,Path,DateCreated,Studios,ImageTags','Limit':limit,'StartIndex':offset,'SortBy':'DateCreated','SortOrder':'Descending'});resp.raise_for_status();data=resp.json()
+ items=_deduplicate_items([_parse_item(i,config) for i in data.get('Items',[])])
+ payload=_apply_filter_and_paginate(items,filter,q,0,len(items))
+ return payload['items'],payload['total']
+
+async def _get_siblings(config,parent_id,current_id):return await get_siblings_impl(config,parent_id,current_id,httpx_module=httpx,server_url_fn=_server_url,headers_fn=_headers,map_path_fn=_map_path)
+def _get_main_nfo(file_path):return get_main_nfo_impl(file_path)
+async def _get_item(config,item_id):return await get_item_impl(config,item_id,httpx_module=httpx,server_url_fn=_server_url,headers_fn=_headers,map_path_fn=_map_path,parse_tags_fn=_parse_tags,get_siblings_fn=_get_siblings,get_main_nfo_fn=_get_main_nfo)
+def _hardlink_groups_path():return hardlink_groups_path_impl(_config_path)
+def _hardlink_groups_last_scanned_at():
+ try:return datetime.fromtimestamp(_hardlink_groups_path().stat().st_mtime,timezone.utc).isoformat()
+ except OSError:return None
+def _scan_inodes(d):return scan_inodes_impl(d)
+def _scan_single_group(s,h):return scan_single_group_impl(s,h,scan_inodes_fn=_scan_inodes)
+async def _build_hardlink_groups():return await build_hardlink_groups_impl(_load_config(),scan_single_group_fn=_scan_single_group,extract_code_from_path_fn=extract_code_from_path_impl)
+def _save_hardlink_groups(g):save_hardlink_groups_impl(g,hardlink_groups_path_fn=_hardlink_groups_path)
+def _load_hardlink_groups():return load_hardlink_groups_impl(hardlink_groups_path_fn=_hardlink_groups_path)
+def _enrich_hardlink_groups(g):return enrich_hardlink_groups_impl(g)
+
+def _configured(config):
+ if not config.get('server_url') or not config.get('api_key'):raise HTTPException(503,_ADAPTER_NOT_ACTIVATED)
+
+@router.get('')
+async def get_status():
+ config=_load_config()
+ if not config.get('server_url') or not config.get('api_key'):return MediaLibraryStatus(available=False,current=None,message=_ADAPTER_NOT_ACTIVATED)
+ return MediaLibraryStatus(available=True,current=MediaAdapterMeta(id='emby',name='Emby / Jellyfin',version='1.0.0',description='连接 Emby 或 Jellyfin 媒体服务器',author='NOOR'),message=None)
+@router.get('/config')
+async def get_config():return {'config':_ensure_webhook_token(_load_config())}
+@router.post('/config')
+async def save_config(config:dict):
+ existing=_load_config();existing.update(config);_save_config(existing);return {'ok':True,'sync_state':_bump_sync_state()}
+@router.get('/sync-state')
+async def get_sync_state():return _sync_state_payload()
+@router.post('/cache/invalidate')
+async def invalidate_cache():
+ state=_bump_sync_state();SystemLogManager.get_instance().add_log('info','[MediaLibrary] 媒体库缓存已手动刷新',source='media_library');return {'ok':True,'sync_state':state}
+@router.post('/webhook/emby')
+async def emby_webhook(request:Request,token:str|None=None):
+ config=_ensure_webhook_token(_load_config());expected=str(config.get('webhook_token') or '').strip();provided=str(token or request.headers.get('X-NOOR-Webhook-Token') or '').strip()
+ if not expected or not secrets.compare_digest(provided,expected):raise HTTPException(403,'Invalid webhook token')
+ body=await request.body()
+ if len(body)>1024*1024:raise HTTPException(413,'Webhook 请求超过 1 MB')
+ payload=None
+ if body:
+  try:
+   import json
+   payload=json.loads(body)
+  except Exception:payload=None
+ state=_bump_sync_state(webhook=True);source=_webhook_source(request);summary=_webhook_summary(payload)
+ SystemLogManager.get_instance().add_log('info',f'[MediaLibrary] 收到 Emby Webhook，已刷新媒体库缓存 · {summary}',source=f'Emby · {source}',event_type=(payload.get('Event') if isinstance(payload,dict) else None))
+ return {'ok':True,'source':source,'summary':summary,'sync_state':state}
+@router.post('/test')
+async def test_connection(config:dict|None=None):
+ cfg=config if config is not None else _load_config()
+ if not cfg:return {'ok':False,'message':_ADAPTER_NOT_ACTIVATED,'libraries':[]}
+ ok,msg=await _test_connection(cfg)
+ try:libs=await _list_libraries(cfg)
+ except Exception:libs=[]
+ return {'ok':ok,'message':msg,'libraries':libs}
+@router.get('/libraries')
+async def get_libraries():
+ config=_load_config();_configured(config)
+ try:return {'libraries':await _list_libraries(config)}
+ except Exception:return {'libraries':[]}
+@router.get('/items')
+async def get_items(library_id:str|None=None,limit:int=50,offset:int=0,filter:str|None=None,q:str|None=None,force_refresh:bool=Query(False)):
+ config=_load_config();_configured(config);now=time.time()
+ try:
+  if not library_id:
+   enabled=[x.strip() for x in config.get('enabled_library_ids','').split(',') if x.strip()]
+   ids=enabled or [x['id'] for x in await _list_libraries(config)];all_items=[]
+   for lid in ids:
+    key='all_'+lid;cached=_items_cache.get(key)
+    if cached and not force_refresh and now-cached[1]<_CACHE_TTL:items=cached[0]
+    else:items,_=await _list_items(config,lid,2000,0,force_refresh=force_refresh);_items_cache[key]=(items,now)
+    all_items.extend(items)
+   all_items.sort(key=lambda x:x.get('date_created') or '',reverse=True);return _apply_filter_and_paginate(all_items,filter,q,offset,limit)
+  cached=_items_cache.get(library_id)
+  if cached and not force_refresh and now-cached[1]<_CACHE_TTL:return _apply_filter_and_paginate(cached[0],filter,q,offset,limit)
+  all_items,_=await _list_items(config,library_id,2000,0,force_refresh=force_refresh);_items_cache[library_id]=(all_items,now);return _apply_filter_and_paginate(all_items,filter,q,offset,limit)
+ except Exception as e:raise HTTPException(502,f'获取媒体失败: {e}')
+@router.get('/item/{item_id}')
+async def get_item(item_id:str):
+ config=_load_config();_configured(config)
+ try:
+  item=await _get_item(config,item_id)
+  if not item:raise HTTPException(404,f'未找到媒体项目: {item_id}')
+  return item
+ except HTTPException:raise
+ except Exception as e:raise HTTPException(502,f'获取详情失败: {e}')
+@router.get('/hardlinks/groups')
+async def get_hardlink_groups():return {**_enrich_hardlink_groups(_load_hardlink_groups()),'last_scanned_at':_hardlink_groups_last_scanned_at()}
+@router.get('/stream/{item_id}')

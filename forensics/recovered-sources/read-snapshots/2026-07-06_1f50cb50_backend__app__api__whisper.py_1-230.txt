@@ -1,0 +1,230 @@
+"""Whisper 字幕生成 API - 集成到统一任务系统"""
+import asyncio
+import importlib
+import os
+import re
+import shutil
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from app.core.config import get_settings
+from app.tasks.manager import job_manager
+from app.api.system import SystemLogManager
+from app.pipeline.whisper.strategy import apply_whisper_strategy, normalize_whisper_strategy
+
+router = APIRouter(prefix="/api/whisper", tags=["whisper"])
+
+
+class WhisperRequest(BaseModel):
+    model_config = ConfigDict(extra='allow', protected_namespaces=())
+
+    video_path: str  # Emby path
+    strategy: Optional[str] = None
+    preset: Optional[str] = None  # deprecated alias, kept for compatibility
+    subtitle_profile: Optional[str] = "standard"
+    model_backend: Optional[str] = "chickenrice-zh"
+    whisper_task: Optional[str] = "translate"
+    vad_backend: Optional[str] = "energy"
+    chunker: Optional[str] = "smart_vad_chunk"
+    target_chunk_duration_s: Optional[float] = 30.0
+    max_chunk_duration_s: Optional[float] = 30.0
+    segment_merge_max_gap_ms: Optional[int] = 2000
+    segment_merge_max_duration_ms: Optional[int] = 20000
+    model: str = "chickenrice-zh"
+    pipeline_mode: str = "faster"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    # 音频前处理（实验）
+    audio_preprocess_mode: Optional[str] = "none"
+    audio_preprocess_model: Optional[str] = "vocal_balanced"
+    # 翻译设置
+    translate_to: Optional[str] = None
+    translate_base_url: Optional[str] = "https://api.openai.com/v1"
+    translate_api_key: Optional[str] = ""
+    translate_model: Optional[str] = "llama3.2"
+    translate_style: Optional[str] = "adult_explicit"
+
+
+class TranslateSrtRequest(BaseModel):
+    srt_path: str
+    target_lang: str = "zh"
+    model: str = "gpt-4o-mini"
+    style: str = "adult_explicit"
+    base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    api_key: str = ""
+
+
+class WhisperResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+    chain_id: str | None = None
+    followup_task_id: str | None = None
+    followup_job_type: str | None = None
+
+
+def map_emby_path_to_local(emby_path: str) -> str:
+    """Map Emby path to local path using source_dir setting."""
+    settings = get_settings()
+    if not settings.source_dir:
+        return emby_path
+    if emby_path.startswith('/data/media'):
+        return emby_path.replace('/data/media', settings.source_dir, 1)
+    return emby_path
+
+
+def clean_video_name(name: str) -> str:
+    """清理视频名用于字幕文件"""
+    name = re.sub(r'[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\.(mp4|mkv|avi|mov|wmv|flv|m4v)$', '', name, flags=re.IGNORECASE)
+    return name.strip()
+
+
+def build_expected_ja_srt_path(local_video_path: str) -> str:
+    video_dir = os.path.dirname(local_video_path)
+    clean_name = clean_video_name(os.path.basename(local_video_path))
+    return os.path.join(video_dir, f"{clean_name}.ja.srt")
+
+
+def resolve_whisper_strategy(request: WhisperRequest) -> str:
+    explicit_strategy = request.strategy or request.preset
+    if explicit_strategy:
+        return normalize_whisper_strategy(explicit_strategy)
+
+    return "chickenrice"
+
+
+def assert_audio_preprocess_runtime_ready(config: dict) -> None:
+    mode = str(config.get("audio_preprocess_mode") or "none").strip().lower()
+    if mode == "none":
+        return
+    if mode != "vocal_isolation":
+        raise HTTPException(status_code=400, detail=f"不支持的音频预处理模式: {mode}")
+    try:
+        importlib.import_module("audio_separator.separator")
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="音频预处理需要 audio-separator 运行时。请先到设置 > Whisper > 依赖安装 audio_separator，或关闭本次任务的音频预处理。",
+        )
+
+
+@router.post("/tasks", response_model=WhisperResponse)
+async def create_whisper_task(request: WhisperRequest):
+    """创建 Whisper 任务"""
+    from app.core.models import JobCreate, JobSettings
+
+    # 验证视频路径
+    local_video_path = map_emby_path_to_local(request.video_path)
+    if not os.path.exists(local_video_path):
+        raise HTTPException(status_code=404, detail=f"Video not found: {local_video_path}")
+
+    resolved_strategy = resolve_whisper_strategy(request)
+
+    direct_translate_backend = (request.model_backend or request.model or "").strip() == "chickenrice-zh"
+    requested_translate_to = None if direct_translate_backend else ((request.translate_to or "").strip() or None)
+    whisper_config = {
+        "strategy": resolved_strategy,
+        "subtitle_profile": request.subtitle_profile,
+        "model_backend": request.model_backend or request.model,
+        "whisper_task": request.whisper_task,
+        "vad_backend": request.vad_backend,
+        "chunker": request.chunker,
+        "target_chunk_duration_s": request.target_chunk_duration_s,
+        "max_chunk_duration_s": request.max_chunk_duration_s,
+        "segment_merge_max_gap_ms": request.segment_merge_max_gap_ms,
+        "segment_merge_max_duration_ms": request.segment_merge_max_duration_ms,
+        "model": request.model,
+        "pipeline_mode": request.pipeline_mode,
+        "language": request.language,
+        "sensitivity": request.sensitivity,
+        "audio_preprocess_mode": request.audio_preprocess_mode,
+        "audio_preprocess_model": request.audio_preprocess_model,
+        "translate_to": None,
+        "translate_base_url": request.translate_base_url,
+        "translate_api_key": request.translate_api_key,
+        "translate_model": request.translate_model,
+        "translate_style": request.translate_style,
+    }
+    whisper_config = apply_whisper_strategy(whisper_config, resolved_strategy)
+    assert_audio_preprocess_runtime_ready(whisper_config)
+
+    # 从路径提取视频名称
+    video_name = os.path.splitext(os.path.basename(local_video_path))[0]
+
+    chain_id = str(os.urandom(16).hex())
+    job_data = JobCreate(
+        emby_item_id=f"whisper_{os.path.basename(local_video_path)}",
+        emby_item_name=f"[Whisper] {video_name}",
+        input_path=local_video_path,
+        settings=JobSettings(**whisper_config),
+        chain_id=chain_id,
+    )
+
+    result = await job_manager.enqueue_whisper(job_data)
+
+    translate_job_response = None
+    if requested_translate_to:
+        translate_job_data = JobCreate(
+            emby_item_id=f"translate_{os.path.basename(local_video_path)}",
+            emby_item_name=f"[翻译] {video_name}",
+            input_path=build_expected_ja_srt_path(local_video_path),
+            settings=JobSettings(
+                srt_path=build_expected_ja_srt_path(local_video_path),
+                target_lang=requested_translate_to,
+                translate_model=request.translate_model,
+                translate_base_url=request.translate_base_url,
+                translate_api_key=request.translate_api_key or "",
+                translate_style=request.translate_style,
+            ),
+            chain_id=chain_id,
+            depends_on_task_id=result.id,
+            parent_task_id=result.id,
+        )
+        translate_job_response = await job_manager.create_job(
+            translate_job_data,
+            job_type="translate-srt",
+            status="blocked",
+            enqueue_now=False,
+        )
+
+    return WhisperResponse(
+        task_id=result.id,
+        status=result.status,
+        message=("Whisper 转写任务已创建，翻译任务将自动衔接" if requested_translate_to else "Whisper 转写任务已创建"),
+        chain_id=chain_id,
+        followup_task_id=translate_job_response.id if translate_job_response else None,
+        followup_job_type="translate-srt" if translate_job_response else None,
+    )
+
+
+@router.get("/tasks/{task_id}")
+async def get_whisper_task(task_id: str):
+    """获取任务状态"""
+    job = await job_manager.get_job(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if job.job_type not in {"whisper", "whisper_transcribe"}:
+        raise HTTPException(status_code=400, detail="Task is not a Whisper job")
+
+    log_lines = await job_manager.get_logs(task_id)
+
+    return {
+        "task_id": job.id,
+        "status": job.status,
+        "progress": job.progress,
+        "log_lines": log_lines[-50:],
+        "error": job.error_message,
+        "result_metadata": job.result_metadata,
+    }
+
+
+@router.post("/tasks/{task_id}/run")
+async def run_whisper_task(task_id: str):
+    """手动触发 Whisper 任务"""
+    job = await job_manager.get_job(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if job.job_type not in {"whisper", "whisper_transcribe"}:
+        raise HTTPException(status_code=400, detail="Task is not a Whisper job")
+    # Whisper 任务已经在队列中，等待 worker 处理

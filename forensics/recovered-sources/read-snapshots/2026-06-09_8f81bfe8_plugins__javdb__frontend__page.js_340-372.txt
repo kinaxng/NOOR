@@ -1,0 +1,33 @@
+    { label: '上映时间', value: 'date' },
+    { label: '更新时间', value: 'updated' },
+  ]
+  const videosFilterOptions = [
+    ['all', '全部'],
+    ['m', '可下载'],
+    ['c', '字幕'],
+    ['n', '无资源'],
+  ]
+
+  function isActorRankingFrame() {
+    return state.tab === 'rankings' && state.rankingMode === 'actors' && !state.relation
+  }
+
+  function rerenderCurrentList() {
+    renderFilters()
+    renderGrid()
+    renderPager()
+  }
+
+  function usesRemotePaging() {
+    if (state.relation) return state.relation.relType !== 'actor'
+    if (state.tab === 'latest') return true
+    if (state.tab === 'videos') return true
+    if (state.tab === 'rankings') return state.rankingMode === 'top250'
+    return false
+  }
+
+  function latestRemoteFilter() {
+    if (state.latestSelectedFilters.includes('cracked')) return 'cracked'
+    if (state.latestSelectedFilters.includes('cnsub')) return 'cnsub'
+    if (state.latestSelectedFilters.includes('magnets')) return 'magnets'
+    return 'all'

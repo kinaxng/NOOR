@@ -1,0 +1,81 @@
+    assert "水トさくら" in records[0]["aliases"]
+    assert "Sakura Miura" in records[0]["aliases"]
+
+
+def test_actor_mapping_name_index_prefers_primary_name_over_other_alias():
+    records = [
+        {
+            "id": "3173209",
+            "jp": "広瀬みつき",
+            "zh_cn": "広瀬美希",
+            "zh_tw": "広瀬美希",
+            "names": ["広瀬みつき", "広瀬美希", "日向ゆら"],
+            "tmdb_id": "3173209",
+            "verified": True,
+        },
+        {
+            "id": "5349111",
+            "jp": "日向ゆら",
+            "zh_cn": "日向ゆら",
+            "zh_tw": "日向ゆら",
+            "names": ["日向ゆら"],
+            "tmdb_id": "5349111",
+            "verified": False,
+        },
+    ]
+
+    index = media_library._actor_mapping_name_index(records)
+    match = index[media_library._normalize_actor_key("日向ゆら")]
+
+    assert match["source"] == "primary"
+    assert match["record"]["id"] == "5349111"
+
+
+def test_normalize_actor_key_folds_sumire_variant():
+    assert media_library._normalize_actor_key("仓本堇") == media_library._normalize_actor_key("仓本菫")
+
+
+def test_enrich_actor_display_names_adds_identity_name_structure(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            "id": "3283399",
+            "jp": "倉本すみれ",
+            "zh_cn": "仓本菫",
+            "zh_tw": "倉本菫",
+            "aliases": ["倉本 すみれ"],
+            "names": ["倉本すみれ", "仓本菫", "倉本 すみれ"],
+            "tmdb_id": "3283399",
+            "verified": True,
+        }
+    ])
+
+    actor = media_library._enrich_actor_display_names([
+        {"id": "1547", "name": "仓本堇", "sort_name": "倉本すみれ"}
+    ], lang="ja-JP")[0]
+
+    assert actor["display_name"] == "倉本すみれ"
+    assert actor["identity_names"]["emby_name"] == "仓本堇"
+    assert actor["identity_names"]["emby_sort_name"] == "倉本すみれ"
+    assert actor["identity_names"]["jp"] == "倉本すみれ"
+    assert actor["identity_names"]["zh_cn"] == "仓本菫"
+    assert actor["identity_names"]["aliases"] == ["倉本 すみれ"]
+
+
+def test_parse_person_reads_provider_ids_case_insensitively():
+    person = {
+        "Id": "actor-1",
+        "Name": "柏木小夏",
+        "ProviderIds": {
+            "tmdb": "3413916",
+            "imdb": "nm-example",
+            "Twitter": "actor_x",
+            "Instagram": "actor_ins",
+            "TikTok": "actor_tok",
+            "YouTube": "channel-1",
+            "Wikidata": "Q1",
+        },
+        "PremiereDate": "1998-01-02T00:00:00.0000000Z",
+        "ProductionLocations": ["Tokyo, Japan"],
+        "Gender": "female",
+        "KnownForDepartment": "Acting",
+        "Popularity": 12.5,

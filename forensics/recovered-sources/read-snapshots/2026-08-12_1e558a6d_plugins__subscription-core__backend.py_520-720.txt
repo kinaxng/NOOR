@@ -1,0 +1,201 @@
+        text = str(value or "")
+        if target and target in _norm_code(text):
+            return True
+    return False
+
+
+def _matches(sub: dict[str, Any], resource: dict[str, Any]) -> tuple[bool, str]:
+    mode = str(sub.get("mode") or "loose")
+    require_cracked = bool(sub.get("require_cracked"))
+    require_subtitle = bool(sub.get("require_subtitle"))
+    f = _features(resource)
+    if mode == "strict":
+        if require_cracked and not f["is_cracked"]:
+            return False, "缺少破解"
+        if require_subtitle and not f["has_subtitle"]:
+            return False, "缺少中字"
+    return True, "匹配"
+
+
+def _preference_rank(sub: dict[str, Any], resource: dict[str, Any]) -> tuple[int, int, int]:
+    f = _features(resource)
+    if f.get("is_new_model_uncensored_crack") and f["has_subtitle"]:
+        tier = -1
+    elif f["is_cracked"] and f["has_subtitle"]:
+        tier = 0
+    elif f["is_cracked"]:
+        tier = 1
+    elif f["has_subtitle"]:
+        tier = 2
+    else:
+        tier = 3
+    return (tier, -_score_resource(resource), -int(resource.get("size_bytes") or 0))
+
+
+async def _find_media(code: str, *aliases: Any) -> dict[str, Any] | None:
+    try:
+        from app.api.endpoints import media_library as media_api
+
+        config = media_api._load_config()
+        if not config.get("server_url") or not config.get("api_key"):
+            return None
+        libraries = await media_api._list_libraries(config)
+        raw_enabled = str(config.get("enabled_library_ids") or "")
+        enabled_ids = [x.strip() for x in raw_enabled.split(",") if x.strip()]
+        target_ids = enabled_ids or [lib.get("id") for lib in libraries if lib.get("id")]
+        queries = _code_lookup_values(code, *aliases)
+        targets = {_norm_code(x) for x in queries if _norm_code(x)}
+        if not queries or not targets:
+            return None
+        for library_id in target_ids:
+            for query in queries:
+                items, _ = await media_api._list_items(config, library_id, limit=12, offset=0, q=query)
+                for item in items:
+                    nfo = item.get("nfo") if isinstance(item.get("nfo"), dict) else {}
+                    text = " ".join(str(x or "") for x in [nfo.get("num"), item.get("name"), nfo.get("title"), item.get("path")])
+                    norm_text = _norm_code(text)
+                    if any(target and target in norm_text for target in targets):
+                        return item
+    except Exception:
+        return None
+    return None
+
+
+async def _search_resources(code: str, limit: int = 24) -> list[dict[str, Any]]:
+    from app.plugins.runtime import runtime
+
+    query = {"keyword": code, "q": code, "code": code, "number": code, "limit": limit, "mode": "deep", "page": 1, "max_items": 100}
+    data = await runtime.search_resources(query, limit_per_plugin=limit)
+    groups = data.get("groups") if isinstance(data, dict) else data
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in groups or []:
+        for item in group.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            key = f"{item.get('provider')}:{item.get('id')}:{item.get('url')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+def _classify(media_item: dict[str, Any] | None) -> str:
+    return "upgrade" if media_item else "subscribe"
+
+
+def _source_payload(payload: dict[str, Any]) -> dict[str, str]:
+    return {
+        "source_plugin": str(payload.get("source_plugin") or payload.get("sourcePlugin") or "").strip(),
+        "source_label": str(payload.get("source_label") or payload.get("sourceLabel") or "").strip(),
+        "source_route": str(payload.get("source_route") or payload.get("sourceRoute") or "").strip(),
+        "source_context": str(payload.get("source_context") or payload.get("sourceContext") or "").strip(),
+    }
+
+
+def _candidate_snapshot(resource: dict[str, Any], *, current_score: int = 0, threshold: int = 0, upgrade_reason: str = "") -> dict[str, Any]:
+    features = resource.get("subscription_features") if isinstance(resource.get("subscription_features"), dict) else _features(resource)
+    quality_score = int(resource.get("subscription_quality_score") if resource.get("subscription_quality_score") is not None else _score_resource_quality(resource))
+    return {
+        "provider": resource.get("provider"),
+        "provider_label": resource.get("provider_label") or resource.get("provider") or "",
+        "id": resource.get("id"),
+        "title": resource.get("title") or "",
+        "subtitle": resource.get("subtitle") or "",
+        "size_bytes": int(resource.get("size_bytes") or 0),
+        "score": int(resource.get("subscription_score") if resource.get("subscription_score") is not None else _score_resource(resource)),
+        "quality_score": quality_score,
+        "current_score": current_score,
+        "improvement": quality_score - int(current_score or 0),
+        "required_improvement": threshold,
+        "upgrade_reason": upgrade_reason,
+        "match_reason": resource.get("match_reason") or "",
+        "features": features,
+        "preferred_downloader": resource.get("preferred_downloader") or "",
+        "compatible_downloaders": resource.get("compatible_downloaders") or [],
+    }
+
+
+def _public_subscription(sub: dict[str, Any]) -> dict[str, Any]:
+    out = dict(sub)
+    best = out.get("best_resource") if isinstance(out.get("best_resource"), dict) else {}
+    if not out.get("fanart_url"):
+        out["fanart_url"] = best.get("fanart_url") or best.get("cover_url") or out.get("cover_url") or ""
+    out["current_profile"] = {
+        "score": int(out.get("current_score") or 0),
+        "is_cracked": bool(out.get("current_is_cracked")),
+        "has_subtitle": bool(out.get("current_has_subtitle")),
+        "is_new_model_uncensored_crack": bool(out.get("current_is_new_model_uncensored_crack")),
+        "resolution_rank": int(out.get("current_resolution_rank") or 0),
+        "size_bytes": int(out.get("current_size_bytes") or 0),
+        "path": out.get("current_file_path") or "",
+    }
+    if best:
+        features = best.get("features") if isinstance(best.get("features"), dict) else {}
+        out["candidate_profile"] = {
+            "score": int(best.get("score") or 0),
+            "is_cracked": bool(features.get("is_cracked")),
+            "has_subtitle": bool(features.get("has_subtitle")),
+            "resolution_rank": _resolution_rank(" ".join(str(best.get(k) or "") for k in ("title", "subtitle", "provider_label"))),
+            "size_bytes": int(best.get("size_bytes") or 0),
+            "provider": best.get("provider_label") or best.get("provider") or "",
+            "title": best.get("title") or "",
+            "reason": best.get("upgrade_reason") or "",
+            "improvement": best.get("improvement"),
+            "required_improvement": best.get("required_improvement"),
+        }
+    else:
+        out["candidate_profile"] = None
+    recent = out.get("recent_candidates") if isinstance(out.get("recent_candidates"), list) else []
+    out["recent_candidates"] = recent[:8]
+    return out
+
+
+async def _create_subscription(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    raw_code = _extract_raw_code(payload.get("code") or payload.get("number") or payload.get("title"))
+    code = _extract_code(payload.get("code") or payload.get("number") or payload.get("title"))
+    if not code:
+        raise ValueError("缺少作品番号")
+    data = _ensure_store()
+    existing = next((s for s in data["subscriptions"] if _norm_code(s.get("code")) == _norm_code(code) and s.get("status") != "deleted"), None)
+    if existing:
+        changed = False
+        for key in ("title", "cover_url", "fanart_url"):
+            raw_value = payload.get(key)
+            if key == "cover_url" and not raw_value:
+                raw_value = payload.get("image")
+            if key == "fanart_url" and not raw_value:
+                raw_value = payload.get("backdrop_url")
+            value = str(raw_value or "").strip()
+            if value and not str(existing.get(key) or "").strip():
+                existing[key] = value
+                changed = True
+        source = _source_payload(payload)
+        existing.setdefault("source_history", [])
+        source_event = {**source, "at": _now()}
+        if any(source.values()):
+            existing["last_source"] = source
+            existing["source_history"].insert(0, source_event)
+            del existing["source_history"][20:]
+            changed = True
+        if raw_code and not existing.get("search_code"):
+            existing["search_code"] = raw_code
+            changed = True
+        if changed:
+            existing["updated_at"] = _now()
+            if any(source.values()):
+                _event(data, existing.get("id", ""), "info", "订阅入口已更新", source)
+            _save(data)
+        _schedule_immediate_check(config, existing.get("id", ""))
+        return {"ok": True, "subscription": _public_subscription(existing), "created": False}
+    media_item = await _find_media(code, raw_code)
+    sub_type = str(payload.get("type") or "auto")
+    if sub_type == "auto":
+        sub_type = _classify(media_item)
+    now = _now()
+    current_profile = _media_quality_profile(media_item)
+    source = _source_payload(payload)
+    sub = {
+        "id": uuid.uuid4().hex,
+        "code": code,

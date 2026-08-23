@@ -1,0 +1,11 @@
+  })
+  if (!ok) return
+  mergeExecuting.value = { ...mergeExecuting.value, [mappingId]: true }
+  try {
+    const resp = await api.post('/media-library/actors/mapping/merge-execute', {
+      mapping_id: mappingId,
+      target_name: plan.target_name,
+      target_actor_id: plan.target_actor_id || selectedMergeTargetId(group) || undefined,
+      dry_run: false,
+    }, {
+      params: { lang: currentLang.value },

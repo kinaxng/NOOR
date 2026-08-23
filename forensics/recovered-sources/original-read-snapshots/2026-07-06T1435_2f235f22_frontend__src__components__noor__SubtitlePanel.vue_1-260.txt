@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import VuiSubmitButton from '../ui/SubmitButton.vue'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import VisionTabs from '../ui/Tabs.vue'
+import { buildWhisperProfileWithTranslation, formatWhisperAudioPreprocessSummary, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend } from '../../composables/useWhisperProfiles'
+import PanelHeader from './panels/PanelHeader.vue'
+import FilePathSelector from './panels/FilePathSelector.vue'
+import { useSubtitles } from '../../composables/useSubtitles'
+import { useWhisper } from '../../composables/useWhisper'
+import { useI18n } from '../../composables/useI18n'
+import { useToast } from '../../composables/useToast'
+import { useJobNavigation } from '../../composables/useJobNavigation'
+import SubtitlePreview from './SubtitlePreview.vue'
+import api from '../../api'
+import type { TranslateSrtTaskCreateResponse } from '../../api/types'
+import { useJobsStore } from '../../stores/jobs'
+
+const { t, i18nVersion } = useI18n()
+const toast = useToast()
+const jobsStore = useJobsStore()
+const { openJobsFocus } = useJobNavigation()
+const panelTitle = computed(() => t('detail.openSubtitle'))
+
+const props = defineProps<{
+  open: boolean
+  detail: import('../../api/types').MediaItemDetail | null
+  loading?: boolean
+  initialSelectedPath?: string
+}>()
+
+// Convenience ref to detail
+const detail = computed(() => props.detail)
+
+const emit = defineEmits<{
+  close: []
+  refreshLocal: []
+}>()
+
+// Subtitle composable
+const {
+  subtitles,
+  onlineSubtitles,
+  loadingSubtitles,
+  searchingOnline,
+  subtitleError,
+  subtitlePreviewContent,
+  subtitlePreviewFilename,
+  loadingSubtitlePreview,
+  fetchSubtitles,
+  searchOnlineSubtitles,
+  downloadOnlineSubtitle,
+  previewOnlineSubtitle,
+  previewLocalSubtitle,
+  deleteSubtitle,
+  clearSubtitles,
+  formatFileSize,
+  closeSubtitlePreview,
+} = useSubtitles()
+
+// Whisper composable
+const {
+  whisperTaskId,
+  whisperStatus,
+  whisperQueuedHint,
+  whisperProgress,
+  whisperRunning,
+  whisperFeedbackVisible,
+  whisperFeedbackKind,
+  startWhisperTask,
+  openQueuedJob,
+} = useWhisper()
+
+// Whisper settings
+const whisperDefaultsLoaded = ref(false)
+const whisperDefaultModelBackend = ref<WhisperModelBackend>('chickenrice-zh')
+const whisperDefaultVadBackend = ref('energy')
+const whisperAudioPreprocessMode = ref('none')
+const whisperAudioPreprocessModel = ref('vocal_balanced')
+const whisperRunAudioPreprocessMode = ref('none')
+const whisperRunAudioPreprocessModel = ref('vocal_balanced')
+
+// Translate settings (for local SRT translation feature)
+const whisperTranslateEnabled = ref(true)
+const whisperTranslateTo = ref('zh')
+const whisperTranslateModel = ref('gpt-4o-mini')
+const whisperTranslateStyle = ref('adult_explicit')
+const whisperTranslateBaseUrl = ref('https://api.openai.com/v1')
+const whisperTranslateApiKey = ref('')
+const whisperSavedAudioPreprocessMode = ref('none')
+const whisperSavedAudioPreprocessModel = ref('vocal_balanced')
+const whisperSavedTranslateEnabled = ref(true)
+const whisperSavedTranslateTo = ref('zh')
+const whisperSavedTranslateModel = ref('gpt-4o-mini')
+const whisperSavedTranslateStyle = ref('adult_explicit')
+const whisperSavedTranslateBaseUrl = ref('https://api.openai.com/v1')
+const whisperSavedTranslateApiKey = ref('')
+
+// Local SRT translation loading state
+const translatingSubtitle = ref('')
+
+
+// Tabs
+const subtitleTab = ref<'local' | 'search' | 'whisper'>('local')
+
+// Translation strings as computed (reactive to currentLang)
+const tabLabels = computed(() => {
+  void i18nVersion.value
+  return {
+    local: t('subtitle.local'),
+    search: t('subtitle.search'),
+    whisper: t('subtitle.whisper'),
+  }
+})
+const noResultsLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.noResults')
+})
+const previewLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.preview')
+})
+const deleteLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.delete')
+})
+const loadingLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.loading')
+})
+const downloadLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.download')
+})
+const rescanLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.rescan')
+})
+const sourceLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.source')
+})
+function displaySubtitleSource(sub: { source?: string; source_key?: string }) {
+  if (sub.source_key === 'local-subtitle-library' || sub.source_key === 'local_library') {
+    return t('subtitle.sourceName.localSubtitleLibrary')
+  }
+  if (sub.source_key === 'xunlei-subtitle' || sub.source_key === 'xunlei') {
+    return t('subtitle.sourceName.xunlei')
+  }
+  if (sub.source_key === 'mteam-plugin' || sub.source_key === 'mteam') {
+    return t('subtitle.sourceName.mteam')
+  }
+  return sub.source || ''
+}
+const whisperLangLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.language')
+})
+const whisperSubmitButtonLabel = computed(() => {
+  if (whisperFeedbackKind.value === 'queued') return t('whisper.status.queued')
+  if (whisperFeedbackKind.value === 'error') return whisperStatus.value
+  return whisperStatus.value || t('whisper.status.submitting')
+})
+const whisperSubmitStatus = computed<'idle' | 'running' | 'success' | 'error'>(() => {
+  if (!whisperFeedbackVisible.value) return 'idle'
+  if (whisperFeedbackKind.value === 'queued') return 'success'
+  if (whisperFeedbackKind.value === 'error') return 'error'
+  return 'running'
+})
+
+const whisperDefaultMeta = computed(() => getWhisperModelBackendMeta(whisperDefaultModelBackend.value))
+const whisperTranslationSummary = computed(() => formatWhisperTranslationSummary(t, {
+  translateEnabled: whisperTranslateEnabled.value,
+  translateTo: whisperTranslateTo.value,
+  translateModel: whisperTranslateModel.value,
+  directTranslate: isDirectWhisperTranslationBackend(whisperDefaultModelBackend.value),
+}))
+const whisperHasRunOverrides = computed(() => (
+  whisperRunAudioPreprocessMode.value !== whisperSavedAudioPreprocessMode.value
+  || whisperRunAudioPreprocessModel.value !== whisperSavedAudioPreprocessModel.value
+  || whisperTranslateEnabled.value !== whisperSavedTranslateEnabled.value
+))
+const whisperAudioPreprocessSummary = computed(() => formatWhisperAudioPreprocessSummary(t, {
+  audioPreprocessMode: whisperRunAudioPreprocessMode.value,
+  audioPreprocessModel: whisperRunAudioPreprocessModel.value,
+}))
+const whisperStrategyPresentation = computed(() => getWhisperSelectableStrategyPresentation(t, whisperDefaultModelBackend.value))
+const whisperExperimentalHint = computed(() => whisperStrategyPresentation.value.experimentalHint)
+const whisperDefaultSummaryClass = computed(() => whisperStrategyPresentation.value.summaryClass)
+const whisperOpenJobsLabel = computed(() => t('whisper.status.viewJobs'))
+const whisperTranslateRunningLabel = computed(() => t('subtitle.translateRunning'))
+const whisperTranslateActionLabel = computed(() => t('subtitle.aiTranslate'))
+const whisperRunAudioModeClean = computed(() => t('settings.whisper.audioPreprocessModel.vocalClean'))
+const whisperRunAudioModeBalanced = computed(() => t('settings.whisper.audioPreprocessModel.vocalBalanced'))
+const whisperAudioPreprocessEnabled = computed({
+  get: () => whisperRunAudioPreprocessMode.value !== 'none',
+  set: (enabled: boolean) => {
+    if (enabled) {
+      whisperRunAudioPreprocessMode.value = 'vocal_isolation'
+      if (!whisperRunAudioPreprocessModel.value || whisperRunAudioPreprocessModel.value === 'none') {
+        whisperRunAudioPreprocessModel.value = 'vocal_balanced'
+      }
+    } else {
+      whisperRunAudioPreprocessMode.value = 'none'
+    }
+  },
+})
+const whisperFlowSteps = computed(() => {
+  if (whisperDefaultModelBackend.value === 'anime-whisper') {
+    return [
+      { title: 'Smart VAD 分块', desc: '按语音活动切分音频，控制每段长度，降低长音频污染。' },
+      { title: 'Anime-Whisper 转写', desc: '使用 Anime-Whisper 生成日语字幕，适合作为对照模型。' },
+      { title: '字幕安全整理', desc: '整理空段、重叠时间轴与过长片段，生成 ja.srt。' },
+      { title: '可选翻译', desc: '如开启翻译，再提交 OpenAI-Compatible 翻译任务生成中文。' },
+    ]
+  }
+  if (whisperDefaultModelBackend.value === 'large-v3') {
+    return [
+      { title: 'Smart VAD 分块', desc: '按语音活动切分音频，控制每段长度，降低长音频污染。' },
+      { title: 'Faster-Whisper large-v3 转写', desc: '使用 large-v3 生成日语字幕，可再衔接翻译任务。' },
+      { title: '字幕安全整理', desc: '整理空段、重叠时间轴与过长片段，生成 ja.srt。' },
+      { title: '可选翻译', desc: '如开启翻译，再提交 OpenAI-Compatible 翻译任务生成中文。' },
+    ]
+  }
+  return [
+    { title: 'Smart VAD 分块', desc: '先按语音活动切段，目标约 30 秒，避免整段长音频直接进模型。' },
+    { title: 'ChickenRice 日中直出', desc: '使用 faster-whisper 直译模型从日语音频生成中文字幕。' },
+    { title: '字幕安全整理', desc: '整理空段、重叠时间轴、相邻短段与过长片段，生成 zh.srt。' },
+  ]
+})
+// whisperTranslateProviderOptions removed — unified OpenAI-compatible API, no provider concept (translate fields kept for local SRT translation feature)
+
+// Selected file path (for multi-file work: current + siblings)
+const selectedPath = ref('')
+
+// When selected path changes, re-fetch subtitles
+watch(selectedPath, async (newPath) => {
+  if (newPath && props.open) {
+    await fetchSubtitles(newPath)
+  }
+})
+
+// Sibling paths from detail
+const siblingPaths = computed(() => {
+  return props.detail?.siblings?.filter(s => s.file_path) || undefined
+})
+
+function resetWhisperRunOverrides() {
+  whisperRunAudioPreprocessMode.value = whisperSavedAudioPreprocessMode.value
+  whisperRunAudioPreprocessModel.value = whisperSavedAudioPreprocessModel.value
+  whisperTranslateEnabled.value = whisperSavedTranslateEnabled.value
+  whisperTranslateTo.value = whisperSavedTranslateTo.value
+  whisperTranslateModel.value = whisperSavedTranslateModel.value
+  whisperTranslateStyle.value = whisperSavedTranslateStyle.value
+  whisperTranslateBaseUrl.value = whisperSavedTranslateBaseUrl.value
+  whisperTranslateApiKey.value = whisperSavedTranslateApiKey.value
+}
+
+// Load whisper defaults

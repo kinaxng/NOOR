@@ -1,0 +1,85 @@
+<script setup lang="ts">
+import { computed, ref, onBeforeUnmount, onMounted, watch } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const upgrading = ref(false)
+const modelActionLoading = ref(false)
+const activeSection = ref<'runtime' | 'models' | 'execution' | 'detection' | 'masking' | 'output'>('runtime')
+
+const sections = [
+  { key: 'runtime', label: '源码与路径' },
+  { key: 'models', label: '模型管理' },
+  { key: 'execution', label: '执行' },
+  { key: 'detection', label: '检测选择' },
+  { key: 'masking', label: '遮罩' },
+  { key: 'output', label: '输出' },
+] as const
+
+const executionProviderOptions = ['cpu', 'cuda', 'tensorrt', 'openvino', 'directml', 'rocm', 'coreml']
+const downloadProviderOptions = ['github', 'huggingface']
+const processorOptions = [
+  { id: 'face_swapper', label: '人脸替换', acceleration: 'tensorrt' },
+  { id: 'face_enhancer', label: '人脸增强', acceleration: 'tensorrt' },
+  { id: 'frame_enhancer', label: '画面增强', acceleration: 'tensorrt' },
+  { id: 'face_editor', label: '人脸编辑', acceleration: 'cuda' },
+  { id: 'age_modifier', label: '年龄调整', acceleration: 'cuda' },
+  { id: 'expression_restorer', label: '表情修复', acceleration: 'cuda' },
+  { id: 'lip_syncer', label: '唇形同步', acceleration: 'cuda' },
+  { id: 'frame_colorizer', label: '画面上色', acceleration: 'cuda' },
+  { id: 'background_remover', label: '背景移除', acceleration: 'cuda' },
+  { id: 'deep_swapper', label: 'Deep 换脸', acceleration: 'cuda' },
+  { id: 'face_debugger', label: '人脸调试', acceleration: 'none' },
+]
+const faceSwapperModelOptions = ['blendswap_256', 'ghost_1_256', 'ghost_2_256', 'ghost_3_256', 'hififace_unofficial_256', 'hyperswap_1a_256', 'hyperswap_1b_256', 'hyperswap_1c_256', 'inswapper_128', 'inswapper_128_fp16', 'simswap_256', 'simswap_unofficial_512', 'uniface_256']
+const faceSwapperPixelBoostOptionsByModel: Record<string, string[]> = {
+  blendswap_256: ['256x256', '384x384', '512x512', '768x768', '1024x1024'],
+  ghost_1_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  ghost_2_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  ghost_3_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  hififace_unofficial_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  hyperswap_1a_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  hyperswap_1b_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  hyperswap_1c_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  inswapper_128: ['128x128', '256x256', '384x384', '512x512', '768x768', '1024x1024'],
+  inswapper_128_fp16: ['128x128', '256x256', '384x384', '512x512', '768x768', '1024x1024'],
+  simswap_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  simswap_unofficial_512: ['512x512', '768x768', '1024x1024'],
+  uniface_256: ['256x256', '512x512', '768x768', '1024x1024'],
+}
+const faceEnhancerModelOptions = ['gfpgan_1.2', 'gfpgan_1.3', 'gfpgan_1.4', 'gpen_bfr_256', 'gpen_bfr_512', 'restoreformer_plus_plus']
+const frameEnhancerModelOptions = ['span_kendata_x4', 'real_esrgan_x2', 'real_esrgan_x2_fp16', 'real_esrgan_x4', 'real_esrgan_x4_fp16', 'real_hatgan_x4', 'ultra_sharp_x4']
+const detectorAngleOptions = ['0', '90', '180', '270']
+const maskTypeOptions = ['box', 'occlusion', 'area', 'region']
+const maskAreaOptions = ['upper-face', 'lower-face', 'mouth']
+const maskRegionOptions = ['skin', 'left-eyebrow', 'right-eyebrow', 'left-eye', 'right-eye', 'glasses', 'nose', 'mouth', 'upper-lip', 'lower-lip']
+const genderOptions = ['', 'female', 'male']
+const raceOptions = ['', 'white', 'black', 'latino', 'asian', 'indian', 'arabic']
+const previewModeOptions = [
+  { id: 'default', label: '默认' },
+  { id: 'frame-by-frame', label: '原图对比' },
+  { id: 'face-by-face', label: '人脸对比' },
+]
+const previewResolutionOptions = ['512x512', '768x768', '1024x1024']
+const scaleOptions = Array.from({ length: 32 }, (_, index) => {
+  const value = (index + 1) * 0.25
+  return Number.isInteger(value) ? value.toFixed(1) : String(value)
+})
+
+const facefusionDir = ref('')
+const facefusionPythonPath = ref('')
+const nativeModelDir = ref('')
+const resolvedFacefusionDir = ref('')
+const facefusionSourceMode = ref('')
+const facefusionVersion = ref('')
+const facefusionUpstreamRevision = ref('')

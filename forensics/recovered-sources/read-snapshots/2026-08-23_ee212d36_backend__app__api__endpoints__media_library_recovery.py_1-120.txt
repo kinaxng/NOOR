@@ -1,0 +1,120 @@
+"""Fallback Emby media adapter for servers where MediaFolders returns 502.
+
+The recovered legacy adapter depends on ``/Library/MediaFolders``.  This is
+not available on the configured Emby instance, while the authenticated user
+item and view APIs work normally.  Keep the fallback narrow and register it
+before the legacy router so hardlink and mutation endpoints remain untouched.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+import xml.etree.ElementTree as ET
+
+import httpx
+from fastapi import APIRouter, HTTPException, Query
+
+from app.api.endpoints import media_library as media
+from app.api.endpoints.media_library_item_detail import build_stream_url_for_server_impl, get_main_nfo_impl, _sort_siblings
+
+
+router = APIRouter(prefix="/api/media-library", tags=["media-library-recovery"])
+DETAIL_FIELDS = "Path,ProviderIds,People,ImageTags,BackdropImageTags,Overview,OriginalTitle,PremiereDate,DateCreated,Genres,Studios,Tags,MediaSources,ParentId"
+
+
+def _config(value: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = value if value is not None else media._load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail="媒体库适配器未配置，请在设置中配置 Emby / Jellyfin 服务器地址")
+    return config
+
+
+def _base(config: dict[str, Any]) -> str:
+    return str(media._server_url(config)).rstrip("/")
+
+
+def _headers(config: dict[str, Any]) -> dict[str, str]:
+    return media._headers(str(config.get("api_key") or ""))
+
+
+def _user_items_url(config: dict[str, Any]) -> str:
+    user_id = str(config.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=400, detail="媒体库未配置 Emby 用户 ID，无法使用恢复适配器")
+    return f"{_base(config)}/emby/Users/{quote(user_id)}/Items"
+
+
+def _matches_filter(item: dict[str, Any], filter_name: str | None) -> bool:
+    if not filter_name:
+        return True
+    tags = item.get("tags") if isinstance(item.get("tags"), dict) else {}
+    if filter_name == "cracked":
+        return bool(tags.get("is_cracked"))
+    if filter_name == "chinese":
+        return bool(tags.get("has_chinese"))
+    if filter_name == "leaked":
+        return tags.get("release_type_key") == "leaked"
+    if filter_name == "uncensored":
+        return tags.get("release_type_key") == "uncensored"
+    return True
+
+
+def _matches_query(item: dict[str, Any], query: str | None) -> bool:
+    needle = str(query or "").strip().casefold()
+    if not needle:
+        return True
+    haystack = " ".join(
+        str(item.get(key) or "") for key in ("name", "code", "original_title", "title")
+    ).casefold()
+    return needle in haystack
+
+
+def _path_mappings() -> list[tuple[str, str]]:
+    """Return container-to-host mappings without requiring Emby to know the host.
+
+    A JSON object in ``NOOR_MEDIA_PATH_MAPPINGS`` takes precedence, for example
+    ``{\"/data\": \"/mnt/media\"}``.  The recovery host has its NAS data mount at
+    ``~/Videos``; use that conventional mapping only when the mount exists.
+    """
+    mappings: list[tuple[str, str]] = []
+    raw = os.environ.get("NOOR_MEDIA_PATH_MAPPINGS", "").strip()
+    if raw:
+        try:
+            configured = json.loads(raw)
+            if isinstance(configured, dict):
+                mappings.extend((str(source), str(target)) for source, target in configured.items())
+        except json.JSONDecodeError:
+            pass
+    videos_root = Path.home() / "Videos"
+    if videos_root.is_dir():
+        mappings.append(("/data", str(videos_root)))
+        mappings.append(("/volume1/data", str(videos_root)))
+    return sorted(((source.rstrip("/"), target.rstrip("/")) for source, target in mappings if source and target), key=lambda item: len(item[0]), reverse=True)
+
+
+def _host_path(path: Any) -> str:
+    original = str(path or "").strip()
+    if not original or Path(original).exists():
+        return original
+    for source, target in _path_mappings():
+        if original == source or original.startswith(source + "/"):
+            return target + original[len(source):]
+    return original
+
+
+def _map_host_path(server_path: str | None, config: dict[str, Any]) -> str | None:
+    mapped = media._map_path(server_path, config)
+    return _host_path(mapped) if mapped else mapped
+
+
+def _parse_item(raw: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    item = media._parse_item(raw, config)
+    original_path = str(item.get("path") or "")
+    translated_path = _host_path(original_path)
+    if translated_path != original_path:
+        item["emby_path"] = original_path
+        item["path"] = translated_path
+    people = raw.get("People") if isinstance(raw.get("People"), list) else []

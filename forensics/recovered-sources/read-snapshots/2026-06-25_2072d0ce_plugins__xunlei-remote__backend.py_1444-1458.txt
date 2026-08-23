@@ -1,0 +1,15 @@
+                phase=str(payload.get("phase") or "all"),
+                limit=int(payload.get("limit") or 100),
+                page_token=str(payload.get("page_token") or ""),
+            )
+        if action in {"pause_task", "resume_task", "retry_task", "delete_task_files"}:
+            task_id = str(payload.get("id") or payload.get("task_id") or "").strip()
+            if not task_id:
+                raise ValueError("missing task id")
+            phase = {"pause_task": "pause", "resume_task": "running", "retry_task": "running", "delete_task_files": "delete"}[action]
+            return await _operate_task(config, client, pan_auth, device_id, task_id, phase)
+        if action == "delete_tasks":
+            ids_raw = payload.get("ids") or payload.get("task_ids") or payload.get("id") or payload.get("task_id")
+            ids = [str(x).strip() for x in (ids_raw if isinstance(ids_raw, list) else [ids_raw]) if str(x or "").strip()]
+            if not ids:
+                raise ValueError("missing task id")

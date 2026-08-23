@@ -1,0 +1,90 @@
+from fastapi import APIRouter, HTTPException
+from app.api.system import SystemLogManager
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal, Optional
+from app.core.config import (
+    get_settings,
+    clear_settings_cache,
+    PROJECT_ROOT,
+)
+from app.core.lada_paths import build_lada_python_env
+from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+import os
+import sys
+import subprocess
+import logging
+
+from app.api.settings_helpers import (
+    LADA_MODEL_WEIGHTS_ENV,
+    WHISPER_MODELS,
+    format_size as _format_size,
+    get_httpx as _get_httpx,
+    get_lada_installation_info as _get_lada_installation_info,
+    get_lada_model_weights_dir_from_env as _get_lada_model_weights_dir_from_env,
+    get_lada_version_info as _get_lada_version_info,
+    get_whisper_feature_flags as _get_whisper_feature_flags,
+    lada_cli_base_cmd as _lada_cli_base_cmd,
+    parse_custom_config as _parse_custom_config,
+    python_executable as _python_executable,
+    read_env_file,
+    set_env_values,
+    update_env_value,
+)
+
+from app.api.settings_status_helpers import (
+    build_status_payload,
+    install_status_path,
+    model_download_status_path,
+    read_install_status_response,
+    read_model_download_status_response,
+    write_status_file,
+)
+
+from app.api.settings_directories import (
+    build_directory_browse_payload,
+    is_allowed_directory_path,
+    resolve_browse_path,
+)
+from app.api.settings_lada import get_lada_info_impl
+from app.api.settings_lada_upgrade import (
+    build_lada_fetch_urls,
+    build_lada_upgrade_env,
+    raise_for_git_pull_failure,
+    resolve_git_branch,
+    should_add_break_system_packages,
+)
+from app.api.settings_facefusion_upgrade import (
+    get_facefusion_installation_info,
+    upgrade_facefusion_source,
+)
+from app.api.settings_response import build_settings_payload
+from app.api.settings_whisper_models import delete_whisper_model_files, resolve_whisper_model_dir
+from app.api.settings_updates import (
+    apply_emby_config_updates,
+    apply_facefusion_config_updates,
+    apply_facefusion_defaults_updates,
+    apply_lada_config_updates,
+    apply_network_config_updates,
+    apply_ui_config_updates,
+    build_storage_env_updates,
+)
+from app.api.settings_lada_defaults import apply_lada_defaults_updates
+from app.api.settings_whisper import (
+    apply_whisper_config_updates,
+    build_whisper_models_payload,
+    normalize_whisper_config_payload,
+    sanitize_download_status,
+)
+from app.api.settings_whisper_runtime import (
+    detect_audio_separator_requirement,
+    detect_install_requirements,
+    detect_onnxruntime_gpu_requirement,
+    inspect_whisper_model_cache,
+    inspect_whisper_python_dependencies,
+    log_whisper_dependency_summary,
+)
+
+router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+class EmbyConfig(BaseModel):

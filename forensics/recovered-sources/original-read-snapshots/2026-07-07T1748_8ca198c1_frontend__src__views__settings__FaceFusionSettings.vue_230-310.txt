@@ -1,0 +1,81 @@
+    resolvedFacefusionDir.value = data.facefusion?.resolved_dir || ''
+    facefusionSourceMode.value = data.facefusion?.source_mode || ''
+    facefusionVersion.value = data.facefusion?.version || ''
+    facefusionUpstreamRevision.value = data.facefusion?.upstream_revision || ''
+    facefusionUpstreamShortRevision.value = data.facefusion?.upstream_short_revision || ''
+    facefusionUpstreamUpdatedAt.value = data.facefusion?.upstream_updated_at || ''
+    facefusionRuntimeVersions.value = data.facefusion?.runtime_versions || {}
+    facefusionExecutionProviders.value = data.facefusion?.execution_providers || []
+    facefusionPythonExecutable.value = data.facefusion?.python_executable || ''
+    facefusionCanSelfUpgrade.value = data.facefusion?.can_self_upgrade || false
+    facefusionUpgradeHint.value = data.facefusion?.upgrade_hint || ''
+    facefusionUpstreamRepo.value = data.facefusion?.upstream_repo || ''
+    if (data.facefusion_defaults) {
+      executionProvider.value = data.facefusion_defaults.execution_provider || 'cuda'
+      deviceIds.value = data.facefusion_defaults.device_ids || '0'
+      threadCount.value = data.facefusion_defaults.thread_count ?? 8
+      videoMemoryStrategy.value = data.facefusion_defaults.video_memory_strategy || 'strict'
+      systemMemoryLimit.value = data.facefusion_defaults.system_memory_limit ?? 0
+      logLevel.value = data.facefusion_defaults.log_level || 'info'
+      downloadProviders.value = data.facefusion_defaults.download_providers || 'github huggingface'
+      haltOnError.value = data.facefusion_defaults.halt_on_error ?? false
+      previewMode.value = data.facefusion_defaults.preview_mode || 'default'
+      previewResolution.value = data.facefusion_defaults.preview_resolution || '768x768'
+      processors.value = data.facefusion_defaults.processors || ''
+      faceSwapperModel.value = data.facefusion_defaults.face_swapper_model || 'hyperswap_1a_256'
+      faceSwapperPixelBoost.value = data.facefusion_defaults.face_swapper_pixel_boost || '256x256'
+      faceSwapperWeight.value = data.facefusion_defaults.face_swapper_weight ?? 0.5
+      faceEnhancerModel.value = data.facefusion_defaults.face_enhancer_model || 'gfpgan_1.4'
+      faceEnhancerBlend.value = data.facefusion_defaults.face_enhancer_blend ?? 80
+      faceEnhancerWeight.value = data.facefusion_defaults.face_enhancer_weight ?? 0.5
+      frameEnhancerModel.value = data.facefusion_defaults.frame_enhancer_model || 'span_kendata_x4'
+      frameEnhancerBlend.value = data.facefusion_defaults.frame_enhancer_blend ?? 80
+      faceDetectorModel.value = data.facefusion_defaults.face_detector_model || 'yolo_face'
+      faceDetectorSize.value = data.facefusion_defaults.face_detector_size || '640x640'
+      faceDetectorScore.value = data.facefusion_defaults.face_detector_score ?? 0.5
+      faceDetectorAngles.value = data.facefusion_defaults.face_detector_angles || '0'
+      faceDetectorMargin.value = data.facefusion_defaults.face_detector_margin || '0 0 0 0'
+      faceLandmarkerModel.value = data.facefusion_defaults.face_landmarker_model || '2dfan4'
+      faceLandmarkerScore.value = data.facefusion_defaults.face_landmarker_score ?? 0.5
+      faceSelectorMode.value = data.facefusion_defaults.face_selector_mode || 'reference'
+      faceSelectorOrder.value = data.facefusion_defaults.face_selector_order || 'large-small'
+      faceSelectorGender.value = data.facefusion_defaults.face_selector_gender || ''
+      faceSelectorAgeStart.value = data.facefusion_defaults.face_selector_age_start || ''
+      faceSelectorAgeEnd.value = data.facefusion_defaults.face_selector_age_end || ''
+      faceSelectorRace.value = data.facefusion_defaults.face_selector_race || ''
+      referenceFrameNumber.value = data.facefusion_defaults.reference_frame_number ?? 0
+      referenceFacePosition.value = data.facefusion_defaults.reference_face_position ?? 0
+      referenceFaceDistance.value = data.facefusion_defaults.reference_face_distance ?? 0.3
+      faceMaskTypes.value = data.facefusion_defaults.face_mask_types || 'box'
+      faceMaskAreas.value = data.facefusion_defaults.face_mask_areas || ''
+      faceMaskRegions.value = data.facefusion_defaults.face_mask_regions || ''
+      faceMaskBlur.value = data.facefusion_defaults.face_mask_blur ?? 0.3
+      faceMaskPadding.value = data.facefusion_defaults.face_mask_padding || '0 0 0 0'
+      faceOccluderModel.value = data.facefusion_defaults.face_occluder_model || 'xseg_1'
+      faceParserModel.value = data.facefusion_defaults.face_parser_model || 'bisenet_resnet_34'
+      outputVideoEncoder.value = data.facefusion_defaults.output_video_encoder || 'libx264'
+      outputVideoPreset.value = data.facefusion_defaults.output_video_preset || 'veryfast'
+      outputVideoQuality.value = data.facefusion_defaults.output_video_quality ?? 80
+      outputVideoScale.value = data.facefusion_defaults.output_video_scale || '1.0'
+      outputVideoFps.value = data.facefusion_defaults.output_video_fps || ''
+      outputAudioEncoder.value = data.facefusion_defaults.output_audio_encoder || 'aac'
+      outputAudioQuality.value = data.facefusion_defaults.output_audio_quality ?? 80
+      outputAudioVolume.value = data.facefusion_defaults.output_audio_volume ?? 100
+      outputImageQuality.value = data.facefusion_defaults.output_image_quality ?? 80
+      outputImageScale.value = data.facefusion_defaults.output_image_scale || '1.0'
+      tempFrameFormat.value = data.facefusion_defaults.temp_frame_format || 'png'
+    }
+  } catch (e: any) {
+    toast.error(settingsErrorMessage(e))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadFaceFusionModels() {
+  try {
+    const resp = await api.get('/settings/facefusion/models')
+    facefusionModelStatus.value = resp.data?.models || null
+    facefusionModelDownloadStatus.value = resp.data?.download_status || { status: 'idle', progress: 0, message: '', output: '' }
+  } catch (e: any) {
+    toast.error(settingsErrorMessage(e, 'FaceFusion 模型状态读取失败'))

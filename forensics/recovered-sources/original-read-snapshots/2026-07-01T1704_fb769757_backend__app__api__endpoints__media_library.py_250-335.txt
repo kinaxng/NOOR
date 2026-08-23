@@ -1,0 +1,86 @@
+    return {
+        "imported": True,
+        "path": str(path),
+        "source_path": payload.get("source_path"),
+        "updated_at": payload.get("updated_at"),
+        "stats": payload.get("stats") or {"total": len(records or [])},
+    }
+
+
+def _load_actor_mapping_records() -> list[dict]:
+    global _actor_mapping_records_cache, _actor_mapping_name_index_cache
+    path = _actor_mapping_store_path()
+    if not path.is_file():
+        _actor_mapping_records_cache = None
+        _actor_mapping_name_index_cache = None
+        return []
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        _actor_mapping_records_cache = None
+        _actor_mapping_name_index_cache = None
+        return []
+    if _actor_mapping_records_cache and _actor_mapping_records_cache[0] == mtime:
+        return _actor_mapping_records_cache[1]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        _actor_mapping_records_cache = None
+        _actor_mapping_name_index_cache = None
+        return []
+    records = payload.get("records") if isinstance(payload, dict) else []
+    parsed = [item for item in (records or []) if isinstance(item, dict)]
+    _actor_mapping_records_cache = (mtime, parsed)
+    _actor_mapping_name_index_cache = None
+    return parsed
+
+
+def _actor_mapping_primary_names(record: dict) -> set[str]:
+    return {
+        str(name or "")
+        for name in (record.get("jp"), record.get("zh_cn"), record.get("zh_tw"))
+        if str(name or "").strip()
+    }
+
+
+def _actor_mapping_name_index(records: list[dict]) -> dict[str, dict]:
+    global _actor_mapping_name_index_cache
+    cache_key = id(records)
+    if _actor_mapping_name_index_cache and _actor_mapping_name_index_cache[0] == cache_key:
+        return _actor_mapping_name_index_cache[1]
+    index: dict[str, dict] = {}
+    for record in records:
+        primary_names = _actor_mapping_primary_names(record)
+        for name in record.get("names") or []:
+            key = _normalize_actor_key(str(name or ""))
+            if key and key not in index:
+                index[key] = {
+                    "record": record,
+                    "name": str(name or ""),
+                    "source": "primary" if str(name or "") in primary_names else "alias",
+                }
+    _actor_mapping_name_index_cache = (cache_key, index)
+    return index
+
+
+def _mapping_match_record(match: dict | None) -> dict | None:
+    if not match:
+        return None
+    return match.get("record") if isinstance(match.get("record"), dict) else match
+
+
+def _should_reject_actor_mapping_match(actor: dict, record: dict, match: dict | None) -> bool:
+    if not match or match.get("source") != "alias":
+        return False
+    if record.get("verified"):
+        return False
+    actor_tmdb = str(actor.get("tmdb_id") or "").strip()
+    mapping_tmdb = str(record.get("tmdb_id") or "").strip()
+    return not (actor_tmdb and mapping_tmdb and actor_tmdb == mapping_tmdb)
+
+
+def _localized_mapping_name(record: dict | None, fallback: str, lang: str | None = None) -> str:
+    if not record:
+        return fallback
+    normalized_lang = str(lang or "").lower()
+    if normalized_lang in {"zh-tw", "zh_hant", "zht", "tw"}:

@@ -1,0 +1,186 @@
+            "processed": len(applied) + len(skipped),
+            "applied_count": len(applied),
+            "skipped_count": len(skipped),
+            "updated_at": time.time(),
+        })
+    return {
+        "ok": True,
+        "dry_run": req.dry_run,
+        "applied_count": len(applied),
+        "skipped_count": len(skipped),
+        "applied": applied,
+        "skipped": skipped,
+        "summary": preview.get("summary") or {},
+    }
+
+
+def _actor_target_name_for_lang(actor: dict, lang: str | None) -> tuple[str, str]:
+    names = actor.get("identity_names") if isinstance(actor.get("identity_names"), dict) else {}
+    lowered = str(lang or "").lower()
+    if lowered == "zh-tw" or "hant" in lowered or lowered == "tw":
+        candidates = [
+            ("zh_tw", str(names.get("zh_tw") or "")),
+            ("zh_cn", str(names.get("zh_cn") or "")),
+            ("jp", str(names.get("jp") or "")),
+        ]
+    elif lowered.startswith("zh") or lowered == "cn":
+        candidates = [
+            ("zh_cn", str(names.get("zh_cn") or "")),
+            ("jp", str(names.get("jp") or "")),
+            ("zh_tw", str(names.get("zh_tw") or "")),
+        ]
+    else:
+        candidates = [
+            ("jp", str(names.get("jp") or "")),
+            ("zh_cn", str(names.get("zh_cn") or "")),
+            ("zh_tw", str(names.get("zh_tw") or "")),
+        ]
+    for source, value in candidates:
+        text = value.strip()
+        if text:
+            return text, source
+    fallback = str(actor.get("name") or actor.get("display_name") or "").strip()
+    return fallback, "emby"
+
+
+async def _preview_actor_name_sync(config: dict, *, lang: str | None = None, limit: int = 5000) -> dict:
+    actors, total = await _list_actors(
+        config,
+        limit=max(1, min(limit, 5000)),
+        offset=0,
+        sort_by="SortName",
+        sort_order="Ascending",
+        lang=lang,
+        include_ignored=False,
+    )
+    raw_name_owner: dict[str, list[dict]] = {}
+    candidates: list[dict] = []
+    for actor in actors:
+        actor_id = str(actor.get("id") or "")
+        current_name = str(actor.get("name") or "").strip()
+        if current_name:
+            raw_name_owner.setdefault(_normalize_actor_key(current_name), []).append(actor)
+        target_name, target_source = _actor_target_name_for_lang(actor, lang)
+        candidates.append({
+            "actor": actor,
+            "actor_id": actor_id,
+            "current_name": current_name,
+            "target_name": target_name,
+            "target_source": target_source,
+            "needs_update": bool(target_name and target_name != current_name),
+            "conflict_actors": [],
+            "has_conflict": False,
+        })
+
+    by_target: dict[str, list[dict]] = {}
+    for item in candidates:
+        key = _normalize_actor_key(item.get("target_name"))
+        if key:
+            by_target.setdefault(key, []).append(item)
+
+    for item in candidates:
+        key = _normalize_actor_key(item.get("target_name"))
+        if not key:
+            continue
+        conflicts: list[dict] = []
+        for other in by_target.get(key, []):
+            if str(other.get("actor_id") or "") != str(item.get("actor_id") or ""):
+                conflicts.append(other.get("actor") or {})
+        for owner in raw_name_owner.get(key, []):
+            owner_id = str(owner.get("id") or "")
+            if owner_id != str(item.get("actor_id") or "") and all(str(conflict.get("id") or "") != owner_id for conflict in conflicts):
+                conflicts.append(owner)
+        item["conflict_actors"] = [
+            {
+                "id": actor.get("id"),
+                "name": actor.get("name"),
+                "display_name": actor.get("display_name"),
+                "image_url": actor.get("image_url"),
+            }
+            for actor in conflicts
+        ]
+        item["has_conflict"] = bool(conflicts)
+
+    updates = [item for item in candidates if item.get("needs_update")]
+    safe_updates = [item for item in updates if not item.get("has_conflict")]
+    conflicts = [item for item in updates if item.get("has_conflict")]
+    missing = [item for item in candidates if not item.get("target_name")]
+    updates.sort(key=lambda item: (
+        1 if item.get("has_conflict") else 0,
+        str(item.get("target_name") or ""),
+        str(item.get("current_name") or ""),
+    ))
+    return {
+        "lang": lang or "",
+        "actors_scanned": len(actors),
+        "total": total,
+        "updates": updates,
+        "safe_updates": safe_updates,
+        "conflicts": conflicts,
+        "missing": missing,
+        "summary": {
+            "actors_scanned": len(actors),
+            "update_count": len(updates),
+            "safe_update_count": len(safe_updates),
+            "conflict_count": len(conflicts),
+            "missing_count": len(missing),
+        },
+    }
+
+
+async def _apply_actor_name_sync(
+    config: dict,
+    req: ActorNameSyncRequest,
+    *,
+    lang: str | None = None,
+) -> dict:
+    preview = await _preview_actor_name_sync(config, lang=lang)
+    allowed_ids = {str(actor_id) for actor_id in (req.actor_ids or []) if str(actor_id).strip()}
+    applied: list[dict] = []
+    skipped: list[dict] = []
+    candidates = []
+    for item in preview.get("updates") or []:
+        actor_id = str(item.get("actor_id") or "")
+        if allowed_ids and actor_id not in allowed_ids:
+            continue
+        candidates.append(item)
+    progress_key = str(req.progress_key or "").strip()
+    if progress_key:
+        _ACTOR_NAME_SYNC_PROGRESS[progress_key] = {
+            "ok": True,
+            "status": "running",
+            "processed": 0,
+            "total": len(candidates),
+            "applied_count": 0,
+            "skipped_count": 0,
+            "current_actor": "",
+            "started_at": time.time(),
+            "updated_at": time.time(),
+        }
+    for item in candidates:
+        actor_id = str(item.get("actor_id") or "")
+        if progress_key:
+            _ACTOR_NAME_SYNC_PROGRESS[progress_key].update({
+                "current_actor": item.get("current_name") or actor_id,
+                "current_target": item.get("target_name") or "",
+                "updated_at": time.time(),
+            })
+        if item.get("has_conflict") and req.skip_conflicts:
+            skipped.append({**item, "skip_reason": "conflict"})
+        elif not item.get("target_name"):
+            skipped.append({**item, "skip_reason": "missing_target_name"})
+        else:
+            if not req.dry_run:
+                await _update_actor_profile(
+                    config,
+                    actor_id,
+                    ActorProfileUpdateRequest(name=str(item.get("target_name") or "")),
+                    lang=lang,
+                )
+            applied.append(item)
+        if progress_key:
+            _ACTOR_NAME_SYNC_PROGRESS[progress_key].update({
+                "processed": len(applied) + len(skipped),
+                "applied_count": len(applied),
+                "skipped_count": len(skipped),
+                "updated_at": time.time(),

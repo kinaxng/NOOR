@@ -1,0 +1,111 @@
+    actors, total = await media_library._list_actors(
+        {'server_url': 'http://server', 'api_key': 'token'},
+        q='水卜',
+    )
+
+    assert total == 1
+    assert actors[0]['name'] == '水卜さくら'
+    assert actors[0]['tmdb_id'] == '123'
+    assert actors[0]['image_url'] == 'http://server/emby/Items/actor-1/Images/Primary?tag=tag-1'
+    assert actors[0]['server_id'] == 'server-1'
+    assert actors[0]['emby_url'] == 'http://server/web/index.html#!/item?id=actor-1&serverId=server-1'
+
+
+@pytest.mark.asyncio
+async def test_preview_actor_mapping_matches_groups_aliases(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            'id': '2599695',
+            'jp': '水卜さくら',
+            'zh_cn': '水卜樱',
+            'zh_tw': '水卜櫻',
+            'tmdb_id': '2599695',
+            'verified': True,
+            'names': ['水卜さくら', '水卜樱', '水卜櫻', '水トさくら', 'Sakura Miura'],
+        }
+    ])
+
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending', lang=None):
+        return [
+            {'id': 'emby-1', 'name': '水卜さくら', 'tmdb_id': '2599695', 'image_url': 'http://server/image.jpg'},
+            {'id': 'emby-2', 'name': '水トさくら'},
+            {'id': 'emby-3', 'name': 'Unmatched'},
+        ], 3
+
+    monkeypatch.setattr(media_library, '_list_actors', fake_list_actors)
+
+    result = await media_library._preview_actor_mapping_matches({'server_url': 'http://server', 'api_key': 'token'}, only_candidates=True)
+
+    assert result['candidate_groups'] == 1
+    assert result['matched_actors'] == 2
+    assert result['unmatched_actors'] == 1
+    assert result['conflict_groups'] == 0
+    assert result['groups'][0]['tmdb_id'] == '2599695'
+    assert result['groups'][0]['target_actor_id'] == 'emby-1'
+    assert result['groups'][0]['missing_tmdb_count'] == 1
+    assert [actor['id'] for actor in result['groups'][0]['actors']] == ['emby-1', 'emby-2']
+
+
+@pytest.mark.asyncio
+async def test_preview_actor_mapping_rejects_unverified_alias_tmdb_conflict(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            'id': '2381412',
+            'jp': '紺野ひかる',
+            'zh_cn': '绀野光',
+            'zh_tw': '星野光',
+            'tmdb_id': '2381412',
+            'verified': False,
+            'names': ['紺野ひかる', '绀野光', '星野光', '皆月ひかる', '皆月光'],
+        }
+    ])
+
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending', lang=None):
+        return [
+            {'id': 'emby-konno', 'name': '紺野ひかる', 'tmdb_id': '2381412'},
+            {'id': 'emby-minazuki', 'name': '皆月ひかる', 'tmdb_id': '3122077'},
+            {'id': 'emby-minazuki-empty', 'name': '皆月光'},
+        ], 3
+
+    monkeypatch.setattr(media_library, '_list_actors', fake_list_actors)
+
+    result = await media_library._preview_actor_mapping_matches({'server_url': 'http://server', 'api_key': 'token'}, only_candidates=True)
+
+    assert result['candidate_groups'] == 0
+    assert result['matched_actors'] == 1
+    assert result['rejected_actors'] == 2
+    assert {actor['id'] for actor in result['rejected_matches']} == {'emby-minazuki', 'emby-minazuki-empty'}
+    assert {actor['rejected_reason'] for actor in result['rejected_matches']} == {'tmdb_conflict_alias'}
+
+
+@pytest.mark.asyncio
+async def test_detect_duplicate_actors_groups_normalized_names(monkeypatch: pytest.MonkeyPatch):
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending'):
+        return [
+            {'id': '1', 'name': 'Actor A', 'tmdb_id': '101'},
+            {'id': '2', 'name': 'Actor-A', 'tmdb_id': '102'},
+            {'id': '3', 'name': 'Actor B'},
+        ], 3
+
+    monkeypatch.setattr(media_library, '_list_actors', fake_list_actors)
+
+    groups = await media_library._detect_duplicate_actors({'server_url': 'http://server', 'api_key': 'token'})
+
+    assert len(groups) == 1
+    assert groups[0]['key'] == 'actora'
+    assert groups[0]['count'] == 2
+    assert groups[0]['tmdb_ids'] == ['101', '102']
+
+
+
+
+@pytest.mark.asyncio
+async def test_get_items_filters_cached_library_items_by_query(monkeypatch: pytest.MonkeyPatch):
+    media_library._items_cache.clear()
+    monkeypatch.setattr(media_library, '_load_config', lambda: {'server_url': 'http://server', 'api_key': 'token'})
+
+    cached_items = [
+        {'id': '1', 'name': 'CAWD-807', 'path': '/library/CAWD-807.mp4', 'tags': {'has_chinese': True}, 'date_created': '2026-04-01T00:00:00Z'},
+        {'id': '2', 'name': 'IPZZ-508', 'path': '/library/IPZZ-508.mp4', 'tags': {'has_chinese': False}, 'date_created': '2026-04-02T00:00:00Z'},
+    ]
+    media_library._items_cache['library-1'] = (cached_items, time.time())

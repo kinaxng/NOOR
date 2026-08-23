@@ -1,0 +1,31 @@
+        if result.returncode != 0:
+            raise_for_git_pull_failure(last_pull_stderr or result.stderr, lada_path=lada_path, branch=branch, log_mgr=log_mgr)
+
+        log_mgr.add_log("info", "[LADA] 代码拉取成功，正在重新安装...")
+        pip_cmd = [_python_executable(), "-m", "pip", "install", "-e", lada_path, "--no-deps"]
+        if should_add_break_system_packages(sys):
+            pip_cmd.append("--break-system-packages")
+        reinstall = subprocess.run(
+            pip_cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=no_proxy_env,
+        )
+
+        if reinstall.returncode != 0:
+            log_mgr.add_log("error", f"[LADA] pip 安装失败 — {reinstall.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Reinstall failed: {reinstall.stderr}")
+
+        # Get new version
+        version_cp = subprocess.run(
+            [_python_executable(), "-c", "import lada; print(lada.VERSION)"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        new_version = version_cp.stdout.strip() if version_cp.returncode == 0 else None
+
+        log_mgr.add_log("success", f"[LADA] 升级完成 — 新版本：{new_version or '未知'}")
+        return {
+            "success": True,

@@ -1,0 +1,121 @@
+
+
+def test_translation_process_emits_normalized_phase_keys(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    from app.pipeline.whisper import runtime as whisper_runtime
+
+    srt_path = tmp_path / 'sample.srt'
+    srt_path.write_text(
+        '1\n00:00:01,000 --> 00:00:02,000\nこんにちは\n\n'
+        '2\n00:00:03,000 --> 00:00:04,000\nさようなら\n',
+        encoding='utf-8',
+    )
+
+    class FakeTranslator:
+        def translate_batch(self, batch_texts, target_lang, translate_style='standard'):
+            return [f'{text}-{target_lang}' for text in batch_texts]
+
+    class FakeQueue:
+        def __init__(self):
+            self.items = []
+
+        def put(self, item):
+            self.items.append(item)
+
+    class FakeCancelEvent:
+        def is_set(self):
+            return False
+
+    monkeypatch.setattr('app.pipeline.whisper.translator.get_translator', lambda **kwargs: FakeTranslator())
+    monkeypatch.setattr('app.pipeline.whisper.translator._is_ollama_url', lambda _base_url: True)
+
+    queue = FakeQueue()
+    whisper_runtime._translation_process_entry(
+        str(srt_path),
+        'zh',
+        'demo-model',
+        'http://ollama.local',
+        None,
+        'standard',
+        0,
+        100,
+        queue,
+        FakeCancelEvent(),
+    )
+
+    progress_phase_keys = [item['phase_key'] for item in queue.items if item.get('type') == 'progress']
+    assert progress_phase_keys[:3] == ['prepare', 'prepare', 'analyze']
+    assert 'translate' in progress_phase_keys
+    assert progress_phase_keys[-2:] == ['output', 'output']
+
+
+def test_translate_progress_phase_order_declares_expected_pipeline_contract():
+    assert TRANSLATE_PROGRESS_PHASE_ORDER == (
+        "load_subtitle",
+        "segment_text",
+        "translate",
+        "merge_output",
+        "write_output",
+    )
+
+
+def test_translation_process_progress_ranges_follow_declared_contract(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    from app.pipeline.whisper import runtime as whisper_runtime
+
+    srt_path = tmp_path / 'sample.srt'
+    srt_path.write_text(
+        '1\n00:00:01,000 --> 00:00:02,000\nこんにちは\n\n'
+        '2\n00:00:03,000 --> 00:00:04,000\nさようなら\n',
+        encoding='utf-8',
+    )
+
+    class FakeTranslator:
+        def translate_batch(self, batch_texts, target_lang, translate_style='standard'):
+            return [f'{text}-{target_lang}' for text in batch_texts]
+
+    class FakeQueue:
+        def __init__(self):
+            self.items = []
+
+        def put(self, item):
+            self.items.append(item)
+
+    class FakeCancelEvent:
+        def is_set(self):
+            return False
+
+    monkeypatch.setattr('app.pipeline.whisper.translator.get_translator', lambda **kwargs: FakeTranslator())
+    monkeypatch.setattr('app.pipeline.whisper.translator._is_ollama_url', lambda _base_url: True)
+
+    queue = FakeQueue()
+    whisper_runtime._translation_process_entry(
+        str(srt_path),
+        'zh',
+        'demo-model',
+        'http://ollama.local',
+        None,
+        'standard',
+        0,
+        100,
+        queue,
+        FakeCancelEvent(),
+    )
+
+    progress_events = [item for item in queue.items if item.get('type') == 'progress']
+    assert progress_events[0]['phase_key'] == 'prepare'
+    assert 0 <= progress_events[0]['progress'] <= 4
+    assert progress_events[1]['phase_key'] == 'prepare'
+    assert 0 <= progress_events[1]['progress'] <= 8
+    assert progress_events[2]['phase_key'] == 'analyze'
+    assert 10 <= progress_events[2]['progress'] <= 19
+    translate_event = next(item for item in progress_events if item.get('phase_key') == 'translate')
+    assert 20 <= translate_event['progress'] <= 90
+    merge_event = next(item for item in progress_events if item.get('detail') == '合并译文与字幕时间轴')
+    assert merge_event['phase_key'] == 'process'
+    assert 90 <= merge_event['progress'] <= 92
+    assert progress_events[-1]['phase_key'] == 'output'
+    assert progress_events[-1]['progress'] == 100
+
+
+def test_whisper_process_entry_emits_result_metadata(monkeypatch: pytest.MonkeyPatch):
+    class FakeQueue:
+        def __init__(self):

@@ -1,0 +1,166 @@
+        if base_url.endswith(("/v1/chat", "/v1/chat/completions")):
+            return base_url
+        return f"{base_url.removesuffix('/v1')}/v1/chat/completions"
+
+    def translate_batch(
+        self,
+        texts: list[str],
+        target_lang: str = "zh",
+        translate_style: Optional[str] = None,
+    ) -> list[str]:
+        """Translate a numbered batch while preserving subtitle boundaries."""
+        if not texts:
+            return []
+
+        style = translate_style or self.translate_style
+        lang_display = self._get_lang_display(target_lang)
+        style_key = style if style in TRANSLATE_SYSTEM_PROMPTS else "adult_explicit"
+        system_prompt = TRANSLATE_SYSTEM_PROMPTS[style_key].format(
+            lang=lang_display,
+            content="[序号] 日语字幕文本（见下方用户消息）",
+            dictionary="（本任务无自定义字典规则）",
+        )
+        formatted_content = self._format_subtitles(texts)
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        is_ollama = _is_ollama_url(self.base_url)
+        request_json = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": formatted_content},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 16384 if is_ollama else 8192,
+        }
+        if is_ollama:
+            request_json["thinking"] = False
+
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(self._chat_endpoint(), headers=headers, json=request_json)
+                response.raise_for_status()
+                result = response.json()
+                choices = result.get("choices", [])
+                message = choices[0].get("message", {}) if choices else {}
+                generated_text = message.get("content") or ""
+                if not generated_text and message.get("reasoning"):
+                    generated_text = self._extract_from_reasoning(message["reasoning"], len(texts))
+                if not generated_text:
+                    raise RuntimeError(
+                        f"API 返回内容为空（choices={len(choices)}，model={self.model})。"
+                        "可能是模型不支持此请求或 API 限流。"
+                    )
+
+            translations = self._parse_translations(generated_text, len(texts))
+            cleaned_translations = [text.strip() for text in translations]
+            has_translation_content = any(cleaned_translations)
+            total_chars = sum(len(text) for text in cleaned_translations)
+            source_total_chars = sum(len(text) for text in texts)
+            is_suspiciously_short = source_total_chars >= 20 and total_chars <= max(2, len(texts))
+            refusal_phrases = [
+                "无法提供", "不适合", "不能翻译", "无法翻译", "抱歉", "sorry",
+                "cannot", "unable", "refuse", "过滤", "filter", "することはできません",
+                "の内容が", "性的", "_TEXTCONTENT_", "cannot provide", "not appropriate",
+                "unable to", "不符合", "无法生成", "内容限制",
+            ]
+            is_refusal = any(phrase.lower() in generated_text.lower() for phrase in refusal_phrases)
+            if is_refusal or is_suspiciously_short or not has_translation_content:
+                raise RuntimeError(
+                    "翻译模型拒绝翻译（内容过滤或返回过短）。"
+                    f"可能是批次过短（{len(texts)}条/{total_chars}字符）或内容被拒绝。"
+                    "尝试更换翻译模型或使用 standard 翻译风格。"
+                    f"原始返回: {generated_text[:200]}"
+                )
+            return translations
+        except httpx.ConnectError as exc:
+            logger.error("连接失败: %s", self.base_url)
+            raise ConnectionError(f"无法连接到 {self.base_url}，请检查地址是否正确") from exc
+        except httpx.TimeoutException as exc:
+            logger.error("请求超时: %s", self.base_url)
+            raise TimeoutError("翻译请求超时，请重试") from exc
+        except Exception as exc:
+            logger.error("翻译失败: %s", exc)
+            raise RuntimeError(f"翻译失败: {exc}") from exc
+
+    @staticmethod
+    def _format_subtitles(texts: list[str]) -> str:
+        return "\n".join(f"[{i + 1}] {text}" for i, text in enumerate(texts))
+
+    @staticmethod
+    def _parse_translations(generated_text: str, expected_count: int) -> list[str]:
+        translations: list[str] = []
+        for line in generated_text.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("["):
+                parts = line.split("]", 1)
+                translations.append(parts[1].strip() if len(parts) == 2 else line)
+            elif translations:
+                translations[-1] += " " + line
+        while len(translations) < expected_count:
+            translations.append(translations[-1] if translations else "")
+        return translations[:expected_count]
+
+    @staticmethod
+    def _extract_from_reasoning(reasoning: str, expected_count: int) -> str:
+        lines = reasoning.split("\n")
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if not line.startswith("["):
+                continue
+            parts = line.split("]", 1)
+            if len(parts) != 2 or not parts[1].strip():
+                continue
+            result_lines: list[str] = []
+            for raw_line in lines[i:]:
+                current = raw_line.strip()
+                if current.startswith("["):
+                    numbered = current.split("]", 1)
+                    if len(numbered) == 2:
+                        result_lines.append(f"[{numbered[0][1:]}] {numbered[1].strip()}")
+                elif result_lines:
+                    result_lines[-1] += " " + current
+            if result_lines:
+                return "\n".join(result_lines)
+
+        translations: list[str] = []
+        for index in range(1, expected_count + 1):
+            patterns = [
+                rf"\*\*\[{index}\]\*\*.*?➡️.*?\*\*中文[:：]\*\*\s*(.+?)(?:\n|$)",
+                rf"\[{index}\].*?➡️.*?:\s*(.+?)(?:\n|$)",
+                r"中文[:：]\s*(.+?)(?:\n|$)",
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, reasoning, re.DOTALL)
+                if match:
+                    translations.append(match.group(1).strip())
+                    break
+            else:
+                translations.append("")
+        if any(translations):
+            return "\n".join(f"[{i + 1}] {text}" for i, text in enumerate(translations))
+        return reasoning.strip()
+
+    @staticmethod
+    def _get_lang_display(lang_code: str) -> str:
+        return {
+            "zh": "中文", "en": "英文", "ko": "韩文",
+            "zh-CN": "简体中文", "zh-TW": "繁体中文",
+        }.get(lang_code, lang_code)
+
+
+def get_translator(
+    model: Optional[str] = None,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    translate_style: str = "adult_explicit",
+    timeout: Optional[int] = None,
+) -> OpenAILikeTranslator:
+    settings_base_url = os.environ.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1")
+    settings_api_key = os.environ.get("WHISPER_TRANSLATE_API_KEY", "")
+    resolved_base_url = base_url or settings_base_url
+    if timeout is None:

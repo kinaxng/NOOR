@@ -1,0 +1,260 @@
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+from typing import Any, Callable
+
+VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.webm', '.mpg', '.mpeg'}
+
+
+def hardlink_groups_path_impl(config_path_fn: Callable[[], Path]) -> Path:
+    return config_path_fn().parent / 'runtime' / 'media_library' / 'hardlink_groups.txt'
+
+
+def legacy_hardlink_groups_path_impl(config_path_fn: Callable[[], Path]) -> Path:
+    return config_path_fn().parent / 'hardlink_groups.txt'
+
+
+def _legacy_path_for(primary_path: Path) -> Path | None:
+    if (
+        primary_path.name == 'hardlink_groups.txt'
+        and primary_path.parent.name == 'media_library'
+        and primary_path.parent.parent.name == 'runtime'
+    ):
+        return primary_path.parent.parent.parent / 'hardlink_groups.txt'
+    return None
+
+
+def scan_inodes_impl(dir_path: str) -> dict[tuple[int, int], str]:
+    result: dict[tuple[int, int], str] = {}
+    if not os.path.isdir(dir_path):
+        return result
+    for dirpath, _dirnames, filenames in os.walk(dir_path):
+        for fn in filenames:
+            ext = os.path.splitext(fn)[1].lower()
+            if ext not in VIDEO_EXTS:
+                continue
+            full_path = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(full_path)
+            except (OSError, PermissionError):
+                continue
+            if st.st_ino == 0:
+                continue
+            key = (st.st_ino, st.st_dev)
+            if key not in result:
+                result[key] = full_path
+    return result
+
+
+def scan_single_group_impl(source_dir: str, hardlink_dir: str, *, scan_inodes_fn: Callable[[str], dict[tuple[int, int], str]]) -> list[dict]:
+    source_inodes = scan_inodes_fn(source_dir)
+    hardlink_inodes: dict[tuple[int, int], list[str]] = {}
+    if os.path.isdir(hardlink_dir):
+        for dirpath, _dirnames, filenames in os.walk(hardlink_dir):
+            for fn in filenames:
+                ext = os.path.splitext(fn)[1].lower()
+                if ext not in VIDEO_EXTS:
+                    continue
+                full_path = os.path.join(dirpath, fn)
+                try:
+                    st = os.stat(full_path)
+                except (OSError, PermissionError):
+                    continue
+                if st.st_ino == 0:
+                    continue
+                key = (st.st_ino, st.st_dev)
+                hardlink_inodes.setdefault(key, []).append(full_path)
+
+    results: list[dict] = []
+    matched_source_keys: set[tuple[int, int]] = set()
+    for inode_key, hl_paths in hardlink_inodes.items():
+        source_path = source_inodes.get(inode_key)
+        if source_path:
+            matched_source_keys.add(inode_key)
+        results.append({'source_path': source_path, 'hardlink_paths': hl_paths})
+
+    for inode_key, source_path in source_inodes.items():
+        if inode_key in matched_source_keys:
+            continue
+        results.append({'source_path': source_path, 'hardlink_paths': []})
+    return results
+
+
+def fetch_emby_item_info_impl(config: dict, emby_id: str | None, *, httpx_module: Any, server_url_fn: Callable[[dict], str], headers_fn: Callable[[str], dict]) -> tuple[str | None, str | None]:
+    if not emby_id or not config.get('api_key'):
+        return None, None
+
+    user_id = config.get('user_id', '')
+    api_key = config.get('api_key', '')
+    base_url = server_url_fn(config)
+    fields = 'Name,ImageTags'
+
+    try:
+        if user_id:
+            resp = httpx_module.Client(timeout=15.0).get(
+                f'{base_url}/emby/Users/{user_id}/Items/{emby_id}',
+                headers=headers_fn(api_key),
+                params={'Fields': fields},
+            )
+        else:
+            resp = httpx_module.Client(timeout=15.0).get(
+                f'{base_url}/emby/Items/{emby_id}',
+                headers=headers_fn(api_key),
+                params={'Fields': fields},
+            )
+        if resp.status_code != 200:
+            return None, None
+        data = resp.json()
+    except Exception:
+        return None, None
+
+    name = data.get('Name')
+    poster_url = None
+    img_tags = data.get('ImageTags', {})
+    tag = img_tags.get('Primary')
+    if tag:
+        poster_url = f'{base_url}/emby/Items/{emby_id}/Images/Primary?tag={tag}'
+    return name, poster_url
+
+
+def extract_code_from_path_impl(file_path: str) -> str:
+    if not file_path:
+        return 'N/A'
+
+    basename = os.path.splitext(os.path.basename(file_path))[0]
+    basename = re.sub(r'[-_]?(?:restored-u|restored|cracked|leaked|uncensored|uncensor|破解|流出|无码|C(?=\b)|cd\d+|C\b)', '', basename, flags=re.IGNORECASE)
+    basename = basename.replace('_', '-')
+    basename = basename.strip('-_')
+
+    m = re.search(r'\b([A-Z]{2,6}-\d+)\b', basename, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+
+    m2 = re.search(r'\b(\d{3,}-\d+)\b', basename)
+    if m2:
+        return m2.group(1).upper()
+
+    code = basename.strip('-_')
+    return code.upper() if code else 'N/A'
+
+
+async def build_hardlink_groups_impl(config: dict, *, scan_single_group_fn: Callable[[str, str], list[dict]], extract_code_from_path_fn: Callable[[str], str]) -> list[dict]:
+    scan_groups: list[dict] = config.get('scan_groups', [])
+    code_map: dict[str, list] = {}
+    for group in scan_groups:
+        source_dir = group.get('source_dir', '')
+        hardlink_dir = group.get('hardlink_dir', '')
+        if not source_dir or not hardlink_dir:
+            continue
+        pairs = scan_single_group_fn(source_dir, hardlink_dir)
+        for pair in pairs:
+            source_path = pair['source_path']
+            hardlink_paths = pair['hardlink_paths']
+            code_path = hardlink_paths[0] if hardlink_paths else source_path
+            code = extract_code_from_path_fn(code_path) if code_path else 'N/A'
+            code_map.setdefault(code, []).append({
+                'source_path': source_path,
+                'hardlink_paths': hardlink_paths,
+            })
+
+    results: list[dict] = []
+    for code, entries in code_map.items():
+        results.append({'code': code, 'entries': entries})
+    results.sort(key=lambda x: x['code'])
+    return results
+
+
+def save_hardlink_groups_impl(groups: list[dict], *, hardlink_groups_path_fn: Callable[[], Path]) -> None:
+    lines: list[str] = []
+    for g in groups:
+        code = g.get('code', 'N/A')
+        for entry in g.get('entries', []):
+            source = entry.get('source_path') or ''
+            hlinks = entry.get('hardlink_paths', [])
+            lines.append(f"{code}|{source}|{'|'.join(hlinks)}")
+    path = hardlink_groups_path_fn()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+def source_file_size_impl(source_path: str | None) -> int | None:
+    if not source_path:
+        return None
+    try:
+        return os.stat(source_path).st_size
+    except (OSError, PermissionError, AttributeError):
+        return None
+
+
+def load_hardlink_groups_impl(*, hardlink_groups_path_fn: Callable[[], Path]) -> list[dict]:
+    path = hardlink_groups_path_fn()
+    if not path.is_file():
+        legacy_path = _legacy_path_for(path)
+        if legacy_path is None or not legacy_path.is_file():
+            return []
+        path = legacy_path
+
+    code_map: dict[str, list] = {}
+    for line in path.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split('|')
+        if len(parts) < 3:
+            continue
+        code = parts[0] or 'N/A'
+        source = parts[1]
+        hlinks = [item for item in (parts[2:] if len(parts) >= 3 else []) if item]
+        code_map.setdefault(code, []).append({'source_path': source, 'hardlink_paths': hlinks})
+
+    groups: list[dict] = []
+    for code, entries in code_map.items():
+        groups.append({'code': code, 'entries': entries})
+    groups.sort(key=lambda x: x['code'])
+    return groups
+
+
+def enrich_hardlink_groups_impl(groups: list[dict], *, source_file_size_fn: Callable[[str | None], int | None] = source_file_size_impl) -> dict[str, Any]:
+    enriched_groups: list[dict] = []
+    total_entries = 0
+    total_hardlinks = 0
+    issue_groups = 0
+    orphan_entries = 0
+
+    for group in groups:
+        enriched_entries: list[dict] = []
+        group_hardlinks = 0
+        group_orphans = 0
+        is_unparsed = group.get('code', 'N/A') == 'N/A'
+
+        for entry in group.get('entries', []):
+            hardlink_paths = [item for item in (entry.get('hardlink_paths', []) or []) if item]
+            hardlink_count = len(hardlink_paths)
+            source_path = entry.get('source_path')
+            source_size = source_file_size_fn(source_path)
+            issues: list[str] = []
+            if not source_path:
+                issues.append('orphan_source')
+                group_orphans += 1
+                orphan_entries += 1
+
+            status = 'issue' if issues else 'healthy'
+            group_hardlinks += hardlink_count
+            enriched_entries.append({
+                'source_path': source_path,
+                'hardlink_paths': hardlink_paths,
+                'hardlink_count': hardlink_count,
+                'source_size': source_size,
+                'issues': issues,
+                'status': status,
+            })
+
+        issue_count = group_orphans + (1 if is_unparsed else 0)
+        has_issues = issue_count > 0
+        if has_issues:
+            issue_groups += 1
+
+        total_entries += len(enriched_entries)
+        total_hardlinks += group_hardlinks

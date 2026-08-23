@@ -1,0 +1,91 @@
+    if (state.loading && !state.data) return skeleton()
+    grid.innerHTML = ''
+    const items = state.data?.items || []
+    if (!items.length) {
+      const empty = el('div', 'av-rec-empty')
+      empty.innerHTML = '<strong>暂无推荐</strong><span>可以先重建 AV 图谱/Knowledge Core，或确认 JavDB 插件已启用。</span>'
+      grid.appendChild(empty)
+      return
+    }
+    for (const item of items) {
+      const card = el('article', 'av-rec-card')
+      const image = el('button', 'av-rec-cover')
+      image.type = 'button'
+      image.onclick = () => openJavDB(item)
+      if (item.fanart_url || item.cover_url) image.innerHTML = `<img src="${escapeHtml(item.fanart_url || item.cover_url)}" loading="lazy" alt="">`
+      else image.textContent = item.code || 'NO IMAGE'
+      const body = el('section', 'av-rec-body')
+      const head = el('div', 'av-rec-card-head')
+      const title = el('button', 'av-rec-card-title')
+      title.type = 'button'
+      title.onclick = () => openJavDB(item)
+      title.innerHTML = `<strong>${escapeHtml(item.code)}</strong><span>${escapeHtml(item.title || '')}</span>`
+      const score = el('div', `av-rec-score av-rec-score--${scoreTone(item.score)}`)
+      score.innerHTML = `<strong>${escapeHtml(item.score)}</strong><span>推荐分</span>`
+      head.append(title, score)
+      const meta = el('div', 'av-rec-meta')
+      if (item.release_date) meta.appendChild(badge(item.release_date, 'muted'))
+      if (item.in_library) meta.appendChild(badge('已入库', 'good'))
+      if (item.is_today_increment) meta.appendChild(badge('今日新增', 'hot'))
+      if (item.magnets_count) meta.appendChild(badge(`${item.magnets_count} 磁链`, 'good'))
+      for (const source of (item.source_tags || []).slice(0, 3)) meta.appendChild(badge(source.label || source.id, 'info'))
+      const resourceSummary = item.resource_summary || {}
+      if (resourceSummary.total) meta.appendChild(badge(`${resourceSummary.total} 资源`, 'info'))
+      if (item.has_cnsub) meta.appendChild(badge('中字', 'good'))
+      if (item.is_cracked) meta.appendChild(badge('破解', 'hot'))
+      const size = fmtSizeMb(item.best_resource_size_mb) || fmtBytes(resourceSummary.best_size_bytes)
+      if (size) meta.appendChild(badge(size, 'soft'))
+      const people = el('div', 'av-rec-tags')
+      if (item.personalized_score) people.appendChild(badge(`偏好 ${Math.round(item.personalized_score)}`, 'hot'))
+      if (item.confidence) people.appendChild(badge(`置信 ${Math.round(item.confidence)}`, 'good'))
+      if (item.match_level === 'strong') people.appendChild(badge('强匹配', 'hot'))
+      else if (item.match_level === 'medium') people.appendChild(badge('中匹配', 'good'))
+      else if (item.match_level === 'weak') people.appendChild(badge('弱匹配', 'soft'))
+      for (const source of (resourceSummary.providers || []).slice(0, 3)) people.appendChild(badge(`${source.name}×${source.count}`, 'info'))
+      for (const name of (item.actors || []).slice(0, 4)) people.appendChild(badge(name, 'soft'))
+      if (item.series) people.appendChild(badge(`系列 ${item.series}`, 'soft'))
+      if (item.director) people.appendChild(badge(`导演 ${item.director}`, 'muted'))
+      for (const name of (item.categories || []).slice(0, 5)) people.appendChild(badge(name, 'muted'))
+      const breakdown = item.score_breakdown || {}
+      const scoreParts = el('div', 'av-rec-score-parts')
+      const scorePartValues = [
+        ['演员', breakdown.actor_preference ?? breakdown.preference],
+        ['类型', breakdown.category_preference],
+        ['关系', breakdown.relationship_preference],
+        ['资源', breakdown.resources],
+        ['质量', breakdown.quality],
+        ['降权', breakdown.penalty ? `-${Math.round(breakdown.penalty)}` : '0'],
+      ]
+      for (const [label, value] of scorePartValues) {
+        const part = el('span')
+        part.innerHTML = `<em>${escapeHtml(label)}</em><strong>${escapeHtml(value == null || value === '' ? 0 : Math.round(Number(value) || 0))}</strong>`
+        scoreParts.appendChild(part)
+      }
+      const reasons = el('ul', 'av-rec-reasons')
+      for (const reason of item.reasons || []) {
+        const li = document.createElement('li')
+        li.textContent = reason
+        reasons.appendChild(li)
+      }
+      const buttons = el('div', 'av-rec-card-actions')
+      const viewBtn = el('button', '', 'JavDB')
+      viewBtn.onclick = () => openJavDB(item)
+      const likeBtn = el('button', '', '喜欢')
+      likeBtn.onclick = () => feedback(item, 'like')
+      const dislikeBtn = el('button', '', '不感兴趣')
+      dislikeBtn.onclick = () => openDislikePicker(item)
+      const ignoreBtn = el('button', '', '忽略')
+      ignoreBtn.onclick = () => feedback(item, 'ignore')
+      buttons.append(viewBtn, likeBtn, dislikeBtn, ignoreBtn)
+      body.append(head, meta, people, scoreParts, reasons, buttons)
+      card.append(image, body)
+      grid.appendChild(card)
+    }
+  }
+
+  function render() {
+    renderModes()
+    renderProfile()
+    renderNotice()
+    renderItems()
+  }

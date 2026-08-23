@@ -1,0 +1,19 @@
+
+关键配置项：
+
+```bash
+# 模型目录（宿主机根目录，容器内保留相同绝对路径）
+MODELS_DIR=/volume1/models
+INSTALL_NEMO=false
+FULL_RUNTIME_IMAGE=nvidia/cuda:12.8.1-runtime-ubuntu24.04
+MEDIA_ROOT=/home/kinax/Videos
+
+# 视频文件（宿主机目录在容器内保留相同绝对路径）
+#
+# MEDIA_ROOT 最好填写 downloads / media / 硬链接目录的共同上级
+MEDIA_ROOT=/media
+
+# NOOR 自身数据根。Docker 内固定为 /app/data，由宿主机 ./data 持久化。
+NOOR_DATA_DIR=./data
+```
+

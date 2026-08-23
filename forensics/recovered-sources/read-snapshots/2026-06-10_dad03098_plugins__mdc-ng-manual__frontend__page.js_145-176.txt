@@ -1,0 +1,32 @@
+      ? sdk.ui.input({ value: state.targetFolder, placeholder: '/data/media/av', onInput: value => { state.targetFolder = value } })
+      : (() => {
+          const input = document.createElement('input')
+          input.value = state.targetFolder
+          input.placeholder = '/data/media/av'
+          input.oninput = e => { state.targetFolder = e.target.value }
+          return input
+        })()
+    const modeControl = sdk.ui?.select
+      ? sdk.ui.select({ value: state.linkMode, options: modeOptions, onChange: value => { state.linkMode = String(value); renderForm() } })
+      : (() => {
+          const sel = document.createElement('select')
+          modeOptions.forEach(opt => {
+            const o = document.createElement('option')
+            o.value = opt.value
+            o.textContent = opt.label
+            if (opt.value === state.linkMode) o.selected = true
+            sel.appendChild(o)
+          })
+          sel.onchange = e => { state.linkMode = e.target.value; renderForm() }
+          return sel
+        })()
+
+    const watchOptions = [{ label: '不复用', value: '-1' }, ...(state.defaults.watch_dirs || []).map(item => ({ label: item.path || `监控目录 ${item.index}`, value: String(item.index) }))]
+    const reuseControl = sdk.ui?.select
+      ? sdk.ui.select({ value: state.reuseWatchIndex, options: watchOptions, onChange: value => { state.reuseWatchIndex = String(value) } })
+      : (() => {
+          const sel = document.createElement('select')
+          watchOptions.forEach(opt => {
+            const o = document.createElement('option')
+            o.value = opt.value
+            o.textContent = opt.label

@@ -1,0 +1,26 @@
+  simswap_256: ['256x256', '512x512', '768x768', '1024x1024'],
+  simswap_unofficial_512: ['512x512', '768x768', '1024x1024'],
+  uniface_256: ['256x256', '512x512', '768x768', '1024x1024'],
+}
+const facefusionFaceEnhancerModelOptions = ['gfpgan_1.2', 'gfpgan_1.3', 'gfpgan_1.4', 'gpen_bfr_256', 'gpen_bfr_512', 'restoreformer_plus_plus']
+const facefusionFrameEnhancerModelOptions = ['span_kendata_x4', 'real_esrgan_x2', 'real_esrgan_x2_fp16', 'real_esrgan_x4', 'real_esrgan_x4_fp16', 'real_hatgan_x4', 'ultra_sharp_x4']
+
+// Load settings from backend when panel opens
+watch(() => props.open, async (isOpen) => {
+  if (!isOpen) return
+
+  try {
+    const resp = await api.get('/settings')
+    const defaults = resp.data?.lada_defaults || {}
+
+    settings.value = {
+      detection_model: defaults.detection_model || 'v4-fast',
+      restoration_model: defaults.restoration_model || 'basicvsrpp-v1.2',
+      encoding_preset: defaults.encoding_preset || 'hevc-nvidia-gpu-hq',
+    }
+
+    const ffDefaults = resp.data?.facefusion_defaults || {}
+    facefusionSettings.value = {
+      ...facefusionSettings.value,
+      preview_mode: ffDefaults.preview_mode || 'default',
+      preview_resolution: ffDefaults.preview_resolution || '768x768',

@@ -1,0 +1,76 @@
+          actionBtn.textContent = '读取中'
+          try {
+            const data = await postAction(actionBtn.dataset.probe === 'user' ? 'account_user_me' : 'account_clients')
+            result.innerHTML = renderJson(data)
+          } catch (e) {
+            result.innerHTML = `<div class="xunlei-account-probe__error">${esc(e.message || '读取失败')}</div>`
+          } finally {
+            actionBtn.disabled = false
+            actionBtn.textContent = old
+          }
+        }
+      }
+    } catch (e) {
+      box.innerHTML = `<div class="xunlei-account-probe__error">${esc(e.message || '读取失败')}</div>`
+    }
+  }
+
+  async function openRestoreModal() {
+    const box = document.createElement('div')
+    box.className = 'xunlei-restore'
+    box.innerHTML = '<div class="xunlei-account-probe__state">扫描残留文件中...</div>'
+    const closeBtn = sdk.ui?.button ? sdk.ui.button({ label: '关闭', className: 'xunlei-remote-btn' }) : document.createElement('button')
+    if (!sdk.ui?.button) { closeBtn.type = 'button'; closeBtn.className = 'xunlei-remote-btn'; closeBtn.textContent = '关闭' }
+    const modal = modalApi({ title: '残留文件处理', width: 'lg', content: box, footer: [closeBtn] })
+    closeBtn.onclick = () => modal.close()
+    const render = data => {
+      const items = Array.isArray(data.items) ? data.items : []
+      const rows = items.map((item, idx) => {
+        const status = item.size <= 0 ? '0 字节' : item.code ? '可搜索' : '待识别'
+        const statusClass = item.size <= 0 ? 'muted' : item.code ? 'info' : 'warning'
+        return `
+          <div class="xunlei-restore-item">
+            <div class="xunlei-restore-item__main">
+              <strong>${esc(item.code || item.name || '-')}</strong>
+              <span>${esc(item.path || '')}</span>
+              <small>${esc(item.size_formatted || '')} · ${esc(item.remote_dir || '')}</small>
+            </div>
+            <div class="xunlei-restore-item__side">
+              <button type="button" class="xunlei-remote-btn xunlei-remote-btn--danger" data-delete-search-index="${idx}" ${item.code ? '' : 'disabled'}>删除并搜索</button>
+            </div>
+          </div>
+        `
+      }).join('')
+      box.innerHTML = `
+        <div class="xunlei-restore-list">${rows || '<div class="xunlei-restore-empty">没有发现 .xltd / .xtld 残留文件</div>'}</div>
+      `
+      for (const btn of box.querySelectorAll('[data-delete-search-index]')) {
+        btn.onclick = async () => {
+          const item = items[Number(btn.dataset.deleteSearchIndex)]
+          if (!item) return
+          const q = encodeURIComponent(item.code || '')
+          if (!q) return
+          if (!window.confirm(`删除这个残留文件？\n${item.path}`)) return
+          btn.disabled = true
+          const old = btn.textContent
+          btn.textContent = '删除中'
+          try {
+            await postAction('delete_restore_file', { path: item.path })
+            modal.close()
+            window.location.href = `/search/resources?q=${q}`
+          } catch (e) {
+            toast('error', e.message || '删除失败')
+            btn.disabled = false
+            btn.textContent = old
+          }
+        }
+      }
+    }
+    try {
+      render(await postAction('restore_candidates', { limit: 120 }))
+    } catch (e) {
+      box.innerHTML = `<div class="xunlei-account-probe__error">${esc(e.message || '扫描失败')}</div>`
+    }
+  }
+
+  function openNewTaskModal() {

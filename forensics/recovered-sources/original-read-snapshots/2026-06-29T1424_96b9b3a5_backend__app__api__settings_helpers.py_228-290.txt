@@ -1,0 +1,63 @@
+def get_lada_version_info() -> dict:
+    now = time.time()
+    cache_key = "lada_version"
+    with _version_cache_lock:
+        entry = _version_cache.get(cache_key)
+        if entry and (now - entry["ts"]) < _VERSION_CACHE_TTL:
+            return entry["data"]
+
+    install_info = get_lada_installation_info()
+    version = None
+
+    try:
+        result = subprocess.run(
+            lada_cli_base_cmd() + ["--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            version = output.replace("Lada:", "").strip() if output else None
+    except Exception:
+        pass
+
+    if not version:
+        try:
+            result = subprocess.run(
+                [python_executable(), "-c", "import lada; print(getattr(lada, 'VERSION', ''))"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                version = result.stdout.strip()
+        except Exception:
+            pass
+
+    if not version and install_info["repo_path"]:
+        try:
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--always", "HEAD"],
+                cwd=install_info["repo_path"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+        except Exception:
+            pass
+
+    data = {
+        "version": version,
+        "is_docker": install_info["is_docker"],
+        "is_submodule": install_info["is_submodule"],
+        "install_mode": install_info["install_mode"],
+        "can_self_upgrade": install_info["can_self_upgrade"],
+        "upgrade_strategy": install_info["upgrade_strategy"],
+        "upgrade_hint": install_info["upgrade_hint"],
+        "repo_path": install_info["repo_path"],
+    }
+    with _version_cache_lock:
+        _version_cache[cache_key] = {"data": data, "ts": now}

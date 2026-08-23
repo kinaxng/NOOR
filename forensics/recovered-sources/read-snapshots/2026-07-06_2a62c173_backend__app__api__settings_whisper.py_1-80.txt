@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+from typing import Any, Callable
+
+from app.pipeline.whisper.strategy import apply_whisper_strategy
+
+
+TRANSFORMERS_MODEL_KEYS = {
+    "anime-whisper": "anime_whisper",
+}
+
+ONNX_VAD_MODEL_KEYS = {
+    "whisper-vad-onnx": "whisper_vad_onnx",
+}
+
+
+def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
+    payload = config.model_dump() if hasattr(config, "model_dump") else dict(config)
+    payload = apply_whisper_strategy(payload, payload.get("strategy"))
+
+    payload["subtitle_profile"] = payload.get("subtitle_profile", "standard")
+    payload["model_backend"] = payload.get("model_backend") or payload.get("model") or "chickenrice-zh"
+    payload["whisper_task"] = payload.get("whisper_task") or ("translate" if payload["model_backend"] == "chickenrice-zh" else "transcribe")
+    payload["vad_backend"] = payload.get("vad_backend", "energy")
+    payload["chunker"] = payload.get("chunker", "smart_vad_chunk")
+    payload["target_chunk_duration_s"] = payload.get("target_chunk_duration_s", 30.0)
+    payload["max_chunk_duration_s"] = payload.get("max_chunk_duration_s", 30.0)
+    payload["segment_merge_max_gap_ms"] = payload.get("segment_merge_max_gap_ms", 2000)
+    payload["segment_merge_max_duration_ms"] = payload.get("segment_merge_max_duration_ms", 20000)
+    return payload
+
+
+def apply_whisper_config_updates(config: Any, update_env_value_fn: Callable[[str, str], None]) -> None:
+    payload = normalize_whisper_config_payload(config)
+    update_env_value_fn("WHISPER_STRATEGY", payload["strategy"])
+    update_env_value_fn("WHISPER_SUBTITLE_PROFILE", payload["subtitle_profile"])
+    update_env_value_fn("WHISPER_MODEL_BACKEND", payload["model_backend"])
+    update_env_value_fn("WHISPER_TASK", payload["whisper_task"])
+    update_env_value_fn("WHISPER_VAD_BACKEND", payload["vad_backend"])
+    update_env_value_fn("WHISPER_CHUNKER", payload["chunker"])
+    update_env_value_fn("WHISPER_TARGET_CHUNK_DURATION_S", str(payload["target_chunk_duration_s"]))
+    update_env_value_fn("WHISPER_MAX_CHUNK_DURATION_S", str(payload["max_chunk_duration_s"]))
+    update_env_value_fn("WHISPER_SEGMENT_MERGE_MAX_GAP_MS", str(payload["segment_merge_max_gap_ms"]))
+    update_env_value_fn("WHISPER_SEGMENT_MERGE_MAX_DURATION_MS", str(payload["segment_merge_max_duration_ms"]))
+    update_env_value_fn("WHISPER_MODEL", payload["model"])
+    update_env_value_fn("WHISPER_PIPELINE_MODE", payload["pipeline_mode"])
+    update_env_value_fn("WHISPER_LANGUAGE", payload["language"])
+    update_env_value_fn("WHISPER_SENSITIVITY", payload["sensitivity"])
+    update_env_value_fn("WHISPER_TRANSLATE_TO", payload["translate_to"])
+    update_env_value_fn("WHISPER_TRANSLATE_MODEL", payload["translate_model"])
+    update_env_value_fn("WHISPER_TRANSLATE_STYLE", payload["translate_style"])
+    update_env_value_fn("WHISPER_TRANSLATE_BASE_URL", payload["translate_base_url"])
+    update_env_value_fn("WHISPER_TRANSLATE_API_KEY", payload["translate_api_key"])
+
+
+def sanitize_download_status(download_status: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": download_status.get("status", "idle"),
+        "progress": download_status.get("progress", 0),
+        "message": download_status.get("message", ""),
+        "model": download_status.get("model", ""),
+    }
+
+
+def build_whisper_models_payload(
+    *,
+    check_result: dict[str, Any],
+    whisper_models: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    models = []
+    available_models = check_result.get("models", {})
+
+    for key, info in whisper_models.items():
+        if info["type"] == "transformers":
+            check_key = TRANSFORMERS_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        elif info["type"] == "onnx-vad":
+            check_key = ONNX_VAD_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        else:

@@ -1,0 +1,361 @@
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _combined_category_count(name: str, genre_counter: Counter, tag_counter: Counter) -> int:
+    return max(int(genre_counter.get(name, 0)), int(tag_counter.get(name, 0)))
+
+
+def _preference_confidence(count: int, media_count: int) -> float:
+    """Return a bounded confidence curve for a media-library signal.
+
+    A single hit should be a clue, not a strong conclusion. Repeated hits become
+    meaningful, but the curve saturates so one very common actor/tag does not
+    dominate the whole recommendation page.
+    """
+    if count <= 0 or media_count <= 0:
+        return 0.0
+    frequency = min(1.0, count / max(media_count, 1))
+    repeat = min(1.0, math.log2(count + 1) / 5.0)
+    return max(0.0, min(1.0, repeat * 0.78 + frequency * 0.22))
+
+
+def _score_bucket(value: float) -> str:
+    if value >= 28:
+        return "strong"
+    if value >= 14:
+        return "medium"
+    if value > 0:
+        return "weak"
+    return "none"
+
+
+async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    warnings: list[str] = []
+    try:
+        from app.plugins.runtime import runtime
+        if not runtime.is_enabled("javdb"):
+            return [], ["JavDB 插件未启用，暂时无法生成候选推荐。"]
+        candidate_limit = max(12, min(int(config.get("candidate_limit") or 48), 120))
+        detail_limit = max(0, min(int(config.get("detail_limit") or 36), 80))
+        requests = [
+            ("latest", {"page": 1, "limit": candidate_limit, "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "update"}),
+            ("latest", {"page": 1, "limit": max(24, candidate_limit // 2), "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "release"}),
+            # A recommendation engine should not only chase the newest feed.
+            # Blend in DBOnline's own recommend/ranking lists as candidates, but
+            # keep them small so they do not slow down the plugin.
+            ("recommend", {"page": 1, "limit": max(18, candidate_limit // 3)}),
+            ("rankings", {"page": 1, "limit": max(18, candidate_limit // 3), "period": "weekly", "type": 0}),
+        ]
+        by_code: dict[str, dict[str, Any]] = {}
+        for action, payload in requests:
+            try:
+                data = await runtime.handle_action("javdb", action, payload)
+                for item in data.get("items") or []:
+                    code = _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
+                    if not code:
+                        continue
+                    current = by_code.get(code)
+                    if not current:
+                        next_item = dict(item)
+                        # Match the JavDB plugin media card: the horizontal
+                        # cover is cover_url/thumb_url, not preview screenshots.
+                        next_item["fanart_url"] = next_item.get("cover_url") or next_item.get("thumb_url") or ""
+                        by_code[code] = next_item
+                    else:
+                        current["magnets_count"] = max(int(current.get("magnets_count") or 0), int(item.get("magnets_count") or 0))
+                        current["has_cnsub"] = bool(current.get("has_cnsub") or item.get("has_cnsub") or item.get("play_subtitle"))
+                        current["is_cracked"] = bool(current.get("is_cracked") or item.get("is_cracked"))
+                        if not current.get("fanart_url"):
+                            current["fanart_url"] = current.get("cover_url") or current.get("thumb_url") or item.get("cover_url") or item.get("thumb_url") or ""
+            except Exception as exc:
+                warnings.append(f"JavDB {action} 拉取失败：{exc}")
+        items = list(by_code.values())
+        semaphore = asyncio.Semaphore(6)
+
+        async def enrich(item: dict[str, Any]) -> dict[str, Any]:
+            code = _norm_code(item.get("code") or item.get("number") or item.get("display_title"))
+            if not code:
+                return item
+            async with semaphore:
+                try:
+                    detail = await runtime.handle_action("javdb", "video", {"code": code})
+                    data = detail.get("data") if isinstance(detail, dict) else {}
+                    if isinstance(data, dict):
+                        item["detail"] = data
+                        item["actors"] = _names(data.get("actors"))
+                        item["categories"] = _names(data.get("categories"))
+                        item["maker"] = data.get("maker") or data.get("publisher") or ""
+                        item["cover_url"] = data.get("cover_url") or item.get("cover_url")
+                        item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
+                        item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
+                        item["is_cracked"] = bool(item.get("is_cracked") or _text_has_cracked(data))
+                        magnets = data.get("magnets") if isinstance(data.get("magnets"), list) else []
+                        if magnets:
+                            item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
+                            item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
+                except Exception:
+                    pass
+            return item
+
+        enriched = await asyncio.gather(*(enrich(item) for item in items[:detail_limit]))
+        by_code.update({_norm_code(item.get("code") or item.get("number")): item for item in enriched if _norm_code(item.get("code") or item.get("number"))})
+        return list(by_code.values()), warnings
+    except Exception as exc:
+        return [], [f"候选拉取失败：{exc}"]
+
+
+def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict[str, Any], feedback: dict[str, Any]) -> dict[str, Any] | None:
+    code = _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
+    ignored = feedback.get("ignored_codes") or set()
+    liked = feedback.get("liked_codes") or set()
+    disliked = feedback.get("disliked_codes") or set()
+    disliked_actors: Counter = feedback.get("disliked_actors") or Counter()
+    disliked_categories: Counter = feedback.get("disliked_categories") or Counter()
+    liked_actors: Counter = feedback.get("liked_actors") or Counter()
+    liked_categories: Counter = feedback.get("liked_categories") or Counter()
+    if not code or code in ignored or code in disliked:
+        return None
+    in_library = code in profile.get("codes", set()) or bool((item.get("library") or {}).get("in_library") if isinstance(item.get("library"), dict) else False)
+    actors = _unique_names(item.get("actors") or [], 12)
+    categories = _unique_names(item.get("categories") or [], 16)
+    maker = str(item.get("maker") or "").strip()
+    score = 0.0
+    reasons: list[str] = []
+    personalized_score = 0.0
+    actionability_score = 0.0
+    quality_score = 0.0
+    penalty_score = 0.0
+
+    actor_counter: Counter = profile.get("actors") or Counter()
+    genre_counter: Counter = profile.get("genres") or Counter()
+    tag_counter: Counter = profile.get("tags") or Counter()
+    studio_counter: Counter = profile.get("studios") or Counter()
+    actor_category_counter: Counter = profile.get("actor_category") or Counter()
+    media_count = max(int(profile.get("media_count") or 0), 1)
+
+    actor_hits = [(name, actor_counter.get(name, 0)) for name in actors if actor_counter.get(name, 0) > 0]
+    if actor_hits:
+        best_name, best_count = max(actor_hits, key=lambda x: x[1])
+        confidence = _preference_confidence(best_count, media_count)
+        boost = min(32, (3 if best_count <= 1 else 7) + math.log2(best_count + 1) * 7.2 + confidence * 6)
+        score += boost
+        personalized_score += boost
+        reasons.append(f"{'演员偏好' if best_count > 1 else '演员线索'}：{best_name} 已有 {best_count} 部")
+        if len(actor_hits) >= 2:
+            score += min(8, len(actor_hits) * 2.5)
+            personalized_score += min(8, len(actor_hits) * 2.5)
+            reasons.append(f"多演员命中：{len(actor_hits)} 位")
+
+    feedback_actor_boost = 0.0
+    feedback_actor_penalty = 0.0
+    for actor in actors:
+        feedback_actor_boost += min(8, liked_actors.get(actor, 0) * 4)
+        # A single dislike is a weak signal; repeated selected dislike is a real
+        # user preference. Keep it soft to avoid "误杀" an actor that only
+        # appeared in a bad title once.
+        disliked_count = disliked_actors.get(actor, 0)
+        if disliked_count:
+            feedback_actor_penalty += min(18, 4 + disliked_count * 6)
+    if feedback_actor_boost:
+        score += feedback_actor_boost
+        personalized_score += feedback_actor_boost
+        reasons.append("正反馈演员")
+    if feedback_actor_penalty:
+        score -= feedback_actor_penalty
+        penalty_score += feedback_actor_penalty
+        reasons.append("负反馈演员降权")
+
+    category_hits = []
+    for name in categories:
+        count = _combined_category_count(name, genre_counter, tag_counter)
+        if count > 0:
+            category_hits.append((name, count, _generic_category_factor(name)))
+    if category_hits:
+        sorted_hits = sorted(category_hits, key=lambda x: x[1] * x[2], reverse=True)
+        names = "/".join(name for name, _, factor in sorted_hits[:3] if factor >= 0.5)
+        boost = min(24, sum(min(6.5, math.sqrt(count) * 2.9 + _preference_confidence(count, media_count) * 2) * factor for _, count, factor in sorted_hits[:6]))
+        score += boost
+        personalized_score += boost
+        if names:
+            reasons.append(f"类型匹配：{names}")
+
+    feedback_category_boost = 0.0
+    feedback_category_penalty = 0.0
+    for category in categories:
+        factor = _generic_category_factor(category)
+        feedback_category_boost += min(6, liked_categories.get(category, 0) * 3 * factor)
+        disliked_count = disliked_categories.get(category, 0)
+        if disliked_count:
+            feedback_category_penalty += min(16, (3 + disliked_count * 5) * factor)
+    if feedback_category_boost:
+        score += feedback_category_boost
+        personalized_score += feedback_category_boost
+        reasons.append("正反馈类型")
+    if feedback_category_penalty:
+        score -= feedback_category_penalty
+        penalty_score += feedback_category_penalty
+        reasons.append("负反馈类型降权")
+
+    combo_hits = []
+    for actor in actors:
+        for category in categories:
+            count = actor_category_counter.get((actor, category), 0)
+            factor = _generic_category_factor(category)
+            if count > 0 and factor >= 0.5:
+                actor_count = max(actor_counter.get(actor, 0), 1)
+                category_count = max(_combined_category_count(category, genre_counter, tag_counter), 1)
+                lift = count / math.sqrt(actor_count * category_count)
+                combo_hits.append((actor, category, count, factor, lift))
+    if combo_hits:
+        actor, category, count, factor, lift = max(combo_hits, key=lambda x: (x[2] * x[3], x[4]))
+        boost = min(24, (5 if count <= 1 else 9) + math.log2(count + 1) * 5 * factor + min(5, lift * 7))
+        score += boost
+        personalized_score += boost
+        reasons.append(f"组合偏好：{actor} + {category} 出现 {count} 次")
+
+    # If the candidate has no familiar actor but several strong preferred tags,
+    # mark it as a controlled discovery rather than letting it look random.
+    if not actor_hits and category_hits:
+        strong_category_count = sum(1 for _, count, factor in category_hits if count >= 2 and factor >= 0.5)
+        if strong_category_count >= 2:
+            discovery_boost = min(8, strong_category_count * 2.5)
+            score += discovery_boost
+            personalized_score += discovery_boost
+            reasons.append("类型探索")
+
+    if maker and studio_counter.get(maker, 0):
+        count = studio_counter.get(maker, 0)
+        boost = min(9, 3 + math.log2(count + 1) * 3)
+        score += boost
+        personalized_score += boost
+        reasons.append(f"厂牌匹配：{maker}")
+
+    magnets_count = int(item.get("magnets_count") or 0)
+    if magnets_count > 0:
+        boost = 6 + min(5, magnets_count)
+        score += boost
+        actionability_score += boost
+        reasons.append(f"有 {magnets_count} 个磁链")
+
+    if item.get("has_cnsub"):
+        boost = 9 if config.get("prefer_subtitle", True) else 5
+        score += boost
+        actionability_score += boost
+        reasons.append("中字资源")
+    if item.get("is_cracked"):
+        boost = 10 if config.get("prefer_cracked", True) else 5
+        score += boost
+        actionability_score += boost
+        reasons.append("破解特征")
+
+    size_mb = float(item.get("best_resource_size_mb") or 0)
+    if size_mb > 0:
+        boost = min(4, max(0, math.log(max(size_mb, 1), 2) - 10))
+        score += boost
+        quality_score += boost
+        if size_mb >= 4096:
+            reasons.append(f"资源体积 {size_mb / 1024:.1f}GB")
+
+    if code in liked:
+        score += 20
+        reasons.append("已标记喜欢")
+    release = str(item.get("release_date") or item.get("date") or "")
+    if release.startswith("2026"):
+        score += 4
+        quality_score += 4
+        reasons.append("近期作品")
+    elif release.startswith("2025"):
+        score += 2
+        quality_score += 2
+
+    if profile.get("media_count", 0) < 5:
+        score += min(12, float(item.get("score") or 0) * 2)
+        if not reasons:
+            reasons.append("媒体库样本较少，按资源可用性推荐")
+
+    if media_count >= 10 and personalized_score < 10:
+        score -= 12
+        penalty_score += 12
+        reasons.append("个性化命中较弱")
+
+    # Generic-only candidates are often popular feed noise. If all category
+    # labels are broad labels and no actor/studio signal exists, keep them from
+    # floating to the top only because they have resources.
+    meaningful_categories = [x for x in categories if _generic_category_factor(x) >= 0.5]
+    if media_count >= 10 and not actor_hits and not maker and not meaningful_categories:
+        score -= 10
+        penalty_score += 10
+        reasons.append("标签过泛降权")
+
+    local_features = (profile.get("local_features") or {}).get(code) or {}
+    rec_type = "upgrade" if in_library else "subscribe"
+    if in_library:
+        current_has_sub = bool(local_features.get("has_subtitle"))
+        current_cracked = bool(local_features.get("is_cracked"))
+        improved = []
+        if item.get("has_cnsub") and not current_has_sub:
+            improved.append("补中字")
+        if item.get("is_cracked") and not current_cracked:
+            improved.append("补破解")
+        if size_mb >= 4096:
+            improved.append("更高体积版本")
+        if not improved:
+            return None
+        score += 10
+        reasons.insert(0, "洗版：" + " / ".join(improved[:3]))
+
+    score = max(0, min(92, round(score)))
+    if score <= 0:
+        return None
+    match_bucket = _score_bucket(personalized_score)
+    return {
+        "code": code,
+        "title": item.get("title") or item.get("display_title") or code,
+        "display_title": item.get("display_title") or f"{code} {item.get('title') or ''}".strip(),
+        "cover_url": item.get("cover_url") or item.get("thumb_url") or "",
+        "fanart_url": item.get("fanart_url") or item.get("cover_url") or item.get("thumb_url") or "",
+        "release_date": release,
+        "actors": actors[:6],
+        "categories": categories[:8],
+        "maker": maker,
+        "score": score,
+        "personalized_score": round(personalized_score, 1),
+        "actionability_score": round(actionability_score, 1),
+        "quality_score": round(quality_score, 1),
+        "penalty_score": round(penalty_score, 1),
+        "match_level": match_bucket,
+        "confidence": max(0, min(100, round(personalized_score * 1.6 + actionability_score * 0.45 - penalty_score * 0.7))),
+        "score_breakdown": {
+            "preference": round(personalized_score, 1),
+            "resources": round(actionability_score, 1),
+            "quality": round(quality_score, 1),
+            "penalty": round(penalty_score, 1),
+        },
+        "type": rec_type,
+        "in_library": bool(in_library),
+        "magnets_count": magnets_count,
+        "has_cnsub": bool(item.get("has_cnsub")),
+        "is_cracked": bool(item.get("is_cracked")),
+        "best_resource_size_mb": size_mb,
+        "reasons": reasons[:5],
+        "source": "javdb",
+        "source_label": "JavDB",
+        "route": f"/plugins/javdb?code={code}",
+        "raw": {"id": item.get("id"), "library": item.get("library") or {}},
+    }
+
+
+def _resource_features(resource: dict[str, Any]) -> dict[str, bool]:
+    features = resource.get("features") if isinstance(resource.get("features"), dict) else {}
+    requirements = resource.get("requirements") if isinstance(resource.get("requirements"), dict) else {}
+    tags = " ".join(str(x) for x in (resource.get("tags") or []))
+    text = "\n".join([
+        str(resource.get("title") or ""),
+        str(resource.get("subtitle") or ""),
+        str(resource.get("provider_label") or ""),
+        tags,
+        json.dumps(features, ensure_ascii=False),
+    ])
+    return {

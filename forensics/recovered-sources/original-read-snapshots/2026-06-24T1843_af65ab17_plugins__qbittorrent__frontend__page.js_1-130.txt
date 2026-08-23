@@ -1,0 +1,130 @@
+export async function mount(el, sdk = {}) {
+  const pluginId = sdk.pluginId || 'qbittorrent'
+  const api = (path, init) => sdk.api?.plugin ? sdk.api.plugin(path, init) : fetch(`/api/plugins/${pluginId}${path}`, init)
+  const toast = (type, msg) => sdk.toast?.[type]?.(msg)
+  const state = {
+    loading: false,
+    error: '',
+    version: '',
+    apiMode: '',
+    transfer: {},
+    showNoorOnly: false,
+    noorTag: 'noor',
+    minFileSizeMb: 0,
+    categories: {},
+    settingsOpen: false,
+    categoryEditor: { open: false, mode: 'create', original: '', name: '', savePath: '', deleting: '' },
+    torrents: [],
+    filter: 'all',
+    category: '',
+    query: '',
+    searchOpen: false,
+    selected: '',
+    detail: null,
+    detailOpen: false,
+    confirmDeleteHash: '',
+    actioning: new Set(),
+    filteringNoor: false,
+    destroyed: false,
+    refreshTimer: null,
+    ws: null,
+    wsFallback: false,
+    liveMode: 'connecting',
+    page: 1,
+    pageSize: 10,
+    renderedFilterTab: '',
+  }
+
+  el.innerHTML = `
+    <div class="qb-page">
+      <div class="noor-plugin-topbar qb-toolbar">
+        <div data-role="filterTabs" class="noor-plugin-topbar__tabs"></div>
+        <div class="noor-plugin-topbar__actions qb-actions">
+          <span data-role="version" class="qb-badge" style="display:none"></span>
+          <span data-role="scope" class="qb-badge"></span>
+          <span data-role="smallFilterHost"></span>
+          <span data-role="connection" class="qb-connection"><i></i><span>未连接</span></span>
+          <span data-role="newTaskHost"></span>
+          <span data-role="settingsHost"></span>
+          <span data-role="refreshHost"></span>
+        </div>
+      </div>
+      <div class="qb-overview-row">
+        <div class="qb-summary" data-role="summary"></div>
+        <div class="qb-task-tools">
+          <div data-role="searchToggle" class="qb-search-card qb-stat" title="点击搜索任务名称 / 保存路径"><span>搜索</span><strong data-role="searchLabel">${state.query ? '已筛选' : '任务'}</strong><input data-role="search" class="qb-search-inline" placeholder="输入关键词" style="display:none"><span data-role="clearSearchHost"></span></div>
+        </div>
+      </div>
+      <div data-role="state" class="qb-state" style="display:none"></div>
+      <div class="qb-table-card">
+        <div class="qb-table-wrap">
+          <table class="qb-table">
+            <thead><tr>
+              <th>名称</th>
+              <th>状态</th>
+              <th>进度</th>
+              <th>速度</th>
+              <th>大小</th>
+              <th>分享率</th>
+              <th>时间</th>
+              <th class="qb-right">操作</th>
+            </tr></thead>
+            <tbody data-role="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div data-role="detail" class="qb-detail" style="display:none"></div>
+      <div data-role="pager" class="qb-pager"></div>
+      <div data-role="confirm" class="qb-modal-root"></div>
+    </div>
+  `
+
+  const $ = role => el.querySelector(`[data-role="${role}"]`)
+  let tbody = $('tbody'), stateBox = $('state'), summary = $('summary'), version = $('version'), scope = $('scope'),
+    smallFilterHost = $('smallFilterHost'), newTaskHost = $('newTaskHost'), settingsHost = $('settingsHost'), refreshHost = $('refreshHost'),
+    connection = $('connection'), smallFilter = null, newTask = null, settings = null, refresh = null, search = $('search'), searchToggle = $('searchToggle'),
+    searchLabel = $('searchLabel'), clearSearchHost = $('clearSearchHost'), clearSearch = null, detail = $('detail'), pager = $('pager'), confirmRoot = $('confirm'), filterTabs = $('filterTabs')
+  let activeSdkModal = null
+  const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
+  const fmtBytes = n => { n = Number(n || 0); if (!n) return '0 B'; const u = ['B','KB','MB','GB','TB']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return `${n.toFixed(i>=3?2:1)} ${u[i]}` }
+  const fmtSpeed = n => Number(n || 0) ? `${fmtBytes(n)}/s` : '0 B/s'
+  const fmtEta = n => { n = Number(n || 0); if (n < 0 || n >= 8640000) return '∞'; const h=Math.floor(n/3600), m=Math.floor((n%3600)/60); return h ? `${h}h ${m}m` : `${m}m` }
+  const fmtTime = n => { n = Number(n || 0); if (!n) return '-'; const d = new Date(n * 1000); return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
+  const pct = n => `${Math.round(Number(n || 0) * 1000) / 10}%`
+  const stateText = s => ({ downloading:'下载中', stalledDL:'等待下载', uploading:'做种', stalledUP:'等待做种', pausedDL:'暂停', pausedUP:'暂停', stoppedDL:'停止', stoppedUP:'停止', error:'错误', missingFiles:'文件缺失', queuedDL:'排队', queuedUP:'排队', checkingDL:'校验中', checkingUP:'校验中', checkingResumeData:'校验中', metaDL:'获取元数据', forcedDL:'强制下载', forcedUP:'强制做种', moving:'移动中' }[s] || s || '-')
+  const stateTone = s => /error|missing/i.test(s) ? 'error' : /paused|stopped/i.test(s) ? 'muted' : /upload|stalledUP|forcedUP/i.test(s) ? 'success' : /check|queue|meta|moving/i.test(s) ? 'warning' : 'info'
+  const priorityText = p => Number(p || 0) === 0 ? '已跳过' : Number(p || 0) >= 7 ? '最高' : Number(p || 0) >= 6 ? '高' : Number(p || 0) >= 1 ? '下载' : '默认'
+  const hasTag = (torrent, tag) => String(torrent?.tags || '').split(',').map(x => x.trim().toLowerCase()).includes(String(tag || '').toLowerCase())
+
+  function initUiKitTopbar() {
+    const mkBtn = (label, cls, tone, title) => {
+      if (sdk.ui?.button) return sdk.ui.button({ label, className: cls, tone, title })
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = cls
+      btn.textContent = label
+      if (title) btn.title = title
+      return btn
+    }
+    settings = mkBtn('设置', 'qb-icon-btn', 'default', '设置分类路径')
+    settings.dataset.role = 'settings'
+    settingsHost.replaceWith(settings)
+    newTask = mkBtn('新建任务', 'qb-btn qb-btn--primary', 'primary')
+    newTask.dataset.role = 'newTask'
+    newTaskHost.replaceWith(newTask)
+    refresh = mkBtn('刷新', 'qb-btn qb-btn--primary', 'primary')
+    refresh.dataset.role = 'refresh'
+    refreshHost.replaceWith(refresh)
+    smallFilter = mkBtn('', 'qb-badge qb-badge-btn', 'default', '对 NOOR 推送到 qB 的任务跳过小于阈值的非字幕文件。点击可立即对当前任务执行一次过滤。')
+    smallFilter.dataset.role = 'smallFilter'
+    smallFilter.style.display = 'none'
+    smallFilterHost.replaceWith(smallFilter)
+    clearSearch = mkBtn('×', 'qb-search-clear', 'default', '清除搜索')
+    clearSearch.dataset.role = 'clearSearch'
+    clearSearch.style.display = 'none'
+    clearSearchHost.replaceWith(clearSearch)
+
+  }
+  initUiKitTopbar()
+
+  function matchesFilter(t) {

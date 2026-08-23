@@ -1,0 +1,776 @@
+        if not mapping_id:
+            continue
+        if req.skip_conflicts and group.get("has_tmdb_conflict"):
+            skipped.append({"mapping_id": mapping_id, "name": group.get("display_name") or group.get("canonical_name") or "", "reason": "tmdb_conflict"})
+            continue
+        target_actor_id = str(req.target_actor_ids.get(mapping_id) or group.get("target_actor_id") or "").strip()
+        if not target_actor_id:
+            skipped.append({"mapping_id": mapping_id, "name": group.get("display_name") or group.get("canonical_name") or "", "reason": "missing_target"})
+            continue
+        try:
+            result = await _execute_actor_mapping_merge(
+                config,
+                ActorMappingMergeRequest(
+                    mapping_id=mapping_id,
+                    target_actor_id=target_actor_id,
+                    dry_run=req.dry_run,
+                ),
+                lang=lang,
+            )
+            results.append(result)
+            updated_count += int(result.get("updated_count") or 0)
+            deleted_actor_count += len(result.get("deleted_actor_ids") or [])
+        except HTTPException as exc:
+            failures.append({
+                "mapping_id": mapping_id,
+                "name": group.get("display_name") or group.get("canonical_name") or "",
+                "status_code": exc.status_code,
+                "error": exc.detail,
+            })
+        except Exception as exc:
+            failures.append({
+                "mapping_id": mapping_id,
+                "name": group.get("display_name") or group.get("canonical_name") or "",
+                "error": str(exc),
+            })
+
+    return {
+        "ok": not failures,
+        "dry_run": req.dry_run,
+        "candidate_count": len(groups),
+        "executed_count": len(results),
+        "updated_count": updated_count,
+        "deleted_actor_count": deleted_actor_count,
+        "skipped_count": len(skipped),
+        "failed_count": len(failures),
+        "results": results,
+        "skipped": skipped,
+        "failures": failures,
+    }
+
+
+def _item_matches_query(item: dict, query: str | None) -> bool:
+    if not query:
+        return True
+    q = query.strip().lower()
+    if not q:
+        return True
+    fields = [
+        item.get('name'),
+        item.get('path'),
+        (item.get('nfo') or {}).get('title') if isinstance(item.get('nfo'), dict) else None,
+        (item.get('nfo') or {}).get('originaltitle') if isinstance(item.get('nfo'), dict) else None,
+        (item.get('nfo') or {}).get('num') if isinstance(item.get('nfo'), dict) else None,
+    ]
+    haystack = '\n'.join(str(field) for field in fields if field).lower()
+    return q in haystack
+
+def _apply_filter_and_paginate(items: list[dict], filter: str | None, q: str | None, offset: int, limit: int) -> tuple[list[dict], int]:
+    filtered = []
+    for item in items:
+        tags = item.get("tags", {})
+        matches_filter = not filter
+        if filter:
+            if not tags:
+                matches_filter = False
+            elif filter == "cracked":
+                matches_filter = bool(tags.get("is_cracked"))
+            elif filter == "chinese":
+                matches_filter = bool(tags.get("has_chinese"))
+            elif filter == "leaked":
+                matches_filter = tags.get("release_type_key") == "leaked"
+            elif filter == "uncensored":
+                matches_filter = tags.get("release_type_key") == "uncensored"
+        if matches_filter and _item_matches_query(item, q):
+            filtered.append(item)
+    return filtered[offset:offset + limit], len(filtered)
+
+
+
+async def _get_siblings(config: dict, parent_id: str, current_id: str) -> list[dict]:
+    return await get_siblings_impl(
+        config,
+        parent_id,
+        current_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+        map_path_fn=_map_path,
+    )
+
+
+def _get_main_nfo(file_path: str | None) -> str | None:
+    return get_main_nfo_impl(file_path)
+
+
+async def _get_item(config: dict, item_id: str) -> dict | None:
+    return await get_item_impl(
+        config,
+        item_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+        map_path_fn=_map_path,
+        parse_tags_fn=_parse_tags,
+        get_siblings_fn=_get_siblings,
+        get_main_nfo_fn=_get_main_nfo,
+    )
+
+
+# ─── Hardlink group management ─────────────────────────────────────────────────
+
+def _hardlink_groups_path() -> Path:
+    return hardlink_groups_path_impl(_config_path)
+
+
+def _hardlink_groups_last_scanned_at() -> str | None:
+    path = _hardlink_groups_path()
+    if not path.is_file():
+        return None
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+    except OSError:
+        return None
+
+
+def _scan_inodes(dir_path: str) -> dict[tuple[int, int], str]:
+    return scan_inodes_impl(dir_path)
+
+
+def _scan_single_group(source_dir: str, hardlink_dir: str) -> list[dict]:
+    return scan_single_group_impl(source_dir, hardlink_dir, scan_inodes_fn=_scan_inodes)
+
+
+def _fetch_emby_item_info(config: dict, emby_id: str | None) -> tuple[str | None, str | None]:
+    return fetch_emby_item_info_impl(
+        config,
+        emby_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+    )
+
+
+def _extract_code_from_path(file_path: str) -> str:
+    return extract_code_from_path_impl(file_path)
+
+
+async def _build_hardlink_groups() -> list[dict]:
+    return await build_hardlink_groups_impl(
+        _load_config(),
+        scan_single_group_fn=_scan_single_group,
+        extract_code_from_path_fn=_extract_code_from_path,
+    )
+
+
+def _save_hardlink_groups(groups: list[dict]) -> None:
+    save_hardlink_groups_impl(groups, hardlink_groups_path_fn=_hardlink_groups_path)
+
+
+def _load_hardlink_groups() -> list[dict]:
+    return load_hardlink_groups_impl(hardlink_groups_path_fn=_hardlink_groups_path)
+
+
+def _enrich_hardlink_groups(groups: list[dict]) -> dict:
+    return enrich_hardlink_groups_impl(groups)
+
+
+# ─── Schemas ──────────────────────────────────────────────────────────────────
+
+class MediaAdapterMeta(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: str
+    author: str
+
+
+class MediaLibraryStatus(BaseModel):
+    available: bool
+    current: MediaAdapterMeta | None
+    message: str | None
+
+
+# ─── API Endpoints ─────────────────────────────────────────────────────────────
+
+@router.get("", response_model=MediaLibraryStatus)
+async def get_status():
+    """Get media library adapter status."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        return MediaLibraryStatus(
+            available=False,
+            current=None,
+            message=_ADAPTER_NOT_ACTIVATED,
+        )
+    return MediaLibraryStatus(
+        available=True,
+        current=MediaAdapterMeta(
+            id="emby",
+            name="Emby / Jellyfin",
+            version="1.0.0",
+            description="连接 Emby 或 Jellyfin 媒体服务器",
+            author="NOOR",
+        ),
+        message=None,
+    )
+
+
+@router.get("/config")
+async def get_config():
+    """Get saved media library configuration."""
+    return {"config": _ensure_webhook_token(_load_config())}
+
+
+@router.post("/config")
+async def save_config(config: dict):
+    """Partially update media library configuration.
+    Only updates the fields provided; all other fields are preserved.
+    """
+    existing = _load_config()
+    existing.update(config)
+    _save_config(existing)
+    state = _bump_sync_state()
+    return {"ok": True, "sync_state": state}
+
+
+@router.get("/sync-state")
+async def get_sync_state():
+    """Return the media library cache sync state for lightweight polling."""
+    return _sync_state_payload()
+
+
+@router.post("/cache/invalidate")
+async def invalidate_cache():
+    """Clear NOOR's media library cache without touching Emby."""
+    state = _bump_sync_state()
+    SystemLogManager.get_instance().add_log(
+        "info",
+        "[MediaLibrary] 媒体库缓存已手动刷新",
+        source="media_library",
+    )
+    return {"ok": True, "sync_state": state}
+
+
+@router.post("/webhook/emby")
+async def emby_webhook(request: Request, token: str | None = None):
+    """Receive Emby webhook notifications and invalidate NOOR media cache."""
+    config = _ensure_webhook_token(_load_config())
+    expected = str(config.get("webhook_token") or "").strip()
+    provided = (token or request.headers.get("X-NOOR-Webhook-Token") or "").strip()
+    if not expected or not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="Invalid webhook token")
+
+    event_name = ""
+    item_name = ""
+    notification_type = ""
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip() or "unknown"
+    try:
+        payload = await request.json()
+        if isinstance(payload, dict):
+            event_name = str(payload.get("Event") or payload.get("event") or payload.get("NotificationType") or "")
+            notification_type = str(payload.get("NotificationType") or payload.get("Type") or payload.get("type") or "")
+            item = payload.get("Item") if isinstance(payload.get("Item"), dict) else {}
+            item_name = str(item.get("Name") or payload.get("Name") or payload.get("Title") or "")
+    except Exception:
+        payload = None
+
+    state = _bump_sync_state(webhook=True)
+    is_test = any("test" in value.lower() or "测试" in value for value in [event_name, notification_type, item_name])
+    source_ip = _request_source_ip(request)
+    hint_parts = []
+    if is_test:
+        hint_parts.append("测试通知")
+    if event_name:
+        hint_parts.append(f"事件={event_name}")
+    if notification_type and notification_type != event_name:
+        hint_parts.append(f"类型={notification_type}")
+    if item_name:
+        hint_parts.append(f"条目={item_name}")
+    hint_parts.append(f"内容类型={content_type}")
+    hint_parts.append(f"来源={source_ip}")
+    hint = " · ".join(hint_parts)
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 收到 Emby Webhook，已刷新媒体库缓存 · {hint}",
+        source="media_library.webhook",
+    )
+    return {"ok": True, "sync_state": state}
+
+
+@router.post("/test")
+async def test_connection(config: dict | None = None):
+    """Test connection with provided config. Returns available libraries on success."""
+    cfg = config if config is not None else _load_config()
+    if not cfg:
+        return {"ok": False, "message": _ADAPTER_NOT_ACTIVATED, "libraries": []}
+    # Test connection by fetching items (works reliably; MediaFolders may return 502)
+    try:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            resp = await client.get(
+                f"{_server_url(cfg)}/emby/Items",
+                headers=_headers(cfg.get("api_key", "")),
+                params={"limit": 1, "Fields": "BasicSyncInfo"},
+            )
+            resp.raise_for_status()
+        # Also try to get libraries
+        try:
+            libraries = await _list_libraries(cfg)
+        except Exception:
+            libraries = []
+        return {"ok": True, "message": f"已连接至 {cfg.get('server_url', 'Emby/Jellyfin')}", "libraries": libraries}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return {"ok": False, "message": "API Key 无效或已过期", "libraries": []}
+        return {"ok": False, "message": f"连接失败: HTTP {e.response.status_code}", "libraries": []}
+    except httpx.TimeoutException as e:
+        return {"ok": False, "message": f"连接超时（请检查 Emby 地址或网络）: {e}", "libraries": []}
+    except httpx.ConnectError as e:
+        return {"ok": False, "message": f"无法连接到 Emby（请检查地址/端口）: {e}", "libraries": []}
+    except Exception as e:
+        err = str(e).strip() or e.__class__.__name__
+        return {"ok": False, "message": f"连接失败: {err}", "libraries": []}
+
+
+@router.get("/libraries")
+async def get_libraries():
+    """Get list of media libraries."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        libraries = await _list_libraries(config)
+    except Exception:
+        return {"libraries": []}
+
+    return {"libraries": libraries}
+
+
+@router.get("/items")
+async def get_items(
+    library_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    filter: str | None = None,
+    q: str | None = None,
+    force_refresh: bool = Query(False, description="强制刷新缓存"),
+):
+    """Get items from the media library."""
+    import time
+
+    force_refresh = force_refresh if isinstance(force_refresh, bool) else False
+
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    now = time.time()
+
+    if not library_id:
+        raw = config.get("enabled_library_ids", "") if isinstance(config, dict) else ""
+        enabled_ids = [lid.strip() for lid in raw.split(",") if lid.strip()] if raw else []
+
+        try:
+            all_libraries = await _list_libraries(config)
+            target_ids = enabled_ids if enabled_ids else [lib["id"] for lib in all_libraries]
+
+            all_items: list[dict] = []
+            for lid in target_ids:
+                cache_key = f"all_{lid}"
+                if not force_refresh and cache_key in _items_cache:
+                    cached, cached_at = _items_cache[cache_key]
+                    if now - cached_at < _CACHE_TTL:
+                        all_items.extend(cached)
+                        continue
+                items, _ = await _list_items(config, lid, limit=2000, offset=0, force_refresh=force_refresh)
+                _items_cache[cache_key] = (items, now)
+                all_items.extend(items)
+
+            all_items.sort(key=lambda x: x.get("date_created") or "", reverse=True)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"获取媒体失败: {e}")
+
+        all_items = [i for i in all_items if _item_matches_filter(i, filter)] if filter else all_items
+        all_items = [i for i in all_items if _item_matches_query(i, q)] if q else all_items
+
+        total = len(all_items)
+        return {"items": all_items[offset:offset + limit], "total": total}
+
+    cache_key = library_id
+    if not force_refresh and cache_key in _items_cache:
+        cached_items, cached_at = _items_cache[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return _paginate_filter(cached_items, filter, q, offset, limit)
+
+    try:
+        all_items, _ = await _list_items(config, library_id, limit=2000, offset=0, force_refresh=force_refresh)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取媒体失败: {e}")
+
+    _items_cache[cache_key] = (all_items, now)
+    return _paginate_filter(all_items, filter, q, offset, limit)
+
+
+def _item_matches_filter(item: dict, filter_str: str) -> bool:
+    tags = item.get("tags", {})
+    if not tags:
+        return False
+    if filter_str == "cracked" and tags.get("is_cracked"):
+        return True
+    if filter_str == "chinese" and tags.get("has_chinese"):
+        return True
+    if filter_str == "leaked" and tags.get("release_type_key") == "leaked":
+        return True
+    if filter_str == "uncensored" and tags.get("release_type_key") == "uncensored":
+        return True
+    return False
+
+
+def _paginate_filter(all_items: list, filter_str: str | None, q: str | None, offset: int, limit: int):
+    filtered = [i for i in all_items if _item_matches_filter(i, filter_str)] if filter_str else list(all_items)
+    filtered = [i for i in filtered if _item_matches_query(i, q)] if q else filtered
+    total = len(filtered)
+    return {"items": filtered[offset:offset + limit], "total": total}
+
+
+@router.get("/actors")
+async def get_actors(
+    limit: int = 60,
+    offset: int = 0,
+    q: str | None = None,
+    sort_by: str = "SortName",
+    sort_order: str = "Ascending",
+    lang: str | None = None,
+):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        actors, total = await _list_actors(
+            config,
+            limit=limit,
+            offset=offset,
+            q=q,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            lang=lang,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取演员失败: {e}")
+
+    return {"actors": actors, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/actors/duplicates")
+async def get_duplicate_actors(limit: int = 2000):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        groups = await _detect_duplicate_actors(config, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"检测重名演员失败: {e}")
+
+    return {"groups": groups, "total": len(groups)}
+
+
+@router.get("/actor/{actor_id}/movies")
+async def get_actor_movies(actor_id: str, limit: int = 120, offset: int = 0):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+            movies = await _emby_related_movies_for_actor(client, config, actor_id, limit=5000)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"获取演员作品失败: {exc}")
+    items = [_parse_item(item, config) for item in movies]
+    items = _deduplicate_items(items)
+    total = len(items)
+    return {"items": items[offset:offset + max(1, min(limit, 500))], "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/actor/{actor_id}")
+async def get_actor_profile(actor_id: str, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return {"ok": True, "actor": await _get_actor_profile(config, actor_id, lang=lang)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"获取演员详情失败: {exc}")
+
+
+@router.post("/actor/{actor_id}")
+async def update_actor_profile(actor_id: str, req: ActorProfileUpdateRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _update_actor_profile(config, actor_id, req, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"保存演员详情失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员资料已保存: {actor_id} · Emby 同步 {'成功' if result.get('synced') else '失败'}",
+        source="media_library.actors",
+    )
+    return result
+
+
+@router.post("/actor/{actor_id}/avatar")
+async def upload_actor_avatar(actor_id: str, file: UploadFile = File(...), lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "image/jpeg"
+    if not str(content_type).startswith("image/"):
+        raise HTTPException(status_code=400, detail="请上传图片文件")
+    content = await file.read()
+    try:
+        result = await _set_actor_avatar_bytes(config, actor_id, content, content_type=content_type, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"上传演员头像失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员头像已上传: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actor/{actor_id}/avatar-url")
+async def set_actor_avatar_from_url(actor_id: str, req: ActorAvatarUrlRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _set_actor_avatar_from_url(config, actor_id, req.url, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"设置演员头像失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员头像已从 URL 设置: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actor/{actor_id}/metadata/tmdb-preview")
+async def preview_actor_tmdb_metadata(actor_id: str, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return await _preview_actor_tmdb_metadata(config, actor_id, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"读取 TMDB 演员资料失败: {exc}")
+
+
+@router.post("/actor/{actor_id}/metadata/tmdb-apply")
+async def apply_actor_tmdb_metadata(actor_id: str, req: ActorTmdbApplyRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _apply_actor_tmdb_metadata(config, actor_id, req, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"应用 TMDB 演员资料失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员 TMDB 资料已应用: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.delete("/actor/{actor_id}")
+async def delete_actor_profile(actor_id: str):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _delete_actor_profile(config, actor_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"删除演员失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "warning",
+        f"[MediaLibrary] 演员已删除: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actors/mapping/upload")
+async def upload_actor_mapping(file: UploadFile = File(...)):
+    filename = _safe_upload_filename(file.filename)
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(content) > 30 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="上传文件超过 30MB")
+
+    upload_dir = _actor_mapping_upload_dir()
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    target = upload_dir / f"{timestamp}_{filename}"
+    target.write_bytes(content)
+    latest = upload_dir / "latest"
+    latest.write_text(str(target), encoding="utf-8")
+
+    file_info = _actor_mapping_upload_info(target, len(content))
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 已上传演员映射表: {filename} · {len(content)} bytes",
+        source="media_library.actors",
+    )
+    return {"ok": True, "file": file_info}
+
+
+@router.get("/actors/mapping/latest-upload")
+async def get_latest_actor_mapping_upload():
+    path = _latest_actor_mapping_upload_path()
+    if path is None:
+        return {"ok": True, "uploaded": False}
+    return {"ok": True, "uploaded": True, "file": _actor_mapping_upload_info(path)}
+
+
+@router.get("/actors/mapping/status")
+async def get_actor_mapping_status():
+    _maybe_schedule_actor_mapping_auto_update()
+    settings = get_settings()
+    return {
+        "ok": True,
+        **_load_actor_mapping_status(),
+        "online": {
+            "enabled": bool(getattr(settings, "actor_mapping_auto_update", False)),
+            **_load_actor_mapping_online_state(),
+        },
+    }
+
+
+@router.post("/actors/mapping/sync-online")
+async def sync_online_actor_mapping():
+    try:
+        return await _sync_actor_mapping_online(force=True)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.delete("/actors/mapping")
+async def clear_actor_mapping():
+    result = _clear_actor_mapping_records()
+    SystemLogManager.get_instance().add_log(
+        "warning",
+        "[MediaLibrary] 演员映射表已清除",
+        source="media_library.actors",
+    )
+    return result
+
+
+@router.post("/actors/mapping/import-latest")
+async def import_latest_actor_mapping():
+    path = _latest_actor_mapping_upload_path()
+    if path is None:
+        raise HTTPException(status_code=400, detail="还没有上传演员映射表")
+    if path.suffix.lower() != ".xml":
+        raise HTTPException(status_code=400, detail="当前仅支持导入 XML 演员映射表")
+    try:
+        records, stats = _parse_actor_mapping_xml(path)
+        result = _save_actor_mapping_records(records, path, stats)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"导入演员映射表失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 已导入演员映射表: {stats.get('total', 0)} 条 · TMDB {stats.get('with_tmdb', 0)} 条",
+        source="media_library.actors",
+    )
+    return {"ok": True, "mapping": result}
+
+
+@router.get("/actors/mapping/matches")
+async def get_actor_mapping_matches(
+    limit: int = 5000,
+    only_candidates: bool = Query(False, description="只返回需要合并确认的候选组"),
+    lang: str | None = None,
+):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _preview_actor_mapping_matches(config, limit=limit, only_candidates=only_candidates, lang=lang)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"匹配演员映射表失败: {exc}")
+    return {"ok": True, **result}
+
+
+@router.get("/actors/mapping/merge-plan")
+async def get_actor_mapping_merge_plan(
+    mapping_id: str,
+    target_name: str | None = None,
+    target_actor_id: str | None = None,
+    lang: str | None = None,
+):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return {
+            "ok": True,
+            **await _build_actor_mapping_merge_plan(
+                config,
+                mapping_id,
+                target_name=target_name,
+                target_actor_id=target_actor_id,
+                lang=lang,
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"生成演员合并计划失败: {exc}")
+
+
+@router.post("/actors/mapping/merge-execute")
+async def execute_actor_mapping_merge(req: ActorMappingMergeRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _execute_actor_mapping_merge(config, req, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"执行演员合并失败: {exc}")
+    if not req.dry_run:
+        _bump_sync_state()
+        SystemLogManager.get_instance().add_log(
+            "info",
+            (
+                f"[MediaLibrary] 演员合并完成: {req.mapping_id} -> {result.get('plan', {}).get('target_name')}"
+                f" · {result.get('updated_count', 0)} 部作品"
+                f" · 删除空演员 {len(result.get('deleted_actor_ids') or [])} 个"
+            ),
+            source="media_library.actors",
+        )
+    return result

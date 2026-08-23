@@ -201,6 +201,12 @@ select option {
   .settings-input::placeholder {
     color: rgba(255, 255, 255, 0.2);
   }
+  .settings-input--readonly,
+  .settings-input[readonly] {
+    color: rgba(255, 255, 255, 0.68);
+    background: rgba(255, 255, 255, 0.025);
+    border-color: rgba(255, 255, 255, 0.055);
+  }
   select.settings-input {
     cursor: pointer;
     appearance: none;

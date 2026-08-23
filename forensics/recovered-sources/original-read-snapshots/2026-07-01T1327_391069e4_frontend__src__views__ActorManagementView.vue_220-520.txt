@@ -1,0 +1,301 @@
+            }) }}
+          </span>
+        </div>
+        <button type="button" class="duplicate-panel__close" @click="showMappingMatches = false">
+          <BaseIcon name="close" />
+        </button>
+      </div>
+
+      <div v-if="mappingMatches.groups?.length" class="duplicate-groups">
+        <article v-for="group in mappingMatches.groups" :key="group.mapping_id" class="duplicate-group">
+          <div class="duplicate-group__title">
+            <strong>{{ mappingGroupName(group) }}</strong>
+            <span>{{ group.count }}</span>
+          </div>
+          <div class="mapping-alias-line">
+            <span v-if="group.jp">{{ group.jp }}</span>
+            <span v-if="group.zh_tw">{{ group.zh_tw }}</span>
+            <span v-if="group.tmdb_id">TMDB {{ group.tmdb_id }}</span>
+          </div>
+          <div class="duplicate-members">
+            <button
+              v-for="actor in group.actors"
+              :key="actor.id"
+              type="button"
+              class="duplicate-member"
+              @click="openEmby(actor)"
+            >
+              <span class="duplicate-member__avatar">
+                <img v-if="actor.image_url" :src="actor.image_url" :alt="actor.name" loading="lazy" />
+                <span v-else>{{ actorInitial(actor.name) }}</span>
+              </span>
+              <span class="duplicate-member__body">
+                <span>{{ actor.name }}</span>
+                <em>{{ actor.matched_name }}</em>
+              </span>
+            </button>
+          </div>
+        </article>
+      </div>
+      <div v-else class="actor-empty actor-empty--compact">{{ t('files.actors.noMappingCandidates') }}</div>
+    </section>
+
+    <section class="noor-control-panel actor-filter-panel">
+      <div class="noor-control-panel__row noor-control-panel__row--primary">
+        <div class="noor-control-panel__group">
+          <span class="noor-control-panel__group-label">{{ t('files.actors.sortBy') }}</span>
+          <div class="noor-control-panel__group-items">
+            <button type="button" class="actor-chip" :class="{ 'is-active': sortBy === 'SortName' && sortOrder === 'Ascending' }" @click="setSort('SortName', 'Ascending')">
+              {{ t('files.actors.sortNameAsc') }}
+            </button>
+            <button type="button" class="actor-chip" :class="{ 'is-active': sortBy === 'DateCreated' && sortOrder === 'Descending' }" @click="setSort('DateCreated', 'Descending')">
+              {{ t('files.actors.sortRecent') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="loading" class="actor-loading">
+      <BaseIcon name="loading" class="actor-loading__icon" />
+    </div>
+
+    <div v-else-if="!actors.length" class="actor-empty ui-card">
+      <BaseIcon name="user" class="actor-empty__icon" />
+      <span>{{ t('files.actors.empty') }}</span>
+    </div>
+
+    <div v-else class="actor-grid">
+      <article v-for="actor in actors" :key="actor.id" class="actor-card ui-card" @click="openEmby(actor)">
+        <div class="actor-card__avatar">
+          <img v-if="actor.image_url" :src="actor.image_url" :alt="actorName(actor)" loading="lazy" />
+          <span v-else>{{ actorInitial(actorName(actor)) }}</span>
+        </div>
+        <div class="actor-card__body">
+          <h3>{{ actorName(actor) }}</h3>
+        </div>
+      </article>
+    </div>
+
+    <NoorPagination v-model:page="page" :total-pages="totalPages" />
+  </div>
+</template>
+
+<style scoped>
+.actor-management {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.actor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.actor-file-input {
+  display: none;
+}
+
+.actor-search {
+  position: relative;
+  min-width: min(22rem, 100%);
+}
+
+.actor-search__icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+}
+
+.actor-search__input {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0 0.8rem 0 2.2rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
+  font-size: 0.86rem;
+  outline: none;
+}
+
+.actor-search__input:focus {
+  border-color: rgba(0, 117, 255, 0.52);
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.16);
+}
+
+.mapping-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.mapping-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.55rem;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.mapping-status strong {
+  color: var(--color-text-primary);
+}
+
+.actor-filter-panel {
+  padding: 0.7rem 0.85rem;
+}
+
+.actor-chip {
+  min-height: 2rem;
+  padding: 0 0.78rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.actor-chip:hover,
+.actor-chip.is-active {
+  color: var(--color-text-primary);
+  border-color: rgba(0, 117, 255, 0.48);
+  background: rgba(0, 117, 255, 0.16);
+}
+
+.duplicate-panel {
+  padding: 1rem;
+}
+
+.duplicate-panel__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.duplicate-panel__head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.duplicate-panel__head span {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.duplicate-panel__close {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.duplicate-panel__close svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.duplicate-groups {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.duplicate-group {
+  padding: 0.75rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.duplicate-group__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.duplicate-group__title strong {
+  color: var(--color-text-primary);
+  font-size: 0.88rem;
+}
+
+.duplicate-group__title span {
+  min-width: 1.45rem;
+  height: 1.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.mapping-alias-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: -0.2rem 0 0.6rem;
+}
+
+.mapping-alias-line span {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.duplicate-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.5rem;
+}
+
+.duplicate-member {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  text-align: left;
+}
+
+.duplicate-member__avatar,
+.actor-card__avatar {
+  flex: 0 0 auto;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;

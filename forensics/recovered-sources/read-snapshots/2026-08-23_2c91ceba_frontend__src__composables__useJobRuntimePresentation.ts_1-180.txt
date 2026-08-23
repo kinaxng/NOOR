@@ -1,0 +1,180 @@
+
+import { computed, type ComputedRef, type Ref } from 'vue'
+import type { Job } from '../api/types'
+import type { JobCardViewModel } from '../components/noor/JobCard.vue'
+import type { JobChainMemberViewModel } from '../components/noor/JobChainPanel.vue'
+import { useI18n } from './useI18n'
+import { useJobPresentation } from './useJobPresentation'
+import type { JobRuntimeStatus } from './useJobEventState'
+
+export type JobRuntimeSnapshot = {
+  status: string
+  progress: number
+  phaseKey?: string
+  phaseGroup?: string
+  phaseLabel?: string
+  detail?: string
+  phaseProgress?: number
+}
+
+export type JobRuntimeViewState = {
+  status?: string
+  phaseKey?: string
+  phaseGroup?: string
+  phaseLabel?: string
+  detail?: string
+}
+
+export type JobTabKey = 'running' | 'completed' | 'failed' | 'background'
+
+type UseJobRuntimePresentationOptions = {
+  allJobs: () => Job[]
+  jobStatuses: Ref<Record<string, JobRuntimeStatus>>
+  selectedJobId: Ref<string | null>
+  flashJobId: Ref<string | null>
+  activeTab: Ref<JobTabKey>
+  currentTabJobs: ComputedRef<Job[]>
+  selectedJob: ComputedRef<Job | null>
+  selectedJobChain: ComputedRef<Job[]>
+  cancelLabel: ComputedRef<string>
+}
+
+export function useJobRuntimePresentation(options: UseJobRuntimePresentationOptions) {
+  const {
+    allJobs,
+    jobStatuses,
+    selectedJobId,
+    flashJobId,
+    activeTab,
+    currentTabJobs,
+    selectedJob,
+    selectedJobChain,
+    cancelLabel,
+  } = options
+
+  const { t } = useI18n()
+  const {
+    getChainStepLabel,
+    getChainRoleLabel,
+    getChainWaitingLabel,
+    getChainPositionLabel,
+    getChainStatusSummary,
+    getChainFlowLabel,
+    getJobChainHint,
+    getStatusTone,
+    getEffectiveViewState,
+    getDisplayPhaseLine,
+    getCardView,
+    getProgressView,
+    getChainProgressView,
+    getDescriptionView,
+    getDisplayState,
+    getJobTypeLabel,
+    getJobTypeChipClass,
+    getJobDisplayName,
+    fallbackStatusLabel,
+  } = useJobPresentation(allJobs)
+
+  const showJobTypeChip = computed(() => activeTab.value === 'running')
+  const showJobProgressPanel = computed(() => activeTab.value === 'running')
+  const showJobSummaryLine = computed(() => activeTab.value === 'running' || activeTab.value === 'failed')
+  const showJobMetaLine = computed(() => activeTab.value === 'failed')
+  const showJobCompletedAt = computed(() => activeTab.value === 'completed' || activeTab.value === 'failed')
+
+  function getJobById(jobId: string) {
+    return allJobs().find(job => job.id === jobId) || null
+  }
+
+  function getJobRuntimeSnapshot(job: Job): JobRuntimeSnapshot {
+    const runtime = jobStatuses.value[job.id]
+    return {
+      status: runtime?.status ?? '',
+      progress: runtime?.progress ?? job.progress ?? 0,
+      phaseKey: runtime?.phaseKey ?? job.phase_key,
+      phaseGroup: runtime?.phaseGroup ?? job.phase_group,
+      phaseLabel: runtime?.phaseLabel ?? job.phase_label,
+      detail: runtime?.detail ?? job.detail,
+      phaseProgress: runtime?.phaseProgress ?? job.phase_progress ?? 0,
+    }
+  }
+
+  function getJobRuntimeBundle(job: Job) {
+    const snapshot = getJobRuntimeSnapshot(job)
+    return {
+      snapshot,
+      view: {
+        status: snapshot.status,
+        phaseKey: snapshot.phaseKey,
+        phaseGroup: snapshot.phaseGroup,
+        phaseLabel: snapshot.phaseLabel,
+        detail: snapshot.detail,
+      } satisfies JobRuntimeViewState,
+    }
+  }
+
+  function getJobDisplayBundle(job: Job) {
+    const runtimeBundle = getJobRuntimeBundle(job)
+    const progressView = getProgressView.value(job, {
+      progress: runtimeBundle.snapshot.progress,
+      phaseKey: runtimeBundle.snapshot.phaseKey,
+      phaseLabel: runtimeBundle.snapshot.phaseLabel,
+      phaseProgress: runtimeBundle.snapshot.phaseProgress,
+      detail: runtimeBundle.snapshot.detail,
+    })
+    const displayState = getDisplayState.value(job, {
+      ...runtimeBundle.view,
+      progress: runtimeBundle.snapshot.progress,
+      phaseProgress: runtimeBundle.snapshot.phaseProgress,
+    })
+    return {
+      runtime: runtimeBundle.snapshot,
+      viewState: runtimeBundle.view,
+      cardView: getCardView.value(job, runtimeBundle.view),
+      progressView,
+      displayState,
+      descriptionView: {
+        ...getDescriptionView.value(job, runtimeBundle.view),
+        summaryLine: displayState.summaryLine,
+        metaLine: displayState.metaLine,
+      },
+    }
+  }
+
+  function getJobRuntimeViewState(job: Job): JobRuntimeViewState {
+    return getJobRuntimeBundle(job).view
+  }
+
+  function getJobStatus(jobId: string) {
+    const job = getJobById(jobId)
+    return job ? getJobRuntimeSnapshot(job).status : ''
+  }
+
+  function getChainMemberStatus(member: Job) {
+    return getEffectiveViewState.value(member, getJobRuntimeViewState(member)).statusLabel
+  }
+
+  function getChainMemberColor(member: Job) {
+    return getStatusTone.value(member)
+  }
+
+  function getChainMemberPhaseLine(member: Job) {
+    return getDisplayPhaseLine.value(member, getJobDisplayBundle(member).viewState)
+  }
+
+  function isPrimaryChainJob(job: Job) {
+    return getChainRoleLabel.value(job) === t('jobs.chain.rolePrimary')
+  }
+
+  function isFollowupChainJob(job: Job) {
+    return getChainRoleLabel.value(job) === t('jobs.chain.roleFollowup')
+  }
+
+  function getJobCardView(job: Job) {
+    return getJobDisplayBundle(job).cardView
+  }
+
+  function getJobProgressView(job: Job) {
+    return getJobDisplayBundle(job).progressView
+  }
+
+  function getJobDescriptionView(job: Job) {

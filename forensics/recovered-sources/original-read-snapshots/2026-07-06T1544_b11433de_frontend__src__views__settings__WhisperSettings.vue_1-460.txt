@@ -1,0 +1,460 @@
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import { dictionaries } from '../../i18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+import { WHISPER_MODEL_BACKENDS, buildWhisperProfileWithTranslation, formatWhisperAudioPreprocessSummary, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend } from '../../composables/useWhisperProfiles'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const checkingDeps = ref(false)
+const checkingModels = ref(false)
+const downloadingModel = ref<string | null>(null)
+const installingDeps = computed(() => installStatus.value.status === 'running')
+const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
+const activeModelBackend = ref<WhisperModelBackend>('chickenrice-zh')
+const vadBackend = ref('energy')
+const audioPreprocessMode = ref('none')
+const audioPreprocessModel = ref('vocal_balanced')
+
+// ===== Translation settings =====
+const translateEnabled = ref(true)
+const translateTo = ref('zh')
+const translateModel = ref('gpt-4o-mini')
+const translateStyle = ref('adult_explicit')
+const translateBaseUrl = ref('https://api.openai.com/v1')
+const translateApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ available: boolean; message: string; models?: string[] } | null>(null)
+
+const checkingDepsResult = ref<Record<string, any>>({})
+const whisperCudaAvailable = ref(false)
+const torchVariant = ref<'gpu' | 'cpu'>('gpu')
+const whisperModels = ref<any[]>([])
+const whisperFeatures = ref<any>({})
+const depsExpanded = ref(false)
+const modelsExpanded = ref(false)
+
+// 只显示不便 Docker build 的运行时依赖（installable: true）
+const runtimeInstallableDeps = computed(() =>
+  Object.fromEntries(
+    Object.entries(checkingDepsResult.value).filter(([, v]) => (v as any).installable)
+  )
+)
+const runtimeDisplayedDeps = computed(() =>
+  Object.fromEntries(
+    Object.entries(checkingDepsResult.value).filter(([name]) => !String(name).startsWith('_'))
+  )
+)
+
+// 是否有缺失的运行时依赖（控制安装按钮显示）
+const hasMissingRuntimeDeps = computed(() => {
+  return Object.entries(runtimeInstallableDeps.value).some(([name, v]: [string, any]) => {
+    if (!v.installed) return true
+    if (v.in_noor_env === false) return true
+    if (name === 'onnxruntime' && torchVariant.value === 'gpu' && checkingDepsResult.value.torch?.cuda && !v.cuda) return true
+    return false
+  })
+})
+const installStatus = ref<{ status: string; progress: number; message: string; current_package?: string }>({
+  status: 'idle',
+  progress: 0,
+  message: '',
+})
+
+function dependencyDisplayName(name: string) {
+  if (name === 'torch') return `torch (${torchVariant.value.toUpperCase()})`
+  if (name === 'onnxruntime' && torchVariant.value === 'gpu') return 'onnxruntime-gpu'
+  return String(name)
+}
+
+function dependencySourceLabel(info: any) {
+  if (!info?.installed) return ''
+  if (info.in_noor_env === false) {
+    if (info.source === 'user_site') return t('settings.whisper.depSourceUser')
+    if (info.source === 'system_site') return t('settings.whisper.depSourceSystem')
+    return t('settings.whisper.depSourceExternal')
+  }
+  return t('settings.whisper.depSourceNoor')
+}
+
+function dependencyStatusColor(name: string, info: any) {
+  if (!info?.installed) return 'error'
+  if (info.in_noor_env === false) return 'warning'
+  if (name === 'onnxruntime' && torchVariant.value === 'gpu' && checkingDepsResult.value.torch?.cuda && !info.cuda) return 'warning'
+  return 'success'
+}
+
+function dependencyStatusText(name: string, info: any) {
+  if (!info?.installed) return t('settings.whisper.notInstalled')
+  if (info.in_noor_env === false) return dependencySourceLabel(info)
+  if (name === 'onnxruntime' && torchVariant.value === 'gpu' && checkingDepsResult.value.torch?.cuda && !info.cuda) {
+    return t('settings.whisper.onnxNoCuda')
+  }
+  return info.version || t('settings.whisper.installed')
+}
+
+function dependencyDetail(info: any) {
+  const parts: string[] = []
+  if (info?.installed && info?.in_noor_env !== false) parts.push(dependencySourceLabel(info))
+  if (Array.isArray(info?.providers) && info.providers.length) parts.push(`Provider: ${info.providers.join(' / ')}`)
+  if (info?.path) parts.push(info.path)
+  return parts.join(' · ')
+}
+
+onMounted(async () => {
+  await loadSettings()
+  await Promise.all([checkWhisperDeps(), loadWhisperModels()])
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      const w = resp.data.whisper
+      const defaults = resolveWhisperEditableDefaults(w)
+      whisperFeatures.value = w.features || {}
+      activeModelBackend.value = defaults.model_backend
+      vadBackend.value = defaults.vad_backend
+      audioPreprocessMode.value = defaults.audio_preprocess_mode
+      audioPreprocessModel.value = defaults.audio_preprocess_model
+      translateEnabled.value = defaults.translate_enabled
+      translateTo.value = defaults.translate_to
+      translateModel.value = defaults.translate_model
+      translateStyle.value = defaults.translate_style
+      translateBaseUrl.value = defaults.translate_base_url
+      translateApiKey.value = defaults.translate_api_key
+    }
+  } catch (e) {
+    console.error('Failed to load whisper settings:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function checkWhisperDeps() {
+  checkingDeps.value = true
+  try {
+    const resp = await api.post('/settings/whisper/check')
+    checkingDepsResult.value = resp.data.dependencies
+    whisperFeatures.value = resp.data.features || whisperFeatures.value
+    whisperCudaAvailable.value = resp.data.cuda_available
+    torchVariant.value = resp.data.cuda_available ? 'gpu' : 'cpu'
+    const statusResp = await api.get('/settings/whisper/install-status')
+    installStatus.value = statusResp.data
+  } catch (e: any) {
+    toast.error(t('settings.whisper.checkFailed'))
+  } finally {
+    checkingDeps.value = false
+  }
+}
+
+async function loadWhisperModels() {
+  checkingModels.value = true
+  try {
+    const resp = await api.get('/settings/whisper/models')
+    whisperModels.value = resp.data.models
+    // 更新下载状态（如果有正在进行的下载）
+    if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'running') {
+      modelDownloadStatus.value = resp.data.downloadStatus
+      // 恢复 downloadingModel 状态
+      if (resp.data.downloadStatus.model) {
+        downloadingModel.value = resp.data.downloadStatus.model
+      }
+    } else if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'idle') {
+      // 下载完成或空闲时，清除状态
+      downloadingModel.value = null
+    }
+  } catch (e: any) {
+    console.error('Failed to load models:', e)
+  } finally {
+    checkingModels.value = false
+  }
+}
+
+function buildWhisperSettingsPayload() {
+  return buildWhisperProfileWithTranslation(activeModelBackend.value, {
+    vad_backend: vadBackend.value,
+    audio_preprocess_mode: audioPreprocessMode.value,
+    audio_preprocess_model: audioPreprocessModel.value,
+    translate_enabled: translateEnabled.value,
+    translate_to: translateTo.value,
+    translate_model: translateModel.value,
+    translate_style: translateStyle.value,
+    translate_base_url: translateBaseUrl.value,
+    translate_api_key: translateApiKey.value,
+  })
+}
+
+async function saveWhisper() {
+  saving.value = true
+  try {
+    await api.put('/settings/whisper', buildWhisperSettingsPayload())
+    toast.success(t('settings.whisper.whisperSettingsSaved'))
+  } catch (e: any) {
+    toast.error(t('settings.whisper.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function testTranslateConnection() {
+  testingConnection.value = true
+  connectionResult.value = null
+  try {
+    const resp = await api.post('/whisper/translate/test', null, {
+      params: {
+        base_url: translateBaseUrl.value,
+        api_key: translateApiKey.value || undefined,
+        model: translateModel.value,
+      },
+    })
+    connectionResult.value = resp.data
+    if (resp.data.available) {
+      toast.success(resp.data.message)
+    } else {
+      toast.error(resp.data.message)
+    }
+  } catch (e: any) {
+    connectionResult.value = { available: false, message: t('settings.emby.connectFailed', { error: t('common.error') }) }
+    toast.error(t('settings.whisper.testFailed'))
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+async function installDeps() {
+  const parts = Object.entries(runtimeInstallableDeps.value)
+    .filter(([, info]: [string, any]) => !info?.installed)
+    .map(([name]) => name === 'torch' ? `torch ${torchVariant.value.toUpperCase()}` : name)
+  const torchIsInstalled = !!checkingDepsResult.value.torch?.installed
+  const variantChanged = torchIsInstalled && (torchVariant.value === 'gpu') !== !!checkingDepsResult.value.torch?.cuda
+  if (variantChanged && !parts.some(item => item.startsWith('torch'))) {
+    parts.push(`torch ${torchVariant.value.toUpperCase()}`)
+  }
+  const msg = parts.length === 0
+    ? t('settings.whisper.installDepsReady')
+    : t('settings.whisper.installDepsPlan', { packages: parts.join(' + ') })
+  if (!await confirm({ message: msg, danger: false })) return
+
+  installStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.installing') }
+  try {
+    await api.post('/settings/whisper/install-deps', {
+      torch_variant: torchVariant.value,
+      torch_current_cuda: !!checkingDepsResult.value.torch?.cuda,
+    })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/install-status')
+      const status = statusResp.data
+      installStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(t('settings.whisper.installSuccess'))
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.installFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.installFailed'))
+  }
+}
+
+async function downloadModel(modelId: string) {
+  if (!await confirm({ message: t('settings.whisper.downloadModelConfirm', { modelId }) })) return
+
+  downloadingModel.value = modelId
+  modelDownloadStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.downloading') }
+  try {
+    await api.post('/settings/whisper/models/download', { model: modelId })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/models/download-status')
+      const status = statusResp.data
+      modelDownloadStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(status.message || t('settings.whisper.downloadSuccess'))
+        await loadWhisperModels()
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.downloadFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.downloadFailed'))
+  } finally {
+    downloadingModel.value = null
+  }
+}
+
+async function deleteModel(modelId: string) {
+  if (!await confirm({ message: t('settings.whisper.deleteModelConfirm', { modelId }), danger: true })) return
+  try {
+    await api.delete(`/settings/whisper/models/${modelId}`)
+    toast.success(t('settings.whisper.deleted'))
+    await loadWhisperModels()
+    await checkWhisperDeps()
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.deleteFailed'))
+  }
+}
+
+// ===== Option lists =====
+
+
+// Translation target language options — derived from available i18n dictionaries
+const translateLangOptions = computed(() => {
+  return Object.keys(dictionaries).map(lang => ({
+    value: lang,
+    label: t(`settings.whisper.translateLang.${lang}`) || lang.toUpperCase(),
+  }))
+})
+
+// Translation style options
+const translateStyleOptions = computed(() => [
+  { value: 'adult_explicit', label: t('settings.whisper.translateStyle.adultExplicit') },
+  { value: 'standard', label: t('settings.whisper.translateStyle.standard') },
+])
+
+const vadBackendOptions = computed(() => [
+  { value: 'energy', label: t('settings.whisper.vadBackend.energy') },
+  { value: 'whisper_vad_onnx', label: t('settings.whisper.vadBackend.whisperVadOnnx') },
+])
+
+const activeTranslateSummary = computed(() => {
+  return formatWhisperTranslationSummary(t, {
+    translateEnabled: translateEnabled.value,
+    translateTo: translateTo.value,
+    translateModel: translateModel.value,
+    directTranslate: isDirectWhisperTranslationBackend(activeModelBackend.value),
+  })
+})
+const activeAudioPreprocessSummary = computed(() => {
+  return formatWhisperAudioPreprocessSummary(t, {
+    audioPreprocessMode: audioPreprocessMode.value,
+    audioPreprocessModel: audioPreprocessModel.value,
+  })
+})
+
+const modelBackendOptions = computed(() => WHISPER_MODEL_BACKENDS.map((backend) => ({
+  backend,
+  meta: getWhisperModelBackendMeta(backend),
+  presentation: getWhisperSelectableStrategyPresentation(t, backend),
+})))
+const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBackend(activeModelBackend.value))
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">
+      <!-- 1. Default Settings -->
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.currentProfileTitle') }}</h2>
+        <p class="settings-card__desc settings-card__desc--compact">{{ t('settings.whisper.currentProfileDesc') }}</p>
+
+        <div class="settings-form mt-2.5 space-y-1.5">
+          <button
+            v-for="option in modelBackendOptions"
+            :key="option.backend"
+            type="button"
+            class="whisper-strategy-card whisper-strategy-card--primary whisper-strategy-card--summary"
+            :class="{ 'whisper-strategy-card--active': activeModelBackend === option.backend }"
+            @click="activeModelBackend = option.backend"
+          >
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t(option.meta.titleKey) }}</div>
+              </div>
+              <VuiBadge :color="option.presentation.badgeColor" variant="gradient" size="sm">{{ t(option.meta.badgeKey) }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">{{ t(option.meta.stackKey) }}</p>
+            <div class="whisper-strategy-card__meta">
+              <span class="whisper-strategy-card__chip">{{ activeAudioPreprocessSummary }}</span>
+              <span v-if="activeModelBackend === option.backend" class="whisper-strategy-card__chip">{{ activeTranslateSummary }}</span>
+              <span v-else class="whisper-strategy-card__chip">{{ t(option.meta.descKey) }}</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.audioLabTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.audioLabDesc') }}</p>
+
+        <div class="settings-form settings-form--compact mt-2.5">
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.vadBackendLabel')" :description="t('settings.whisper.vadBackendDesc')">
+            <select v-model="vadBackend" class="settings-input">
+              <option v-for="opt in vadBackendOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.audioPreprocessLabel')" :description="t('settings.whisper.audioPreprocessDesc')">
+            <select v-model="audioPreprocessMode" class="settings-input">
+              <option value="none">{{ t('settings.whisper.audioPreprocessMode.none') }}</option>
+              <option value="vocal_isolation">{{ t('settings.whisper.audioPreprocessMode.vocalIsolation') }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow
+            customClass="whisper-field-row"
+            :label="t('settings.whisper.audioPreprocessModelLabel')"
+            :description="t('settings.whisper.audioPreprocessModelDesc')"
+          >
+            <select v-model="audioPreprocessModel" class="settings-input" :disabled="audioPreprocessMode === 'none'">
+              <option value="vocal_clean">{{ t('settings.whisper.audioPreprocessModel.vocalClean') }}</option>
+              <option value="vocal_balanced">{{ t('settings.whisper.audioPreprocessModel.vocalBalanced') }}</option>
+            </select>
+          </FieldRow>
+
+          <div class="settings-card__actions settings-card__actions--compact mt-1">
+            <VuiButton variant="gradient" color="info" size="small" customClass="settings-primary-btn" :loading="saving" @click="saveWhisper">
+              {{ saving ? t('settings.whisper.saving') : t('common.save') }}
+            </VuiButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. OpenAI Translation Card -->
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.translationTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.translationDesc') }}</p>
+
+        <div class="settings-form settings-form--compact mt-2.5">
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateEnable')" :description="t('settings.whisper.translateEnableDesc')">
+            <div class="flex items-center gap-3">
+              <SettingsSwitch v-model="translateEnabled" :disabled="activeModelDirectTranslate" />
+              <span class="text-sm text-text-secondary">{{ activeModelDirectTranslate ? t('settings.whisper.directTranslateOn') : (translateEnabled ? t('common.enabled') : t('common.disabled')) }}</span>
+            </div>
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateTargetLabel')" :description="t('settings.whisper.translateTargetDesc')">
+            <select v-model="translateTo" class="settings-input" :disabled="activeModelDirectTranslate || !translateEnabled">
+              <option v-for="opt in translateLangOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateModelLabel')" :description="t('settings.whisper.translateModelDesc')">
+            <input v-model="translateModel" type="text" class="settings-input" placeholder="gpt-4o-mini" :disabled="activeModelDirectTranslate || !translateEnabled" />
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateBaseUrlLabel')" :description="t('settings.whisper.translateBaseUrlDesc')">
+            <input v-model="translateBaseUrl" type="text" class="settings-input" placeholder="https://api.openai.com/v1" :disabled="activeModelDirectTranslate || !translateEnabled" />

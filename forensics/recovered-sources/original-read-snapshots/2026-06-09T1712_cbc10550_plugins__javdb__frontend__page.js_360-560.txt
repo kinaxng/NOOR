@@ -1,0 +1,201 @@
+      // DBOnline's daily/weekly/monthly ranking endpoint returns a fixed top
+      // list (currently 49 rows) and ignores page/limit. Keeping our default
+      // 48-row page creates a useless second page with only one item.
+      state.limit = 60
+      return
+    }
+    state.limit = 48
+  }
+
+  function setTab(next) {
+    if (state.tab === next) return
+    state.tab = next
+    state.page = 1
+    state.latestSelectedFilters = next === 'latest' ? ['magnets'] : []
+    state.latestType = 'all'
+    state.latestSort = 'update'
+    state.videosFilter = ''
+    state.videosActorId = ''
+    state.videosCategoryIds = []
+    state.videosMinScore = ''
+    state.videosSort = 'created'
+    state.videosOrder = 'desc'
+    state.rankingMode = 'top250'
+    state.rankingType = 0
+    state.rankingPeriod = 'daily'
+    state.rankingSelectedFilters = []
+    state.top250Year = ''
+    state.relation = null
+    if (next === 'videos') void ensureVideoCategories()
+    if (next === 'videos') void ensureVideoActors()
+    loadData()
+  }
+
+  function setRelation(relType, relId, label) {
+    state.relation = { relType, relId, label }
+    state.relationActorSelectedFilters = []
+    state.relationActorSingleFilter = false
+    state.relationActorYear = ''
+    state.relationActorSort = 'release_desc'
+    state.page = 1
+    loadData()
+  }
+
+  function actorRelationYears() {
+    const years = new Set()
+    for (const item of state.items) {
+      const year = String(item?.release_date || '').slice(0, 4)
+      if (year) years.add(year)
+    }
+    return [...years].sort((a, b) => Number(b) - Number(a))
+  }
+
+  function normalizeCategoryOptions(items) {
+    return (Array.isArray(items) ? items : [])
+      .map(item => {
+        const value = String(item?.id ?? item?.value ?? item?.category_id ?? item?.external_id ?? '').trim()
+        const label = String(item?.name ?? item?.label ?? item?.title ?? item?.value ?? '').trim()
+        return value && label ? { value, label } : null
+      })
+      .filter(Boolean)
+  }
+
+  async function loadSubscriptionStates() {
+    try {
+      const res = await sdk.api.post('/plugins/subscription-core/actions/overview', { payload: {} })
+      const map = new Map()
+      for (const item of (res.data?.items || [])) {
+        if (!item || item.status === 'deleted') continue
+        const key = normalizeCode(item.code)
+        if (key) map.set(key, item)
+      }
+      state.subscriptionMap = map
+    } catch {
+      state.subscriptionMap = new Map()
+    }
+  }
+
+  function subscriptionStateFor(videoData) {
+    const code = detailCode(videoData)
+    if (!code) return null
+    return state.subscriptionMap.get(normalizeCode(code)) || null
+  }
+
+  function subscriptionActionModel(videoData) {
+    const sub = subscriptionStateFor(videoData)
+    const isInLibrary = !!videoData?.library?.in_library
+    if (sub) {
+      const running = ['matched', 'submitted', 'waiting_quota', 'submit_failed'].includes(String(sub.status || ''))
+      if (sub.type === 'upgrade') return { label: running ? '洗版中' : '洗版中', state: 'upgrade-active', disabled: true }
+      return { label: running ? '已订阅' : '已订阅', state: 'subscribed', disabled: true }
+    }
+    return isInLibrary
+      ? { label: '洗版', state: 'upgrade', disabled: false }
+      : { label: '订阅', state: 'subscribe', disabled: false }
+  }
+
+  async function ensureVideoCategories() {
+    if (state.videoCategoriesLoaded || state.videoCategoriesLoading) return
+    state.videoCategoriesLoading = true
+    try {
+      const res = await sdk.api.post('/plugins/javdb/actions/categories', { payload: {} })
+      state.videoCategories = normalizeCategoryOptions(res.data?.items || [])
+      state.videoCategoriesLoaded = true
+      renderFilters()
+    } catch {
+      state.videoCategories = []
+      state.videoCategoriesLoaded = false
+    } finally {
+      state.videoCategoriesLoading = false
+    }
+  }
+
+  async function ensureVideoActors() {
+    if (state.videoActorsLoaded || state.videoActorsLoading) return
+    state.videoActorsLoading = true
+    try {
+      const res = await sdk.api.post('/plugins/javdb/actions/actor_options', { payload: {} })
+      state.videoActors = (Array.isArray(res.data?.items) ? res.data.items : [])
+        .map(item => {
+          const value = String(item?.external_id ?? item?.id ?? '').trim()
+          const label = String(item?.name ?? '').trim()
+          return value && label ? { value, label } : null
+        })
+        .filter(Boolean)
+      state.videoActorsLoaded = true
+      renderFilters()
+    } catch {
+      state.videoActors = []
+      state.videoActorsLoaded = false
+    } finally {
+      state.videoActorsLoading = false
+    }
+  }
+
+  function filteredItems() {
+    if (state.relation?.relType === 'actor') {
+      const list = state.items.filter(item => {
+        if (state.relationActorSelectedFilters.includes('magnets') && Number(item?.magnets_count || 0) <= 0) return false
+        if (state.relationActorSelectedFilters.includes('cnsub') && !(item?.has_cnsub || item?.play_subtitle)) return false
+        if (state.relationActorSelectedFilters.includes('cracked') && !item?.is_cracked) return false
+        if (state.relationActorSingleFilter && Number(item?.actor_count || 0) > 1) return false
+        if (state.relationActorYear && String(item?.release_date || '').slice(0, 4) !== state.relationActorYear) return false
+        return true
+      })
+      const sorted = [...list]
+      if (state.relationActorSort === 'release_desc') sorted.sort((a, b) => String(b.release_date || '').localeCompare(String(a.release_date || '')))
+      else if (state.relationActorSort === 'release_asc') sorted.sort((a, b) => String(a.release_date || '').localeCompare(String(b.release_date || '')))
+      else if (state.relationActorSort === 'magnets_desc') sorted.sort((a, b) => Number(b.magnets_count || 0) - Number(a.magnets_count || 0))
+      else if (state.relationActorSort === 'title_asc') sorted.sort((a, b) => titleOf(a).localeCompare(titleOf(b), 'zh-CN'))
+      return sorted
+    }
+    if (state.tab === 'latest') {
+      return state.items.filter(item => {
+        if (state.latestSelectedFilters.includes('magnets') && Number(item?.magnets_count || 0) <= 0) return false
+        if (state.latestSelectedFilters.includes('cnsub') && !(item?.has_cnsub || item?.play_subtitle)) return false
+        if (state.latestSelectedFilters.includes('cracked') && !item?.is_cracked) return false
+        return true
+      })
+    }
+    return state.items
+  }
+
+  async function enrichWorkItems(items) {
+    const targets = (items || []).filter(item => item && item.code && !item.__detailEnriched)
+    if (!targets.length) return
+    const queue = targets.slice(0, state.relation?.relType === 'actor' ? 120 : 80)
+    const concurrency = 8
+    let index = 0
+    async function worker() {
+      while (index < queue.length) {
+        const current = queue[index++]
+        try {
+          const res = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code: current.code } })
+          const detail = res.data?.data || {}
+          current.actor_count = Array.isArray(detail.actors) ? detail.actors.length : Number(current.actor_count || 0)
+          current.has_cnsub = !!(current.has_cnsub || current.play_subtitle || detectCnsub(detail))
+          current.is_cracked = !!(current.is_cracked || detectCracked(detail))
+          if (detail.library && typeof detail.library === 'object') current.library = detail.library
+          current.__detailEnriched = true
+        } catch {
+          current.__detailEnriched = true
+          if (current.actor_count == null) current.actor_count = 0
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+  }
+
+  function renderTabs() {
+    if (!tabControl) {
+      tabControl = sdk.ui.tabs({
+        tabs: tabDefs,
+        value: state.tab,
+        route: {
+          mode: 'path',
+          subPath: () => sdk.route?.subPath || '',
+          push: path => sdk.route?.push?.(path),
+          replace: path => sdk.route?.replace?.(path),
+        },
+        onChange: setTab,
+      })

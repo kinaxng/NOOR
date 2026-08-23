@@ -1,0 +1,301 @@
+
+    for target_file in sorted(delete_files):
+        if not target_file.exists():
+            missing_files.append(str(target_file))
+            continue
+        try:
+            deleted_files.extend(_remove_file_and_sibling_nfo(target_file, remove_nfo=True))
+        except Exception as e:
+            errors.append(f"{target_file}: {e}")
+
+    if errors:
+        raise HTTPException(status_code=500, detail=f"部分删除失败: {'; '.join(errors)}")
+
+    if not deleted_dirs and not deleted_files and (missing_dirs or missing_files):
+        raise HTTPException(status_code=404, detail="目标不存在")
+
+    return {
+        "deleted_dirs": deleted_dirs,
+        "missing_dirs": missing_dirs,
+        "deleted_files": deleted_files,
+        "missing_files": missing_files,
+    }
+
+
+def _preview_delete_targets(
+    delete_dirs: set[Path],
+    delete_files: set[Path],
+) -> dict:
+    planned_dirs = sorted(str(p) for p in delete_dirs)
+    planned_files: list[str] = []
+    for file_path in sorted(delete_files):
+        planned_files.append(str(file_path))
+        nfo_path = file_path.with_suffix(".nfo")
+        if nfo_path.exists():
+            planned_files.append(str(nfo_path))
+    return {
+        "planned_dirs": planned_dirs,
+        "planned_files": planned_files,
+    }
+
+
+def _path_matches_hardlink_entry(target: Path, entry: dict) -> bool:
+    try:
+        resolved = target.resolve()
+    except Exception:
+        resolved = target
+    source_path = entry.get("source_path")
+    if source_path:
+        try:
+            if Path(source_path).resolve() == resolved:
+                return True
+        except Exception:
+            pass
+    for hardlink_path in entry.get("hardlink_paths") or []:
+        try:
+            if Path(hardlink_path).resolve() == resolved:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _delete_plan_from_hardlink_entry(
+    entry: dict,
+    *,
+    code: str | None,
+    source_roots: list[Path],
+    hardlink_roots: list[Path],
+) -> tuple[set[Path], set[Path]]:
+    source_path = Path(entry["source_path"]).resolve() if entry.get("source_path") else None
+    if source_path:
+        _assert_safe_path(source_path, source_roots + hardlink_roots, label="主文件路径")
+
+    hardlink_paths: list[Path] = []
+    for hardlink_path in entry.get("hardlink_paths") or []:
+        p = Path(hardlink_path).resolve()
+        _assert_safe_path(p, source_roots + hardlink_roots, label="硬链接路径")
+        hardlink_paths.append(p)
+
+    return _collect_chain_delete_targets(
+        source_path,
+        hardlink_paths,
+        code=code,
+        source_roots=source_roots,
+        hardlink_roots=hardlink_roots,
+    )
+
+
+def _find_inode_chain_for_path(target: Path, roots: list[Path]) -> list[Path]:
+    try:
+        target_stat = target.stat()
+    except OSError:
+        return []
+    inode_key = (target_stat.st_ino, target_stat.st_dev)
+    matches: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        try:
+            walker = os.walk(root)
+            for dirpath, _dirnames, filenames in walker:
+                for filename in filenames:
+                    if Path(filename).suffix.lower() not in VIDEO_EXTS:
+                        continue
+                    path = Path(dirpath) / filename
+                    try:
+                        st = path.stat()
+                    except (OSError, PermissionError):
+                        continue
+                    if (st.st_ino, st.st_dev) != inode_key:
+                        continue
+                    resolved = path.resolve()
+                    if resolved not in seen:
+                        seen.add(resolved)
+                        matches.append(resolved)
+        except (OSError, PermissionError):
+            continue
+    return matches
+
+
+def _delete_plan_from_inode_chain(
+    target: Path,
+    *,
+    code: str | None,
+    source_roots: list[Path],
+    hardlink_roots: list[Path],
+) -> tuple[set[Path], set[Path]]:
+    roots = source_roots + hardlink_roots
+    matches = _find_inode_chain_for_path(target, roots)
+    if not matches:
+        return set(), {target}
+
+    source_path = next((path for path in matches if _is_under_roots(path, source_roots)), None)
+    if source_path is None and _is_under_roots(target, source_roots):
+        source_path = target
+    hardlink_paths = [path for path in matches if path != source_path]
+
+    return _collect_chain_delete_targets(
+        source_path,
+        hardlink_paths,
+        code=code,
+        source_roots=source_roots,
+        hardlink_roots=hardlink_roots,
+    )
+
+
+async def _media_item_delete_plan(item_id: str, config: dict) -> tuple[str, set[Path], set[Path]]:
+    try:
+        raw = await _get_item(config, item_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"获取媒体项目失败: {exc}") from exc
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"未找到媒体项目: {item_id}")
+
+    file_path = str(raw.get("file_path") or "").strip()
+    if not file_path:
+        raise HTTPException(status_code=400, detail="媒体项目没有可删除的文件路径")
+
+    source_roots, hardlink_roots = _allowed_scan_roots(config)
+    if not source_roots and not hardlink_roots:
+        raise HTTPException(status_code=400, detail="未配置扫描组路径，无法执行删除")
+
+    target = Path(file_path).resolve()
+    _assert_safe_path(target, source_roots + hardlink_roots, label="媒体文件路径")
+
+    groups = _enrich_hardlink_groups(_load_hardlink_groups()).get("groups") or []
+    for group in groups:
+        for entry in group.get("entries") or []:
+            if not _path_matches_hardlink_entry(target, entry):
+                continue
+            delete_dirs, delete_files = _delete_plan_from_hardlink_entry(
+                entry,
+                code=group.get("code") or _extract_code_from_path(str(target)),
+                source_roots=source_roots,
+                hardlink_roots=hardlink_roots,
+            )
+            return str(group.get("code") or raw.get("name") or target.name), delete_dirs, delete_files
+
+    # Fallback for files not present in the hardlink index: delete only the
+    # indexed entry by scanning same-inode files under configured roots. The
+    # collect step still decides whether parent directories are safe to remove.
+    delete_dirs, delete_files = _delete_plan_from_inode_chain(
+        target,
+        code=_extract_code_from_path(str(target)),
+        source_roots=source_roots,
+        hardlink_roots=hardlink_roots,
+    )
+    return str(raw.get("name") or target.name), delete_dirs, delete_files
+
+
+
+# ─── Emby connection test ──────────────────────────────────────────────────────
+
+async def _test_connection(config: dict) -> tuple[bool, str]:
+    try:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            resp = await client.get(
+                f"{_server_url(config)}/emby/System/Info",
+                headers=_headers(config.get("api_key", "")),
+            )
+            if resp.status_code == 401:
+                return False, "API Key 无效或已过期"
+            resp.raise_for_status()
+            data = resp.json()
+            return True, f"已连接至 {data.get('ServerName', 'Emby/Jellyfin')}"
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return False, "API Key 无效或已过期"
+        return False, f"连接失败: HTTP {e.response.status_code}"
+    except Exception as e:
+        return False, f"连接失败: {e}"
+
+
+# ─── Libraries ─────────────────────────────────────────────────────────────────
+
+async def _list_libraries(config: dict) -> list[dict]:
+    async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+        resp = await client.get(
+            f"{_server_url(config)}/emby/Library/MediaFolders",
+            headers=_headers(config.get("api_key", "")),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    libraries = []
+    for item in data.get("Items", []):
+        item_type = item.get("Type")
+        collection_type = item.get("CollectionType")
+        if item_type in ("movies", "tvshows") or collection_type in ("movies", "tvshows"):
+            poster_url = None
+            if item.get("ImageTags"):
+                tag = item["ImageTags"].get("Primary")
+                if tag:
+                    poster_url = f"{_server_url(config)}/emby/Items/{item['Id']}/Images/Primary?tag={tag}"
+            libraries.append({
+                "id": item["Id"],
+                "name": item["Name"],
+                "type": collection_type or item_type or "unknown",
+                "poster_url": poster_url,
+            })
+    return libraries
+
+
+_VARIANT_MARKER_RE = re.compile(r'(^|[-_.\s])(restored-u|u\d*|c\d*|chs|cht|cn|tw|zh|字幕|中文|破解|流出|uncensored|leaked)(?=$|[-_.\s])', re.IGNORECASE)
+
+
+def _item_variant_penalty(item: dict) -> int:
+    path = (item.get("path") or "").lower()
+    name = (item.get("name") or "").lower()
+    tags = item.get("tags", {}) or {}
+    penalty = 0
+
+    basename = os.path.splitext(os.path.basename(path))[0] if path else name
+    if _VARIANT_MARKER_RE.search(basename):
+        penalty += 60
+    if '.restored-u' in path:
+        penalty += 120
+    if tags.get('is_cracked'):
+        penalty += 40
+    if tags.get('is_leaked'):
+        penalty += 20
+    if tags.get('has_chinese'):
+        penalty += 5
+    return penalty
+
+
+def _merge_group_metadata(representative: dict, group: list[dict]) -> dict:
+    merged = dict(representative)
+    merged_tags = dict((representative.get('tags') or {}))
+
+    if any((item.get('tags') or {}).get('is_cracked') for item in group):
+        merged_tags['is_cracked'] = True
+    if any((item.get('tags') or {}).get('has_chinese') for item in group):
+        merged_tags['has_chinese'] = True
+    if any((item.get('tags') or {}).get('is_leaked') for item in group):
+        merged_tags['is_leaked'] = True
+
+    release_type_key = None
+    if any((item.get('tags') or {}).get('release_type_key') == 'leaked' for item in group):
+        release_type_key = 'leaked'
+    elif any((item.get('tags') or {}).get('release_type_key') == 'uncensored' for item in group):
+        release_type_key = 'uncensored'
+
+    if release_type_key == 'leaked':
+        merged_tags['release_type_key'] = 'leaked'
+        merged_tags['release_type'] = '流出'
+    elif release_type_key == 'uncensored':
+        merged_tags['release_type_key'] = 'uncensored'
+        merged_tags['release_type'] = '无码'
+
+    merged['tags'] = merged_tags
+    merged['subtitle_count'] = max((item.get('subtitle_count') or 0) for item in group)
+    merged['variant_count'] = len(group)
+    return merged
+
+
+def _pick_group_representative(group: list[dict]) -> dict:
+    def sort_key(item: dict) -> tuple:
+        path = item.get('path') or ''
+        name = item.get('name') or ''
+        return (

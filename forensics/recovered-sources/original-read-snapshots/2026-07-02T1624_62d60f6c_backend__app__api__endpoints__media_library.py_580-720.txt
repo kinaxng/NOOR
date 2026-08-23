@@ -1,0 +1,141 @@
+        person = await _tmdb_get_json(
+            client,
+            config,
+            f"/person/{quote(tmdb_id, safe='')}",
+            params={"language": _tmdb_lang_candidates(lang)[0], "append_to_response": "external_ids,translations,images"},
+        )
+    external_ids = person.get("external_ids") if isinstance(person.get("external_ids"), dict) else {}
+    profile_url = _tmdb_profile_url(person.get("profile_path"))
+    proposal_provider_ids = dict(actor.get("provider_ids") or {})
+    proposal_provider_ids["Tmdb"] = str(person.get("id") or tmdb_id)
+    if external_ids.get("imdb_id"):
+        proposal_provider_ids["Imdb"] = str(external_ids.get("imdb_id"))
+    if external_ids.get("twitter_id"):
+        proposal_provider_ids["Twitter"] = str(external_ids.get("twitter_id")).lstrip("@")
+    if external_ids.get("instagram_id"):
+        proposal_provider_ids["Instagram"] = str(external_ids.get("instagram_id")).lstrip("@")
+    if external_ids.get("facebook_id"):
+        proposal_provider_ids["Facebook"] = str(external_ids.get("facebook_id"))
+    tmdb_id_final = str(person.get("id") or tmdb_id)
+    return {
+        "name": str(person.get("name") or "").strip(),
+        "sort_name": str(person.get("name") or "").strip(),
+        "overview": _tmdb_pick_biography(person, lang=lang),
+        "provider_ids": proposal_provider_ids,
+        "tmdb_id": tmdb_id_final,
+        "imdb_id": str(external_ids.get("imdb_id") or actor.get("imdb_id") or ""),
+        "image_url": profile_url,
+        "birthday": person.get("birthday") or "",
+        "deathday": person.get("deathday") or "",
+        "place_of_birth": person.get("place_of_birth") or "",
+        "known_for_department": person.get("known_for_department") or "",
+        "homepage": person.get("homepage") or "",
+        "external_urls": _tmdb_external_urls(external_ids, tmdb_id_final),
+        "source": "tmdb",
+    }
+
+
+def _actor_metadata_diff(current: dict, proposal: dict) -> list[dict]:
+    fields = [
+        ("name", "名称"),
+        ("sort_name", "排序名"),
+        ("overview", "简介"),
+        ("birthday", "出生日期"),
+        ("place_of_birth", "出生地"),
+        ("tmdb_id", "TMDB"),
+        ("imdb_id", "IMDB"),
+        ("image_url", "头像"),
+    ]
+    diffs = []
+    for key, label in fields:
+        old = str(current.get(key) or "").strip()
+        new = str(proposal.get(key) or "").strip()
+        if old != new and new:
+            diffs.append({"field": key, "label": label, "current": old, "proposed": new})
+    return diffs
+
+
+async def _preview_actor_tmdb_metadata(config: dict, actor_id: str, *, lang: str | None = None) -> dict:
+    actor = await _get_actor_profile(config, actor_id, lang=lang)
+    proposal = await _tmdb_person_payload(config, actor, lang=lang)
+    return {"ok": True, "current": actor, "proposal": proposal, "diffs": _actor_metadata_diff(actor, proposal)}
+
+
+async def _apply_actor_tmdb_metadata(config: dict, actor_id: str, req: ActorTmdbApplyRequest, *, lang: str | None = None) -> dict:
+    preview = await _preview_actor_tmdb_metadata(config, actor_id, lang=lang)
+    current = preview["current"]
+    proposal = preview["proposal"]
+    update_req = ActorProfileUpdateRequest(
+        name=proposal.get("name") if req.apply_name else current.get("name"),
+        sort_name=proposal.get("sort_name") if req.apply_name else current.get("sort_name"),
+        overview=proposal.get("overview") if req.apply_overview else current.get("overview"),
+        provider_ids=proposal.get("provider_ids") if req.apply_provider_ids else current.get("provider_ids"),
+        birthday=proposal.get("birthday"),
+        deathday=proposal.get("deathday"),
+        place_of_birth=proposal.get("place_of_birth"),
+        external_urls=proposal.get("external_urls"),
+    )
+    result = await _update_actor_profile(config, actor_id, update_req, lang=lang)
+    avatar_result = None
+    avatar_sync_error = None
+    if req.apply_avatar and proposal.get("image_url"):
+        try:
+            avatar_result = await _set_actor_avatar_from_url(config, actor_id, proposal["image_url"], lang=lang)
+            result["actor"] = avatar_result.get("actor") or result.get("actor")
+        except Exception as exc:
+            avatar_sync_error = str(exc)
+            _save_actor_avatar_override_url(actor_id, proposal["image_url"])
+            result["actor"] = await _get_actor_profile(config, actor_id, lang=lang)
+    return {
+        "ok": True,
+        **result,
+        "preview": preview,
+        "avatar_synced": bool(avatar_result),
+        "avatar_sync_error": avatar_sync_error,
+    }
+
+
+def _localized_mapping_name(record: dict | None, fallback: str, lang: str | None = None) -> str:
+    if not record:
+        return fallback
+    normalized_lang = str(lang or "").lower()
+    if normalized_lang in {"zh-tw", "zh_hant", "zht", "tw"}:
+        return str(record.get("zh_tw") or record.get("zh_cn") or record.get("jp") or fallback)
+    if normalized_lang.startswith("zh") or normalized_lang in {"cn", "zh-cn"}:
+        return str(record.get("zh_cn") or record.get("zh_tw") or record.get("jp") or fallback)
+    return str(record.get("jp") or record.get("zh_cn") or record.get("zh_tw") or fallback)
+
+
+def _enrich_actor_display_names(actors: list[dict], *, lang: str | None = None) -> list[dict]:
+    records = _load_actor_mapping_records()
+    if not records:
+        return [{**actor, "display_name": actor.get("name") or ""} for actor in actors]
+    name_index = _actor_mapping_name_index(records)
+    out: list[dict] = []
+    for actor in actors:
+        name = str(actor.get("name") or "")
+        match = name_index.get(_normalize_actor_key(name))
+        record = _mapping_match_record(match)
+        if record and _should_reject_actor_mapping_match(actor, record, match):
+            record = None
+        out.append({
+            **actor,
+            "display_name": _localized_mapping_name(record, name, lang),
+            "mapping_id": record.get("id") if record else None,
+            "mapping_tmdb_id": record.get("tmdb_id") if record else None,
+        })
+    return out
+
+
+def _actor_merge_score(actor: dict, mapping_tmdb_id: str) -> tuple[int, int, int, int, str]:
+    tmdb_id = str(actor.get("tmdb_id") or "")
+    return (
+        1 if int(actor.get("related_movie_count") or 0) > 0 else 0,
+        1 if mapping_tmdb_id and tmdb_id == mapping_tmdb_id else 0,
+        1 if actor.get("image_url") else 0,
+        1 if actor.get("overview") else 0,
+        str(actor.get("name") or ""),
+    )
+
+
+def _normalize_actor_key(value: str | None) -> str:

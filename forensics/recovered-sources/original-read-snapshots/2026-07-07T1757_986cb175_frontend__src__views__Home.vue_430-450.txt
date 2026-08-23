@@ -1,0 +1,21 @@
+      danger: false,
+      size: 'xl',
+      details: deleteResultDetails(resp.data || {}),
+    })
+    await refreshCurrentPage(true)
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || '作品删除失败')
+  } finally {
+    setDeletingItem(item.id, false)
+  }
+}
+
+function handleCloseDetail() {
+  detailRequestToken += 1
+  resetPanelState()
+  if (route.query.detail) {
+    const nextQuery = { ...route.query }
+    delete nextQuery.detail
+    router.replace({ path: route.path, query: nextQuery })
+  }
+}

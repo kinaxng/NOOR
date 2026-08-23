@@ -1,0 +1,20 @@
+[
+  {
+    "offset": 2294143453,
+    "source": "Home.vue",
+    "file": "/home/kinax/noor/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "e55b02cffce072738f0a5f775612a86f645aadd4c7bd79e5735795e087ecc67a",
+    "size": 23760,
+    "lines": 736
+  },
+  {
+    "offset": 2319174175,
+    "source": "Home.vue",
+    "file": "/home/kinax/noor/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd",
+    "size": 23762,
+    "lines": 736
+  }
+]

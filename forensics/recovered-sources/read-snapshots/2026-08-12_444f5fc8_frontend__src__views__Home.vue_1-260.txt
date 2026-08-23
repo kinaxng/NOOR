@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useI18n } from '../composables/useI18n'
+import MediaCard from '../components/noor/MediaCard.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import NoorPagination from '../components/ui/Pagination.vue'
+import { useRouteTabs } from '../composables/useRouteTabs'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
+import api from '../api'
+
+// Lazy-load panels that are only shown on demand
+const AsyncMediaDetailPanel = defineAsyncComponent(() => import('../components/noor/MediaDetailPanel.vue'))
+const AsyncLadaPanel = defineAsyncComponent(() => import('../components/noor/LadaPanel.vue'))
+const AsyncFaceFusionPanel = defineAsyncComponent(() => import('../components/noor/FaceFusionPanel.vue'))
+const AsyncSubtitlePanel = defineAsyncComponent(() => import('../components/noor/SubtitlePanel.vue'))
+import type { MediaItem } from '../api/types'
+
+const { t, i18nVersion } = useI18n()
+const mediaLibraryStore = useMediaLibraryStore()
+const toast = useToast()
+const { confirm } = useConfirm()
+const route = useRoute()
+const router = useRouter()
+
+type LibraryFilter = 'all' | 'cracked' | 'chinese' | 'leaked' | 'uncensored'
+const activeFilterTab = useRouteTabs<LibraryFilter>({
+  route,
+  router,
+  basePath: '/library',
+  paramName: 'libraryFilter',
+  tabs: ['all', 'cracked', 'chinese', 'leaked', 'uncensored'],
+  defaultTab: 'all',
+})
+const activeFilter = computed({
+  get: () => activeFilterTab.value === 'all' ? '' : activeFilterTab.value,
+  set: (value: string) => {
+    activeFilterTab.value = (value || 'all') as LibraryFilter
+  },
+})
+const filters = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: 'all', label: t('library.filter.all') },
+    { key: 'cracked', label: t('library.filter.cracked') },
+    { key: 'chinese', label: t('library.filter.chinese') },
+    { key: 'leaked', label: t('library.filter.leaked') },
+    { key: 'uncensored', label: t('library.filter.uncensored') },
+  ]
+})
+
+const searchQuery = ref(String(route.query.q || mediaLibraryStore.searchQuery || ''))
+const searchPlaceholder = computed(() => {
+  void i18nVersion.value
+  return t('library.search.placeholder')
+})
+
+const visibleItems = computed(() => mediaLibraryStore.filteredItems)
+
+type LibraryImageMode = 'cover' | 'backdrop'
+const IMAGE_MODE_KEY = 'noor-library-image-mode'
+const imageMode = ref<LibraryImageMode>((localStorage.getItem(IMAGE_MODE_KEY) as LibraryImageMode) || 'cover')
+const gridEl = ref<HTMLElement | null>(null)
+const facefusionBadgeAlwaysVisible = ref(false)
+let resizeObserver: ResizeObserver | null = null
+let resizeTimer: ReturnType<typeof setTimeout> | null = null
+let mediaSyncTimer: ReturnType<typeof setInterval> | null = null
+let mediaSyncVersion: number | null = null
+
+const gridMinWidth = computed(() => imageMode.value === 'backdrop' ? 320 : 160)
+const gridTemplateColumns = computed(() => `repeat(auto-fill, minmax(${gridMinWidth.value}px, 1fr))`)
+const imageModeTitle = computed(() => imageMode.value === 'backdrop' ? '切换为封面图' : '切换为背景图')
+
+function toggleImageMode() {
+  imageMode.value = imageMode.value === 'cover' ? 'backdrop' : 'cover'
+  localStorage.setItem(IMAGE_MODE_KEY, imageMode.value)
+  schedulePageSizeUpdate(true)
+}
+
+function estimatePageSize() {
+  const el = gridEl.value
+  if (!el) return 18
+  const width = el.clientWidth || window.innerWidth
+  const top = el.getBoundingClientRect().top
+  const availableHeight = Math.max(360, window.innerHeight - top - 88)
+  const gap = 16
+  const minWidth = gridMinWidth.value
+  const columns = Math.max(1, Math.floor((width + gap) / (minWidth + gap)))
+  const cardWidth = Math.max(minWidth, (width - gap * Math.max(0, columns - 1)) / columns)
+  const imageHeight = imageMode.value === 'backdrop' ? cardWidth * 1468 / 2184 : cardWidth * 3 / 2
+  const cardHeight = imageHeight + (imageMode.value === 'backdrop' ? 64 : 74)
+  const measuredRows = Math.max(1, Math.floor((availableHeight + gap) / (cardHeight + gap)))
+  const rows = imageMode.value === 'cover' ? Math.max(3, measuredRows) : measuredRows
+  const maxItems = imageMode.value === 'backdrop' ? 96 : 144
+  return Math.max(imageMode.value === 'cover' ? columns * 3 : columns, Math.min(maxItems, columns * rows))
+}
+
+function schedulePageSizeUpdate(refetch = false) {
+  if (resizeTimer) clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(async () => {
+    await nextTick()
+    const changed = mediaLibraryStore.setPageSize(estimatePageSize())
+    if ((changed || refetch) && mediaLibraryStore.selectedLibrary?.id) {
+      await mediaLibraryStore.fetchItems(mediaLibraryStore.selectedLibrary.id, 1, activeFilter.value || null, searchQuery.value)
+    } else if ((changed || refetch) && mediaLibraryStore.enabledLibraryIds.length === 0) {
+      await mediaLibraryStore.fetchAllItems(1, searchQuery.value)
+    }
+  }, 120)
+}
+
+
+
+
+const showDetailPanel = ref(false)
+const showLadaPanel = ref(false)
+const showFaceFusionPanel = ref(false)
+const selectedVideo = ref<MediaItem | null>(null)
+const videoDetail = ref<any>(null)
+const loadingDetail = ref(false)
+const detailError = ref<string | null>(null)
+
+const showSubtitlePanel = ref(false)
+const subtitleVideoPath = ref('')
+const subtitleVideoId = ref('')
+const subtitleFolderPaths = ref<string[]>([])
+let detailRequestToken = 0
+const deletingItemIds = ref(new Set<string>())
+
+function resetPanelState(options: { keepSelectedVideo?: boolean } = {}) {
+  showDetailPanel.value = false
+  showLadaPanel.value = false
+  showFaceFusionPanel.value = false
+  showSubtitlePanel.value = false
+  loadingDetail.value = false
+  videoDetail.value = null
+  detailError.value = null
+  subtitleVideoPath.value = ''
+  subtitleVideoId.value = ''
+  subtitleFolderPaths.value = []
+  if (!options.keepSelectedVideo) {
+    selectedVideo.value = null
+  }
+}
+
+async function loadItemDetail(item: MediaItem) {
+  const token = ++detailRequestToken
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  try {
+    const detail = await mediaLibraryStore.fetchItemDetail(item.id)
+    if (token !== detailRequestToken || selectedVideo.value?.id !== item.id) return null
+    videoDetail.value = detail
+    return detail
+  } catch (e: any) {
+    if (token === detailRequestToken && selectedVideo.value?.id === item.id) {
+      const status = e?.response?.status
+      detailError.value = status === 404 ? '该媒体项目已不存在，正在刷新媒体库。' : (e?.response?.data?.detail || e?.message || t('common.loadFailed'))
+      if (status === 404) {
+        toast.warning('该媒体项目已不存在，已刷新媒体库列表。')
+        await refreshCurrentPage(true)
+      }
+    }
+    return null
+  } finally {
+    if (token === detailRequestToken && selectedVideo.value?.id === item.id) {
+      loadingDetail.value = false
+    }
+  }
+}
+
+async function openDetailFromRoute() {
+  const itemId = String(route.query.detail || '')
+  if (!itemId) return
+  if (showDetailPanel.value && selectedVideo.value?.id === itemId) return
+  resetPanelState({ keepSelectedVideo: true })
+  const existing = mediaLibraryStore.items.find(item => item.id === itemId)
+  selectedVideo.value = existing || {
+    id: itemId,
+    name: '',
+    type: 'Movie',
+  }
+  showDetailPanel.value = true
+  await loadItemDetail(selectedVideo.value)
+}
+
+async function refreshCurrentPage(forceRefresh = false) {
+  const page = mediaLibraryStore.currentPage || 1
+  if (mediaLibraryStore.enabledLibraryIds.length === 0) {
+    await mediaLibraryStore.fetchAllItems(page, searchQuery.value, forceRefresh)
+    return
+  }
+  if (mediaLibraryStore.selectedLibrary?.id) {
+    await mediaLibraryStore.fetchItems(mediaLibraryStore.selectedLibrary.id, page, activeFilter.value || null, searchQuery.value, forceRefresh)
+  }
+}
+
+async function pollMediaLibrarySyncState() {
+  try {
+    const resp = await api.get('/media-library/sync-state')
+    const version = Number(resp.data?.version || 0)
+    if (mediaSyncVersion === null) {
+      mediaSyncVersion = version
+      return
+    }
+    if (version !== mediaSyncVersion) {
+      mediaSyncVersion = version
+      mediaLibraryStore.invalidateCache()
+      await refreshCurrentPage(true)
+      toast.info('媒体库已同步 Emby 更新')
+    }
+  } catch {
+    // Keep polling lightweight; foreground requests still surface errors.
+  }
+}
+
+async function loadFaceFusionBadgePreference() {
+  try {
+    const resp = await api.get('/settings/facefusion/preferences')
+    facefusionBadgeAlwaysVisible.value = !!resp.data?.badge_always_visible
+  } catch {
+    facefusionBadgeAlwaysVisible.value = false
+  }
+}
+
+function startMediaLibrarySyncPolling() {
+  if (mediaSyncTimer) return
+  pollMediaLibrarySyncState()
+  mediaSyncTimer = setInterval(pollMediaLibrarySyncState, 20000)
+}
+
+function stopMediaLibrarySyncPolling() {
+  if (!mediaSyncTimer) return
+  clearInterval(mediaSyncTimer)
+  mediaSyncTimer = null
+}
+
+function deletePlanDetails(plannedDirs: string[] = [], plannedFiles: string[] = []) {
+  return [
+    { label: `将删除文件夹 · ${plannedDirs.length}`, items: plannedDirs },
+    { label: `将删除文件 · ${plannedFiles.length}`, items: plannedFiles },
+  ].filter(section => section.items.length > 0)
+}
+
+function deleteResultDetails(result: any = {}) {
+  const deletedDirs = result.deleted_dirs || []
+  const deletedFiles = result.deleted_files || result.deleted_paths || []
+  const missingDirs = result.missing_dirs || []
+  const missingFiles = result.missing_files || []
+  return [
+    { label: `已删除文件夹 · ${deletedDirs.length}`, items: deletedDirs },
+    { label: `已删除文件 · ${deletedFiles.length}`, items: deletedFiles },
+    { label: `已跳过文件夹 · ${missingDirs.length}`, items: missingDirs },
+    { label: `已跳过文件 · ${missingFiles.length}`, items: missingFiles },
+  ].filter(section => section.items.length > 0)
+}

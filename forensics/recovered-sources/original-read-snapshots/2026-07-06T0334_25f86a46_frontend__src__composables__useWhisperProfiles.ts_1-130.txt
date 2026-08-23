@@ -1,0 +1,130 @@
+export type WhisperModelBackend = 'chickenrice-zh' | 'anime-whisper' | 'large-v3'
+export type WhisperStrategyMode = WhisperModelBackend
+
+export type WhisperTranslationOverrides = {
+  vad_backend?: string
+  audio_preprocess_mode?: string
+  audio_preprocess_model?: string
+  translate_enabled?: boolean
+  translate_to?: string
+  translate_base_url?: string
+  translate_api_key?: string
+  translate_model?: string
+  translate_style?: string
+}
+
+export type WhisperEditableDefaults = {
+  model_backend: WhisperModelBackend
+  vad_backend: string
+  audio_preprocess_mode: string
+  audio_preprocess_model: string
+  translate_enabled: boolean
+  translate_to: string
+  translate_base_url: string
+  translate_api_key: string
+  translate_model: string
+  translate_style: string
+}
+
+export const WHISPER_MODEL_BACKENDS: WhisperModelBackend[] = [
+  'chickenrice-zh',
+  'anime-whisper',
+  'large-v3',
+]
+
+export function normalizeWhisperModelBackend(value?: string | null): WhisperModelBackend {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'anime' || normalized === 'anime-whisper') return 'anime-whisper'
+  if (normalized === 'qwen' || normalized === 'qwen-whisper' || normalized === 'large-v3' || normalized === 'large_v3') return 'large-v3'
+  return 'chickenrice-zh'
+}
+
+export function isDirectWhisperTranslationBackend(modelBackend?: string | null) {
+  return normalizeWhisperModelBackend(modelBackend) === 'chickenrice-zh'
+}
+
+export function buildWhisperProfile(modelBackend: WhisperModelBackend = 'chickenrice-zh') {
+  const backend = normalizeWhisperModelBackend(modelBackend)
+  if (backend === 'anime-whisper') {
+    return {
+      strategy: 'chickenrice',
+      subtitle_profile: 'standard',
+      model_backend: 'anime-whisper',
+      whisper_task: 'transcribe',
+      model: 'anime-whisper',
+      pipeline_mode: 'anime',
+      merge_strategy: 'smart_merge',
+      language: 'ja',
+      sensitivity: 'balanced',
+      vad_method: 'semantic',
+      chunker: 'smart_vad_chunk',
+      target_chunk_duration_s: 30,
+      max_chunk_duration_s: 30,
+      segment_merge_max_gap_ms: 2000,
+      segment_merge_max_duration_ms: 20000,
+      pass1_pipeline: 'anime',
+      pass2_pipeline: '',
+      custom_config: undefined,
+    }
+  }
+
+  if (backend === 'large-v3') {
+    return {
+      strategy: 'chickenrice',
+      subtitle_profile: 'standard',
+      model_backend: 'large-v3',
+      whisper_task: 'transcribe',
+      model: 'large-v3',
+      pipeline_mode: 'faster',
+      merge_strategy: 'smart_merge',
+      language: 'ja',
+      sensitivity: 'balanced',
+      vad_method: 'semantic',
+      chunker: 'smart_vad_chunk',
+      target_chunk_duration_s: 30,
+      max_chunk_duration_s: 30,
+      segment_merge_max_gap_ms: 2000,
+      segment_merge_max_duration_ms: 20000,
+      pass1_pipeline: 'faster',
+      pass2_pipeline: '',
+      custom_config: undefined,
+    }
+  }
+
+  return {
+    strategy: 'chickenrice',
+    subtitle_profile: 'standard',
+    model_backend: 'chickenrice-zh',
+    whisper_task: 'translate',
+    model: 'chickenrice-zh',
+    pipeline_mode: 'faster',
+    merge_strategy: 'smart_merge',
+    language: 'ja',
+    sensitivity: 'balanced',
+    vad_method: 'semantic',
+    chunker: 'smart_vad_chunk',
+    target_chunk_duration_s: 30,
+    max_chunk_duration_s: 30,
+    segment_merge_max_gap_ms: 2000,
+    segment_merge_max_duration_ms: 20000,
+    pass1_pipeline: 'faster',
+    pass2_pipeline: '',
+    custom_config: undefined,
+  }
+}
+
+export function resolveWhisperStrategyMode(strategy?: string | null, modelBackend?: string | null): WhisperModelBackend {
+  return normalizeWhisperModelBackend(modelBackend || strategy)
+}
+
+export function resolveWhisperSelectableMode(strategy?: string | null, modelBackend?: string | null): WhisperModelBackend {
+  return resolveWhisperStrategyMode(strategy, modelBackend)
+}
+
+export function buildWhisperProfileWithTranslation(
+  modelBackend: WhisperModelBackend,
+  overrides: WhisperTranslationOverrides = {},
+) {
+  const profile = buildWhisperProfile(modelBackend)
+  const directTranslate = profile.model_backend === 'chickenrice-zh'
+  return {

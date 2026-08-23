@@ -1,0 +1,13 @@
+  type: string
+  poster_path?: string
+}
+
+export interface FileTags {
+  is_uncensored: boolean  // -u 流出
+  has_chinese: boolean    // -c 中文
+  has_facefusion?: boolean // FaceFusion / FF 换脸版本
+  is_cracked: boolean     // 破解
+  is_leaked: boolean      // 流出
+  release_type: string | null  // 流出 / 无码
+  release_type_key?: 'leaked' | 'uncensored' | null
+}

@@ -1,0 +1,71 @@
+      cover_url: videoData.cover_url || videoData.thumb_url || '',
+      fanart_url: videoData.fanart_url || videoData.cover_url || videoData.thumb_url || '',
+      sourcePlugin: 'javdb',
+      sourceLabel: 'JavDB',
+      sourceRoute: window.location.pathname + window.location.search,
+      sourceContext: 'javdb-work',
+      defaultMode: 'loose',
+      requireCracked: false,
+      requireSubtitle: false,
+      onSuccess: async result => {
+        sdk.toast?.success?.(result?.created ? '订阅已创建' : '订阅已存在')
+        await loadSubscriptionStates()
+        renderGrid()
+      },
+    })
+  }
+
+  function renderGrid() {
+    grid.innerHTML = ''
+    grid.classList.toggle('javdb-grid--actors', isActorRankingFrame() || isActorDirectoryFrame())
+    grid.classList.toggle('is-refreshing', state.loading && state.items.length > 0)
+    const items = filteredItems()
+
+    if (state.loading && !items.length) {
+      renderSkeletonGrid()
+      return
+    }
+
+    if (!items.length) {
+      grid.appendChild(sdk.ui.emptyState({ text: '暂无符合条件的作品' }))
+      return
+    }
+
+    const start = (state.page - 1) * state.limit
+    const visible = usesRemotePaging() ? items : items.slice(start, start + state.limit)
+
+    visible.forEach(item => {
+      if (isActorRankingFrame() || isActorDirectoryFrame()) {
+        const actorTitle = item.name_zht || item.name || '-'
+        const actorId = item.id || item.external_id || item.value
+        const actorMeta = [item.name, item.other_name].filter(Boolean).join(' · ')
+        const actorCard = el('button', 'javdb-actor-card')
+        actorCard.type = 'button'
+        actorCard.onclick = () => setRelation('actor', actorId, actorTitle, { meta: { ...item, value: actorId, label: actorTitle } })
+        const avatar = el('div', 'javdb-actor-avatar')
+        if (item.avatar_url) {
+          const img = el('img')
+          img.src = item.avatar_url
+          img.alt = actorTitle
+          avatar.appendChild(img)
+        } else {
+          avatar.textContent = String(actorTitle || '?').slice(0, 1).toUpperCase()
+        }
+        actorCard.appendChild(avatar)
+        actorCard.appendChild(el('div', 'javdb-actor-name', actorTitle))
+        actorCard.appendChild(el('div', 'javdb-actor-meta', actorMeta || ''))
+        const badgeRow = el('div', 'javdb-actor-badges')
+        if (item.uncensored) badgeRow.appendChild(sdk.ui.badge({ label: '无码', tone: 'info' }))
+        actorCard.appendChild(badgeRow)
+        grid.appendChild(actorCard)
+        return
+      }
+      const badges = []
+      const magnetText = magnetLabel(item)
+      if (magnetText) badges.push(sdk.ui.badge({ label: magnetText, tone: 'info' }))
+      if (item.has_cnsub || item.play_subtitle) badges.push(sdk.ui.badge({ label: '中字', tone: 'success' }))
+      if (item.is_cracked) badges.push(sdk.ui.badge({ label: '破解', tone: 'danger' }))
+      if (item.library?.in_library) badges.push(sdk.ui.badge({ label: '已入库', tone: 'info' }))
+
+      const actionModel = subscriptionActionModel(item)
+      const subscribeAction = el('button', `noor-plugin-badge javdb-subscribe-action javdb-subscribe-action--${actionModel.state}`, actionModel.label)

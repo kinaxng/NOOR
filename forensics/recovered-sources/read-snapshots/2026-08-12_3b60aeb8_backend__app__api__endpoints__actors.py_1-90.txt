@@ -1,0 +1,90 @@
+"""Emby actor management endpoints recovered independently from media_library.
+
+This module deliberately builds on the still-working media-library adapter
+instead of replacing its recovered bytecode.  It is safe to evolve while the
+rest of that adapter is reconstructed.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import re
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
+import httpx
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
+
+from app.api.endpoints import media_library as media
+from app.core.runtime_paths import data_path
+
+
+router = APIRouter(prefix="/api/media-library", tags=["media-library-actors"])
+
+
+class ActorMappingSourceRequest(BaseModel):
+    mdc_ng_path: str
+
+
+class ActorAvatarUrlRequest(BaseModel):
+    url: str
+
+
+class ActorMappingMergeRequest(BaseModel):
+    mapping_id: str
+    target_name: str | None = None
+    target_actor_id: str | None = None
+    dry_run: bool = False
+
+
+class ActorMappingMergeBatchRequest(BaseModel):
+    target_actor_ids: dict[str, str] = {}
+    skip_conflicts: bool = True
+    dry_run: bool = False
+
+
+class ActorTmdbBackfillRequest(BaseModel):
+    actor_ids: list[str] | None = None
+    only_high_confidence: bool = True
+    dry_run: bool = False
+    progress_key: str | None = None
+
+
+class ActorNameSyncRequest(BaseModel):
+    actor_ids: list[str] | None = None
+    skip_conflicts: bool = True
+    dry_run: bool = False
+    progress_key: str | None = None
+
+
+class ActorProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    sort_name: str | None = None
+    jp_name: str | None = None
+    zh_cn_name: str | None = None
+    zh_tw_name: str | None = None
+    aliases: list[str] | None = None
+    overview: str | None = None
+    provider_ids: dict[str, str] | None = None
+    birthday: str | None = None
+    deathday: str | None = None
+    place_of_birth: str | None = None
+    gender: str | None = None
+    known_for_department: str | None = None
+    popularity: float | None = None
+    homepage: str | None = None
+    external_urls: dict[str, str] | None = None
+
+
+class ActorTmdbApplyRequest(BaseModel):
+    apply_name: bool = False
+    apply_overview: bool = True
+    apply_provider_ids: bool = True
+    apply_avatar: bool = False
+
+

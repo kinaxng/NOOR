@@ -1,0 +1,126 @@
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+async function installDeps() {
+  const parts = Object.entries(runtimeInstallableDeps.value)
+    .filter(([, info]: [string, any]) => !info?.installed)
+    .map(([name]) => name === 'torch' ? `torch ${torchVariant.value.toUpperCase()}` : name)
+  const torchIsInstalled = !!checkingDepsResult.value.torch?.installed
+  const variantChanged = torchIsInstalled && (torchVariant.value === 'gpu') !== !!checkingDepsResult.value.torch?.cuda
+  if (variantChanged && !parts.some(item => item.startsWith('torch'))) {
+    parts.push(`torch ${torchVariant.value.toUpperCase()}`)
+  }
+  const msg = parts.length === 0
+    ? t('settings.whisper.installDepsReady')
+    : t('settings.whisper.installDepsPlan', { packages: parts.join(' + ') })
+  if (!await confirm({ message: msg, danger: false })) return
+
+  installStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.installing') }
+  try {
+    await api.post('/settings/whisper/install-deps', {
+      torch_variant: torchVariant.value,
+      torch_current_cuda: !!checkingDepsResult.value.torch?.cuda,
+    })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/install-status')
+      const status = statusResp.data
+      installStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(t('settings.whisper.installSuccess'))
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.installFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.installFailed'))
+  }
+}
+
+async function downloadModel(modelId: string) {
+  if (!await confirm({ message: t('settings.whisper.downloadModelConfirm', { modelId }) })) return
+
+  downloadingModel.value = modelId
+  modelDownloadStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.downloading') }
+  try {
+    await api.post('/settings/whisper/models/download', { model: modelId })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/models/download-status')
+      const status = statusResp.data
+      modelDownloadStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(status.message || t('settings.whisper.downloadSuccess'))
+        await loadWhisperModels()
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.downloadFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.downloadFailed'))
+  } finally {
+    downloadingModel.value = null
+  }
+}
+
+async function deleteModel(modelId: string) {
+  if (!await confirm({ message: t('settings.whisper.deleteModelConfirm', { modelId }), danger: true })) return
+  try {
+    await api.delete(`/settings/whisper/models/${modelId}`)
+    toast.success(t('settings.whisper.deleted'))
+    await loadWhisperModels()
+    await checkWhisperDeps()
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.deleteFailed'))
+  }
+}
+
+// ===== Option lists =====
+
+
+// Translation target language options — derived from available i18n dictionaries
+const translateLangOptions = computed(() => {
+  return Object.keys(dictionaries).map(lang => ({
+    value: lang,
+    label: t(`settings.whisper.translateLang.${lang}`) || lang.toUpperCase(),
+  }))
+})
+
+// Translation style options
+const translateStyleOptions = computed(() => [
+  { value: 'adult_explicit', label: t('settings.whisper.translateStyle.adultExplicit') },
+  { value: 'standard', label: t('settings.whisper.translateStyle.standard') },
+])
+
+const activeTranslateSummary = computed(() => {
+  return formatWhisperTranslationSummary(t, {
+    translateEnabled: translateEnabled.value,
+    translateTo: translateTo.value,
+    translateModel: translateModel.value,
+  })
+})
+const activeAudioPreprocessSummary = computed(() => {
+  return formatWhisperAudioPreprocessSummary(t, {
+    audioPreprocessMode: audioPreprocessMode.value,
+    audioPreprocessModel: audioPreprocessModel.value,
+  })
+})
+
+const recommendedMeta = computed(() => getWhisperStrategyMeta('recommended'))
+const recommendedPresentation = computed(() => getWhisperSelectableStrategyPresentation(t, 'recommended'))
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">

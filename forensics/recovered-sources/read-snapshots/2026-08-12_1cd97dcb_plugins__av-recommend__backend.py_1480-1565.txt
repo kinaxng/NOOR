@@ -1,0 +1,86 @@
+                category_seen[str(category)] += 1
+    return selected
+
+
+async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    source_mode = str(payload.get("source_mode") or "latest").strip().lower()
+    if source_mode not in {"latest", "full"}:
+        source_mode = "latest"
+    store = _ensure_store()
+    feedback = {
+        "ignored_codes": _feedback_codes(store.get("ignored")),
+        "liked_codes": _feedback_codes(store.get("liked")),
+        "disliked_codes": _feedback_codes(store.get("disliked")),
+        "liked_actors": _feedback_counter(store.get("liked"), "actors"),
+        "liked_categories": _feedback_counter(store.get("liked"), "categories"),
+        "disliked_actors": _feedback_counter(store.get("disliked"), "actors"),
+        "disliked_categories": _feedback_counter(store.get("disliked"), "categories"),
+    }
+    profile = await _library_profile()
+    live_codes, live_warning = await _live_library_codes(config, force=bool(payload.get("refresh")))
+    cache_key = json.dumps({
+        "config": config,
+        "ignored": sorted(feedback["ignored_codes"]),
+        "liked": sorted(feedback["liked_codes"]),
+        "disliked": sorted(feedback["disliked_codes"]),
+        "liked_actors": dict(feedback["liked_actors"]),
+        "liked_categories": dict(feedback["liked_categories"]),
+        "disliked_actors": dict(feedback["disliked_actors"]),
+        "disliked_categories": dict(feedback["disliked_categories"]),
+        "library_codes": sorted(live_codes),
+        "source_mode": source_mode,
+    }, sort_keys=True, ensure_ascii=False)
+    if not payload.get("refresh") and _CACHE.get("value") is not None and _CACHE.get("key") == cache_key and time.time() - float(_CACHE.get("ts") or 0) < CACHE_TTL:
+        return _CACHE["value"]
+
+    pool = _pool()
+    if source_mode == "full" and _backfill_candidate_pool_title_profiles(pool):
+        _save_pool(pool)
+    pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+    if source_mode == "full":
+        candidates = [dict(item) for item in pool_items.values() if isinstance(item, dict)]
+        warnings: list[str] = []
+        if not candidates:
+            warnings.append("完整候选池尚未建立，请先执行候选池扫描。")
+    else:
+        candidates, warnings = await _javdb_candidates(config)
+        # Reuse persisted source and first-seen metadata without replacing the
+        # fresher fields returned by the latest feed.
+        for item in candidates:
+            code = _candidate_code(item)
+            persisted = pool_items.get(code) if code else None
+            if isinstance(persisted, dict):
+                item["source_tags"] = list(persisted.get("source_tags") or [])
+                item["is_today_increment"] = bool(persisted.get("is_today_increment"))
+
+    excluded_codes = set(profile.get("codes") or set())
+    excluded_codes.update(live_codes)
+    excluded_codes.update(_subscription_codes())
+    candidates = [
+        item for item in candidates
+        if _candidate_code(item) not in excluded_codes
+        and not bool((item.get("library") or {}).get("in_library") if isinstance(item.get("library"), dict) else False)
+    ]
+    if live_warning:
+        warnings.append(live_warning)
+    scored = []
+    for item in candidates:
+        rec = _candidate_score(item, profile, config, feedback)
+        if rec:
+            scored.append(rec)
+    scored.sort(key=lambda x: (x["score"], x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
+    resource_warnings = await _enrich_recommendation_resources(config, scored)
+    if resource_warnings:
+        warnings.extend(resource_warnings)
+    scored.sort(key=lambda x: (x["score"], (x.get("resource_summary") or {}).get("total") or 0, x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
+    scored = _diversify_recommendations(scored)
+    limit = max(1, min(int(payload.get("limit") or 48), 100))
+    result = {
+        "ok": True,
+        "generated_at": _now_ms(),
+        "source_mode": source_mode,
+        "source_label": "完整推荐" if source_mode == "full" else "最新推荐",
+        "items": scored[:limit],
+        "total": len(scored),
+        "profile": {
+            "media_count": profile.get("media_count") or 0,

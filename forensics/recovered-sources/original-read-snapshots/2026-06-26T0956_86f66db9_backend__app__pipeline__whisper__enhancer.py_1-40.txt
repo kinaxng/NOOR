@@ -1,0 +1,40 @@
+"""语音增强器 — 在转写前对音频进行响度标准化/静音移除/人声增强"""
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Optional, Callable
+
+from .runtime import raise_if_cancelled, run_cancellable_subprocess
+
+
+class AudioEnhancer:
+    """语音增强器，支持多种增强方法串行组合"""
+
+    def __init__(
+        self,
+        enhancers: list[str],  # e.g. ['ffmpeg-dsp', 'demucs', 'silero-vad']
+        progress_callback: Optional[Callable] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ):
+        self.enhancers = enhancers
+        self.progress_callback = progress_callback
+        self.cancel_callback = cancel_callback
+
+    def log(self, msg: str, progress: int = None):
+        if self.progress_callback:
+            try:
+                self.progress_callback(msg, progress)
+            except TypeError:
+                self.progress_callback(msg)
+
+    def enhance(self, audio_path: str, output_path: str, sample_rate: int = 16000) -> str:
+        """
+        对音频应用增强处理。
+        各方法说明：
+          - ffmpeg-dsp: loudnorm 响度标准化（CPU）
+          - clearvoice: WebRTC VAD 静音移除 + 轻降噪（CPU）
+          - silero-vad: Silero VAD 静音检测（不增强，用于 VAD 信息）
+          - demucs: GPU 神经人声分离，提取 vocals 轨（GPU，最强）
+        返回增强后的音频路径。
+        """

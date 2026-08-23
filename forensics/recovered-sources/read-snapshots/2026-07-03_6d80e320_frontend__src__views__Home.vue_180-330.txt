@@ -1,0 +1,151 @@
+  }
+}
+
+async function pollMediaLibrarySyncState() {
+  try {
+    const resp = await api.get('/media-library/sync-state')
+    const version = Number(resp.data?.version || 0)
+    if (mediaSyncVersion === null) {
+      mediaSyncVersion = version
+      return
+    }
+    if (version !== mediaSyncVersion) {
+      mediaSyncVersion = version
+      mediaLibraryStore.invalidateCache()
+      await refreshCurrentPage(true)
+      toast.info('媒体库已同步 Emby 更新')
+    }
+  } catch {
+    // Keep polling lightweight; foreground requests still surface errors.
+  }
+}
+
+function startMediaLibrarySyncPolling() {
+  if (mediaSyncTimer) return
+  pollMediaLibrarySyncState()
+  mediaSyncTimer = setInterval(pollMediaLibrarySyncState, 20000)
+}
+
+function stopMediaLibrarySyncPolling() {
+  if (!mediaSyncTimer) return
+  clearInterval(mediaSyncTimer)
+  mediaSyncTimer = null
+}
+
+function deletePlanDetails(plannedDirs: string[] = [], plannedFiles: string[] = []) {
+  return [
+    { label: `将删除文件夹 · ${plannedDirs.length}`, items: plannedDirs },
+    { label: `将删除文件 · ${plannedFiles.length}`, items: plannedFiles },
+  ].filter(section => section.items.length > 0)
+}
+
+function deleteResultDetails(result: any = {}) {
+  const deletedDirs = result.deleted_dirs || []
+  const deletedFiles = result.deleted_files || result.deleted_paths || []
+  const missingDirs = result.missing_dirs || []
+  const missingFiles = result.missing_files || []
+  return [
+    { label: `已删除文件夹 · ${deletedDirs.length}`, items: deletedDirs },
+    { label: `已删除文件 · ${deletedFiles.length}`, items: deletedFiles },
+    { label: `已跳过文件夹 · ${missingDirs.length}`, items: missingDirs },
+    { label: `已跳过文件 · ${missingFiles.length}`, items: missingFiles },
+  ].filter(section => section.items.length > 0)
+}
+
+function setDeletingItem(itemId: string, active: boolean) {
+  const next = new Set(deletingItemIds.value)
+  if (active) next.add(itemId)
+  else next.delete(itemId)
+  deletingItemIds.value = next
+}
+
+onMounted(async () => {
+  applyRouteSearchQuery()
+  await ensureLibraryReady()
+  await nextTick()
+  schedulePageSizeUpdate(true)
+  startMediaLibrarySyncPolling()
+  if (gridEl.value) {
+    resizeObserver = new ResizeObserver(() => schedulePageSizeUpdate())
+    resizeObserver.observe(gridEl.value)
+  }
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  if (resizeTimer) clearTimeout(resizeTimer)
+  stopMediaLibrarySyncPolling()
+  window.removeEventListener('resize', handleResize)
+})
+
+function handleResize() {
+  schedulePageSizeUpdate()
+}
+
+watch(activeFilter, (key) => {
+  mediaLibraryStore.setFilter(key || null)
+}, { flush: 'post' })
+
+
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+watch(searchQuery, (value) => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    mediaLibraryStore.setSearch(value)
+  }, 220)
+})
+
+function applyRouteSearchQuery() {
+  const q = String(route.query.q || '')
+  if (q && q !== searchQuery.value) {
+    searchQuery.value = q
+    mediaLibraryStore.setSearch(q)
+  }
+}
+
+function autoSelectLibrary(_filter: string | null) {
+  const preferredId = mediaLibraryStore.enabledLibraryIds[0]
+  const lib = (preferredId
+    ? mediaLibraryStore.allLibraries.find(l => l.id === preferredId)
+    : null) || mediaLibraryStore.libraries[0] || null
+  if (!lib) {
+    mediaLibraryStore.selectLibrary(null)
+    return null
+  }
+  mediaLibraryStore.selectLibrary(lib)
+  return lib
+}
+
+async function ensureLibraryReady() {
+  await mediaLibraryStore.fetchLibraries()
+  mediaLibraryStore.filterTag = activeFilter.value || null
+  const lib = autoSelectLibrary(activeFilter.value || null)
+  if (!lib) return
+
+  const selectedId = mediaLibraryStore.selectedLibrary?.id
+  const shouldFetchDirectly = selectedId === lib.id || mediaLibraryStore.items.length === 0
+  if (shouldFetchDirectly) {
+    await mediaLibraryStore.fetchItems(lib.id, 1, activeFilter.value || null, searchQuery.value)
+  }
+}
+
+// Migrate old /library?filter=xxx links to path-based tabs.
+watch(() => route.query.q, () => {
+  applyRouteSearchQuery()
+})
+
+watch(() => route.query.filter, (f) => {
+  const filter = String(f || '')
+  const valid = ['cracked', 'chinese', 'leaked', 'uncensored'].includes(filter)
+  if (!valid) return
+  const nextQuery = { ...route.query }
+  delete nextQuery.filter
+  router.replace({ path: `/library/${filter}`, query: nextQuery })
+}, { immediate: true })
+
+watch(() => route.path, async (path) => {
+  if (path === '/library' || path.startsWith('/library/')) {
+    await ensureLibraryReady()

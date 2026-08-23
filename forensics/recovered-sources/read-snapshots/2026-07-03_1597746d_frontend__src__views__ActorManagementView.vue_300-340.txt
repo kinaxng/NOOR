@@ -1,0 +1,41 @@
+      deleted: result.deleted_actor_count || 0,
+      skipped: result.skipped_count || 0,
+    }))
+    const failures = result.failures || []
+    if (failures.length) {
+      toast.error(t('files.actors.batchMergeFailed', { count: failures.length }) + `: ${failures.slice(0, 3).map((item: any) => `${item.name || item.mapping_id}: ${item.error}`).join(' / ')}`)
+    }
+    await previewMappingMatches()
+    loadActors()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mergeFailed'))
+  } finally {
+    batchMerging.value = false
+  }
+}
+
+function setSort(key: SortKey, order: SortOrder) {
+  sortBy.value = key
+  sortOrder.value = order
+  page.value = 1
+  loadActors()
+}
+
+function openActor(actor: MediaActor) {
+  if (!actor.id) return
+  router.push(`/actors/${encodeURIComponent(actor.id)}`)
+}
+
+watch(query, () => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    page.value = 1
+    loadActors()
+  }, 260)
+})
+
+watch(page, () => {
+  loadActors()
+})
+
+watch(currentLang, () => {

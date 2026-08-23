@@ -1,0 +1,261 @@
+Warning: truncated output (original token count: 2535)
+Total output lines: 260
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const upgrading = ref(false)
+
+const ladaCliPath = ref('')
+const ladaVersion = ref<string | null>(null)
+const ladaIsDocker = ref(false)
+const ladaInstallMode = ref('external-cli')
+const ladaCanSelfUpgrade = ref(false)
+const ladaUpgradeStrategy = ref('manual-external')
+const ladaUpgradeHint = ref('')
+const ladaRepoPath = ref<string | null>(null)
+
+const ladaDevice = ref('cuda:0')
+const ladaFp16 = ref(true)
+const ladaDetectionModel = ref('v4-fast')
+const ladaRestorationModel = ref('basicvsrpp-v1.2')
+const ladaEncodingPreset = ref('hevc-nvidia-gpu-hq')
+const ladaMaxClipLength = ref(180)
+const ladaDetectFaceMosaics = ref(false)
+
+const ladaDevices = ref<any[]>([])
+const ladaEncodingPresets = ref<any[]>([])
+const ladaDetectionModels = ref<any[]>([])
+const ladaRestorationModels = ref<any[]>([])
+const ladaModelWeightsDir = ref('')
+const loadingLadaInfo = ref(false)
+
+const detectionModelsExpanded = ref(false)
+const restorationModelsExpanded = ref(false)
+
+function buildFallbackEncodingPresets() {
+  return [
+    { id: 'hevc-nvidia-gpu-hq', name: t('settings.lada.encodingPresetName.hevcNvidiaGpuHq') },
+    { id: 'hevc-nvidia-gpu-balanced', name: t('settings.lada.encodingPresetName.hevcNvidiaGpuBalanced') },
+    { id: 'hevc-nvidia-gpu-uhq', name: t('settings.lada.encodingPresetName.hevcNvidiaGpuUhq') },
+    { id: 'h264-nvidia-gpu-fast', name: t('settings.lada.encodingPresetName.h264NvidiaGpuFast') },
+    { id: 'h264-cpu-fast', name: t('settings.lada.encodingPresetName.h264CpuFast') },
+    { id: 'h264-cpu-uhq', name: t('settings.lada.encodingPresetName.h264CpuUhq') },
+    { id: 'av1-cpu-uhq', name: t('settings.lada.encodingPresetName.av1CpuUhq') },
+  ]
+}
+
+onMounted(async () => {
+  await loadSettings()
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    const data = resp.data
+
+    ladaCliPath.value = data.lada?.cli_path || ''
+    ladaVersion.value = data.lada?.version || null
+    ladaIsDocker.value = data.lada?.is_docker || false
+    ladaInstallMode.value = data.lada?.install_mode || 'external-cli'
+    ladaCanSelfUpgrade.value = data.lada?.can_self_upgrade || false
+    ladaUpgradeStrategy.value = data.lada?.upgrade_strategy || 'manual-external'
+    ladaUpgradeHint.value = data.lada?.upgrade_hint || ''
+    ladaRepoPath.value = data.lada?.repo_path || null
+
+    if (data.lada_defaults) {
+      ladaDevice.value = data.lada_defaults.device || 'cuda:0'
+      ladaFp16.value = data.lada_defaults.fp16 ?? true
+      ladaDetectionModel.value = data.lada_defaults.detection_model || 'v4-fast'
+      ladaRestorationModel.value = data.lada_defaults.restoration_model || 'basicvsrpp-v1.2'
+      ladaEncodingPreset.value = data.lada_defaults.encoding_preset || 'hevc-nvidia-gpu-hq'
+      ladaMaxClipLength.value = data.lada_defaults.max_clip_length || 180
+      ladaDetectFaceMosaics.value = data.lada_defaults.detect_face_mosaics ?? false
+    }
+    // Encoding presets always available immediately
+    ladaEncodingPresets.value = buildFallbackEncodingPresets()
+
+    await loadLadaInfo()
+  } catch (e: any) {
+    toast.error(t('settings.lada.loadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadLadaInfo() {
+  loadingLadaInfo.value = true
+  try {
+    const resp = await api.get('/settings/lada/info')
+    ladaDevices.value = resp.data.devices || []
+    ladaEncodingPresets.value = resp.data.encoding_presets || []
+    ladaDetectionModels.value = resp.data.detection_models || []
+    ladaRestorationModels.value = resp.data.restoration_models || []
+    ladaModelWeightsDir.value = resp.data.model_weights_dir || ''
+  } catch (e: any) {
+    console.error('Failed to load LADA info:', e)
+  } finally {
+    loadingLadaInfo.value = false
+  }
+}
+
+async function saveLada() {
+  saving.value = true
+  try {
+    await api.put('/settings/lada', { cli_path: ladaCliPath.value })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function upgradeLada() {
+  if (!ladaCanSelfUpgrade.value) {
+    toast.error(ladaUpgradeHint.value || t('settings.lada.upgradeFailed'))
+    return
+  }
+  if (!await confirm({ message: t('settings.lada.upgradeConfirm') })) return
+  upgrading.value = true
+  try {
+    const resp = await api.post('/settings/lada/upgrade')
+   …35 tokens truncated…{
+    toast.error(e.response?.data?.detail || t('settings.lada.upgradeFailed'))
+  } finally {
+    upgrading.value = false
+  }
+}
+
+async function saveLadaDefaults() {
+  saving.value = true
+  try {
+    await api.put('/settings/lada/defaults', {
+      device: ladaDevice.value,
+      fp16: ladaFp16.value,
+      detection_model: ladaDetectionModel.value,
+      restoration_model: ladaRestorationModel.value,
+      encoding_preset: ladaEncodingPreset.value,
+      max_clip_length: ladaMaxClipLength.value,
+      detect_face_mosaics: ladaDetectFaceMosaics.value,
+    })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function installModeLabel(mode: string) {
+  switch (mode) {
+    case 'docker-image':
+      return t('settings.lada.installModeDockerImage')
+    case 'editable-repo':
+      return t('settings.lada.installModeEditableRepo')
+    default:
+      return t('settings.lada.installModeExternalCli')
+  }
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-else>
+      <!-- CLI & Version Info -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.lada.cli') }}</h2>
+
+        <div class="settings-form">
+          <div class="settings-info-row">
+            <div>
+              <p class="info-label">{{ t('settings.lada.version') }}</p>
+              <p class="info-value">{{ ladaVersion || t('settings.lada.versionNotFound') }}</p>
+            </div>
+            <div class="text-right">
+              <p class="info-label">{{ t('settings.lada.runningMode') }}</p>
+              <VuiBadge :color="ladaIsDocker ? 'success' : 'warning'" variant="gradient" size="sm">
+                {{ ladaIsDocker ? t('settings.lada.docker') : t('settings.lada.native') }}
+              </VuiBadge>
+            </div>
+          </div>
+
+          <div class="settings-info-row">
+            <div>
+              <p class="info-label">{{ t('settings.lada.installMode') }}</p>
+              <p class="info-value">{{ installModeLabel(ladaInstallMode) }}</p>
+            </div>
+            <div v-if="ladaRepoPath" class="text-right">
+              <p class="info-label">{{ t('settings.lada.repoPath') }}</p>
+              <p class="info-value info-value--mono">{{ ladaRepoPath }}</p>
+            </div>
+          </div>
+
+          <FieldRow :label="t('settings.lada.cliPath')" :description="t('settings.lada.cliPathDesc')">
+            <input v-model="ladaCliPath" type="text" placeholder="python3 -m lada.cli.main" class="settings-input" />
+          </FieldRow>
+
+          <div class="settings-info-row">
+            <span class="info-label">{{ t('settings.lada.modelWeightsDir') }}</span>
+            <span class="info-value info-value--mono">{{ ladaModelWeightsDir || t('settings.lada.modelWeightsDirNotConfigured') }}</span>
+          </div>
+
+          <div class="settings-actions settings-actions--stack mt-2">
+            <VuiButton variant="gradient" color="info" size="small" customClass="settings-primary-btn" :loading="saving" @click="saveLada">
+              {{ saving ? t('settings.lada.saving') : t('settings.lada.savePaths') }}
+            </VuiButton>
+            <VuiButton
+              variant="contained"
+              color="secondary"
+              size="small"
+              customClass="settings-secondary-btn"
+              :loading="upgrading"
+              :disabled="!ladaCanSelfUpgrade"
+              @click="upgradeLada"
+            >
+              {{ upgrading ? t('settings.lada.upgrading') : t('settings.lada.upgrade') }}
+            </VuiButton>
+          </div>
+          <p v-if="ladaUpgradeHint" class="mt-3 text-xs text-text-secondary">{{ ladaUpgradeHint }}</p>
+        </div>
+      </div>
+
+      <!-- Default Settings -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.lada.defaultSettings') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.lada.defaultSettingsHint') }}</p>
+
+        <div class="settings-form mt-4">
+          <FieldRow :label="t('settings.lada.device')" :description="t('settings.lada.deviceDesc')">
+            <select v-model="ladaDevice" class="settings-input">
+              <option v-for="dev in ladaDevices" :key="dev.id" :value="dev.id">
+                {{ dev.name }} ({{ dev.id }})
+              </option>
+            </select>
+          </FieldRow>
+
+          <FieldRow :label="t('settings.lada.fp16')" :description="t('settings.lada.fp16Desc')">
+            <select v-model="ladaFp16" class="settings-input">
+              <option :value="true">{{ t('settings.lada.fp16Enabled') }}</option>
+              <option :value="false">{{ t('settings.lada.fp16Disabled') }}</option>
+            </select>
+          </FieldRow>

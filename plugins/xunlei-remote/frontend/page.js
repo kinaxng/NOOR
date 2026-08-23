@@ -577,7 +577,7 @@ export async function mount(el, sdk = {}) {
 
   function rowActionForTask(t) {
     if (!t || !t.id) return null
-    if (t.phase === 'PHASE_TYPE_ERROR') return { action: 'resume_task', label: '重试', icon: '↻', tone: 'warning' }
+    if (t.phase === 'PHASE_TYPE_ERROR') return { action: 'retry_task', label: '重试', icon: '↻', tone: 'warning' }
     if (t.phase === 'PHASE_TYPE_PAUSED') return { action: 'resume_task', label: '开始', icon: '▶', tone: 'default' }
     if (t.phase === 'PHASE_TYPE_RUNNING' || t.phase === 'PHASE_TYPE_PENDING') return { action: 'pause_task', label: '暂停', icon: 'Ⅱ', tone: 'default' }
     return null

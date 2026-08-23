@@ -1,0 +1,41 @@
+    return {"ok": True, **result}
+
+
+@router.post("/actors/name-sync/apply")
+async def apply_actor_name_sync(req: ActorNameSyncRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _apply_actor_name_sync(config, req, lang=lang)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"应用演员名称同步失败: {exc}")
+    if not req.dry_run:
+        _bump_sync_state()
+        SystemLogManager.get_instance().add_log(
+            "info",
+            f"[MediaLibrary] 演员名称同步完成: {result.get('applied_count', 0)} 位 · 跳过 {result.get('skipped_count', 0)} 位",
+            source="media_library.actors",
+        )
+    return result
+
+
+@router.get("/actors/mapping/merge-plan")
+async def get_actor_mapping_merge_plan(
+    mapping_id: str,
+    target_name: str | None = None,
+    target_actor_id: str | None = None,
+    lang: str | None = None,
+):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return {
+            "ok": True,
+            **await _build_actor_mapping_merge_plan(
+                config,
+                mapping_id,
+                target_name=target_name,
+                target_actor_id=target_actor_id,
+                lang=lang,

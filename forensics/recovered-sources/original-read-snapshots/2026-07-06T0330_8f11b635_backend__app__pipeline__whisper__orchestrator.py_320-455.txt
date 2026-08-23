@@ -1,0 +1,136 @@
+                all_segments = [(str(audio_path), 0.0, duration)]
+        else:
+            all_segments = [(str(audio_path), 0.0, duration)]
+
+        # Phase: 转写。NOOR 只保留 ChickenRice/faster-whisper 单链路和 anime-whisper 模型后端。
+        all_results = []
+        for idx, (audio_file, seg_start, seg_end) in enumerate(all_segments):
+            self._raise_if_cancelled()
+            seg_duration = seg_end - seg_start
+            seg_weight = 1.0 / len(all_segments)
+            seg_start_pct = int(28 + idx * seg_weight * 57)
+            seg_end_pct = int(28 + (idx + 1) * seg_weight * 57)
+            self.log(
+                f"处理段落 {idx + 1}/{len(all_segments)}: {seg_start:.1f}s - {seg_end:.1f}s ({seg_duration:.1f}s)",
+                seg_start_pct
+            )
+
+            if self.config.pipeline_mode == PipelineMode.ANIME:
+                seg_result = await self._process_anime_segment(audio_file, seg_start, seg_end, idx)
+            else:
+                seg_result = await self._process_faster_segment(audio_file, seg_start, seg_end, idx)
+
+            self.log(f"段落 {idx + 1} 完成: {len(seg_result.segments)} 片段", seg_end_pct)
+
+            for seg in seg_result.segments:
+                seg.start_time += seg_start
+                seg.end_time += seg_start
+
+            all_results.append(seg_result)
+
+        # 合并所有段落结果
+        self._raise_if_cancelled()
+        recommended_segment_diagnostics = None
+        if getattr(self.config, "executor_key", "advanced") == "recommended":
+            recommended_segment_diagnostics = self._collect_recommended_segment_diagnostics(all_results)
+            self.log(
+                "[Recommended] 诊断: "
+                f"对齐 {recommended_segment_diagnostics['aligned_segments']}/{recommended_segment_diagnostics['segment_count']} · "
+                f"large-v3 retry {recommended_segment_diagnostics['large_v3_retry_segments']} · "
+                f"Qwen fallback {recommended_segment_diagnostics['qwen_retry_segments']} · "
+                f"step-down {recommended_segment_diagnostics['stepdown_segments']}",
+            )
+        if len(all_results) == 1:
+            result = all_results[0]
+        else:
+            result = self._merge_all_results(all_results)
+            self.log(f"段落合并完成: {len(result.segments)} 片段", 90)
+        if recommended_segment_diagnostics is not None:
+            result.metadata = {
+                **result.metadata,
+                "recommended_segment_diagnostics": recommended_segment_diagnostics,
+            }
+
+        # Phase: 字幕后处理
+        self.log("=" * 50)
+        self.log("字幕后处理: 时轴安全整理 & 格式整理", 92)
+        self.log("=" * 50)
+        try:
+            self._raise_if_cancelled()
+            is_direct_translation = (
+                getattr(self.config, "whisper_task", None) == "translate"
+                or getattr(self.config, "model_backend", "") == WhisperModel.CHICKENRICE_ZH
+                or getattr(self.config, "model_backend", "") == "chickenrice-zh"
+            )
+            if is_direct_translation:
+                post_processor = SubtitleSafetyPostProcessor(
+                    max_segment_duration=max(
+                        1.0,
+                        float(getattr(self.config, "segment_merge_max_duration_ms", 20000) or 20000) / 1000.0,
+                    ),
+                    max_merge_gap=max(
+                        0.0,
+                        float(getattr(self.config, "segment_merge_max_gap_ms", 2000) or 2000) / 1000.0,
+                    ),
+                )
+                self.log("后处理策略: subtitle-safety")
+            elif getattr(self.config, "executor_key", "advanced") == "recommended":
+                post_processor = RecommendedSubtitlePostProcessor()
+                self.log("后处理策略: default-cleanup")
+            else:
+                post_processor = JapanesePostProcessor(
+                    min_segment_duration=0.8,
+                    max_segment_duration=8.0,
+                    min_gap_threshold=0.3,
+                    merge_below=1.2,
+                )
+            result = post_processor.process(result)
+            if result.metadata.get("recommended_strategy_post_processed"):
+                before_count = result.metadata.get("recommended_cleanup_before_segments", len(result.segments))
+                after_count = result.metadata.get("recommended_cleanup_after_segments", len(result.segments))
+                deduped_count = result.metadata.get("recommended_cleanup_deduped_segments", 0)
+                diagnostics = result.metadata.get("recommended_segment_diagnostics") or recommended_segment_diagnostics or {}
+                cleanup_summary = {
+                    "before_segments": before_count,
+                    "after_segments": after_count,
+                    "deduped_segments": deduped_count,
+                    "noise_only_segments": result.metadata.get("recommended_cleanup_noise_only_segments", 0),
+                    "trimmed_noise_chars": result.metadata.get("recommended_cleanup_trimmed_noise_chars", 0),
+                    "particle_merged_segments": result.metadata.get("recommended_cleanup_particle_merged_segments", 0),
+                    "window_echo_segments": result.metadata.get("recommended_cleanup_window_echo_segments", 0),
+                }
+                result.metadata["recommended_diagnostics"] = {
+                    **diagnostics,
+                    "cleanup": cleanup_summary,
+                }
+                self.log(
+                    f"default-cleanup 统计: {before_count} → {after_count} 片段，去重 {deduped_count} 条"
+                )
+            self.log(f"后处理完成: {len(result.segments)} 片段", 95)
+        except Exception as e:
+            self.log(f"后处理失败（跳过）: {e}")
+
+        if getattr(self.config, "executor_key", "advanced") == "recommended" and not result.metadata.get("recommended_diagnostics"):
+            diagnostics = result.metadata.get("recommended_segment_diagnostics") or recommended_segment_diagnostics
+            if diagnostics is None:
+                diagnostics = self._collect_recommended_segment_diagnostics(all_results)
+            result.metadata = {
+                **result.metadata,
+                "recommended_segment_diagnostics": diagnostics,
+                "recommended_diagnostics": diagnostics,
+            }
+            self.log("[Default] 已写入基础链路诊断")
+
+        # Phase: 生成 SRT
+        self.log("=" * 50)
+        self.log("生成 SRT 文件", 97)
+        self.log("=" * 50)
+
+        # 清理视频名用于字幕文件
+        self._raise_if_cancelled()
+        clean_name = self._clean_video_name(video_name)
+
+        # 生成字幕 SRT。ChickenRice 主链路为日中直出，其余转录后端默认输出日文原文。
+        subtitle_lang = "zh" if getattr(self.config, "whisper_task", "transcribe") == "translate" else "ja"
+        srt_path = output_dir / f"{clean_name}.{subtitle_lang}.srt"
+        generate_srt(result.segments, str(srt_path))

@@ -1,0 +1,151 @@
+const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBackend(activeModelBackend.value))
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">
+      <!-- 1. Default Settings -->
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.currentProfileTitle') }}</h2>
+        <p class="settings-card__desc settings-card__desc--compact">{{ t('settings.whisper.currentProfileDesc') }}</p>
+
+        <div class="settings-form mt-2.5 space-y-1.5">
+          <button
+            v-for="option in modelBackendOptions"
+            :key="option.backend"
+            type="button"
+            class="whisper-strategy-card whisper-strategy-card--primary whisper-strategy-card--summary"
+            :class="{ 'whisper-strategy-card--active': activeModelBackend === option.backend }"
+            @click="activeModelBackend = option.backend"
+          >
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t(option.meta.titleKey) }}</div>
+              </div>
+              <VuiBadge :color="option.presentation.badgeColor" variant="gradient" size="sm">{{ t(option.meta.badgeKey) }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">{{ t(option.meta.stackKey) }}</p>
+            <div class="whisper-strategy-card__meta">
+              <span class="whisper-strategy-card__chip">{{ activeAudioPreprocessSummary }}</span>
+              <span v-if="activeModelBackend === option.backend" class="whisper-strategy-card__chip">{{ activeTranslateSummary }}</span>
+              <span v-else class="whisper-strategy-card__chip">{{ t(option.meta.descKey) }}</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.audioLabTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.audioLabDesc') }}</p>
+
+        <div class="settings-form settings-form--compact mt-2.5">
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.vadBackendLabel')" :description="t('settings.whisper.vadBackendDesc')">
+            <select v-model="vadBackend" class="settings-input">
+              <option v-for="opt in vadBackendOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.audioPreprocessLabel')" :description="t('settings.whisper.audioPreprocessDesc')">
+            <select v-model="audioPreprocessMode" class="settings-input">
+              <option value="none">{{ t('settings.whisper.audioPreprocessMode.none') }}</option>
+              <option value="vocal_isolation">{{ t('settings.whisper.audioPreprocessMode.vocalIsolation') }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow
+            customClass="whisper-field-row"
+            :label="t('settings.whisper.audioPreprocessModelLabel')"
+            :description="t('settings.whisper.audioPreprocessModelDesc')"
+          >
+            <select v-model="audioPreprocessModel" class="settings-input" :disabled="audioPreprocessMode === 'none'">
+              <option value="vocal_clean">{{ t('settings.whisper.audioPreprocessModel.vocalClean') }}</option>
+              <option value="vocal_balanced">{{ t('settings.whisper.audioPreprocessModel.vocalBalanced') }}</option>
+            </select>
+          </FieldRow>
+
+          <div class="settings-card__actions settings-card__actions--compact mt-1">
+            <VuiButton variant="gradient" color="info" size="small" customClass="settings-primary-btn" :loading="saving" @click="saveWhisper">
+              {{ saving ? t('settings.whisper.saving') : t('common.save') }}
+            </VuiButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. OpenAI Translation Card -->
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.translationTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.translationDesc') }}</p>
+
+        <div class="settings-form settings-form--compact mt-2.5">
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateEnable')" :description="t('settings.whisper.translateEnableDesc')">
+            <div class="flex items-center gap-3">
+              <SettingsSwitch v-model="translateEnabled" :disabled="activeModelDirectTranslate" />
+              <span class="text-sm text-text-secondary">{{ activeModelDirectTranslate ? t('settings.whisper.directTranslateOn') : (translateEnabled ? t('common.enabled') : t('common.disabled')) }}</span>
+            </div>
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateTargetLabel')" :description="t('settings.whisper.translateTargetDesc')">
+            <select v-model="translateTo" class="settings-input" :disabled="activeModelDirectTranslate || !translateEnabled">
+              <option v-for="opt in translateLangOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateModelLabel')" :description="t('settings.whisper.translateModelDesc')">
+            <input v-model="translateModel" type="text" class="settings-input" placeholder="gpt-4o-mini" :disabled="activeModelDirectTranslate || !translateEnabled" />
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateBaseUrlLabel')" :description="t('settings.whisper.translateBaseUrlDesc')">
+            <input v-model="translateBaseUrl" type="text" class="settings-input" placeholder="https://api.openai.com/v1" :disabled="activeModelDirectTranslate || !translateEnabled" />
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateApiKeyLabel')" :description="t('settings.whisper.translateApiKeyDesc')">
+            <input v-model="translateApiKey" type="password" class="settings-input" placeholder="sk-..." :disabled="activeModelDirectTranslate || !translateEnabled" />
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateStyleLabel')" :description="t('settings.whisper.translateStyleDesc')">
+            <select v-model="translateStyle" class="settings-input" :disabled="activeModelDirectTranslate || !translateEnabled">
+              <option v-for="opt in translateStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow customClass="whisper-field-row" :label="t('settings.emby.connectionTest')" :description="t('settings.whisper.translateConnectionDesc')">
+            <div class="flex flex-wrap items-center gap-2">
+              <VuiButton variant="contained" color="secondary" size="small" customClass="settings-secondary-btn settings-secondary-btn--compact" :loading="testingConnection" :disabled="activeModelDirectTranslate || !translateEnabled" @click="testTranslateConnection">
+                {{ testingConnection ? t('settings.whisper.testing') : t('settings.whisper.testConnection') }}
+              </VuiButton>
+              <span class="connection-result-badge">
+                <VuiBadge
+                  v-if="connectionResult"
+                  :color="connectionResult.available ? 'success' : 'error'"
+                  variant="gradient"
+                  size="sm"
+                >
+                  {{ connectionResult.message }}
+                </VuiBadge>
+              </span>
+            </div>
+          </FieldRow>
+
+          <div class="settings-card__actions settings-card__actions--end settings-card__actions--compact mt-1">
+            <VuiButton variant="gradient" color="info" size="small" customClass="settings-primary-btn" :loading="saving" @click="saveWhisper">
+              {{ saving ? t('settings.whisper.saving') : t('common.save') }}
+            </VuiButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Dependencies Card (collapsible) -->
+      <div class="settings-card ui-card settings-card--compact">
+        <div class="collapsible-card__header collapsible-card__header--compact" @click="depsExpanded = !depsExpanded">
+          <div class="flex items-center gap-2">
+            <svg class="collapsible-card__chevron" :class="{ 'collapsible-card__chevron--open': depsExpanded }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            <h2 class="settings-card__title !mb-0">{{ t('settings.whisper.dependencies') }}</h2>
+          </div>
+          <VuiButton variant="contained" color="secondary" size="small" customClass="settings-secondary-btn settings-secondary-btn--compact" :loading="checkingDeps" @click.stop="checkWhisperDeps">
+            {{ checkingDeps ? t('settings.whisper.checking') : t('settings.whisper.refresh') }}
+          </VuiButton>
+        </div>
+

@@ -1,0 +1,36 @@
+    all_installable_ok = all(value.get("installed") for value in deps.values() if value.get("installable"))
+    if all_installable_ok:
+        suffix = f" | CUDA 可用 ({cuda_info.get('device_name', 'GPU')})" if cuda_available else " | CUDA 不可用"
+        log_mgr.add_log("success", "[Whisper] 依赖检查完成 — 所有运行时依赖已安装" + suffix)
+        return
+
+    log_mgr.add_log("success", "[Whisper] 依赖检查完成 — Docker 预装依赖已就绪")
+
+
+def detect_install_requirements(torch_variant: str, torch_current_cuda: bool, import_module_fn: Callable[[str], Any] = __import__) -> tuple[bool, bool]:
+    needs_torch = (torch_variant == "gpu") != torch_current_cuda
+    try:
+        import_module_fn("librosa")
+        needs_librosa = False
+    except ImportError:
+        needs_librosa = True
+    return needs_torch, needs_librosa
+
+
+def detect_audio_separator_requirement(import_module_fn: Callable[[str], Any] = __import__) -> bool:
+    try:
+        import_module_fn("audio_separator")
+        return False
+    except ImportError:
+        return True
+
+
+def detect_onnxruntime_gpu_requirement(
+    torch_variant: str,
+    torch_current_cuda: bool,
+    import_module_fn: Callable[[str], Any] = __import__,
+) -> bool:
+    if torch_variant != "gpu" and not torch_current_cuda:
+        return False
+    try:
+        ort = import_module_fn("onnxruntime")

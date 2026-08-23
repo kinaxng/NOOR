@@ -1,0 +1,41 @@
+    output_image_quality: int = 80
+    output_image_scale: str = "1.0"
+    temp_frame_format: str = "png"
+
+
+class FaceFusionModelDownloadRequest(BaseModel):
+    scope: Literal["lite", "full"] = "lite"
+
+
+class WhisperConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    strategy: str = "chickenrice"
+    subtitle_profile: str = "standard"
+    model_backend: str = "chickenrice-zh"
+    whisper_task: str = "translate"
+    vad_backend: str = "energy"
+    chunker: str = "smart_vad_chunk"
+    target_chunk_duration_s: float = 30.0
+    max_chunk_duration_s: float = 30.0
+    segment_merge_max_gap_ms: int = 2000
+    segment_merge_max_duration_ms: int = 20000
+    model: str = "chickenrice-zh"
+    pipeline_mode: str = "faster"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    audio_preprocess_mode: str = "none"
+    audio_preprocess_model: str = "vocal_balanced"
+    translate_to: str = ""
+    translate_model: str = "gpt-4o-mini"
+    translate_style: str = "adult_explicit"  # adult_explicit | standard
+    translate_base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    translate_api_key: str = ""
+
+class NetworkConfig(BaseModel):
+    # Kept for compatibility. The effective order is now mirror -> HTTP proxy -> direct.
+    acceleration_mode: str = "auto"
+    http_proxy: str = ""
+    github_mirror: str = "https://ghproxy.com"
+    github_token: str = ""
+    hf_mirror: str = "https://hf-mirror.com"

@@ -1,0 +1,106 @@
+
+def _actor_mapping_store_path() -> Path:
+    path = data_path() / "media_actor_mappings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _latest_actor_mapping_upload_path() -> Path | None:
+    latest = _actor_mapping_upload_dir() / "latest"
+    if not latest.is_file():
+        return None
+    path = Path(latest.read_text(encoding="utf-8").strip())
+    return path if path.is_file() else None
+
+
+def _split_mapping_keywords(value: str | None) -> list[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    # Spaces are part of many English names, so only explicit list separators split aliases.
+    parts = re.split(r"[,，、;；|/]+", raw)
+    out: list[str] = []
+    for part in parts:
+        name = part.strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def _normalize_mapping_record(attrs: dict[str, str]) -> dict:
+    zh_cn = str(attrs.get("zh_cn") or "").strip()
+    zh_tw = str(attrs.get("zh_tw") or "").strip()
+    jp = str(attrs.get("jp") or "").strip()
+    keyword_names = _split_mapping_keywords(attrs.get("keyword"))
+    names: list[str] = []
+    for name in [jp, zh_cn, zh_tw, *keyword_names]:
+        if name and name not in names:
+            names.append(name)
+    tmdb_id = str(attrs.get("tmdb_id") or "").strip()
+    key_source = tmdb_id or jp or zh_cn or zh_tw or (names[0] if names else "")
+    return {
+        "id": tmdb_id or _normalize_actor_key(key_source),
+        "jp": jp,
+        "zh_cn": zh_cn,
+        "zh_tw": zh_tw,
+        "aliases": [name for name in names if name not in {jp, zh_cn, zh_tw}],
+        "names": names,
+        "tmdb_id": tmdb_id,
+        "verified": str(attrs.get("verified") or "").strip() in {"1", "true", "True", "yes"},
+    }
+
+
+def _parse_actor_mapping_xml(path: Path) -> tuple[list[dict], dict]:
+    records: list[dict] = []
+    missing: dict[str, int] = {"keyword": 0, "tmdb_id": 0, "verified": 0}
+    verified_count = 0
+    for _event, elem in ET.iterparse(path, events=("end",)):
+        tag = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+        if tag != "a":
+            elem.clear()
+            continue
+        attrs = {key: value for key, value in elem.attrib.items()}
+        record = _normalize_mapping_record(attrs)
+        records.append(record)
+        if not attrs.get("keyword"):
+            missing["keyword"] += 1
+        if not attrs.get("tmdb_id"):
+            missing["tmdb_id"] += 1
+        if not attrs.get("verified"):
+            missing["verified"] += 1
+        if record["verified"]:
+            verified_count += 1
+        elem.clear()
+    stats = {
+        "total": len(records),
+        "verified": verified_count,
+        "missing": missing,
+        "with_tmdb": len(records) - missing["tmdb_id"],
+    }
+    return records, stats
+
+
+def _save_actor_mapping_records(records: list[dict], source_path: Path, stats: dict) -> dict:
+    global _actor_mapping_records_cache, _actor_mapping_name_index_cache
+    payload = {
+        "version": 1,
+        "source_path": str(source_path),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "stats": stats,
+        "records": records,
+    }
+    path = _actor_mapping_store_path()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+    try:
+        mtime = path.stat().st_mtime
+        _actor_mapping_records_cache = (mtime, records)
+    except OSError:
+        _actor_mapping_records_cache = None
+    _actor_mapping_name_index_cache = None
+    return {
+        "path": str(path),
+        "updated_at": payload["updated_at"],
+        "stats": stats,
+    }

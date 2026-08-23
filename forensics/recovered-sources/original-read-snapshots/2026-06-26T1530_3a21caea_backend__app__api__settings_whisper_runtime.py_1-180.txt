@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+from pathlib import Path
+import site
+import sys
+import sysconfig
+from typing import Any, Callable
+
+from app.core.config import DEFAULT_REAZON_NEMO_MODEL_PATH, get_settings
+
+
+FASTER_WHISPER_MODELS = [
+    ("tiny", "Systran--faster-whisper-tiny"),
+    ("base", "Systran--faster-whisper-base"),
+    ("small", "Systran--faster-whisper-small"),
+    ("medium", "Systran--faster-whisper-medium"),
+    ("large-v3", "Systran--faster-whisper-large-v3"),
+    ("large-v3-turbo", "Systran--faster-whisper-large-v3-turbo"),
+]
+
+TRANSFORMERS_MODELS = [
+    ("anime_whisper", "litagin/anime-whisper", "~3GB"),
+    ("kotoba-whisper-v2.2", "kotoba-tech/kotoba-whisper-v2.2", "~3GB"),
+]
+
+OPTIONAL_MODULES = [
+    ("soundfile", "soundfile", False),
+    ("stable_whisper", "stable_whisper", False),
+    ("qwen_asr", "qwen_asr", False),
+    ("audio_separator", "audio_separator", True),
+    ("pydub", "pydub", False),
+    ("onnx", "onnx", False),
+    ("onnxruntime", "onnxruntime", True),
+]
+
+
+def _runtime_paths() -> dict[str, str]:
+    purelib = sysconfig.get_paths().get("purelib") or ""
+    usersite = site.getusersitepackages() if hasattr(site, "getusersitepackages") else ""
+    return {
+        "executable": sys.executable,
+        "venv_site": str(Path(purelib).resolve()) if purelib else "",
+        "user_site": str(Path(usersite).resolve()) if usersite else "",
+    }
+
+
+def _classify_module_source(module: Any) -> dict[str, Any]:
+    path = getattr(module, "__file__", None) or ""
+    resolved = str(Path(path).resolve()) if path else ""
+    runtime = _runtime_paths()
+    venv_site = runtime["venv_site"]
+    user_site = runtime["user_site"]
+
+    source = "unknown"
+    in_noor_env = False
+    if resolved and venv_site and resolved.startswith(venv_site):
+        source = "noor_venv"
+        in_noor_env = True
+    elif resolved and user_site and resolved.startswith(user_site):
+        source = "user_site"
+    elif resolved and ("/dist-packages/" in resolved or "/site-packages/" in resolved):
+        source = "system_site"
+    elif resolved:
+        source = "stdlib_or_local"
+        in_noor_env = True
+
+    return {
+        "path": resolved or None,
+        "source": source,
+        "in_noor_env": in_noor_env,
+    }
+
+
+def _module_dependency_payload(module: Any, *, installable: bool) -> dict[str, Any]:
+    payload = {
+        "installed": True,
+        "version": getattr(module, "__version__", None),
+        "installable": installable,
+    }
+    payload.update(_classify_module_source(module))
+    return payload
+
+
+def inspect_whisper_python_dependencies() -> tuple[dict[str, dict[str, Any]], bool, dict[str, Any]]:
+    deps: dict[str, dict[str, Any]] = {}
+    cuda_available = False
+    cuda_info: dict[str, Any] = {}
+    runtime_paths = _runtime_paths()
+
+    try:
+        import torch
+
+        cuda_available = torch.cuda.is_available()
+        cuda_info = {
+            "available": cuda_available,
+            "device_count": 0,
+            "device_name": None,
+            "version": torch.version.cuda,
+        }
+        if cuda_available:
+            try:
+                cuda_info["device_count"] = torch.cuda.device_count()
+                if cuda_info["device_count"] > 0:
+                    cuda_info["device_name"] = torch.cuda.get_device_name(0)
+            except Exception:
+                pass
+        deps["torch"] = {
+            **_module_dependency_payload(torch, installable=True),
+            "cuda": cuda_available,
+            "cuda_info": cuda_info,
+        }
+    except ImportError:
+        deps["torch"] = {"installed": False, "version": None, "cuda": False, "cuda_info": {}, "installable": True}
+
+    for module_name, dep_key, installable in [
+        ("transformers", "transformers", False),
+        ("faster_whisper", "faster_whisper", False),
+        ("numpy", "numpy", False),
+        ("librosa", "librosa", True),
+    ]:
+        try:
+            module = __import__(module_name)
+            deps[dep_key] = _module_dependency_payload(module, installable=installable)
+        except ImportError:
+            deps[dep_key] = {"installed": False, "version": None, "installable": installable}
+
+    for module_name, dep_key, installable in OPTIONAL_MODULES:
+        try:
+            module = __import__(module_name)
+            deps[dep_key] = _module_dependency_payload(module, installable=installable)
+            if dep_key == "onnxruntime":
+                providers = module.get_available_providers()
+                deps[dep_key]["providers"] = providers
+                deps[dep_key]["device"] = module.get_device()
+                deps[dep_key]["cuda"] = "CUDAExecutionProvider" in providers
+        except ImportError:
+            deps[dep_key] = {"installed": False, "version": None, "installable": installable}
+
+    deps["_runtime"] = {
+        "installed": True,
+        "version": None,
+        "installable": False,
+        "path": runtime_paths["executable"],
+        "source": "runtime",
+        "in_noor_env": True,
+        "venv_site": runtime_paths["venv_site"],
+        "user_site": runtime_paths["user_site"],
+        "uses_user_site": any(
+            value.get("source") == "user_site"
+            for key, value in deps.items()
+            if not key.startswith("_")
+        ),
+        "uses_system_site": any(
+            value.get("source") == "system_site"
+            for key, value in deps.items()
+            if not key.startswith("_")
+        ),
+    }
+
+    return deps, cuda_available, cuda_info
+
+
+def resolve_whisper_cache_paths(whisper_model_dir: str) -> dict[str, Any]:
+    default_hf_cache = str(Path.home() / ".cache" / "huggingface")
+    return {
+        "whisper_model_dir": whisper_model_dir,
+        "default_hf_cache": default_hf_cache,
+        "is_default_hf": whisper_model_dir == default_hf_cache,
+        "hf_base": Path(whisper_model_dir),
+        "default_hf_base": Path(default_hf_cache),
+    }
+
+
+def _transformers_exists(repo: str, base: Path, default_hf_cache: str) -> bool:
+    if (base / f"models--{repo.replace('/', '--')}").exists():
+        return True
+    cache = base / ("hub" if str(base) == str(default_hf_cache) else "huggingface/hub")
+    return (cache / f"models--{repo.replace('/', '--')}").exists()
+
+

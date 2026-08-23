@@ -1,0 +1,280 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import contextlib
+import shutil
+from pathlib import Path
+from typing import Any
+
+from app.core.config import PROJECT_ROOT
+
+from .handlers import clear_handler_cache, get_plugin_handler
+from .runtime_paths import PLUGINS_DIR
+from .adapters import build_widget, fetch_rss_items, submit_download, test_plugin, search_subtitles_for_plugin
+from .contracts import DashboardWidget, PluginListItem, PluginManifest, PluginState
+from .market import MarketError, fetch_repo_index, install_from_market_item
+from .store import (
+    load_config,
+    load_market_repos,
+    load_state,
+    save_config,
+    save_market_repos,
+    save_state,
+)
+
+LEGACY_DOWNLOADER_CAPABILITIES: dict[str, dict[str, Any]] = {
+    "qbittorrent": {
+        "accepts_public_magnet": True,
+        "accepts_private_tracker": True,
+        "accepts_http_torrent": True,
+        "accepts_http_url": True,
+    },
+    "transmission": {
+        "accepts_public_magnet": True,
+        "accepts_private_tracker": True,
+        "accepts_http_torrent": True,
+        "accepts_http_url": True,
+    },
+    "xunlei-remote": {
+        "accepts_public_magnet": True,
+        "accepts_private_tracker": False,
+        "accepts_http_torrent": True,
+        "accepts_http_url": True,
+    },
+}
+
+
+class PluginRuntime:
+    def __init__(self):
+        self._lock = asyncio.Lock()
+        self._manifests: dict[str, PluginManifest] = {}
+        self._state: dict[str, PluginState] = {}
+        self._config: dict[str, dict[str, Any]] = {}
+        self._market_repos: list[dict[str, str]] = []
+        self.reload()
+
+    def reload(self) -> None:
+        clear_handler_cache()
+        manifests: dict[str, PluginManifest] = {}
+        if PLUGINS_DIR.exists():
+            for path in sorted(PLUGINS_DIR.glob("*/plugin.json")):
+                try:
+                    raw = json.loads(path.read_text(encoding="utf-8"))
+                    m = PluginManifest(**raw)
+                    manifests[m.id] = m
+                except Exception:
+                    continue
+        self._manifests = manifests
+        self._market_repos = load_market_repos()
+
+        raw_state = load_state()
+        self._state = {
+            pid: PluginState(**(raw_state.get(pid) if pid in raw_state else {"enabled": m.enabled_by_default}))
+            for pid, m in self._manifests.items()
+        }
+        raw_cfg = load_config()
+        self._config = {
+            pid: {**m.default_config, **(raw_cfg.get(pid, {}) or {})}
+            for pid, m in self._manifests.items()
+        }
+        self._persist()
+
+    def _persist(self) -> None:
+        save_state({k: v.model_dump() for k, v in self._state.items()})
+        save_config(self._config)
+        save_market_repos(self._market_repos)
+
+    def list_plugins(self) -> list[PluginListItem]:
+        out: list[PluginListItem] = []
+        for pid, m in self._manifests.items():
+            out.append(
+                PluginListItem(
+                    id=m.id,
+                    name=m.name,
+                    version=m.version,
+                    type=m.type,
+                    description=m.description,
+                    tags=m.tags,
+                    capabilities=m.capabilities,
+                    contributions=m.contributions,
+                    config=self._config.get(pid, {}),
+                    enabled=self._state.get(pid, PluginState()).enabled,
+                )
+            )
+        return sorted(out, key=lambda x: x.id)
+
+    def get_manifest(self, plugin_id: str) -> PluginManifest:
+        m = self._manifests.get(plugin_id)
+        if not m:
+            raise KeyError("plugin not found")
+        return m
+
+    def get_config(self, plugin_id: str) -> dict[str, Any]:
+        self.get_manifest(plugin_id)
+        cfg = self._config.get(plugin_id, {}).copy()
+        handler = get_plugin_handler(plugin_id)
+        if handler and hasattr(handler, "resolve_config"):
+            resolved = handler.resolve_config(cfg)
+            if isinstance(resolved, dict):
+                return resolved.copy()
+        return cfg
+
+    async def set_config(self, plugin_id: str, cfg: dict[str, Any]) -> dict[str, Any]:
+        async with self._lock:
+            m = self.get_manifest(plugin_id)
+            merged = {**m.default_config, **cfg}
+            handler = get_plugin_handler(plugin_id)
+            if handler and hasattr(handler, "persist_config"):
+                persisted = handler.persist_config(merged)
+                if isinstance(persisted, dict):
+                    merged = {**m.default_config, **persisted}
+            self._config[plugin_id] = merged
+            self._persist()
+            return merged.copy()
+
+    async def set_enabled(self, plugin_id: str, enabled: bool) -> None:
+        async with self._lock:
+            self.get_manifest(plugin_id)
+            self._state[plugin_id] = PluginState(enabled=enabled)
+            self._persist()
+
+    async def uninstall_plugin(self, plugin_id: str) -> None:
+        async with self._lock:
+            target = PLUGINS_DIR / plugin_id
+            if not target.exists():
+                raise KeyError("plugin not found")
+            shutil.rmtree(target)
+            self.reload()
+
+    def is_enabled(self, plugin_id: str) -> bool:
+        return self._state.get(plugin_id, PluginState()).enabled
+
+    async def test(self, plugin_id: str) -> dict[str, Any]:
+        manifest = self.get_manifest(plugin_id)
+        cfg = self.get_config(plugin_id)
+        handler = get_plugin_handler(plugin_id)
+        if handler and hasattr(handler, "test"):
+            result = await handler.test(cfg)
+        else:
+            result = await test_plugin(manifest, cfg)
+        return result.model_dump()
+
+    async def get_dashboard_widgets(self, plugin_ids: set[str] | None = None) -> list[DashboardWidget]:
+        widgets: list[DashboardWidget] = []
+        for pid, manifest in self._manifests.items():
+            if plugin_ids is not None and pid not in plugin_ids:
+                continue
+            if not self.is_enabled(pid):
+                continue
+            supports_widget = manifest.type == "dashboard_widget" or "dashboard_widget" in (manifest.capabilities or [])
+            if not supports_widget:
+                continue
+            handler = get_plugin_handler(pid)
+            if handler and hasattr(handler, "build_widget"):
+                widget = await handler.build_widget(self.get_config(pid))
+            else:
+                widget = await build_widget(manifest, self.get_config(pid))
+            if widget:
+                widgets.append(widget)
+        return widgets
+
+    async def get_rss_items(self, plugin_id: str, limit: int, force_refresh: bool = False, include_images: bool = False) -> dict[str, Any]:
+        manifest = self.get_manifest(plugin_id)
+        if manifest.type != "rss_source":
+            raise ValueError("not rss_source plugin")
+        if not self.is_enabled(plugin_id):
+            raise ValueError("plugin disabled")
+        cfg = {**self.get_config(plugin_id), "include_images": include_images}
+        handler = get_plugin_handler(plugin_id)
+        if handler and hasattr(handler, "fetch_rss_items"):
+            return await handler.fetch_rss_items(manifest, cfg, limit=limit, force_refresh=force_refresh)
+        return await fetch_rss_items(manifest, cfg, limit=limit, force_refresh=force_refresh)
+
+
+
+    def get_external_task_contributions(self) -> dict[str, dict[str, Any]]:
+        contributions: dict[str, dict[str, Any]] = {}
+        for pid, manifest in self._manifests.items():
+            ext = (manifest.contributions or {}).get("external_task")
+            if isinstance(ext, dict):
+                contributions[pid] = {
+                    "provider_id": pid,
+                    "label": ext.get("label") or manifest.name or pid,
+                    "phase_label": ext.get("phase_label") or "外部任务",
+                    "can_cancel": bool(ext.get("can_cancel", False)),
+                    "poll_interval": int(ext.get("poll_interval") or 10000),
+                    **ext,
+                }
+        return contributions
+
+    def is_external_task_cancelable(self, job: Any) -> bool:
+        from app.plugins.external_tasks import is_external_task_cancelable
+
+        return is_external_task_cancelable(job)
+
+    async def sync_external_tasks(self, job_id: str | None = None) -> dict[str, Any]:
+        updated = 0
+        checked = 0
+        errors: list[dict[str, str]] = []
+        for pid, manifest in self._manifests.items():
+            if not self.is_enabled(pid):
+                continue
+            if "external_task_provider" not in (manifest.capabilities or []):
+                continue
+            handler = get_plugin_handler(pid)
+            if not handler or not hasattr(handler, "sync_external_tasks"):
+                continue
+            checked += 1
+            try:
+                result = await handler.sync_external_tasks(self.get_config(pid), job_id=job_id)
+                if isinstance(result, dict):
+                    updated += int(result.get("updated") or 0)
+            except Exception as exc:
+                errors.append({"plugin_id": pid, "error": str(exc)})
+        return {"checked": checked, "updated": updated, "errors": errors}
+
+    async def handle_action(self, plugin_id: str, action: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        manifest = self.get_manifest(plugin_id)
+        if not self.is_enabled(plugin_id):
+            raise ValueError("plugin disabled")
+        handler = get_plugin_handler(plugin_id)
+        if not handler or not hasattr(handler, "handle_action"):
+            raise ValueError("plugin action not supported")
+        return await handler.handle_action(action, self.get_config(plugin_id), payload or {})
+
+    async def submit_download(self, plugin_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        manifest = self.get_manifest(plugin_id)
+        if manifest.type != "downloader":
+            raise ValueError("not downloader plugin")
+        if not self.is_enabled(plugin_id):
+            raise ValueError("plugin disabled")
+        handler = get_plugin_handler(plugin_id)
+        if not handler or not hasattr(handler, "submit_download"):
+            raise ValueError("downloader plugin missing submit_download handler")
+        return await handler.submit_download(self.get_config(plugin_id), payload)
+
+
+
+
+    async def push_rss_download(self, plugin_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        manifest = self.get_manifest(plugin_id)
+        if manifest.type != "rss_source":
+            raise ValueError("not rss_source plugin")
+        if not self.is_enabled(plugin_id):
+            raise ValueError("plugin disabled")
+        cfg = self.get_config(plugin_id)
+        downloader_id = (cfg.get("downloader_binding") or "none").strip()
+        if not downloader_id or downloader_id == "none":
+            raise ValueError("未绑定下载器")
+        downloader_manifest = self.get_manifest(downloader_id)
+        if downloader_manifest.type != "downloader":
+            raise ValueError("绑定目标不是下载器")
+        if not self.is_enabled(downloader_id):
+            raise ValueError("下载器插件未启用")
+        url = (payload.get("download_url") or payload.get("enclosure_url") or payload.get("url") or "").strip()
+        if not url:
+            raise ValueError("缺少种子地址")
+        title = (payload.get("title") or payload.get("name") or "").strip()
+        return await self.submit_download(downloader_id, {"url": url, "urls": url, "name": title, "title": title})
+

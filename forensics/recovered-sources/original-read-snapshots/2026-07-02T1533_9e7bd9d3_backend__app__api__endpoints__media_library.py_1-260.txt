@@ -1,0 +1,260 @@
+"""
+Media Library API — direct Emby/Jellyfin adapter.
+"""
+import os
+import re
+import secrets
+import shutil
+import time
+import json
+import mimetypes
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+from urllib.parse import quote
+
+import httpx
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from app.api.system import SystemLogManager
+from app.core.runtime_paths import data_path
+
+from app.api.endpoints.media_library_helpers import (
+    ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED,
+    VIDEO_EXTS,
+    env_source_dir as _env_source_dir,
+    config_path as _config_path,
+    get_config as _get_config,
+    headers as _headers,
+    load_config as _load_config,
+    map_path as _map_path,
+    parse_item as _parse_item,
+    parse_tags as _parse_tags,
+    save_config as _save_config,
+    server_url as _server_url,
+)
+
+from app.api.endpoints.media_library_item_detail import (
+    build_stream_url_for_server_impl,
+    resolve_playback_stream_url_impl,
+    get_item_impl,
+    get_main_nfo_impl,
+    get_siblings_impl,
+)
+
+from app.api.endpoints.media_library_hardlinks import (
+    build_hardlink_groups_impl,
+    enrich_hardlink_groups_impl,
+    extract_code_from_path_impl,
+    fetch_emby_item_info_impl,
+    hardlink_groups_path_impl,
+    load_hardlink_groups_impl,
+    save_hardlink_groups_impl,
+    scan_inodes_impl,
+    scan_single_group_impl,
+)
+
+router = APIRouter(prefix="/api/media-library", tags=["media-library"])
+
+_items_cache: dict[str, tuple[list[dict], float]] = {}
+_CACHE_TTL = 86400  # 24h
+_sync_version = 0
+_last_invalidated_at: float | None = None
+_last_webhook_at: float | None = None
+_actor_mapping_records_cache: tuple[float, list[dict]] | None = None
+_actor_mapping_name_index_cache: tuple[int, dict[str, dict]] | None = None
+_actor_mapping_tmdb_index_cache: tuple[int, dict[str, dict]] | None = None
+
+
+class HardlinkDeleteRequest(BaseModel):
+    file_path: str
+    remove_nfo: bool = True
+    dry_run: bool = False
+
+
+class SourceChainDeleteRequest(BaseModel):
+    source_path: str
+    hardlink_paths: list[str] = []
+    code: str | None = None
+    dry_run: bool = False
+
+
+class HardlinkEntryDeletePayload(BaseModel):
+    source_path: str | None = None
+    hardlink_paths: list[str] = []
+
+
+class GroupDeleteRequest(BaseModel):
+    code: str
+    entries: list[HardlinkEntryDeletePayload]
+    dry_run: bool = False
+
+
+class MediaItemDeleteRequest(BaseModel):
+    item_id: str
+    dry_run: bool = False
+
+
+class ActorMappingMergeRequest(BaseModel):
+    mapping_id: str
+    target_name: str | None = None
+    target_actor_id: str | None = None
+    dry_run: bool = False
+
+
+class ActorMappingMergeBatchRequest(BaseModel):
+    target_actor_ids: dict[str, str] = {}
+    skip_conflicts: bool = True
+    dry_run: bool = False
+
+
+class ActorProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    sort_name: str | None = None
+    overview: str | None = None
+    provider_ids: dict[str, str] | None = None
+
+
+class ActorAvatarUrlRequest(BaseModel):
+    url: str
+
+
+def _actor_mapping_upload_dir() -> Path:
+    path = data_path() / "media_actor_mapping_uploads"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _safe_upload_filename(filename: str | None) -> str:
+    raw = Path(filename or "actor_mapping").name.strip() or "actor_mapping"
+    return re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fffぁ-んァ-ン一-龯]", "_", raw)[:120]
+
+
+def _actor_mapping_upload_info(path: Path, size: int | None = None) -> dict:
+    stat = path.stat()
+    return {
+        "filename": path.name,
+        "size": size if size is not None else stat.st_size,
+        "format": path.suffix.lower().lstrip(".") or "unknown",
+        "saved_path": str(path),
+        "uploaded_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+    }
+
+
+def _actor_mapping_store_path() -> Path:
+    path = data_path() / "media_actor_mappings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _actor_merge_backup_dir() -> Path:
+    path = data_path() / "actor_merge_backups"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _actor_merge_ignored_ghosts_path() -> Path:
+    path = data_path() / "actor_merge_ignored_ghosts.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _load_actor_merge_ignored_ghosts() -> set[str]:
+    path = _actor_merge_ignored_ghosts_path()
+    if not path.is_file():
+        return set()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    if isinstance(payload, list):
+        return {str(item) for item in payload if str(item).strip()}
+    if isinstance(payload, dict):
+        return {str(item) for item in payload.get("actor_ids", []) if str(item).strip()}
+    return set()
+
+
+def _save_actor_merge_ignored_ghosts(actor_ids: set[str]) -> None:
+    _actor_merge_ignored_ghosts_path().write_text(
+        json.dumps(
+            {"actor_ids": sorted(actor_ids), "updated_at": datetime.now(timezone.utc).isoformat()},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _actor_profile_overrides_path() -> Path:
+    path = data_path() / "actor_profile_overrides.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _load_actor_profile_overrides() -> dict[str, dict]:
+    path = _actor_profile_overrides_path()
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_actor_profile_overrides(overrides: dict[str, dict]) -> None:
+    _actor_profile_overrides_path().write_text(json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _latest_actor_mapping_upload_path() -> Path | None:
+    latest = _actor_mapping_upload_dir() / "latest"
+    if not latest.is_file():
+        return None
+    path = Path(latest.read_text(encoding="utf-8").strip())
+    return path if path.is_file() else None
+
+
+def _split_mapping_keywords(value: str | None) -> list[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    # Spaces are part of many English names, so only explicit list separators split aliases.
+    parts = re.split(r"[,，、;；|/]+", raw)
+    out: list[str] = []
+    for part in parts:
+        name = part.strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def _normalize_mapping_record(attrs: dict[str, str]) -> dict:
+    zh_cn = str(attrs.get("zh_cn") or "").strip()
+    zh_tw = str(attrs.get("zh_tw") or "").strip()
+    jp = str(attrs.get("jp") or "").strip()
+    keyword_names = _split_mapping_keywords(attrs.get("keyword"))
+    names: list[str] = []
+    for name in [jp, zh_cn, zh_tw, *keyword_names]:
+        if name and name not in names:
+            names.append(name)
+    tmdb_id = str(attrs.get("tmdb_id") or "").strip()
+    key_source = tmdb_id or jp or zh_cn or zh_tw or (names[0] if names else "")
+    return {
+        "id": tmdb_id or _normalize_actor_key(key_source),
+        "jp": jp,
+        "zh_cn": zh_cn,
+        "zh_tw": zh_tw,
+        "aliases": [name for name in names if name not in {jp, zh_cn, zh_tw}],
+        "names": names,
+        "tmdb_id": tmdb_id,
+        "verified": str(attrs.get("verified") or "").strip() in {"1", "true", "True", "yes"},
+    }
+
+
+def _parse_actor_mapping_xml(path: Path) -> tuple[list[dict], dict]:
+    records: list[dict] = []
+    missing: dict[str, int] = {"keyword": 0, "tmdb_id": 0, "verified": 0}
+    verified_count = 0
+    for _event, elem in ET.iterparse(path, events=("end",)):

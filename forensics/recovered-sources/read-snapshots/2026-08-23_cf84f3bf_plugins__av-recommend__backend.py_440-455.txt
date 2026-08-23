@@ -1,0 +1,17 @@
+        try:
+            data_file.replace(backup)
+        except Exception:
+            pass
+        return _ensure_store()
+
+
+def _save_store(data: dict[str, Any]) -> None:
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = DATA_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(DATA_FILE)
+
+
+def _text_has_subtitle(value: Any) -> bool:
+    text = _feature_value_text(value)
+/bin/bash: line 1: apply_patch: command not found

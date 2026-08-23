@@ -1,0 +1,281 @@
+<style scoped>
+.settings-card__title {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.settings-card__desc {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 0;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.settings-primary-btn {
+  min-width: 5.5rem;
+}
+
+.facefusion-shell {
+  padding: 1.25rem;
+}
+
+.facefusion-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.facefusion-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.facefusion-upgrade-hint {
+  margin: 0.5rem 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.facefusion-version-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.facefusion-upstream-grid {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.8fr) minmax(12rem, 1.2fr);
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.facefusion-version-item {
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.facefusion-version-item span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.facefusion-version-item strong {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facefusion-model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.facefusion-model-status {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.facefusion-model-status__line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.facefusion-model-status__line strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+}
+
+.facefusion-model-status p {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.facefusion-model-progress {
+  overflow: hidden;
+  width: 100%;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.facefusion-model-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(0, 117, 255, 0.95), rgba(70, 190, 255, 0.95));
+  transition: width 0.2s ease;
+}
+
+.facefusion-model-issues {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+  max-height: 16rem;
+  overflow: auto;
+  padding: 0.625rem;
+  border: 1px solid rgba(255, 120, 120, 0.18);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 80, 80, 0.055);
+}
+
+.facefusion-model-issues div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.65fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.facefusion-model-issues strong,
+.facefusion-model-issues span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facefusion-model-issues strong {
+  color: #ffb4b4;
+}
+
+.facefusion-model-output {
+  width: 100%;
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.choice-chips--readonly button {
+  cursor: default;
+  opacity: 1;
+}
+
+.facefusion-empty-state {
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
+}
+
+.facefusion-tabbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.125rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.facefusion-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.25rem 0 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.facefusion-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.facefusion-tabs button {
+  position: relative;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: 0.78125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.facefusion-tabs button::after {
+  content: '';
+  position: absolute;
+  left: 0.625rem;
+  right: 0.625rem;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.facefusion-tabs button:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--color-text-secondary);
+}
+
+.facefusion-tabs button.is-active {
+  background: rgba(255, 255, 255, 0.055);
+  color: #fff;
+  box-shadow: none;
+}
+
+.facefusion-tabs button.is-active::after {
+  background: var(--color-brand);
+}
+
+.facefusion-section {
+  padding: 0;
+}
+
+.choice-chips {
+  display: flex;
+  flex-wrap: wrap;

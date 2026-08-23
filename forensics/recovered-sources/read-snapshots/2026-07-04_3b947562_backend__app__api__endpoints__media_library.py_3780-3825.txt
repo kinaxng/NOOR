@@ -1,0 +1,46 @@
+async def apply_actor_tmdb_backfill(req: ActorTmdbBackfillRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _apply_actor_tmdb_backfill(config, req, lang=lang)
+    except Exception as exc:
+        progress_key = str(req.progress_key or "").strip()
+        if progress_key:
+            _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key] = {
+                **_ACTOR_TMDB_BACKFILL_PROGRESS.get(progress_key, {}),
+                "ok": False,
+                "status": "failed",
+                "error": str(exc),
+                "updated_at": time.time(),
+            }
+        raise HTTPException(status_code=502, detail=f"应用演员 TMDB ID 补全失败: {exc}")
+    if not req.dry_run:
+        _bump_sync_state()
+        SystemLogManager.get_instance().add_log(
+            "info",
+            f"[MediaLibrary] 演员 TMDB ID 补全完成: {result.get('applied_count', 0)} 位",
+            source="media_library.actors",
+        )
+    return result
+
+
+@router.get("/actors/tmdb-backfill/progress/{progress_key}")
+async def get_actor_tmdb_backfill_progress(progress_key: str):
+    key = str(progress_key or "").strip()
+    progress = _ACTOR_TMDB_BACKFILL_PROGRESS.get(key)
+    if not progress:
+        return {"ok": True, "status": "idle", "processed": 0, "total": 0, "applied_count": 0, "skipped_count": 0}
+    return progress
+
+
+@router.get("/actors/name-sync/preview")
+async def preview_actor_name_sync(lang: str | None = None, limit: int = 5000):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _preview_actor_name_sync(config, lang=lang, limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"预览演员名称同步失败: {exc}")
+    return {"ok": True, **result}

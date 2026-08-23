@@ -1,0 +1,121 @@
+    if (sdk.ui?.modal) return sdk.ui.modal(options)
+    const mask = document.createElement('div')
+    mask.className = 'noor-plugin-modal-mask'
+    const panel = document.createElement('div')
+    panel.className = `noor-plugin-modal noor-plugin-modal--${options.width || 'md'}`
+    const head = document.createElement('div')
+    head.className = 'noor-plugin-modal__head'
+    const title = document.createElement('div')
+    title.className = 'noor-plugin-modal__title'
+    title.textContent = options.title || ''
+    const closeBtn = document.createElement('button')
+    closeBtn.type = 'button'
+    closeBtn.className = 'noor-plugin-btn noor-plugin-modal__close'
+    closeBtn.textContent = '关闭'
+    head.append(title, closeBtn)
+    const body = document.createElement('div')
+    body.className = 'noor-plugin-modal__body'
+    panel.append(head, body)
+    const footer = document.createElement('div')
+    footer.className = 'noor-plugin-modal__actions'
+    if (Array.isArray(options.content)) for (const x of options.content) body.appendChild(x)
+    else if (options.content) body.appendChild(options.content)
+    if (Array.isArray(options.footer)) for (const x of options.footer) footer.appendChild(x)
+    else if (options.footer) footer.appendChild(options.footer)
+    if (footer.childNodes.length) panel.appendChild(footer)
+    mask.appendChild(panel)
+    const close = () => { mask.remove(); options.onClose?.() }
+    closeBtn.onclick = close
+    mask.onclick = e => { if (e.target === mask && options.closeOnMask !== false) close() }
+    document.body.appendChild(mask)
+    return { el: mask, body, close }
+  }
+
+  async function postAction(action, payload = {}) {
+    const r = await api(`/actions/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload }) })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok || data.ok === false) throw new Error(data.detail || data.message || data.error || '请求失败')
+    return data
+  }
+
+  async function openAccountProbeModal() {
+    const box = document.createElement('div')
+    box.className = 'xunlei-account-probe'
+    box.innerHTML = '<div class="xunlei-account-probe__state">读取静态参数中...</div>'
+    const closeBtn = sdk.ui?.button ? sdk.ui.button({ label: '关闭', onClick: () => modal.close() }) : document.createElement('button')
+    if (!sdk.ui?.button) { closeBtn.type = 'button'; closeBtn.className = 'xunlei-remote-btn'; closeBtn.textContent = '关闭'; closeBtn.onclick = () => modal.close() }
+    const modal = modalApi({ title: '迅雷账号远程探针', width: 'lg', content: box, footer: [closeBtn] })
+    const renderJson = value => `<pre>${esc(JSON.stringify(value, null, 2))}</pre>`
+    try {
+      const stat = await postAction('account_static_info')
+      box.innerHTML = `
+        <div class="xunlei-account-probe__grid">
+          <div><span>clientId</span><strong>${esc(stat.client_id || '-')}</strong></div>
+          <div><span>deviceId</span><strong>${esc(stat.device_id || '-')}</strong></div>
+          <div><span>算法</span><strong>${esc(stat.algorithms_count || 0)} salts</strong></div>
+        </div>
+        <div class="xunlei-account-probe__actions">
+          <span data-probe-host="user"></span>
+          <span data-probe-host="clients"></span>
+        </div>
+        <div class="xunlei-account-probe__hint">需要在插件设置里填写 pan.xunlei.com 请求头中的 Bearer Access Token。未填写时这里只能显示静态参数。</div>
+        <div class="xunlei-account-probe__result">${renderJson(stat)}</div>
+      `
+      const result = box.querySelector('.xunlei-account-probe__result')
+      for (const host of box.querySelectorAll('[data-probe-host]')) {
+        const probe = host.dataset.probeHost || ''
+        const actionBtn = sdk.ui?.button
+          ? sdk.ui.button({ label: probe === 'user' ? '测试用户' : '读取设备', className: 'xunlei-remote-btn' })
+          : Object.assign(document.createElement('button'), { type: 'button', className: 'xunlei-remote-btn', textContent: probe === 'user' ? '测试用户' : '读取设备' })
+        actionBtn.dataset.probe = probe
+        host.replaceWith(actionBtn)
+        actionBtn.onclick = async () => {
+          actionBtn.disabled = true
+          const old = actionBtn.textContent
+          actionBtn.textContent = '读取中'
+          try {
+            const data = await postAction(actionBtn.dataset.probe === 'user' ? 'account_user_me' : 'account_clients')
+            result.innerHTML = renderJson(data)
+          } catch (e) {
+            result.innerHTML = `<div class="xunlei-account-probe__error">${esc(e.message || '读取失败')}</div>`
+          } finally {
+            actionBtn.disabled = false
+            actionBtn.textContent = old
+          }
+        }
+      }
+    } catch (e) {
+      box.innerHTML = `<div class="xunlei-account-probe__error">${esc(e.message || '读取失败')}</div>`
+    }
+  }
+
+  function openNewTaskModal() {
+    if (!sdk.downloads?.openTask) return
+    sdk.downloads.openTask({
+      downloaderId: pluginId,
+      allowBatchUrls: true,
+      maxUrls: 50,
+      showDownloaderField: false,
+      preview: false,
+      modalTitle: '新建迅雷任务',
+      submitIdleLabel: '创建任务',
+      submitSuccessLabel: '创建成功',
+      submitErrorLabel: '创建失败',
+      urlPlaceholder: '每行一个 magnet / BT URL / 普通 URL，最多 50 条',
+      onSuccess: async (result) => {
+        const successCount = Number(result?.success_count || (result?.ok ? 1 : 0))
+        const failureCount = Number(result?.failure_count || 0)
+        if (successCount > 0) toast('success', `已推送 ${successCount} 条任务`)
+        if (failureCount > 0) {
+          const first = Array.isArray(result?.failures) ? result.failures[0] : null
+          toast('error', `${failureCount} 条任务推送失败：${first?.message || '未知错误'}`)
+        }
+        await load({ silent: true })
+      },
+      onError: (e) => {
+        toast('error', e?.message || '创建失败')
+      },
+    })
+  }
+
+

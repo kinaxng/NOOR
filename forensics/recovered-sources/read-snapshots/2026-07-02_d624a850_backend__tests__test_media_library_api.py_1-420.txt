@@ -1,0 +1,420 @@
+from __future__ import annotations
+
+import time
+import pytest
+from fastapi import HTTPException
+from starlette.requests import Request
+
+from app.api.endpoints import media_library
+from app.api.endpoints import media_library_item_detail as media_item_detail
+
+
+class FakeResponse:
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f'HTTP {self.status_code}')
+
+
+class FakeAsyncClient:
+    def __init__(self, responder, *args, **kwargs):
+        self._responder = responder
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, url, headers=None, params=None):
+        return self._responder('GET', url, headers or {}, params or {}, None)
+
+    async def post(self, url, headers=None, params=None, json=None):
+        return self._responder('POST', url, headers or {}, params or {}, json)
+
+    async def delete(self, url, headers=None, params=None):
+        return self._responder('DELETE', url, headers or {}, params or {}, None)
+
+    def build_request(self, method, url, headers=None):
+        return {'method': method, 'url': url, 'headers': headers or {}}
+
+    async def send(self, request, stream=False):
+        return self._responder(request.get('method', 'GET'), request['url'], request.get('headers', {}), {}, None)
+
+    async def aclose(self):
+        return None
+
+
+def make_request(range_header: str | None = None) -> Request:
+    headers = []
+    if range_header:
+        headers.append((b'range', range_header.encode()))
+    scope = {
+        'type': 'http',
+        'method': 'GET',
+        'path': '/api/media-library/hardlinks/preview-file',
+        'headers': headers,
+    }
+    return Request(scope)
+
+
+def test_parse_actor_mapping_xml_uses_uploaded_attribute_shape(tmp_path):
+    path = tmp_path / "actor-mapping.xml"
+    path.write_text(
+        """<actor-mapping><actor>
+<a zh_cn="水卜樱" zh_tw="水卜櫻" jp="水卜さくら" keyword="水卜櫻,水卜さくら,水トさくら,Sakura Miura" tmdb_id="2599695" verified="1"/>
+<a zh_cn="神宫寺奈绪" zh_tw="神宮寺奈緒" jp="神宮寺ナオ" keyword="神宮寺奈緒,神宮寺ナオ,Nao Jinguji" tmdb_id="2409300"/>
+</actor><actor-blacklist /></actor-mapping>""",
+        encoding="utf-8",
+    )
+
+    records, stats = media_library._parse_actor_mapping_xml(path)
+
+    assert stats == {
+        "total": 2,
+        "verified": 1,
+        "missing": {"keyword": 0, "tmdb_id": 0, "verified": 1},
+        "with_tmdb": 2,
+    }
+    assert records[0]["id"] == "2599695"
+    assert records[0]["jp"] == "水卜さくら"
+    assert "水トさくら" in records[0]["aliases"]
+    assert "Sakura Miura" in records[0]["aliases"]
+
+
+def test_actor_mapping_name_index_prefers_primary_name_over_other_alias():
+    records = [
+        {
+            "id": "3173209",
+            "jp": "広瀬みつき",
+            "zh_cn": "広瀬美希",
+            "zh_tw": "広瀬美希",
+            "names": ["広瀬みつき", "広瀬美希", "日向ゆら"],
+            "tmdb_id": "3173209",
+            "verified": True,
+        },
+        {
+            "id": "5349111",
+            "jp": "日向ゆら",
+            "zh_cn": "日向ゆら",
+            "zh_tw": "日向ゆら",
+            "names": ["日向ゆら"],
+            "tmdb_id": "5349111",
+            "verified": False,
+        },
+    ]
+
+    index = media_library._actor_mapping_name_index(records)
+    match = index[media_library._normalize_actor_key("日向ゆら")]
+
+    assert match["source"] == "primary"
+    assert match["record"]["id"] == "5349111"
+
+
+def test_parse_person_reads_provider_ids_case_insensitively():
+    person = {
+        "Id": "actor-1",
+        "Name": "柏木小夏",
+        "ProviderIds": {"tmdb": "3413916", "imdb": "nm-example"},
+    }
+
+    parsed = media_library._parse_person({"server_url": "http://server"}, person)
+
+    assert parsed["tmdb_id"] == "3413916"
+    assert parsed["imdb_id"] == "nm-example"
+
+
+def test_actor_merge_apply_people_rewrites_source_actor_and_deduplicates():
+    item = {
+        "People": [
+            {"Name": "三原ほのか", "Id": "15088", "Type": "Actor", "PrimaryImageTag": "old"},
+            {"Name": "三原ほのか", "Id": "4258", "Type": "Actor", "PrimaryImageTag": "target"},
+            {"Name": "Director", "Id": "d1", "Type": "Director"},
+        ]
+    }
+
+    next_item, changed = media_library._actor_merge_apply_people(item, source_actor_ids={"15088"}, target_name="三原ほのか")
+
+    assert changed == [{"id": "15088", "name": "三原ほのか", "type": "Actor", "primary_image_tag": "old"}]
+    actors = [person for person in next_item["People"] if person["Type"] == "Actor"]
+    assert actors == [{"Name": "三原ほのか", "Id": "4258", "Type": "Actor", "PrimaryImageTag": "target"}]
+    assert next_item["People"][-1]["Type"] == "Director"
+
+
+def test_actor_merge_remove_source_people_cleans_residual_actor():
+    item = {
+        "People": [
+            {"Name": "南いろは", "Id": "15155", "Type": "Actor", "PrimaryImageTag": "old"},
+            {"Name": "佐野夏", "Id": "10057", "Type": "Actor"},
+            {"Name": "Director", "Id": "d1", "Type": "Director"},
+        ]
+    }
+
+    next_item, removed = media_library._actor_merge_remove_source_people(item, source_actor_ids={"15155"})
+
+    assert removed == [{"id": "15155", "name": "南いろは", "type": "Actor", "primary_image_tag": "old"}]
+    assert [person["Name"] for person in next_item["People"]] == ["佐野夏", "Director"]
+
+
+def test_actor_group_target_name_follows_noor_language():
+    group = {
+        "jp": "三原ほのか",
+        "zh_cn": "三原穗香",
+        "zh_tw": "三原穗香",
+        "display_name": "三原穗香",
+    }
+
+    assert media_library._actor_group_target_name(group, lang="zh-CN") == "三原穗香"
+    assert media_library._actor_group_target_name(group, lang="ja-JP") == "三原ほのか"
+    assert media_library._actor_group_target_name(group, target_name="三原ほのか", lang="zh-CN") == "三原ほのか"
+
+
+def test_actor_group_selected_target_uses_emby_actor_and_excludes_source():
+    group = {
+        "jp": "吉岡ひより",
+        "zh_cn": "吉冈日和",
+        "actors": [
+            {"id": "a1", "name": "吉岡ひより"},
+            {"id": "a2", "name": "吉冈日和"},
+        ],
+    }
+
+    assert media_library._actor_group_target_name(group, lang="zh-CN", target_actor_id="a1") == "吉岡ひより"
+    assert media_library._actor_group_source_ids(group, target_actor_id="a1") == ["a2"]
+
+
+@pytest.mark.asyncio
+async def test_actor_mapping_merge_deletes_source_person_after_zero_references(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    async def fake_plan(config, mapping_id, *, target_name=None, target_actor_id=None, lang=None):
+        return {
+            "mapping_id": mapping_id,
+            "target_name": "広瀬みつき",
+            "target_actor_id": "target-1",
+            "source_actor_ids": ["source-1"],
+            "source_counts": {"source-1": 1},
+            "movies": [{"id": "movie-1", "name": "REAL-915"}],
+        }
+
+    calls = []
+
+    def responder(method, url, headers, params, json):
+        calls.append((method, url, params, json))
+        if method == 'GET' and url.endswith('/emby/Items/movie-1'):
+            return FakeResponse(
+                200,
+                {
+                    "Id": "movie-1",
+                    "Name": "REAL-915",
+                    "Path": "/data/REAL-915.mp4",
+                    "People": [
+                        {"Name": "日向ゆら", "Id": "source-1", "Type": "Actor"},
+                        {"Name": "監督", "Id": "director-1", "Type": "Director"},
+                    ],
+                },
+            )
+        if method == 'POST' and url.endswith('/emby/Items/movie-1'):
+            return FakeResponse(204, {})
+        if method == 'GET' and url.endswith('/emby/Items') and params.get('PersonIds') == 'source-1':
+            return FakeResponse(200, {"Items": []})
+        if method == 'DELETE' and url.endswith('/emby/Items/source-1'):
+            return FakeResponse(204, {})
+        raise AssertionError(f'unexpected request: {method} {url} {params}')
+
+    monkeypatch.setattr(media_library, '_build_actor_mapping_merge_plan', fake_plan)
+    monkeypatch.setattr(media_library, '_actor_merge_backup_dir', lambda: tmp_path)
+    monkeypatch.setattr(media_library.httpx, 'AsyncClient', lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs))
+
+    result = await media_library._execute_actor_mapping_merge(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': ''},
+        media_library.ActorMappingMergeRequest(mapping_id='3173209', target_actor_id='target-1'),
+    )
+
+    assert result["updated_count"] == 1
+    assert result["after_counts"] == {"source-1": 0}
+    assert result["deleted_actor_ids"] == ["source-1"]
+    assert result["delete_failed_actor_ids"] == []
+    assert any(method == 'DELETE' and url.endswith('/emby/Items/source-1') for method, url, _params, _json in calls)
+
+
+@pytest.mark.asyncio
+async def test_actor_mapping_merge_batch_executes_non_conflict_groups(monkeypatch: pytest.MonkeyPatch):
+    async def fake_preview(config, *, limit=5000, only_candidates=False, lang=None):
+        return {
+            "groups": [
+                {"mapping_id": "safe-1", "display_name": "安全组", "target_actor_id": "target-1", "has_tmdb_conflict": False},
+                {"mapping_id": "conflict-1", "display_name": "冲突组", "target_actor_id": "target-2", "has_tmdb_conflict": True},
+            ]
+        }
+
+    executed = []
+
+    async def fake_execute(config, req, *, lang=None):
+        executed.append(req.mapping_id)
+        return {
+            "ok": True,
+            "updated_count": 2,
+            "deleted_actor_ids": ["old-1"],
+        }
+
+    monkeypatch.setattr(media_library, "_preview_actor_mapping_matches", fake_preview)
+    monkeypatch.setattr(media_library, "_execute_actor_mapping_merge", fake_execute)
+
+    result = await media_library._execute_actor_mapping_merge_batch(
+        {"server_url": "http://server", "api_key": "token"},
+        media_library.ActorMappingMergeBatchRequest(target_actor_ids={"safe-1": "target-1"}, skip_conflicts=True),
+        lang="zh-CN",
+    )
+
+    assert executed == ["safe-1"]
+    assert result["executed_count"] == 1
+    assert result["updated_count"] == 2
+    assert result["deleted_actor_count"] == 1
+    assert result["skipped_count"] == 1
+    assert result["skipped"][0]["reason"] == "tmdb_conflict"
+
+
+@pytest.mark.asyncio
+async def test_get_items_returns_paginated_cached_library_items(monkeypatch: pytest.MonkeyPatch):
+    media_library._items_cache.clear()
+    monkeypatch.setattr(media_library, '_load_config', lambda: {'server_url': 'http://server', 'api_key': 'token'})
+
+    cached_items = [
+        {'id': '1', 'tags': {'has_chinese': True}, 'date_created': '2026-04-01T00:00:00Z'},
+        {'id': '2', 'tags': {'has_chinese': False}, 'date_created': '2026-04-02T00:00:00Z'},
+    ]
+    media_library._items_cache['library-1'] = (cached_items, time.time())
+
+    result = await media_library.get_items(library_id='library-1', limit=10, offset=0, filter='chinese')
+
+    assert result == {
+        'items': [{'id': '1', 'tags': {'has_chinese': True}, 'date_created': '2026-04-01T00:00:00Z'}],
+        'total': 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_actors_parses_emby_persons(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'GET'
+        assert url.endswith('/emby/Persons')
+        assert params['SearchTerm'] == '水卜'
+        return FakeResponse(
+            200,
+            {
+                'TotalRecordCount': 1,
+                'Items': [
+                    {
+                        'Id': 'actor-1',
+                        'Name': '水卜さくら',
+                        'SortName': '水卜さくら',
+                        'ServerId': 'server-1',
+                        'PrimaryImageTag': 'tag-1',
+                        'ProviderIds': {'Tmdb': '123'},
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(media_library.httpx, 'AsyncClient', lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs))
+
+    actors, total = await media_library._list_actors(
+        {'server_url': 'http://server', 'api_key': 'token'},
+        q='水卜',
+    )
+
+    assert total == 1
+    assert actors[0]['name'] == '水卜さくら'
+    assert actors[0]['tmdb_id'] == '123'
+    assert actors[0]['image_url'] == 'http://server/emby/Items/actor-1/Images/Primary?tag=tag-1'
+    assert actors[0]['server_id'] == 'server-1'
+    assert actors[0]['emby_url'] == 'http://server/web/index.html#!/item?id=actor-1&serverId=server-1'
+
+
+@pytest.mark.asyncio
+async def test_list_actors_filters_ignored_merge_ghosts(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'GET'
+        assert url.endswith('/emby/Persons')
+        return FakeResponse(
+            200,
+            {
+                'TotalRecordCount': 2,
+                'Items': [
+                    {'Id': 'live-actor', 'Name': '白峰美羽', 'ServerId': 'server-1'},
+                    {'Id': 'ignored-actor', 'Name': '白峰ミウ', 'ServerId': 'server-1'},
+                ],
+            },
+        )
+
+    monkeypatch.setattr(media_library.httpx, 'AsyncClient', lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs))
+    monkeypatch.setattr(media_library, '_load_actor_merge_ignored_ghosts', lambda: {'ignored-actor'})
+
+    actors, total = await media_library._list_actors({'server_url': 'http://server', 'api_key': 'token'})
+
+    assert total == 1
+    assert [actor['id'] for actor in actors] == ['live-actor']
+
+
+@pytest.mark.asyncio
+async def test_preview_actor_mapping_matches_groups_aliases(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            'id': '2599695',
+            'jp': '水卜さくら',
+            'zh_cn': '水卜樱',
+            'zh_tw': '水卜櫻',
+            'tmdb_id': '2599695',
+            'verified': True,
+            'names': ['水卜さくら', '水卜樱', '水卜櫻', '水トさくら', 'Sakura Miura'],
+        }
+    ])
+
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending', lang=None):
+        return [
+            {'id': 'emby-1', 'name': '水卜さくら', 'tmdb_id': '2599695', 'image_url': 'http://server/image.jpg'},
+            {'id': 'emby-2', 'name': '水トさくら'},
+            {'id': 'emby-3', 'name': 'Unmatched'},
+        ], 3
+
+    async def fake_related_movies(client, config, actor_id, *, limit=5000):
+        return [{'Id': f'movie-{actor_id}'}]
+
+    monkeypatch.setattr(media_library, '_list_actors', fake_list_actors)
+    monkeypatch.setattr(media_library, '_emby_related_movies_for_actor', fake_related_movies)
+
+    result = await media_library._preview_actor_mapping_matches({'server_url': 'http://server', 'api_key': 'token'}, only_candidates=True)
+
+    assert result['candidate_groups'] == 1
+    assert result['matched_actors'] == 2
+    assert result['unmatched_actors'] == 1
+    assert result['conflict_groups'] == 0
+    assert result['groups'][0]['tmdb_id'] == '2599695'
+    assert result['groups'][0]['target_actor_id'] == 'emby-1'
+    assert result['groups'][0]['missing_tmdb_count'] == 1
+    assert [actor['id'] for actor in result['groups'][0]['actors']] == ['emby-1', 'emby-2']
+
+
+@pytest.mark.asyncio
+async def test_preview_actor_mapping_rejects_unverified_alias_tmdb_conflict(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            'id': '2381412',
+            'jp': '紺野ひかる',
+            'zh_cn': '绀野光',
+            'zh_tw': '星野光',
+            'tmdb_id': '2381412',
+            'verified': False,
+            'names': ['紺野ひかる', '绀野光', '星野光', '皆月ひかる', '皆月光'],
+        }
+    ])
+
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending', lang=None):
+        return [
+            {'id': 'emby-konno', 'name': '紺野ひかる', 'tmdb_id': '2381412'},
+            {'id': 'emby-minazuki', 'name': '皆月ひかる', 'tmdb_id': '3122077'},

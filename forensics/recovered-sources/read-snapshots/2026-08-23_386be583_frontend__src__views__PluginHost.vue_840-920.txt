@@ -1,0 +1,81 @@
+      skeletonCard: (o: any) => { const d = document.createElement('div'); d.className = `noor-plugin-skeleton ${o.className || ''}`; return d },
+      card: (o: any) => { const a = document.createElement(o.href ? 'a' : 'div'); a.className = `noor-plugin-card ${o.className || ''}`; if (o.href) { (a as HTMLAnchorElement).href = o.href; (a as HTMLAnchorElement).target = o.target || '_self' }; return a },
+      confirm: (o: any) => confirm.confirm({ title: o.title || '确认操作', message: o.message || '', confirmText: o.confirmText || '确认', danger: !!o.danger }),
+    },
+  }
+}
+
+async function mountPlugin() {
+  clearMounted()
+  if (!pluginId.value || !host.value) return
+  const currentMount = mountSeq
+  const controller = new AbortController()
+  sdkAbortController = controller
+  loading.value = true
+  error.value = ''
+  try {
+    const info = await api.get(`/plugins/${pluginId.value}/config`, { signal: controller.signal }).then(r => r.data)
+    if (currentMount !== mountSeq) return
+    const style = info?.plugin?.frontend?.style
+    if (style) {
+      const bust = Date.now()
+      styleEl = document.createElement('link')
+      styleEl.rel = 'stylesheet'
+      styleEl.href = `/api/plugins/${pluginId.value}/assets/${style.replace(/^frontend\//, '')}?t=${bust}`
+      document.head.appendChild(styleEl)
+    }
+    const entry = info?.plugin?.frontend?.entry || 'frontend/page.js'
+    const mod = await import(/* @vite-ignore */ `/api/plugins/${pluginId.value}/assets/${entry.replace(/^frontend\//, '')}?t=${Date.now()}`)
+    if (currentMount !== mountSeq) return
+    await nextTick()
+    if (currentMount !== mountSeq || !host.value) return
+    const ret = await mod.mount(host.value, sdkFor(pluginId.value))
+    if (currentMount !== mountSeq) {
+      if (typeof ret === 'function') ret()
+      return
+    }
+    if (typeof ret === 'function') dispose = ret
+  } catch (e: any) {
+    if (!isAbortLikeError(e) && currentMount === mountSeq) {
+      error.value = e?.response?.data?.detail || e?.message || '插件加载失败'
+      pluginDiagnostic('error', error.value)
+    }
+  } finally {
+    if (currentMount === mountSeq) loading.value = false
+  }
+}
+
+onMounted(mountPlugin)
+watch(pluginId, mountPlugin)
+onBeforeUnmount(clearMounted)
+</script>
+
+<template>
+  <div class="plugin-host-page">
+    <div v-if="loading" class="plugin-host-state">插件加载中</div>
+    <div v-if="error" class="plugin-host-state plugin-host-state--error">{{ error }}</div>
+    <div ref="host" class="plugin-host-mount" :class="{ 'is-loading': loading }" />
+  </div>
+</template>
+
+<style>
+.plugin-host-page { min-height: 40vh; }
+.plugin-host-state { padding: 1rem; margin-bottom: 1rem; border-radius: var(--radius-lg); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.7); }
+.plugin-host-state--error { color: var(--color-error); border-color: rgba(227,26,26,.25); background: rgba(227,26,26,.1); }
+.plugin-host-mount.is-loading { opacity: .6; }
+.noor-plugin-topbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.noor-plugin-topbar__tabs, .noor-plugin-topbar__actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.noor-plugin-btn { min-height: 30px; padding: .35rem .75rem; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: rgba(255,255,255,.78); font-size: .75rem; font-weight: 600; transition: all var(--transition-fast); }
+.noor-plugin-btn:hover:not(:disabled) { background: rgba(255,255,255,.08); color: #fff; }
+.noor-plugin-btn:disabled { opacity: .45; cursor: not-allowed; }
+.noor-plugin-btn--primary { background: var(--color-brand); color: white; border-color: transparent; }
+.noor-plugin-btn--danger { background: rgba(227,26,26,.18); color: #ff8a80; border-color: rgba(227,26,26,.28); }
+.noor-plugin-input { width: 100%; min-height: 36px; padding: .5rem .75rem; border-radius: var(--radius-md); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: white; outline: none; }
+.noor-plugin-input:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgba(0,117,255,.12); }
+.noor-plugin-input option, .noor-plugin-select option { background: #111936; color: white; }
+.noor-plugin-select { position: relative; min-width: 0; }
+.noor-plugin-select__trigger { width: 100%; min-height: 1.85rem; display: inline-flex; align-items: center; justify-content: space-between; gap: .35rem; padding: .32rem .68rem; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(255,255,255,.04); color: var(--color-text-primary,#fff); font-size: .76rem; font-weight: 700; line-height: 1.1; white-space: nowrap; cursor: pointer; transition: border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease; }
+.noor-plugin-select__trigger:hover:not(:disabled), .noor-plugin-select.is-open .noor-plugin-select__trigger { border-color: color-mix(in srgb, var(--color-brand,#0075ff) 45%, transparent); background: color-mix(in srgb, var(--color-brand,#0075ff) 10%, transparent); }
+.noor-plugin-select.is-active .noor-plugin-select__trigger { border-color: color-mix(in srgb, var(--color-brand,#0075ff) 52%, transparent); background: color-mix(in srgb, var(--color-brand,#0075ff) 16%, transparent); color: color-mix(in srgb, var(--color-brand,#0075ff) 28%, white); }
+.noor-plugin-select__trigger:focus-visible { outline: none; border-color: var(--color-brand,#0075ff); box-shadow: 0 0 0 3px rgba(0,117,255,.14); }
+.noor-plugin-select__trigger:disabled { opacity: .5; cursor: not-allowed; }

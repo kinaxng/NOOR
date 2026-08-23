@@ -1,0 +1,36 @@
+    for actor in actors:
+        actor_id = str(actor.get("id") or "")
+        if actor_id in matched_actor_ids:
+            continue
+        actor_name = str(actor.get("name") or "").strip()
+        members = [actor]
+        member_ids = {actor_id}
+        matched_aliases = []
+        for alias in _actor_emby_aliases(actor):
+            alias_key = _normalize_actor_key(alias)
+            other = actors_by_key.get(alias_key)
+            other_id = str(other.get("id") or "") if other else ""
+            if other and other_id and other_id != actor_id and other_id not in member_ids:
+                members.append(other)
+                member_ids.add(other_id)
+                matched_aliases.append(alias)
+        if len(members) < 2:
+            continue
+        group_key = "|".join(sorted(member_ids))
+        if group_key in supplemental_groups:
+            continue
+        display_name = actor.get("display_name") or actor_name
+        supplemental_groups[group_key] = {
+            "mapping_id": f"emby-alias:{_normalize_actor_key(actor_name) or actor_id}",
+            "canonical_name": actor_name,
+            "display_name": display_name,
+            "jp": actor_name,
+            "zh_cn": display_name,
+            "zh_tw": display_name,
+            "tmdb_id": actor.get("tmdb_id") or "",
+            "verified": False,
+            "names": [actor_name, *matched_aliases],
+            "actors": [{**member, "matched_name": member.get("name") or ""} for member in members],
+            "match_source": "emby_alias",
+        }
+    groups_by_mapping.update({group["mapping_id"]: group for group in supplemental_groups.values()})

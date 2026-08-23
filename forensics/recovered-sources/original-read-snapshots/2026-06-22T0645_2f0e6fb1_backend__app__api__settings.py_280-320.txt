@@ -1,0 +1,41 @@
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+
+@router.put("/lada")
+async def update_lada_config(config: LadaConfig):
+    """Update Lada configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA CLI 配置...")
+    try:
+        apply_lada_config_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA CLI 配置已保存")
+        return {"success": True, "message": "Lada settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA CLI 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.put("/network")
+async def update_network_config(config: NetworkConfig):
+    """Update network configuration (acceleration mode, proxy, mirrors)."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存网络加速配置...")
+    try:
+        apply_network_config_updates(config, update_env_value)
+        clear_settings_cache()
+
+        # Apply to current process environment
+        settings = get_settings()
+        settings.apply_network_env()
+
+        log_mgr.add_log("success", "[Settings] 网络加速配置已保存并生效")
+        return {"success": True, "message": "Network settings saved and applied"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 网络加速配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/lada/upgrade")
+async def upgrade_lada():
+    """Upgrade LADA from its official git checkout when running natively."""

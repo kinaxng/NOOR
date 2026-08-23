@@ -1,0 +1,386 @@
+        "release_date": release,
+        "actors": actors[:6],
+        "categories": categories[:8],
+        "maker": maker,
+        "series": series,
+        "director": director,
+        "score": score,
+        "personalized_score": round(personalized_score, 1),
+        "actionability_score": round(actionability_score, 1),
+        "quality_score": round(quality_score, 1),
+        "penalty_score": round(penalty_score, 1),
+        "match_level": match_bucket,
+        "confidence": max(0, min(100, round(personalized_score * 1.6 + actionability_score * 0.45 - penalty_score * 0.7))),
+        "score_breakdown": {
+            "preference": round(personalized_score, 1),
+            "actor_preference": round(actor_preference_score, 1),
+            "category_preference": round(category_preference_score, 1),
+            "relationship_preference": round(relationship_preference_score, 1),
+            "feedback": round(feedback_score, 1),
+            "resources": round(actionability_score, 1),
+            "quality": round(quality_score, 1),
+            "penalty": round(penalty_score, 1),
+        },
+        "type": "recommendation",
+        "in_library": bool(in_library),
+        "magnets_count": magnets_count,
+        "has_cnsub": bool(item.get("has_cnsub")),
+        "is_cracked": bool(item.get("is_cracked")),
+        "best_resource_size_mb": size_mb,
+        "reasons": reasons[:5],
+        "source": "javdb",
+        "source_label": "JavDB",
+        "route": f"/plugins/javdb?code={code}",
+        "source_tags": item.get("display_source_tags") or item.get("source_tags") or [],
+        "is_today_increment": bool(item.get("is_today_increment")),
+        "first_seen_date": item.get("first_seen_date") or "",
+        "last_seen_date": item.get("last_seen_date") or "",
+        "raw": {"id": item.get("id"), "library": item.get("library") or {}},
+    }
+
+
+def _resource_features(resource: dict[str, Any]) -> dict[str, bool]:
+    features = resource.get("features") if isinstance(resource.get("features"), dict) else {}
+    requirements = resource.get("requirements") if isinstance(resource.get("requirements"), dict) else {}
+    tags = " ".join(str(x) for x in (resource.get("tags") or []))
+    text = "\n".join([
+        str(resource.get("title") or ""),
+        str(resource.get("subtitle") or ""),
+        str(resource.get("provider_label") or ""),
+        tags,
+        json.dumps(features, ensure_ascii=False),
+    ])
+    return {
+        "has_subtitle": bool(features.get("has_subtitle") or re.search(r"中字|中文字幕|中文|字幕|sub", text, re.I)),
+        "is_cracked": bool(features.get("is_cracked") or features.get("new_model_uncensored_crack") or re.search(r"破解|无码破解|uncensored|crack|leak|流出", text, re.I)),
+        "is_private_tracker": bool(features.get("is_private_tracker") or requirements.get("accepts_private_tracker")),
+    }
+
+
+async def _enrich_recommendation_resources(config: dict[str, Any], items: list[dict[str, Any]]) -> list[str]:
+    warnings: list[str] = []
+    if not items:
+        return warnings
+    try:
+        from app.plugins.runtime import runtime
+    except Exception as exc:
+        return [f"资源插件运行时不可用：{exc}"]
+    enrich_limit = max(0, min(int(config.get("resource_enrich_limit") or 16), 48))
+    if enrich_limit <= 0:
+        return warnings
+    targets = items[:enrich_limit]
+    semaphore = asyncio.Semaphore(4)
+
+    async def enrich_one(item: dict[str, Any]) -> None:
+        code = str(item.get("code") or "").strip()
+        if not code:
+            return
+        async with semaphore:
+            try:
+                result = await runtime.search_resources(
+                    {"keyword": code, "provider_timeout_seconds": 5},
+                    limit_per_plugin=8,
+                )
+            except Exception as exc:
+                warnings.append(f"{code} 资源确认失败：{exc}")
+                return
+        resources = [res for res in (result.get("items") or []) if isinstance(res, dict)]
+        if not resources:
+            item["resource_summary"] = {"total": 0, "providers": []}
+            return
+        provider_counts: Counter = Counter()
+        total_size = 0
+        best_size = 0
+        has_subtitle = bool(item.get("has_cnsub"))
+        is_cracked = bool(item.get("is_cracked"))
+        has_private = False
+        has_public = False
+        compatible_downloaders: set[str] = set()
+        for res in resources:
+            provider = str(res.get("provider_label") or res.get("provider") or "资源").strip()
+            provider_counts[provider] += 1
+            size = int(res.get("size_bytes") or 0)
+            total_size += max(0, size)
+            best_size = max(best_size, size)
+            feats = _resource_features(res)
+            has_subtitle = has_subtitle or feats["has_subtitle"]
+            is_cracked = is_cracked or feats["is_cracked"]
+            has_private = has_private or feats["is_private_tracker"]
+            has_public = has_public or not feats["is_private_tracker"]
+            for downloader_id in res.get("compatible_downloaders") or []:
+                if downloader_id:
+                    compatible_downloaders.add(str(downloader_id))
+        providers = [{"name": name, "count": count} for name, count in provider_counts.most_common()]
+        item["resource_summary"] = {
+            "total": len(resources),
+            "providers": providers,
+            "best_size_bytes": best_size,
+            "total_size_bytes": total_size,
+            "has_private": has_private,
+            "has_public": has_public,
+            "compatible_downloaders": sorted(compatible_downloaders),
+        }
+        # Resource availability is actionability, not taste. Keep it a small
+        # secondary boost so it cannot dominate actor/category preference.
+        score_boost = min(6, len(resources)) + min(3, best_size / 1024 / 1024 / 1024 * 0.45)
+        if has_subtitle and not item.get("has_cnsub"):
+            score_boost += 4
+            item["has_cnsub"] = True
+            item.setdefault("reasons", []).append("资源确认：中字")
+        if is_cracked and not item.get("is_cracked"):
+            score_boost += 5
+            item["is_cracked"] = True
+            item.setdefault("reasons", []).append("资源确认：破解")
+        if providers:
+            item.setdefault("reasons", []).append("资源来源：" + " / ".join(f"{p['name']}×{p['count']}" for p in providers[:3]))
+        if best_size > 0:
+            item["best_resource_size_mb"] = max(float(item.get("best_resource_size_mb") or 0), best_size / 1024 / 1024)
+        breakdown = item.get("score_breakdown") if isinstance(item.get("score_breakdown"), dict) else {}
+        breakdown["resources"] = round(float(breakdown.get("resources") or 0) + score_boost, 1)
+        item["score_breakdown"] = breakdown
+        item["actionability_score"] = round(float(item.get("actionability_score") or 0) + score_boost, 1)
+        item["confidence"] = max(0, min(100, round(float(item.get("confidence") or 0) + score_boost * 0.45)))
+        cap = 100 if float(item.get("personalized_score") or 0) >= 22 else 82
+        item["score"] = max(0, min(cap, int(round(float(item.get("score") or 0) + score_boost))))
+        item["reasons"] = list(dict.fromkeys(item.get("reasons") or []))[:6]
+
+    await asyncio.gather(*(enrich_one(item) for item in targets))
+    return warnings[:8]
+
+
+def _diversify_recommendations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep strong recommendations but avoid a front page monopolized by one actor/tag."""
+    remaining = list(items)
+    selected: list[dict[str, Any]] = []
+    actor_seen: Counter = Counter()
+    category_seen: Counter = Counter()
+    while remaining:
+        best_index = 0
+        best_value = -9999.0
+        for index, item in enumerate(remaining):
+            value = float(item.get("score") or 0)
+            actors = [str(x) for x in item.get("actors") or []]
+            categories = [str(x) for x in item.get("categories") or [] if _generic_category_factor(x) >= 0.5]
+            actor_penalty = sum(actor_seen.get(actor, 0) for actor in actors[:3]) * 7
+            category_penalty = sum(category_seen.get(category, 0) for category in categories[:3]) * 2
+            adjusted = value - actor_penalty - category_penalty
+            if adjusted > best_value:
+                best_value = adjusted
+                best_index = index
+        picked = remaining.pop(best_index)
+        picked["diversity_rank"] = len(selected) + 1
+        selected.append(picked)
+        for actor in (picked.get("actors") or [])[:3]:
+            actor_seen[str(actor)] += 1
+        for category in (picked.get("categories") or [])[:4]:
+            if _generic_category_factor(category) >= 0.5:
+                category_seen[str(category)] += 1
+    return selected
+
+
+def _filtered_summary(diagnostics: list[dict[str, Any]]) -> dict[str, Any]:
+    counts: Counter = Counter(str(item.get("reason") or "unknown") for item in diagnostics)
+    labels = {
+        "missing_code": "缺少番号",
+        "ignored": "已忽略",
+        "disliked": "不感兴趣",
+        "score_too_low": "评分过低",
+    }
+    return {
+        "total": len(diagnostics),
+        "reasons": [
+            {"reason": key, "label": labels.get(key, key), "count": int(count)}
+            for key, count in counts.most_common()
+        ],
+        "examples": diagnostics[:12],
+    }
+
+
+def _iso_age_seconds(value: Any) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        return max(0.0, (dt.datetime.now(dt.timezone.utc) - parsed.astimezone(dt.timezone.utc)).total_seconds())
+    except Exception:
+        return None
+
+
+def _pool_scan_due(pool: dict[str, Any], interval_minutes: int) -> bool:
+    last = pool.get("last_full_scan") if isinstance(pool.get("last_full_scan"), dict) else {}
+    age = _iso_age_seconds(last.get("at"))
+    if age is None:
+        return True
+    return age >= max(10, interval_minutes) * 60
+
+
+async def _scheduler_loop() -> None:
+    global _scheduler_stop
+    from app.plugins.runtime import runtime
+
+    _scheduler_stop = asyncio.Event()
+    while not _scheduler_stop.is_set():
+        wait_seconds = 1800
+        try:
+            if runtime.is_enabled(PLUGIN_ID):
+                config = runtime.get_config(PLUGIN_ID)
+                enabled = bool(config.get("full_scan_background_enabled", True))
+                interval = max(30, min(int(config.get("full_scan_interval_minutes") or 360), 10080))
+                wait_seconds = min(interval * 60, 1800)
+                if enabled:
+                    async with _pool_lock:
+                        pool = _ensure_candidate_pool()
+                        due = _pool_scan_due(pool, interval)
+                    if due:
+                        await _scan_full_candidate_pool(config)
+            else:
+                wait_seconds = 1800
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            wait_seconds = 1800
+        try:
+            await asyncio.wait_for(_scheduler_stop.wait(), timeout=wait_seconds)
+        except asyncio.TimeoutError:
+            pass
+
+
+async def start_background() -> None:
+    global _scheduler_task
+    if _scheduler_task and not _scheduler_task.done():
+        return
+    _scheduler_task = asyncio.create_task(_scheduler_loop())
+
+
+async def stop_background() -> None:
+    global _scheduler_task, _scheduler_stop
+    if _scheduler_stop:
+        _scheduler_stop.set()
+    if _scheduler_task:
+        _scheduler_task.cancel()
+        with contextlib.suppress(Exception, asyncio.CancelledError):
+            await _scheduler_task
+    _scheduler_task = None
+    _scheduler_stop = None
+
+
+async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    store = _ensure_store()
+    feedback = {
+        "ignored_codes": _feedback_codes(store.get("ignored")),
+        "liked_codes": _feedback_codes(store.get("liked")),
+        "disliked_codes": _feedback_codes(store.get("disliked")),
+        "liked_actors": _feedback_counter(store.get("liked"), "actors"),
+        "liked_categories": _feedback_counter(store.get("liked"), "categories"),
+        "disliked_actors": _feedback_counter(store.get("disliked"), "actors"),
+        "disliked_categories": _feedback_counter(store.get("disliked"), "categories"),
+    }
+    source_mode = str(payload.get("source_mode") or payload.get("mode") or "latest").strip()
+    if source_mode not in {"latest", "full"}:
+        source_mode = "latest"
+    cache_key = json.dumps({
+        "config": config,
+        "source_mode": source_mode,
+        "limit": max(1, min(int(payload.get("limit") or 48), 100)),
+        "ignored": sorted(feedback["ignored_codes"]),
+        "liked": sorted(feedback["liked_codes"]),
+        "disliked": sorted(feedback["disliked_codes"]),
+        "liked_actors": dict(feedback["liked_actors"]),
+        "liked_categories": dict(feedback["liked_categories"]),
+        "disliked_actors": dict(feedback["disliked_actors"]),
+        "disliked_categories": dict(feedback["disliked_categories"]),
+    }, sort_keys=True, ensure_ascii=False)
+    if not payload.get("refresh") and _CACHE.get("value") is not None and _CACHE.get("key") == cache_key and time.time() - float(_CACHE.get("ts") or 0) < CACHE_TTL:
+        return _CACHE["value"]
+
+    profile = await _library_profile()
+    candidates, warnings, candidate_meta = await _javdb_candidates(config, source_mode=source_mode, refresh=bool(payload.get("refresh")))
+    scored = []
+    filtered_diagnostics: list[dict[str, Any]] = []
+    for item in candidates:
+        rec = _candidate_score(item, profile, config, feedback, filtered_diagnostics)
+        if rec:
+            scored.append(rec)
+    scored.sort(key=lambda x: (x["score"], x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
+    resource_config = dict(config)
+    if source_mode == "full":
+        resource_config["resource_enrich_limit"] = min(int(config.get("resource_enrich_limit") or 16), 4)
+    resource_warnings = await _enrich_recommendation_resources(resource_config, scored)
+    if resource_warnings:
+        warnings.extend(resource_warnings)
+    scored.sort(key=lambda x: (x["score"], (x.get("resource_summary") or {}).get("total") or 0, x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
+    scored = _diversify_recommendations(scored)
+    limit = max(1, min(int(payload.get("limit") or 48), 100))
+    result = {
+        "ok": True,
+        "generated_at": _now_ms(),
+        "source_mode": source_mode,
+        "source_label": "完整推荐" if source_mode == "full" else "最新推荐",
+        "items": scored[:limit],
+        "total": len(scored),
+        "profile": {
+            "media_count": profile.get("media_count") or 0,
+            "code_count": len(profile.get("codes") or []),
+            "top_actors": _top(profile.get("actors") or Counter(), 10),
+            "top_genres": _top(profile.get("genres") or Counter(), 10),
+            "top_tags": _top(profile.get("tags") or Counter(), 10),
+            "top_studios": _top(profile.get("studios") or Counter(), 8),
+            "top_series": _top(profile.get("series") or Counter(), 8),
+            "top_directors": _top(profile.get("directors") or Counter(), 8),
+        },
+        "stats": {
+            "candidates": len(candidates),
+            "in_library": sum(1 for x in scored if x.get("in_library")),
+            "ignored": len([x for x in feedback["ignored_codes"] if x]),
+            "disliked": len([x for x in feedback["disliked_codes"] if x]),
+            "today_increment": sum(1 for x in candidates if x.get("is_today_increment")),
+            "candidate_pool_total": (candidate_meta.get("pool") or {}).get("total", 0) if isinstance(candidate_meta, dict) else 0,
+            "candidate_pool_today": (candidate_meta.get("pool") or {}).get("today_increment", 0) if isinstance(candidate_meta, dict) else 0,
+        },
+        "candidate_meta": candidate_meta,
+        "filtered": _filtered_summary(filtered_diagnostics),
+        "warnings": warnings,
+    }
+    _CACHE.update({"ts": time.time(), "key": cache_key, "value": result})
+    return result
+
+
+async def test(config: dict[str, Any]) -> PluginTestResult:
+    try:
+        from app.plugins.runtime import runtime
+        if not runtime.is_enabled("javdb"):
+            return PluginTestResult(ok=False, message="JavDB 插件未启用")
+        profile = await _library_profile()
+        return PluginTestResult(ok=True, message="recommendation ready", details={"media_count": profile.get("media_count", 0)})
+    except Exception as exc:
+        return PluginTestResult(ok=False, message=f"recommendation failed: {exc}")
+
+
+async def handle_action(action: str, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if action in {"recommendations", "overview"}:
+        return await _recommendations(config, payload or {})
+    if action == "candidate_pool":
+        async with _pool_lock:
+            pool = _ensure_candidate_pool()
+            return {"ok": True, "pool": _candidate_pool_stats(pool)}
+    if action == "scan_candidate_pool":
+        return await _scan_full_candidate_pool(config, force=bool((payload or {}).get("force")))
+    if action == "profile":
+        profile = await _library_profile()
+        return {
+            "ok": True,
+            "profile": {
+                "media_count": profile.get("media_count") or 0,
+                "code_count": len(profile.get("codes") or []),
+                "top_actors": _top(profile.get("actors") or Counter(), 20),
+                "top_genres": _top(profile.get("genres") or Counter(), 20),
+                "top_tags": _top(profile.get("tags") or Counter(), 20),
+                "top_studios": _top(profile.get("studios") or Counter(), 12),
+                "top_series": _top(profile.get("series") or Counter(), 12),
+                "top_directors": _top(profile.get("directors") or Counter(), 12),
+            },
+        }
+    if action == "feedback":

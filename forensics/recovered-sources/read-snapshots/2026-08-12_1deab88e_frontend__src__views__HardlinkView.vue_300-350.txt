@@ -1,0 +1,51 @@
+}
+
+function withDeletingState(setRef: typeof deletingHardlinkPaths, key: string, active: boolean) {
+  const next = new Set(setRef.value)
+  if (active) next.add(key)
+  else next.delete(key)
+  setRef.value = next
+}
+
+
+function buildDeletePreviewDetails(plannedDirs: string[], plannedFiles: string[]) {
+  return [
+    { label: `${t('hardlinks.previewDirs')} · ${plannedDirs.length}`, items: plannedDirs },
+    { label: `${t('hardlinks.previewFiles')} · ${plannedFiles.length}`, items: plannedFiles },
+  ].filter((section) => section.items.length > 0)
+}
+
+function isReorganizingSource(path?: string | null) {
+  return !!path && reorganizingSourcePaths.value.has(path)
+}
+
+async function loadMdcManualAvailability() {
+  mdcManualAvailable.value = false
+  try {
+    const pluginsResp = await api.get('/api/plugins')
+    const plugins = Array.isArray(pluginsResp.data)
+      ? pluginsResp.data
+      : (Array.isArray(pluginsResp.data?.items) ? pluginsResp.data.items : [])
+    const plugin = plugins.find((item: any) => item?.id === 'mdc-ng-manual')
+    if (!plugin?.enabled) return
+    const testResp = await api.post('/api/plugins/mdc-ng-manual/test')
+    mdcManualAvailable.value = !!testResp.data?.ok
+  } catch {
+    mdcManualAvailable.value = false
+  }
+}
+
+async function reorganizeSource(entry: HardlinkEntry) {
+  const path = entry.source_path
+  if (!path || isReorganizingSource(path)) return
+  reorganizingSourcePaths.value = new Set(reorganizingSourcePaths.value).add(path)
+  try {
+    const { data } = await api.post('/api/plugins/mdc-ng-manual/actions/create', {
+      payload: { source_paths: path },
+    })
+    if (!data?.ok) throw new Error(data?.message || t('hardlinks.reorganizeFailed'))
+    toast.success(data?.message || t('hardlinks.reorganizeSuccess'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.reorganizeFailed'))
+  } finally {
+    const next = new Set(reorganizingSourcePaths.value)

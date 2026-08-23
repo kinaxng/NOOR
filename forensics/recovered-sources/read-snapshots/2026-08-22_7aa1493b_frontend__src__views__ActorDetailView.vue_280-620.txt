@@ -1,0 +1,341 @@
+    editMode.value = false
+    toast.success(resp.data.synced ? t('files.actors.detailSaveSuccess') : t('files.actors.detailSaveLocalOnly'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.detailSaveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function cancelEdit() {
+  syncForm(actor.value)
+  editMode.value = false
+}
+
+function openMovie(item: MediaItem) {
+  router.push({ path: '/library', query: { q: item.name } })
+}
+
+function openExternal(url?: string) {
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+async function deleteActor() {
+  if (!actorId.value || deleting.value) return
+  const ok = await confirm({
+    title: t('files.actors.deleteTitle'),
+    message: t('files.actors.deleteConfirm', { name: displayName.value || actorId.value }),
+    confirmText: t('common.delete'),
+    danger: true,
+  })
+  if (!ok) return
+  deleting.value = true
+  try {
+    await api.delete(`/media-library/actor/${encodeURIComponent(actorId.value)}`)
+    toast.success(t('files.actors.deleteSuccess'))
+    goBack()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.deleteFailed'))
+  } finally {
+    deleting.value = false
+  }
+}
+
+function chooseAvatarFile() {
+  fileInput.value?.click()
+}
+
+async function uploadAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !actorId.value) return
+  uploadingAvatar.value = true
+  try {
+    const data = new FormData()
+    data.append('file', file)
+    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/avatar`, data, {
+      params: { lang: currentLang.value },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    actor.value = resp.data.actor || actor.value
+    toast.success(t('files.actors.avatarUpdated'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.avatarUpdateFailed'))
+  } finally {
+    uploadingAvatar.value = false
+    input.value = ''
+  }
+}
+
+async function openAvatarPicker() {
+  avatarModalOpen.value = true
+  avatarCandidates.value = []
+  avatarCandidatesLoading.value = true
+  try {
+    const resp = await api.post('/plugins/gfriends/actions/candidates', {
+      payload: {
+        name: gfriendsSearchName.value,
+        aliases: actorAliases.value,
+        limit: 36,
+      },
+    })
+    avatarCandidates.value = resp.data.items || []
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.avatarCandidatesFailed'))
+  } finally {
+    avatarCandidatesLoading.value = false
+  }
+}
+
+async function selectAvatar(candidate: any) {
+  const url = candidate?.remote_url || candidate?.url
+  if (!url || !actorId.value) return
+  uploadingAvatar.value = true
+  try {
+    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/avatar-url`, {
+      url,
+    }, {
+      params: { lang: currentLang.value },
+    })
+    actor.value = resp.data.actor || actor.value
+    avatarModalOpen.value = false
+    toast.success(t('files.actors.avatarUpdated'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.avatarUpdateFailed'))
+  } finally {
+    uploadingAvatar.value = false
+  }
+}
+
+async function previewTmdbMetadata() {
+  if (!actorId.value || tmdbLoading.value) return
+  tmdbLoading.value = true
+  tmdbPreview.value = null
+  try {
+    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/metadata/tmdb-preview`, null, {
+      params: { lang: currentLang.value },
+    })
+    tmdbPreview.value = resp.data
+    tmdbApplyName.value = false
+    tmdbApplyAvatar.value = !!resp.data?.proposal?.image_url
+    tmdbModalOpen.value = true
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbPreviewFailed'))
+  } finally {
+    tmdbLoading.value = false
+  }
+}
+
+async function applyTmdbMetadata() {
+  if (!actorId.value || tmdbApplying.value) return
+  tmdbApplying.value = true
+  try {
+    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/metadata/tmdb-apply`, {
+      apply_name: tmdbApplyName.value,
+      apply_overview: true,
+      apply_provider_ids: true,
+      apply_avatar: tmdbApplyAvatar.value,
+    }, {
+      params: { lang: currentLang.value },
+    })
+    actor.value = resp.data.actor || actor.value
+    syncForm(actor.value)
+    tmdbModalOpen.value = false
+    if (resp.data.avatar_sync_error) {
+      toast.warning(t('files.actors.tmdbApplyAvatarLocalOnly'))
+    } else {
+      toast.success(resp.data.synced ? t('files.actors.tmdbApplySuccess') : t('files.actors.detailSaveLocalOnly'))
+    }
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbApplyFailed'))
+  } finally {
+    tmdbApplying.value = false
+  }
+}
+
+watch(page, loadMovies)
+watch(currentLang, loadActor)
+watch(actorNameLang, loadActor)
+watch(actorId, () => {
+  page.value = 1
+  overviewExpanded.value = false
+  loadActor()
+  loadMovies()
+})
+
+onMounted(() => {
+  loadActor()
+  loadMovies()
+})
+</script>
+
+<template>
+  <div class="actor-detail">
+    <div class="actor-detail__topbar">
+      <button type="button" class="actor-icon-button actor-icon-button--back" :title="t('common.back')" :aria-label="t('common.back')" @click="goBack">
+        <BaseIcon name="chevronLeft" class="w-4 h-4" />
+      </button>
+    </div>
+
+    <section class="actor-profile ui-card">
+      <div class="actor-profile__side">
+        <div class="actor-profile__avatar">
+          <img v-if="actor?.image_url" :src="actor.image_url" :alt="displayName" />
+          <span v-else>{{ actorInitial(displayName) }}</span>
+          <div v-if="editMode" class="actor-profile__avatar-actions">
+            <VuiButton variant="gradient" color="primary" size="small" :disabled="uploadingAvatar" customClass="actor-action-button" @click="chooseAvatarFile">
+              {{ t('files.actors.uploadAvatar') }}
+            </VuiButton>
+            <VuiButton variant="outlined" color="secondary" size="small" :disabled="uploadingAvatar" customClass="actor-action-button" @click="openAvatarPicker">
+              Gfriends
+            </VuiButton>
+            <input ref="fileInput" class="actor-profile__file" type="file" accept="image/*" @change="uploadAvatar" />
+          </div>
+        </div>
+        <div v-if="socialLinks.length" class="actor-profile__links">
+          <button v-for="link in socialLinks" :key="link.key" :title="`${link.label}: ${link.url}`" :aria-label="link.label" @click="openExternal(link.url)">
+            <BaseIcon :name="link.icon" class="actor-profile__link-icon" />
+          </button>
+        </div>
+      </div>
+
+      <div v-if="loading" class="actor-profile__loading">
+        <BaseIcon name="loading" class="w-5 h-5" />
+      </div>
+
+      <div v-else class="actor-profile__content">
+        <div class="actor-profile__head">
+          <div>
+            <h1>{{ displayName || t('files.actors.detailTitle') }}</h1>
+            <p v-if="actor?.name && actor.display_name && actor.name !== actor.display_name">{{ actor.name }}</p>
+          </div>
+          <div class="actor-profile__actions">
+            <VuiButton v-if="editMode && canFetchTmdb" variant="outlined" color="secondary" size="small" :disabled="tmdbLoading" customClass="actor-action-button" @click="previewTmdbMetadata">
+              {{ t('files.actors.tmdbFill') }}
+            </VuiButton>
+            <VuiButton v-if="editMode" variant="outlined" color="secondary" size="small" customClass="actor-action-button" @click="cancelEdit">
+              {{ t('common.cancel') }}
+            </VuiButton>
+            <VuiButton v-if="editMode" variant="gradient" color="primary" size="small" :disabled="saving" customClass="actor-action-button" @click="saveActor">
+              {{ t('common.save') }}
+            </VuiButton>
+            <button v-else type="button" class="actor-icon-button" :title="t('common.edit')" :aria-label="t('common.edit')" @click="saveActor">
+              <BaseIcon name="edit" class="w-4 h-4" />
+            </button>
+            <VuiButton v-if="editMode" variant="outlined" color="secondary" size="small" :disabled="deleting" customClass="actor-action-button actor-action-button--danger" @click="deleteActor">
+              {{ t('common.delete') }}
+            </VuiButton>
+          </div>
+        </div>
+
+        <div v-if="!editMode" class="actor-readonly">
+          <div class="actor-readonly__item">
+            <span class="actor-field-label actor-field-label--icon"><BaseIcon name="brandEmby" class="actor-field-label__icon" />{{ t('files.actors.detailEmbyName') }}</span>
+            <strong>{{ form.name || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span class="actor-field-label actor-field-label--icon"><BaseIcon name="brandEmby" class="actor-field-label__icon" />{{ t('files.actors.detailEmbySortName') }}</span>
+            <strong>{{ form.sort_name || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailJapaneseName') }}</span>
+            <strong>{{ form.jp_name || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailZhCnName') }}</span>
+            <strong>{{ form.zh_cn_name || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailZhTwName') }}</span>
+            <strong>{{ form.zh_tw_name || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item actor-readonly__item--overview">
+            <span>{{ t('files.actors.detailAliases') }}</span>
+            <div v-if="aliasTags.length" class="actor-alias-tags">
+              <span v-for="alias in aliasTags" :key="alias">{{ alias }}</span>
+            </div>
+            <p v-else>-</p>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailBirthday') }}</span>
+            <strong>{{ birthdayLabel() }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailBirthPlace') }}</span>
+            <strong>{{ form.place_of_birth || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailGender') }}</span>
+            <strong>{{ form.gender || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailKnownFor') }}</span>
+            <strong>{{ form.known_for_department || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailPopularity') }}</span>
+            <strong>{{ form.popularity || '-' }}</strong>
+          </div>
+          <div class="actor-readonly__item">
+            <span>{{ t('files.actors.detailHomepage') }}</span>
+            <strong>
+              <button v-if="form.homepage" class="actor-link" @click="openExternal(form.homepage)">{{ form.homepage }}</button>
+              <template v-else>-</template>
+            </strong>
+          </div>
+          <div class="actor-readonly__item actor-readonly__item--overview">
+            <span>{{ t('files.actors.detailOverview') }}</span>
+            <p :class="{ 'is-collapsed': overviewTooLong && !overviewExpanded }">{{ form.overview || '-' }}</p>
+            <button v-if="overviewTooLong" type="button" class="actor-overview-toggle" @click="overviewExpanded = !overviewExpanded">
+              {{ overviewExpanded ? t('files.actors.overviewCollapse') : t('files.actors.overviewExpand') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="actor-form">
+          <label>
+            <span class="actor-field-label actor-field-label--icon"><BaseIcon name="brandEmby" class="actor-field-label__icon" />{{ t('files.actors.detailEmbyName') }}</span>
+            <input v-model="form.name" type="text" />
+          </label>
+          <label>
+            <span class="actor-field-label actor-field-label--icon"><BaseIcon name="brandEmby" class="actor-field-label__icon" />{{ t('files.actors.detailEmbySortName') }}</span>
+            <input v-model="form.sort_name" type="text" />
+          </label>
+          <label>
+            <span>{{ t('files.actors.detailJapaneseName') }}</span>
+            <input v-model="form.jp_name" type="text" />
+          </label>
+          <label>
+            <span>{{ t('files.actors.detailZhCnName') }}</span>
+            <input v-model="form.zh_cn_name" type="text" />
+          </label>
+          <label>
+            <span>{{ t('files.actors.detailZhTwName') }}</span>
+            <input v-model="form.zh_tw_name" type="text" />
+          </label>
+          <label class="actor-form__overview">
+            <span>{{ t('files.actors.detailAliases') }}</span>
+            <textarea v-model="form.aliases" rows="4" />
+          </label>
+          <label>
+            <span>TMDB</span>
+            <input v-model="form.tmdb" type="text" />
+          </label>
+          <label>
+            <span>IMDB</span>
+            <input v-model="form.imdb" type="text" />
+          </label>
+          <label>
+            <span>{{ t('files.actors.detailBirthday') }}</span>
+            <input v-model="form.birthday" type="date" />
+          </label>
+          <label>
+            <span>{{ t('files.actors.detailDeathday') }}</span>
+            <input v-model="form.deathday" type="date" />
+          </label>
+          <label class="actor-form__overview">
+            <span>{{ t('files.actors.detailBirthPlace') }}</span>
+            <input v-model="form.place_of_birth" type="text" />
+          </label>
+          <label>

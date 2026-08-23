@@ -1,0 +1,151 @@
+async function handleScan() {
+  const result = await mediaStore.scanHardlinks()
+  if (result.ok) {
+    toast.success(t('hardlinks.scanSuccess', { count: result.count, entryCount: result.totalEntries }))
+  } else {
+    toast.error(result.error || t('hardlinks.scanFailed'))
+  }
+}
+
+async function refreshGroupsAfterDelete(resultPayload?: DeleteResultPayload) {
+  if (resultPayload && mediaStore.applyHardlinkDeleteResult(resultPayload)) {
+    return
+  }
+
+  const result = await mediaStore.scanHardlinks()
+  if (!result.ok) {
+    toast.error(result.error || t('hardlinks.scanFailed'))
+  }
+}
+
+function openVideoPreview(path: string) {
+  if (!path) return
+  previewVideoPath.value = path
+}
+
+function closeVideoPreview() {
+  previewVideoPath.value = ''
+}
+
+function applySummaryFilter(key: FilterKey) {
+  if (key !== 'all' && filterCounts.value[key] === 0) return
+  filterKey.value = key
+  searchQuery.value = ''
+  currentPage.value = 1
+}
+
+function isFilterDisabled(key: FilterKey) {
+  return key !== 'all' && filterCounts.value[key] === 0
+}
+
+function isDeletingHardlink(path: string) {
+  return deletingHardlinkPaths.value.has(path)
+}
+
+function isDeletingSource(path: string | null) {
+  return !!path && deletingSourcePaths.value.has(path)
+}
+
+function isDeletingGroup(code: string) {
+  return deletingGroupCodes.value.has(code)
+}
+
+function withDeletingState(setRef: typeof deletingHardlinkPaths, key: string, active: boolean) {
+  const next = new Set(setRef.value)
+  if (active) next.add(key)
+  else next.delete(key)
+  setRef.value = next
+}
+
+
+function buildDeletePreviewDetails(plannedDirs: string[], plannedFiles: string[]) {
+  return [
+    { label: `${t('hardlinks.previewDirs')} · ${plannedDirs.length}`, items: plannedDirs },
+    { label: `${t('hardlinks.previewFiles')} · ${plannedFiles.length}`, items: plannedFiles },
+  ].filter((section) => section.items.length > 0)
+}
+
+function isReorganizingSource(path?: string | null) {
+  return !!path && reorganizingSourcePaths.value.has(path)
+}
+
+async function loadMdcManualAvailability() {
+  mdcManualAvailable.value = false
+  try {
+    const pluginsResp = await api.get('/plugins')
+    const plugins = Array.isArray(pluginsResp.data)
+      ? pluginsResp.data
+      : (Array.isArray(pluginsResp.data?.items) ? pluginsResp.data.items : [])
+    const plugin = plugins.find((item: any) => item?.id === 'mdc-ng-manual')
+    if (!plugin?.enabled) return
+    const testResp = await api.post('/plugins/mdc-ng-manual/test')
+    mdcManualAvailable.value = !!testResp.data?.ok
+  } catch {
+    mdcManualAvailable.value = false
+  }
+}
+
+async function reorganizeSource(entry: HardlinkEntry) {
+  const path = entry.source_path
+  if (!path || isReorganizingSource(path)) return
+  reorganizingSourcePaths.value = new Set(reorganizingSourcePaths.value).add(path)
+  try {
+    const { data } = await api.post('/plugins/mdc-ng-manual/actions/create', {
+      payload: { source_paths: path },
+    })
+    if (!data?.ok) throw new Error(data?.message || t('hardlinks.reorganizeFailed'))
+    toast.success(data?.message || t('hardlinks.reorganizeSuccess'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.reorganizeFailed'))
+  } finally {
+    const next = new Set(reorganizingSourcePaths.value)
+    next.delete(path)
+    reorganizingSourcePaths.value = next
+  }
+}
+
+type DeleteResultPayload = {
+  deleted_dirs?: string[]
+  deleted_files?: string[]
+  missing_dirs?: string[]
+  missing_files?: string[]
+  deleted_paths?: string[]
+}
+
+function buildDeleteResultDetails(result: DeleteResultPayload) {
+  const deletedDirs = result.deleted_dirs || []
+  const deletedFiles = result.deleted_files || result.deleted_paths || []
+  const missingDirs = result.missing_dirs || []
+  const missingFiles = result.missing_files || []
+
+  return [
+    { label: `${t('hardlinks.resultDeletedDirs')} · ${deletedDirs.length}`, items: deletedDirs },
+    { label: `${t('hardlinks.resultDeletedFiles')} · ${deletedFiles.length}`, items: deletedFiles },
+    { label: `${t('hardlinks.resultSkippedDirs')} · ${missingDirs.length}`, items: missingDirs },
+    { label: `${t('hardlinks.resultSkippedFiles')} · ${missingFiles.length}`, items: missingFiles },
+  ].filter((section) => section.items.length > 0)
+}
+
+async function showDeleteResult(code: string, result: DeleteResultPayload) {
+  const deletedDirs = result.deleted_dirs || []
+  const deletedFiles = result.deleted_files || result.deleted_paths || []
+  const missingDirs = result.missing_dirs || []
+  const missingFiles = result.missing_files || []
+
+  await confirm({
+    title: t('hardlinks.resultTitle', { code }),
+    message: t('hardlinks.resultSummary', {
+      dirs: deletedDirs.length,
+      files: deletedFiles.length,
+      skipped: missingDirs.length + missingFiles.length,
+    }),
+    confirmText: t('common.close'),
+    hideCancel: true,
+    danger: false,
+    size: 'xl',
+    details: buildDeleteResultDetails(result),
+  })
+}
+
+async function deleteHardlink(path: string) {
+  if (!path || isDeletingHardlink(path)) return

@@ -1,0 +1,21 @@
+    mapping_id: str
+    target_name: str | None = None
+    target_actor_id: str | None = None
+    dry_run: bool = False
+
+
+class ActorMappingMergeBatchRequest(BaseModel):
+    target_actor_ids: dict[str, str] = {}
+    skip_conflicts: bool = True
+    dry_run: bool = False
+
+
+class ActorTmdbBackfillRequest(BaseModel):
+    actor_ids: list[str] | None = None
+    only_high_confidence: bool = True
+    dry_run: bool = False
+
+
+class ActorProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    sort_name: str | None = None

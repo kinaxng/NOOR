@@ -1,0 +1,71 @@
+      const mappingId = String(group?.mapping_id || '')
+      if (!mappingId) continue
+      mergeExecuting.value = { ...mergeExecuting.value, [mappingId]: true }
+      try {
+        const planResp = await api.get('/media-library/actors/mapping/merge-plan', {
+          params: { mapping_id: mappingId, target_actor_id: selectedMergeTargetId(group) || undefined, lang: currentLang.value },
+        })
+        const plan = planResp.data
+        mergePlans.value = { ...mergePlans.value, [mappingId]: plan }
+        if (!plan?.movie_count) {
+          emptyCount += 1
+          continue
+        }
+        const resp = await api.post('/media-library/actors/mapping/merge-execute', {
+          mapping_id: mappingId,
+          target_name: plan.target_name,
+          target_actor_id: plan.target_actor_id || selectedMergeTargetId(group) || undefined,
+          dry_run: false,
+        }, {
+          params: { lang: currentLang.value },
+        })
+        mergedCount += 1
+        updatedCount += resp.data.updated_count || 0
+        deletedActorCount += (resp.data.deleted_actor_ids || []).length
+      } catch (error: any) {
+        failures.push(`${mappingGroupName(group)}: ${error?.response?.data?.detail || error?.message || t('files.actors.mergeFailed')}`)
+      } finally {
+        mergeExecuting.value = { ...mergeExecuting.value, [mappingId]: false }
+      }
+    }
+    toast.success(t('files.actors.batchMergeSuccess', {
+      groups: mergedCount,
+      count: updatedCount,
+      deleted: deletedActorCount,
+      empty: emptyCount,
+    }))
+    if (failures.length) {
+      toast.error(t('files.actors.batchMergeFailed', { count: failures.length }) + `: ${failures.slice(0, 3).join(' / ')}`)
+    }
+    await previewMappingMatches()
+    loadActors()
+  } finally {
+    batchMerging.value = false
+  }
+}
+
+function setSort(key: SortKey, order: SortOrder) {
+  sortBy.value = key
+  sortOrder.value = order
+  page.value = 1
+  loadActors()
+}
+
+function openEmby(actor: MediaActor) {
+  if (!actor.emby_url) return
+  window.open(actor.emby_url, '_blank', 'noopener,noreferrer')
+}
+
+watch(query, () => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    page.value = 1
+    loadActors()
+  }, 260)
+})
+
+watch(page, () => {
+  loadActors()
+})
+
+watch(currentLang, () => {

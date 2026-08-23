@@ -1,0 +1,166 @@
+    *,
+    lang: str | None = None,
+) -> dict:
+    preview = await _preview_actor_tmdb_backfill(config, lang=lang)
+    allowed_ids = {str(actor_id) for actor_id in (req.actor_ids or []) if str(actor_id).strip()}
+    applied = []
+    skipped = []
+    candidates = []
+    for item in preview.get("candidates") or []:
+        actor_id = str(item.get("actor_id") or "")
+        if allowed_ids and actor_id not in allowed_ids:
+            continue
+        candidates.append(item)
+    progress_key = str(req.progress_key or "").strip()
+    if progress_key:
+        _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key] = {
+            "ok": True,
+            "status": "running",
+            "processed": 0,
+            "total": len(candidates),
+            "applied_count": 0,
+            "skipped_count": 0,
+            "current_actor": "",
+            "started_at": time.time(),
+            "updated_at": time.time(),
+        }
+    for item in candidates:
+        actor_id = str(item.get("actor_id") or "")
+        if progress_key:
+            _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key].update({
+                "current_actor": item.get("display_name") or item.get("actor_name") or actor_id,
+                "updated_at": time.time(),
+            })
+        if req.only_high_confidence and item.get("confidence") != "high":
+            skipped.append({**item, "skip_reason": "not_high_confidence"})
+        elif item.get("conflict_actors"):
+            skipped.append({**item, "skip_reason": "conflict"})
+        else:
+            if not req.dry_run:
+                provider_ids = dict((item.get("actor") or {}).get("provider_ids") or {})
+                provider_ids["Tmdb"] = str(item.get("tmdb_id") or "")
+                await _update_actor_profile(
+                    config,
+                    actor_id,
+                    ActorProfileUpdateRequest(provider_ids=provider_ids),
+                    lang=lang,
+                )
+            applied.append(item)
+        if progress_key:
+            _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key].update({
+                "processed": len(applied) + len(skipped),
+                "applied_count": len(applied),
+                "skipped_count": len(skipped),
+                "updated_at": time.time(),
+            })
+    if progress_key:
+        _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key].update({
+            "status": "completed",
+            "current_actor": "",
+            "processed": len(applied) + len(skipped),
+            "applied_count": len(applied),
+            "skipped_count": len(skipped),
+            "updated_at": time.time(),
+        })
+    return {
+        "ok": True,
+        "dry_run": req.dry_run,
+        "applied_count": len(applied),
+        "skipped_count": len(skipped),
+        "applied": applied,
+        "skipped": skipped,
+        "summary": preview.get("summary") or {},
+    }
+
+
+def _actor_group_target_name(
+    group: dict,
+    target_name: str | None = None,
+    *,
+    lang: str | None = None,
+    target_actor_id: str | None = None,
+) -> str:
+    selected_id = str(target_actor_id or "").strip()
+    if selected_id:
+        for actor in group.get("actors") or []:
+            if str(actor.get("id") or "").strip() == selected_id:
+                selected_name = str(actor.get("name") or actor.get("display_name") or "").strip()
+                if selected_name:
+                    return selected_name
+    explicit = str(target_name or "").strip()
+    if explicit:
+        return explicit
+    fallback = str(group.get("display_name") or group.get("canonical_name") or group.get("jp") or group.get("zh_cn") or "").strip()
+    return _localized_mapping_name(group, fallback, lang).strip()
+
+
+def _actor_group_source_ids(group: dict, *, target_actor_id: str | None = None) -> list[str]:
+    selected_id = str(target_actor_id or "").strip()
+    out: list[str] = []
+    for actor in group.get("actors") or []:
+        actor_id = str(actor.get("id") or "").strip()
+        if selected_id and actor_id == selected_id:
+            continue
+        if actor_id and actor_id not in out:
+            out.append(actor_id)
+    return out
+
+
+async def _find_actor_mapping_group(config: dict, mapping_id: str, *, lang: str | None = None) -> dict:
+    result = await _preview_actor_mapping_matches(config, limit=5000, only_candidates=False, lang=lang)
+    for group in result.get("groups") or []:
+        if str(group.get("mapping_id") or "") == str(mapping_id):
+            return group
+    raise HTTPException(status_code=404, detail=f"未找到映射组: {mapping_id}")
+
+
+async def _emby_get_json(client: httpx.AsyncClient, config: dict, path: str, *, params: dict | None = None) -> dict:
+    resp = await client.get(
+        f"{_server_url(config)}/emby{path}",
+        headers=_headers(config.get("api_key", "")),
+        params=params or {},
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _emby_related_movies_for_actor(client: httpx.AsyncClient, config: dict, actor_id: str, *, limit: int = 5000) -> list[dict]:
+    user_id = str(config.get("user_id") or "").strip()
+    path = f"/Users/{quote(user_id, safe='')}/Items" if user_id else "/Items"
+    data = await _emby_get_json(
+        client,
+        config,
+        path,
+        params={
+            "PersonIds": actor_id,
+            "Recursive": "true",
+            "IncludeItemTypes": "Movie",
+            "Limit": max(1, min(limit, 5000)),
+            "Fields": "Path,People,ProviderIds,ImageTags,DateCreated",
+        },
+    )
+    return [item for item in data.get("Items", []) if isinstance(item, dict)]
+
+
+async def _emby_item_for_update(client: httpx.AsyncClient, config: dict, item_id: str) -> dict:
+    user_id = str(config.get("user_id") or "").strip()
+    path = f"/Users/{quote(user_id, safe='')}/Items/{quote(str(item_id), safe='')}" if user_id else f"/Items/{quote(str(item_id), safe='')}"
+    return await _emby_get_json(
+        client,
+        config,
+        path,
+        params={
+            "Fields": (
+                "Path,People,ProviderIds,Genres,Studios,Tags,Overview,PremiereDate,SortName,"
+                "DateCreated,ImageTags,LockedFields,OriginalTitle,ProductionYear,CommunityRating,"
+                "CriticRating,OfficialRating,CustomRating,Taglines"
+            )
+        },
+    )
+
+
+async def _emby_delete_item(client: httpx.AsyncClient, config: dict, item_id: str) -> None:
+    safe_id = quote(str(item_id), safe="")
+    user_id = str(config.get("user_id") or "").strip()
+    headers = _headers(config.get("api_key", ""))
+    attempts = [

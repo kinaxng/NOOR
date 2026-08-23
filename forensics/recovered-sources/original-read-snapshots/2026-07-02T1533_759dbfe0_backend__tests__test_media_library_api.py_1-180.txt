@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import time
+import pytest
+from fastapi import HTTPException
+from starlette.requests import Request
+
+from app.api.endpoints import media_library
+from app.api.endpoints import media_library_item_detail as media_item_detail
+
+
+class FakeResponse:
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f'HTTP {self.status_code}')
+
+
+class FakeAsyncClient:
+    def __init__(self, responder, *args, **kwargs):
+        self._responder = responder
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, url, headers=None, params=None):
+        return self._responder('GET', url, headers or {}, params or {}, None)
+
+    async def post(self, url, headers=None, params=None, json=None, content=None):
+        return self._responder('POST', url, headers or {}, params or {}, content if content is not None else json)
+
+    async def put(self, url, headers=None, params=None, content=None):
+        return self._responder('PUT', url, headers or {}, params or {}, content)
+
+    async def delete(self, url, headers=None, params=None):
+        return self._responder('DELETE', url, headers or {}, params or {}, None)
+
+    def build_request(self, method, url, headers=None):
+        return {'method': method, 'url': url, 'headers': headers or {}}
+
+    async def send(self, request, stream=False):
+        return self._responder(request.get('method', 'GET'), request['url'], request.get('headers', {}), {}, None)
+
+    async def aclose(self):
+        return None
+
+
+def make_request(range_header: str | None = None) -> Request:
+    headers = []
+    if range_header:
+        headers.append((b'range', range_header.encode()))
+    scope = {
+        'type': 'http',
+        'method': 'GET',
+        'path': '/api/media-library/hardlinks/preview-file',
+        'headers': headers,
+    }
+    return Request(scope)
+
+
+def test_parse_actor_mapping_xml_uses_uploaded_attribute_shape(tmp_path):
+    path = tmp_path / "actor-mapping.xml"
+    path.write_text(
+        """<actor-mapping><actor>
+<a zh_cn="水卜樱" zh_tw="水卜櫻" jp="水卜さくら" keyword="水卜櫻,水卜さくら,水トさくら,Sakura Miura" tmdb_id="2599695" verified="1"/>
+<a zh_cn="神宫寺奈绪" zh_tw="神宮寺奈緒" jp="神宮寺ナオ" keyword="神宮寺奈緒,神宮寺ナオ,Nao Jinguji" tmdb_id="2409300"/>
+</actor><actor-blacklist /></actor-mapping>""",
+        encoding="utf-8",
+    )
+
+    records, stats = media_library._parse_actor_mapping_xml(path)
+
+    assert stats == {
+        "total": 2,
+        "verified": 1,
+        "missing": {"keyword": 0, "tmdb_id": 0, "verified": 1},
+        "with_tmdb": 2,
+    }
+    assert records[0]["id"] == "2599695"
+    assert records[0]["jp"] == "水卜さくら"
+    assert "水トさくら" in records[0]["aliases"]
+    assert "Sakura Miura" in records[0]["aliases"]
+
+
+def test_actor_mapping_name_index_prefers_primary_name_over_other_alias():
+    records = [
+        {
+            "id": "3173209",
+            "jp": "広瀬みつき",
+            "zh_cn": "広瀬美希",
+            "zh_tw": "広瀬美希",
+            "names": ["広瀬みつき", "広瀬美希", "日向ゆら"],
+            "tmdb_id": "3173209",
+            "verified": True,
+        },
+        {
+            "id": "5349111",
+            "jp": "日向ゆら",
+            "zh_cn": "日向ゆら",
+            "zh_tw": "日向ゆら",
+            "names": ["日向ゆら"],
+            "tmdb_id": "5349111",
+            "verified": False,
+        },
+    ]
+
+    index = media_library._actor_mapping_name_index(records)
+    match = index[media_library._normalize_actor_key("日向ゆら")]
+
+    assert match["source"] == "primary"
+    assert match["record"]["id"] == "5349111"
+
+
+def test_parse_person_reads_provider_ids_case_insensitively():
+    person = {
+        "Id": "actor-1",
+        "Name": "柏木小夏",
+        "ProviderIds": {"tmdb": "3413916", "imdb": "nm-example"},
+    }
+
+    parsed = media_library._parse_person({"server_url": "http://server"}, person)
+
+    assert parsed["tmdb_id"] == "3413916"
+    assert parsed["imdb_id"] == "nm-example"
+
+
+def test_apply_actor_profile_override_updates_fields_and_clears_provider_id():
+    actor = {
+        "id": "actor-1",
+        "name": "白峰ミウ",
+        "sort_name": "白峰ミウ",
+        "overview": "",
+        "provider_ids": {"Tmdb": "3219331", "Imdb": "nm-old", "MetaTube": "Gfriends:old"},
+        "tmdb_id": "3219331",
+        "imdb_id": "nm-old",
+    }
+
+    result = media_library._apply_actor_profile_override(
+        actor,
+        {
+            "name": "白峰美羽",
+            "overview": "简介",
+            "provider_ids": {"Tmdb": "", "Imdb": "nm-new"},
+        },
+    )
+
+    assert result["name"] == "白峰美羽"
+    assert result["sort_name"] == "白峰ミウ"
+    assert result["overview"] == "简介"
+    assert result["provider_ids"] == {"Imdb": "nm-new", "MetaTube": "Gfriends:old"}
+    assert result["tmdb_id"] is None
+    assert result["imdb_id"] == "nm-new"
+
+
+@pytest.mark.asyncio
+async def test_list_actors_applies_profile_overrides(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'GET'
+        assert url.endswith('/emby/Persons')
+        return FakeResponse(
+            200,
+            {
+                'TotalRecordCount': 1,
+                'Items': [
+                    {
+                        'Id': 'actor-1',
+                        'Name': '白峰ミウ',
+                        'SortName': '白峰ミウ',
+                        'ProviderIds': {'Tmdb': '3219331'},
+                    }
+                ],

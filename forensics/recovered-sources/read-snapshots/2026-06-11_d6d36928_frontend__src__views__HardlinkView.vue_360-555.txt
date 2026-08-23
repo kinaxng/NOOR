@@ -1,0 +1,196 @@
+  return deletingGroupCodes.value.has(code)
+}
+
+function withDeletingState(setRef: typeof deletingHardlinkPaths, key: string, active: boolean) {
+  const next = new Set(setRef.value)
+  if (active) next.add(key)
+  else next.delete(key)
+  setRef.value = next
+}
+
+
+function buildDeletePreviewDetails(plannedDirs: string[], plannedFiles: string[]) {
+  return [
+    { label: `${t('hardlinks.previewDirs')} · ${plannedDirs.length}`, items: plannedDirs },
+    { label: `${t('hardlinks.previewFiles')} · ${plannedFiles.length}`, items: plannedFiles },
+  ].filter((section) => section.items.length > 0)
+}
+
+type DeleteResultPayload = {
+  deleted_dirs?: string[]
+  deleted_files?: string[]
+  missing_dirs?: string[]
+  missing_files?: string[]
+  deleted_paths?: string[]
+}
+
+function buildDeleteResultDetails(result: DeleteResultPayload) {
+  const deletedDirs = result.deleted_dirs || []
+  const deletedFiles = result.deleted_files || result.deleted_paths || []
+  const missingDirs = result.missing_dirs || []
+  const missingFiles = result.missing_files || []
+
+  return [
+    { label: `${t('hardlinks.resultDeletedDirs')} · ${deletedDirs.length}`, items: deletedDirs },
+    { label: `${t('hardlinks.resultDeletedFiles')} · ${deletedFiles.length}`, items: deletedFiles },
+    { label: `${t('hardlinks.resultSkippedDirs')} · ${missingDirs.length}`, items: missingDirs },
+    { label: `${t('hardlinks.resultSkippedFiles')} · ${missingFiles.length}`, items: missingFiles },
+  ].filter((section) => section.items.length > 0)
+}
+
+async function showDeleteResult(code: string, result: DeleteResultPayload) {
+  const deletedDirs = result.deleted_dirs || []
+  const deletedFiles = result.deleted_files || result.deleted_paths || []
+  const missingDirs = result.missing_dirs || []
+  const missingFiles = result.missing_files || []
+
+  await confirm({
+    title: t('hardlinks.resultTitle', { code }),
+    message: t('hardlinks.resultSummary', {
+      dirs: deletedDirs.length,
+      files: deletedFiles.length,
+      skipped: missingDirs.length + missingFiles.length,
+    }),
+    confirmText: t('common.close'),
+    hideCancel: true,
+    danger: false,
+    size: 'xl',
+    details: buildDeleteResultDetails(result),
+  })
+}
+
+async function deleteHardlink(path: string) {
+  if (!path || isDeletingHardlink(path)) return
+  const preview = await api.post('/media-library/hardlinks/delete-hardlink', {
+    file_path: path,
+    remove_nfo: true,
+    dry_run: true,
+  })
+  const plannedFiles: string[] = preview.data?.planned_files || []
+  const ok = await confirm({
+    title: t('hardlinks.previewTitle', { code: path.split('/').pop() || path }),
+    message: t('hardlinks.previewSummary', { dirs: 0, files: plannedFiles.length }),
+    confirmText: t('common.delete'),
+    danger: true,
+    size: 'lg',
+    note: previewDeleteNote.value,
+    details: buildDeletePreviewDetails([], plannedFiles),
+  })
+  if (!ok) return
+
+  withDeletingState(deletingHardlinkPaths, path, true)
+  try {
+    const resp = await api.post('/media-library/hardlinks/delete-hardlink', {
+      file_path: path,
+      remove_nfo: true,
+    })
+    toast.success(t('hardlinks.deleteHardlinkSuccess'))
+    await showDeleteResult(path.split('/').pop() || path, resp.data || {})
+    await refreshGroupsAfterDelete(resp.data || {})
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteHardlinkFailed'))
+  } finally {
+    withDeletingState(deletingHardlinkPaths, path, false)
+  }
+}
+
+async function deleteSourceChain(entry: HardlinkEntry) {
+  if (!entry.source_path || isDeletingSource(entry.source_path)) return
+  const preview = await api.post('/media-library/hardlinks/delete-source-chain', {
+    source_path: entry.source_path,
+    hardlink_paths: entry.hardlink_paths,
+    code: extractCodeFromEntry(entry),
+    dry_run: true,
+  })
+  const plannedDirs: string[] = preview.data?.planned_dirs || []
+  const plannedFiles: string[] = preview.data?.planned_files || []
+  const ok = await confirm({
+    title: t('hardlinks.previewTitle', { code: extractCodeFromEntry(entry) || (entry.source_path.split('/').pop() || '') }),
+    message: t('hardlinks.previewSummary', { dirs: plannedDirs.length, files: plannedFiles.length }),
+    confirmText: t('common.delete'),
+    danger: true,
+    size: 'xl',
+    note: previewDeleteNote.value,
+    details: buildDeletePreviewDetails(plannedDirs, plannedFiles),
+  })
+  if (!ok) return
+
+  withDeletingState(deletingSourcePaths, entry.source_path, true)
+  try {
+    const resp = await api.post('/media-library/hardlinks/delete-source-chain', {
+      source_path: entry.source_path,
+      hardlink_paths: entry.hardlink_paths,
+      code: extractCodeFromEntry(entry),
+    })
+    toast.success(t('hardlinks.deleteSourceChainSuccess'))
+    await showDeleteResult(extractCodeFromEntry(entry) || (entry.source_path.split('/').pop() || ''), resp.data || {})
+    await refreshGroupsAfterDelete(resp.data || {})
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteSourceChainFailed'))
+  } finally {
+    withDeletingState(deletingSourcePaths, entry.source_path, false)
+  }
+}
+
+function extractCodeFromEntry(entry: HardlinkEntry): string | null {
+  if (!entry.source_path) return null
+  const base = entry.source_path.split('/').pop() || ''
+  const match = base.match(/[A-Za-z]{2,6}[-_ ]?\d{2,6}|\d{6}-\d{3}/)
+  return match ? match[0].replace(/[_ ]/g, '-').toUpperCase() : null
+}
+
+async function deleteGroup(group: HardlinkGroup) {
+  if (!group.code || isDeletingGroup(group.code)) return
+  const preview = await api.post('/media-library/hardlinks/delete-group', {
+    code: group.code,
+    entries: group.entries.map((entry) => ({
+      source_path: entry.source_path,
+      hardlink_paths: entry.hardlink_paths,
+    })),
+    dry_run: true,
+  })
+  const plannedDirs: string[] = preview.data?.planned_dirs || []
+  const plannedFiles: string[] = preview.data?.planned_files || []
+  const ok = await confirm({
+    title: t('hardlinks.previewTitle', { code: group.code }),
+    message: t('hardlinks.previewSummary', { dirs: plannedDirs.length, files: plannedFiles.length }),
+    confirmText: t('common.delete'),
+    danger: true,
+    size: 'xl',
+    note: previewDeleteNote.value,
+    details: buildDeletePreviewDetails(plannedDirs, plannedFiles),
+  })
+  if (!ok) return
+
+  withDeletingState(deletingGroupCodes, group.code, true)
+  try {
+    const resp = await api.post('/media-library/hardlinks/delete-group', {
+      code: group.code,
+      entries: group.entries.map((entry) => ({
+        source_path: entry.source_path,
+        hardlink_paths: entry.hardlink_paths,
+      })),
+    })
+    toast.success(t('hardlinks.deleteGroupSuccess'))
+    await showDeleteResult(group.code, resp.data || {})
+    await refreshGroupsAfterDelete(resp.data || {})
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteGroupFailed'))
+  } finally {
+    withDeletingState(deletingGroupCodes, group.code, false)
+  }
+}
+
+async function previewGroupDelete(group: HardlinkGroup) {
+  try {
+    const resp = await api.post('/media-library/hardlinks/delete-group', {
+      code: group.code,
+      entries: group.entries.map((entry) => ({
+        source_path: entry.source_path,
+        hardlink_paths: entry.hardlink_paths,
+      })),
+      dry_run: true,
+    })
+
+    const plannedDirs: string[] = resp.data?.planned_dirs || []
+    const plannedFiles: string[] = resp.data?.planned_files || []

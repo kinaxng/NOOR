@@ -1,0 +1,41 @@
+#    - 路径映射
+```
+
+持久化约定：
+- SQLite 数据库：`./data/noor.db`
+- 插件数据 / 任务日志 / 状态文件：`./data/`
+- 设置页保存配置：`./.env`
+- 临时文件：`./data/runtime/...`
+- 缓存目录：`./data/runtime/...`
+- 模型总根：`${MODELS_DIR}` 挂载到容器内同一路径 `${MODELS_DIR}`
+- 媒体总根：`${MEDIA_ROOT}` 挂载到容器内同一路径 `${MEDIA_ROOT}`
+
+> Docker 模式升级建议通过更新镜像并重建容器完成，
+> 不建议在运行中的容器内直接执行 LADA 自升级。
+
+详细文档：[DOCKER.md](./DOCKER.md)
+
+## 页面路由
+
+| 路径 | 说明 |
+|------|------|
+| `/` | 单个媒体库海报墙，从 Emby / Jellyfin 浏览并提交任务 |
+| `/jobs` | 实时任务监控，SSE 推送日志与进度 |
+| `/history` | 历史记录，查看完成/失败任务 |
+| `/settings` | 系统设置 |
+
+## 配置 (.env)
+
+```bash
+# LADA
+LADA_CLI_PATH=python3 -m lada.cli.main
+LADA_MODEL_WEIGHTS_DIR=/path/to/lada_model_weights
+
+# Whisper
+WHISPER_MODEL_DIR=/path/to/models/huggingface
+WHISPER_CACHE_DIR=/path/to/noor/data/runtime/whisper/cache
+
+# Emby / Jellyfin
+EMBY_SERVER=http://localhost:8096
+EMBY_API_KEY=your_api_key
+EMBY_USER_ID=optional_user_id

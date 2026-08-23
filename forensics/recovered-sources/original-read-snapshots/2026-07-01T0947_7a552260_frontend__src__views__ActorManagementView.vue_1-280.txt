@@ -1,0 +1,280 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import api from '../api'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import NoorPagination from '../components/ui/Pagination.vue'
+import { useI18n } from '../composables/useI18n'
+import { useToast } from '../composables/useToast'
+import type { MediaActor, MediaActorDuplicateGroup } from '../api/types'
+
+type SortKey = 'SortName' | 'DateCreated'
+type SortOrder = 'Ascending' | 'Descending'
+
+const { t, i18nVersion } = useI18n()
+const toast = useToast()
+
+const actors = ref<MediaActor[]>([])
+const duplicateGroups = ref<MediaActorDuplicateGroup[]>([])
+const loading = ref(false)
+const duplicateLoading = ref(false)
+const mappingUploading = ref(false)
+const mappingImporting = ref(false)
+const mappingMatching = ref(false)
+const mappingFile = ref<any | null>(null)
+const mappingStatus = ref<any | null>(null)
+const mappingMatches = ref<any | null>(null)
+const showMappingMatches = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const query = ref('')
+const page = ref(1)
+const pageSize = 60
+const total = ref(0)
+const sortBy = ref<SortKey>('SortName')
+const sortOrder = ref<SortOrder>('Ascending')
+const showDuplicates = ref(false)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const resultLabel = computed(() => {
+  void i18nVersion.value
+  return t('files.actors.resultCount', { count: total.value })
+})
+
+let searchTimer: number | null = null
+
+function actorInitial(name: string) {
+  return (name || '?').trim().slice(0, 1).toUpperCase()
+}
+
+async function loadActors() {
+  loading.value = true
+  try {
+    const resp = await api.get('/media-library/actors', {
+      params: {
+        limit: pageSize,
+        offset: (page.value - 1) * pageSize,
+        q: query.value.trim() || undefined,
+        sort_by: sortBy.value,
+        sort_order: sortOrder.value,
+      },
+    })
+    actors.value = resp.data.actors || []
+    total.value = resp.data.total || 0
+  } catch (error: any) {
+    actors.value = []
+    total.value = 0
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.loadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadDuplicates() {
+  duplicateLoading.value = true
+  try {
+    const resp = await api.get('/media-library/actors/duplicates')
+    duplicateGroups.value = resp.data.groups || []
+    showDuplicates.value = true
+  } catch (error: any) {
+    duplicateGroups.value = []
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.duplicatesFailed'))
+  } finally {
+    duplicateLoading.value = false
+  }
+}
+
+async function loadLatestMappingUpload() {
+  try {
+    const resp = await api.get('/media-library/actors/mapping/latest-upload')
+    mappingFile.value = resp.data.uploaded ? resp.data.file : null
+  } catch {
+    mappingFile.value = null
+  }
+}
+
+async function loadMappingStatus() {
+  try {
+    const resp = await api.get('/media-library/actors/mapping/status')
+    mappingStatus.value = resp.data.imported ? resp.data : null
+  } catch {
+    mappingStatus.value = null
+  }
+}
+
+function openMappingPicker() {
+  fileInput.value?.click()
+}
+
+async function uploadMappingFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const form = new FormData()
+  form.append('file', file)
+  mappingUploading.value = true
+  try {
+    const resp = await api.post('/media-library/actors/mapping/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    mappingFile.value = resp.data.file || null
+    await loadMappingStatus()
+    toast.success(t('files.actors.mappingUploadSuccess'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingUploadFailed'))
+  } finally {
+    mappingUploading.value = false
+  }
+}
+
+async function importLatestMapping() {
+  mappingImporting.value = true
+  try {
+    const resp = await api.post('/media-library/actors/mapping/import-latest')
+    mappingStatus.value = { imported: true, ...(resp.data.mapping || {}) }
+    toast.success(t('files.actors.mappingImportSuccess'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingImportFailed'))
+  } finally {
+    mappingImporting.value = false
+  }
+}
+
+async function previewMappingMatches() {
+  mappingMatching.value = true
+  try {
+    const resp = await api.get('/media-library/actors/mapping/matches', {
+      params: { only_candidates: true },
+    })
+    mappingMatches.value = resp.data || null
+    showMappingMatches.value = true
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingMatchFailed'))
+  } finally {
+    mappingMatching.value = false
+  }
+}
+
+function setSort(key: SortKey, order: SortOrder) {
+  sortBy.value = key
+  sortOrder.value = order
+  page.value = 1
+  loadActors()
+}
+
+function openEmby(actor: MediaActor) {
+  if (!actor.emby_url) return
+  window.open(actor.emby_url, '_blank', 'noopener,noreferrer')
+}
+
+watch(query, () => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    page.value = 1
+    loadActors()
+  }, 260)
+})
+
+watch(page, () => {
+  loadActors()
+})
+
+onMounted(() => {
+  loadActors()
+  loadLatestMappingUpload()
+  loadMappingStatus()
+})
+</script>
+
+<template>
+  <div class="actor-management">
+    <div class="page-header">
+      <div class="page-header__left">
+        <div>
+          <h1 class="page-title">{{ t('files.actors.title') }}</h1>
+          <div class="page-meta">
+            <span>{{ resultLabel }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="actor-actions">
+        <div class="actor-search">
+          <BaseIcon name="search" class="actor-search__icon" />
+          <input v-model="query" type="search" :placeholder="t('files.actors.searchPlaceholder')" class="actor-search__input" />
+        </div>
+        <VuiButton variant="outlined" color="secondary" size="small" :disabled="duplicateLoading" @click="loadDuplicates">
+          <BaseIcon name="user" class="w-4 h-4" />
+          {{ t('files.actors.detectDuplicates') }}
+        </VuiButton>
+        <VuiButton variant="outlined" color="secondary" size="small" :disabled="mappingUploading" @click="openMappingPicker">
+          <BaseIcon name="upload" class="w-4 h-4" />
+          {{ t('files.actors.importMapping') }}
+        </VuiButton>
+        <input ref="fileInput" type="file" accept=".xml,text/xml,application/xml" class="actor-file-input" @change="uploadMappingFile" />
+      </div>
+    </div>
+
+    <section v-if="mappingFile" class="mapping-panel ui-card">
+      <div class="mapping-panel__head">
+        <div>
+          <h2>{{ t('files.actors.mappingTitle') }}</h2>
+          <span>{{ mappingFile.filename }} · {{ mappingFile.format }} · {{ mappingFile.size }} bytes</span>
+        </div>
+        <VuiButton variant="gradient" color="info" size="small" :disabled="mappingImporting" @click="importLatestMapping">
+          <BaseIcon name="check" class="w-4 h-4" />
+          {{ t('files.actors.importLatestMapping') }}
+        </VuiButton>
+        <VuiButton v-if="mappingStatus" variant="outlined" color="secondary" size="small" :disabled="mappingMatching" @click="previewMappingMatches">
+          <BaseIcon name="search" class="w-4 h-4" />
+          {{ t('files.actors.previewMappingMatches') }}
+        </VuiButton>
+      </div>
+      <div class="mapping-grid">
+        <div class="mapping-kv">
+          <span>{{ t('files.actors.mappingFilename') }}</span>
+          <strong>{{ mappingFile.filename || '-' }}</strong>
+        </div>
+        <div class="mapping-kv">
+          <span>{{ t('files.actors.mappingSize') }}</span>
+          <strong>{{ mappingFile.size || 0 }} bytes</strong>
+        </div>
+        <div class="mapping-kv mapping-kv--wide">
+          <span>{{ t('files.actors.mappingUploadedAt') }}</span>
+          <strong>{{ mappingFile.uploaded_at || '-' }}</strong>
+        </div>
+      </div>
+      <div class="mapping-block">
+        <span class="mapping-block__label">{{ t('files.actors.mappingSavedPath') }}</span>
+        <pre>{{ mappingFile.saved_path }}</pre>
+      </div>
+      <div v-if="mappingStatus" class="mapping-stats">
+        <span>{{ t('files.actors.mappingImportedTotal') }} <strong>{{ mappingStatus.stats?.total || 0 }}</strong></span>
+        <span>TMDB <strong>{{ mappingStatus.stats?.with_tmdb || 0 }}</strong></span>
+        <span>Verified <strong>{{ mappingStatus.stats?.verified || 0 }}</strong></span>
+      </div>
+    </section>
+
+    <section v-if="showMappingMatches && mappingMatches" class="duplicate-panel ui-card">
+      <div class="duplicate-panel__head">
+        <div>
+          <h2>{{ t('files.actors.mappingMatchesTitle') }}</h2>
+          <span>
+            {{ t('files.actors.mappingMatchesSummary', {
+              candidates: mappingMatches.candidate_groups || 0,
+              matched: mappingMatches.matched_actors || 0,
+              unmatched: mappingMatches.unmatched_actors || 0,
+            }) }}
+          </span>
+        </div>
+        <button type="button" class="duplicate-panel__close" @click="showMappingMatches = false">
+          <BaseIcon name="close" />
+        </button>
+      </div>
+
+      <div v-if="mappingMatches.groups?.length" class="duplicate-groups">
+        <article v-for="group in mappingMatches.groups" :key="group.mapping_id" class="duplicate-group">
+          <div class="duplicate-group__title">
+            <strong>{{ group.zh_cn || group.jp || group.canonical_name }}</strong>
+            <span>{{ group.count }}</span>
+          </div>
+          <div class="mapping-alias-line">

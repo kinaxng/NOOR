@@ -1,0 +1,280 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import api from '../api'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import MediaCard from '../components/noor/MediaCard.vue'
+import BaseModal from '../components/ui/BaseModal.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import NoorPagination from '../components/ui/Pagination.vue'
+import { useI18n } from '../composables/useI18n'
+import { useConfirm } from '../composables/useConfirm'
+import { useToast } from '../composables/useToast'
+import type { MediaActor, MediaItem } from '../api/types'
+
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t, currentLang } = useI18n()
+
+const actor = ref<MediaActor | null>(null)
+const movies = ref<MediaItem[]>([])
+const loading = ref(false)
+const saving = ref(false)
+const editMode = ref(false)
+const deleting = ref(false)
+const uploadingAvatar = ref(false)
+const avatarModalOpen = ref(false)
+const avatarCandidatesLoading = ref(false)
+const avatarCandidates = ref<any[]>([])
+const moviesLoading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const page = ref(1)
+const pageSize = 48
+const total = ref(0)
+const form = ref({
+  name: '',
+  sort_name: '',
+  overview: '',
+  tmdb: '',
+  imdb: '',
+})
+
+const actorId = computed(() => String(route.params.actorId || ''))
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const displayName = computed(() => actor.value?.display_name || actor.value?.name || '')
+const mediaServerName = computed(() => actor.value?.media_server?.name || 'Emby / Jellyfin')
+const tmdbUrl = computed(() => actor.value?.tmdb_id ? `https://www.themoviedb.org/person/${encodeURIComponent(actor.value.tmdb_id)}` : '')
+const imdbUrl = computed(() => actor.value?.imdb_id ? `https://www.imdb.com/name/${encodeURIComponent(actor.value.imdb_id)}/` : '')
+const actorAliases = computed(() => {
+  const names = [
+    actor.value?.display_name,
+    actor.value?.name,
+    form.value.name,
+    form.value.sort_name,
+  ].filter(Boolean) as string[]
+  return Array.from(new Set(names.filter(name => name !== displayName.value)))
+})
+
+function actorInitial(name: string) {
+  return (name || '?').trim().slice(0, 1).toUpperCase()
+}
+
+function syncForm(nextActor: MediaActor | null) {
+  form.value = {
+    name: nextActor?.name || '',
+    sort_name: nextActor?.sort_name || nextActor?.name || '',
+    overview: nextActor?.overview || '',
+    tmdb: nextActor?.tmdb_id || '',
+    imdb: nextActor?.imdb_id || '',
+  }
+}
+
+async function loadActor() {
+  if (!actorId.value) return
+  loading.value = true
+  try {
+    const resp = await api.get(`/media-library/actor/${encodeURIComponent(actorId.value)}`, {
+      params: { lang: currentLang.value },
+    })
+    actor.value = resp.data.actor || null
+    syncForm(actor.value)
+    editMode.value = false
+  } catch (error: any) {
+    actor.value = null
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.detailLoadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadMovies() {
+  if (!actorId.value) return
+  moviesLoading.value = true
+  try {
+    const resp = await api.get(`/media-library/actor/${encodeURIComponent(actorId.value)}/movies`, {
+      params: { limit: pageSize, offset: (page.value - 1) * pageSize },
+    })
+    movies.value = resp.data.items || []
+    total.value = resp.data.total || 0
+  } catch (error: any) {
+    movies.value = []
+    total.value = 0
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.moviesLoadFailed'))
+  } finally {
+    moviesLoading.value = false
+  }
+}
+
+async function saveActor() {
+  if (!actorId.value) return
+  if (!editMode.value) {
+    editMode.value = true
+    return
+  }
+  saving.value = true
+  try {
+    const providerIds: Record<string, string> = {
+      Tmdb: form.value.tmdb.trim(),
+      Imdb: form.value.imdb.trim(),
+    }
+    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}`, {
+      name: form.value.name.trim(),
+      sort_name: form.value.sort_name.trim(),
+      overview: form.value.overview,
+      provider_ids: providerIds,
+    }, {
+      params: { lang: currentLang.value },
+    })
+    actor.value = resp.data.actor || actor.value
+    syncForm(actor.value)
+    editMode.value = false
+    toast.success(resp.data.synced ? t('files.actors.detailSaveSuccess') : t('files.actors.detailSaveLocalOnly'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.detailSaveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function cancelEdit() {
+  syncForm(actor.value)
+  editMode.value = false
+}
+
+function openMovie(item: MediaItem) {
+  router.push({ path: '/library', query: { q: item.name } })
+}
+
+function openExternal(url?: string) {
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+async function deleteActor() {
+  if (!actorId.value || deleting.value) return
+  const ok = await confirm({
+    title: t('files.actors.deleteTitle'),
+    message: t('files.actors.deleteConfirm', { name: displayName.value || actorId.value }),
+    confirmText: t('common.delete'),
+    danger: true,
+  })
+  if (!ok) return
+  deleting.value = true
+  try {
+    await api.delete(`/media-library/actor/${encodeURIComponent(actorId.value)}`)
+    toast.success(t('files.actors.deleteSuccess'))
+    router.push('/files/actors')
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.deleteFailed'))
+  } finally {
+    deleting.value = false
+  }
+}
+
+function chooseAvatarFile() {
+  fileInput.value?.click()
+}
+
+async function uploadAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !actorId.value) return
+  uploadingAvatar.value = true
+  try {
+    const data = new FormData()
+    data.append('file', file)
+    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/avatar`, data, {
+      params: { lang: currentLang.value },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    actor.value = resp.data.actor || actor.value
+    toast.success(t('files.actors.avatarUpdated'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.avatarUpdateFailed'))
+  } finally {
+    uploadingAvatar.value = false
+    input.value = ''
+  }
+}
+
+async function openAvatarPicker() {
+  avatarModalOpen.value = true
+  avatarCandidates.value = []
+  avatarCandidatesLoading.value = true
+  try {
+    const resp = await api.post('/plugins/gfriends/actions/candidates', {
+      payload: {
+        name: displayName.value || form.value.name,
+        aliases: actorAliases.value,
+        limit: 36,
+      },
+    })
+    avatarCandidates.value = resp.data.items || []
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.avatarCandidatesFailed'))
+  } finally {
+    avatarCandidatesLoading.value = false
+  }
+}
+
+async function selectAvatar(candidate: any) {
+  const url = candidate?.remote_url || candidate?.url
+  if (!url || !actorId.value) return
+  uploadingAvatar.value = true
+  try {
+    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/avatar-url`, {
+      url,
+    }, {
+      params: { lang: currentLang.value },
+    })
+    actor.value = resp.data.actor || actor.value
+    avatarModalOpen.value = false
+    toast.success(t('files.actors.avatarUpdated'))
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.avatarUpdateFailed'))
+  } finally {
+    uploadingAvatar.value = false
+  }
+}
+
+watch(page, loadMovies)
+watch(currentLang, loadActor)
+watch(actorId, () => {
+  page.value = 1
+  loadActor()
+  loadMovies()
+})
+
+onMounted(() => {
+  loadActor()
+  loadMovies()
+})
+</script>
+
+<template>
+  <div class="actor-detail">
+    <div class="actor-detail__topbar">
+      <VuiButton variant="outlined" color="secondary" size="small" @click="router.push('/files/actors')">
+        {{ t('common.back') }}
+      </VuiButton>
+    </div>
+
+    <section class="actor-profile ui-card">
+      <div class="actor-profile__avatar">
+        <img v-if="actor?.image_url" :src="actor.image_url" :alt="displayName" />
+        <span v-else>{{ actorInitial(displayName) }}</span>
+        <div v-if="editMode" class="actor-profile__avatar-actions">
+          <VuiButton variant="gradient" color="primary" size="small" :disabled="uploadingAvatar" customClass="actor-action-button" @click="chooseAvatarFile">
+            {{ t('files.actors.uploadAvatar') }}
+          </VuiButton>
+          <VuiButton variant="outlined" color="secondary" size="small" :disabled="uploadingAvatar" customClass="actor-action-button" @click="openAvatarPicker">
+            Gfriends
+          </VuiButton>
+          <input ref="fileInput" class="actor-profile__file" type="file" accept="image/*" @change="uploadAvatar" />
+        </div>
+      </div>
+
+      <div v-if="loading" class="actor-profile__loading">
+        <BaseIcon name="loading" class="w-5 h-5" />

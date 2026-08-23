@@ -1,0 +1,81 @@
+            return os.path.commonpath(hardlink_parents)
+        except Exception:
+            return hardlink_parents[0]
+
+    source_dir = env_source_dir()
+    if source_dir:
+        return source_dir
+    return ''
+
+def map_path(server_path: str, config: dict) -> str:
+    if not server_path:
+        return server_path
+    prefix = config.get('path_prefix', '/data/media')
+    local_root = (config.get('local_path_prefix') or '').strip() or local_media_root(config)
+    if local_root and server_path.startswith(prefix):
+        return server_path.replace(prefix, local_root, 1)
+    return server_path
+
+
+def parse_tags(name: str, studios: list, file_path: str | None) -> dict:
+    base = name.rsplit('.', 1)[0] if '.' in name else name
+    lower = base.lower()
+    fp_lower = (file_path or '').lower()
+    fp_base = ''
+    fp_name = ''
+    if file_path:
+        fp_name = os.path.splitext(os.path.basename(file_path))[0].lower()
+        fp_dir = os.path.basename(os.path.dirname(file_path)).lower()
+        fp_base = fp_name + ' ' + fp_dir
+    has_chinese = bool(
+        re.search(r'[-_]c(\d*)[-_\.]', lower) or '中文字幕' in base or 'chinese' in lower
+        or '中文字幕' in fp_lower
+        or ((fp_name.endswith('-c') or fp_name.endswith('-c1') or fp_name.endswith('-c2')) if file_path else False)
+    )
+    is_cracked = bool(
+        re.search(r'[-_]u\d*[-_\.]', lower) or '破解' in base or 'uncensored' in lower
+        or '破解' in fp_lower or '破解' in fp_base
+        or ((fp_name.endswith('-u') or fp_name.endswith('-u1')) if file_path else False)
+    )
+    is_leaked = bool('流出' in base or 'leaked' in lower or '流出' in fp_lower)
+    has_facefusion = bool(
+        re.search(r'(^|[^a-z0-9])(facefusion|ff)(?=[^a-z0-9]|$)', lower)
+        or re.search(r'(^|[^a-z0-9])(facefusion|ff)(?=[^a-z0-9]|$)', fp_lower)
+    )
+    has_uncensored_studio = any(s.lower() in UNCENSORED_STUDIOS or any(k in s.lower() for k in UNCENSORED_STUDIOS) for s in studios)
+    has_uncensored_path = any(k in (file_path or '').lower() for k in UNCENSORED_PATH_KEYWORDS)
+    if (has_uncensored_studio or has_uncensored_path) and not is_leaked and not is_cracked:
+        release_type = '无码'
+        release_type_key = 'uncensored'
+    elif is_leaked:
+        release_type = '流出'
+        release_type_key = 'leaked'
+    elif '無碼' in base or '无码' in base:
+        release_type = '无码'
+        release_type_key = 'uncensored'
+    else:
+        release_type = None
+        release_type_key = None
+    return {
+        'is_uncensored': is_cracked,
+        'is_cracked': is_cracked,
+        'has_chinese': has_chinese,
+        'has_facefusion': has_facefusion,
+        'is_leaked': is_leaked,
+        'release_type': release_type,
+        'release_type_key': release_type_key,
+    }
+
+
+def parse_item(item: dict, config: dict) -> dict:
+    poster_url = None
+    for img_type in ['Primary', 'Thumb', 'Backdrop']:
+        tag = item.get('ImageTags', {}).get(img_type)
+        if tag:
+            poster_url = f"{server_url(config)}/emby/Items/{item['Id']}/Images/{img_type}?tag={tag}"
+            break
+
+    fanart_url = None
+    backdrop_tags = item.get('BackdropImageTags', [])
+    if backdrop_tags:
+        fanart_url = f"{server_url(config)}/emby/Items/{item['Id']}/Images/Backdrop?tag={backdrop_tags[0]}"

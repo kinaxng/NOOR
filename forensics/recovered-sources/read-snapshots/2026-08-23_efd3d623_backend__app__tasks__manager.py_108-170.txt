@@ -1,0 +1,63 @@
+    async def get_logs(self, job_id: str) -> list[str]:
+        return read_log_lines(job_id)
+
+    async def delete_job(self, job_id: str) -> bool:
+        async with async_session_maker() as session:
+            job = await session.get(Job, job_id)
+            if not job:
+                return False
+            if job.status in {'queued', 'running', 'blocked'}:
+                return False
+            await session.delete(job)
+            await session.commit()
+        try:
+            Path(log_file_path(job_id)).unlink(missing_ok=True)
+        except OSError:
+            pass
+        return True
+
+    async def cancel_job(self, job_id: str) -> JobResponse | None:
+        self._cancel_events.setdefault(job_id, asyncio.Event()).set()
+        async with async_session_maker() as session:
+            job = await session.get(Job, job_id)
+            if not job:
+                return None
+            if job.status not in {'completed', 'failed', 'cancelled', 'skipped'}:
+                job.status = 'cancelled'
+                job.completed_at = utcnow_naive()
+                job.detail = '任务已取消'
+                await session.commit()
+                await session.refresh(job)
+            response = self._response(job)
+        await self._log(job_id, '任务已取消')
+        await self._emit(job_id, 'cancelled', success=False, progress=response.progress, detail=response.detail)
+        return response
+
+    async def cleanup_orphaned_jobs(self) -> int:
+        count = 0
+        async with async_session_maker() as session:
+            result = await session.execute(select(Job).where(Job.status == 'running'))
+            for job in result.scalars():
+                job.status = 'failed'
+                job.error_message = '后端异常退出，任务已停止'
+                job.completed_at = utcnow_naive()
+                count += 1
+            await session.commit()
+        return count
+
+    async def recover_queued_jobs(self) -> None:
+        await self.cleanup_orphaned_jobs()
+        async with async_session_maker() as session:
+            result = await session.execute(select(Job.id).where(Job.status == 'queued'))
+            queued = list(result.scalars())
+        for job_id in queued:
+            await self.queue.put(job_id)
+        if queued:
+            self._ensure_worker()
+
+    async def _set_state(self, job_id: str, *, status: str | None = None, progress: int | None = None, detail: str | None = None, error: str | None = None, output_path: str | None = None, result_metadata: dict | None = None, phase_key: str | None = None, phase_label: str | None = None, phase_progress: int | None = None) -> Job | None:
+        async with async_session_maker() as session:
+            job = await session.get(Job, job_id)
+            if not job:
+                return None
+            if status is not None:

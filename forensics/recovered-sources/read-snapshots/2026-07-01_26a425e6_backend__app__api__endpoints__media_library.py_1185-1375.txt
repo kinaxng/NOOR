@@ -1,0 +1,191 @@
+
+
+def _actor_group_source_ids(group: dict, *, target_actor_id: str | None = None) -> list[str]:
+    selected_id = str(target_actor_id or "").strip()
+    out: list[str] = []
+    for actor in group.get("actors") or []:
+        actor_id = str(actor.get("id") or "").strip()
+        if selected_id and actor_id == selected_id:
+            continue
+        if actor_id and actor_id not in out:
+            out.append(actor_id)
+    return out
+
+
+async def _find_actor_mapping_group(config: dict, mapping_id: str, *, lang: str | None = None) -> dict:
+    result = await _preview_actor_mapping_matches(config, limit=5000, only_candidates=False, lang=lang)
+    for group in result.get("groups") or []:
+        if str(group.get("mapping_id") or "") == str(mapping_id):
+            return group
+    raise HTTPException(status_code=404, detail=f"未找到映射组: {mapping_id}")
+
+
+async def _emby_get_json(client: httpx.AsyncClient, config: dict, path: str, *, params: dict | None = None) -> dict:
+    resp = await client.get(
+        f"{_server_url(config)}/emby{path}",
+        headers=_headers(config.get("api_key", "")),
+        params=params or {},
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _emby_related_movies_for_actor(client: httpx.AsyncClient, config: dict, actor_id: str, *, limit: int = 5000) -> list[dict]:
+    user_id = str(config.get("user_id") or "").strip()
+    path = f"/Users/{quote(user_id, safe='')}/Items" if user_id else "/Items"
+    data = await _emby_get_json(
+        client,
+        config,
+        path,
+        params={
+            "PersonIds": actor_id,
+            "Recursive": "true",
+            "IncludeItemTypes": "Movie",
+            "Limit": max(1, min(limit, 5000)),
+            "Fields": "Path,People,ProviderIds,ImageTags,DateCreated",
+        },
+    )
+    return [item for item in data.get("Items", []) if isinstance(item, dict)]
+
+
+async def _emby_item_for_update(client: httpx.AsyncClient, config: dict, item_id: str) -> dict:
+    user_id = str(config.get("user_id") or "").strip()
+    path = f"/Users/{quote(user_id, safe='')}/Items/{quote(str(item_id), safe='')}" if user_id else f"/Items/{quote(str(item_id), safe='')}"
+    return await _emby_get_json(
+        client,
+        config,
+        path,
+        params={
+            "Fields": (
+                "Path,People,ProviderIds,Genres,Studios,Tags,Overview,PremiereDate,SortName,"
+                "DateCreated,ImageTags,LockedFields,OriginalTitle,ProductionYear,CommunityRating,"
+                "CriticRating,OfficialRating,CustomRating,Taglines"
+            )
+        },
+    )
+
+
+def _actor_merge_apply_people(item: dict, *, source_actor_ids: set[str], target_name: str) -> tuple[dict, list[dict]]:
+    people = item.get("People") if isinstance(item.get("People"), list) else []
+    has_existing_target = any(
+        isinstance(person, dict)
+        and str(person.get("Type") or "") == "Actor"
+        and str(person.get("Name") or "") == target_name
+        and str(person.get("Id") or "") not in source_actor_ids
+        for person in people
+    )
+    next_people: list[dict] = []
+    changed_people: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for person in people:
+        if not isinstance(person, dict):
+            continue
+        next_person = dict(person)
+        person_type = str(next_person.get("Type") or "")
+        person_id = str(next_person.get("Id") or "")
+        if person_type == "Actor" and person_id in source_actor_ids:
+            changed_people.append({
+                "id": person_id,
+                "name": next_person.get("Name") or "",
+                "type": person_type,
+                "primary_image_tag": next_person.get("PrimaryImageTag"),
+            })
+            if has_existing_target:
+                continue
+            next_person["Name"] = target_name
+            next_person["Type"] = "Actor"
+            next_person.pop("Id", None)
+            next_person.pop("PrimaryImageTag", None)
+        dedupe_key = (str(next_person.get("Type") or ""), str(next_person.get("Name") or ""))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        next_people.append(next_person)
+    next_item = dict(item)
+    next_item["People"] = next_people
+    return next_item, changed_people
+
+
+def _actor_merge_remove_source_people(item: dict, *, source_actor_ids: set[str]) -> tuple[dict, list[dict]]:
+    people = item.get("People") if isinstance(item.get("People"), list) else []
+    next_people: list[dict] = []
+    removed: list[dict] = []
+    for person in people:
+        if (
+            isinstance(person, dict)
+            and str(person.get("Type") or "") == "Actor"
+            and str(person.get("Id") or "") in source_actor_ids
+        ):
+            removed.append({
+                "id": person.get("Id"),
+                "name": person.get("Name") or "",
+                "type": person.get("Type") or "",
+                "primary_image_tag": person.get("PrimaryImageTag"),
+            })
+            continue
+        next_people.append(person)
+    next_item = dict(item)
+    next_item["People"] = next_people
+    return next_item, removed
+
+
+async def _build_actor_mapping_merge_plan(
+    config: dict,
+    mapping_id: str,
+    *,
+    target_name: str | None = None,
+    target_actor_id: str | None = None,
+    lang: str | None = None,
+) -> dict:
+    group = await _find_actor_mapping_group(config, mapping_id, lang=lang)
+    target = _actor_group_target_name(group, target_name, lang=lang, target_actor_id=target_actor_id)
+    if not target:
+        raise HTTPException(status_code=400, detail="无法确定目标演员名")
+    source_ids = _actor_group_source_ids(group, target_actor_id=target_actor_id)
+    if target_actor_id:
+        if len(source_ids) < 1:
+            raise HTTPException(status_code=400, detail="当前映射组没有需要合并到目标的演员")
+    elif len(source_ids) < 2:
+        raise HTTPException(status_code=400, detail="当前映射组不足两位演员，无需合并")
+
+    movies_by_id: dict[str, dict] = {}
+    source_counts: dict[str, int] = {}
+    async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+        for actor_id in source_ids:
+            related = await _emby_related_movies_for_actor(client, config, actor_id)
+            source_counts[actor_id] = len(related)
+            for item in related:
+                item_id = str(item.get("Id") or "")
+                if item_id and item_id not in movies_by_id:
+                    movies_by_id[item_id] = item
+
+    source_id_set = set(source_ids)
+    movies: list[dict] = []
+    for item in movies_by_id.values():
+        changed_people = []
+        for person in item.get("People") or []:
+            if isinstance(person, dict) and str(person.get("Type") or "") == "Actor" and str(person.get("Id") or "") in source_id_set:
+                changed_people.append({
+                    "id": person.get("Id"),
+                    "name": person.get("Name") or "",
+                    "type": person.get("Type") or "",
+                    "primary_image_tag": person.get("PrimaryImageTag"),
+                })
+        if changed_people:
+            movies.append({
+                "id": item.get("Id"),
+                "name": item.get("Name") or "",
+                "path": item.get("Path") or "",
+                "changed_people": changed_people,
+                "target_name": target,
+            })
+    movies.sort(key=lambda item: str(item.get("name") or ""))
+    return {
+        "mapping_id": mapping_id,
+        "target_name": target,
+        "target_actor_id": str(target_actor_id or "").strip() or None,
+        "group": group,
+        "source_actor_ids": source_ids,
+        "source_counts": source_counts,
+        "movie_count": len(movies),
+        "movies": movies,

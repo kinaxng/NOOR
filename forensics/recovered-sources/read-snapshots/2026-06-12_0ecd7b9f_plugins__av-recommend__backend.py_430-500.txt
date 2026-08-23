@@ -1,0 +1,71 @@
+                continue
+            key = _norm_key(term)
+            if key in seen:
+                continue
+            seen.add(key)
+            terms.append(term)
+            if len(terms) >= limit:
+                return terms
+    return terms
+
+
+def _profile_title_term_matches(item: Any, profile_terms: Counter, limit: int = 8) -> list[dict[str, Any]]:
+    if not profile_terms:
+        return []
+    item_terms = _title_mined_terms(item, 80)
+    matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for term in item_terms:
+        count = float(profile_terms.get(term, 0) or 0)
+        if count <= 0:
+            continue
+        key = _norm_key(term)
+        if key in seen:
+            continue
+        seen.add(key)
+        matches.append({"name": term, "count": count})
+    matches.sort(key=lambda x: (float(x.get("count") or 0), len(str(x.get("name") or ""))), reverse=True)
+    return matches[:limit]
+
+
+def _is_actor_name_term(term: str, actor_names: set[str]) -> bool:
+    normalized = _norm_key(term)
+    if not normalized:
+        return False
+    for actor in actor_names:
+        actor_key = _norm_key(actor)
+        if not actor_key:
+            continue
+        if normalized == actor_key or normalized in actor_key or actor_key in normalized:
+            return True
+    return False
+
+
+def _prune_title_term_counter(counter: Counter) -> Counter:
+    trait_labels = {str(trait.get("name") or "") for trait in TITLE_TRAIT_PATTERNS}
+    items = [(str(term), float(count)) for term, count in counter.items() if str(term).strip() and float(count or 0) > 0]
+    kept: Counter = Counter()
+    for term, count in sorted(items, key=lambda x: (len(x[0]), -x[1])):
+        if term in trait_labels:
+            continue
+        if len(term) <= 2:
+            container = next((longer for longer, longer_count in items if term != longer and term in longer and len(longer) > len(term) and longer_count >= count * 0.5), None)
+            if container:
+                continue
+        kept[term] = count
+    return kept
+
+
+def _ensure_title_profile(item: dict[str, Any]) -> dict[str, Any]:
+    profile = item.get("title_profile")
+    if isinstance(profile, dict) and int(profile.get("version") or 0) == 1:
+        return profile
+    profile = _analyze_title(item)
+    item["title_profile"] = profile
+    item["title_traits"] = _title_trait_labels(profile)
+    return profile
+
+
+def _merge_title_traits(categories: list[str], title_traits: list[str], limit: int = 16) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()

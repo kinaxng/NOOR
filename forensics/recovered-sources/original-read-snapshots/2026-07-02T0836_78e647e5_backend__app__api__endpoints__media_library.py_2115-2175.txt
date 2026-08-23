@@ -1,0 +1,61 @@
+                lang=lang,
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"生成演员合并计划失败: {exc}")
+
+
+@router.post("/actors/mapping/merge-execute")
+async def execute_actor_mapping_merge(req: ActorMappingMergeRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _execute_actor_mapping_merge(config, req, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"执行演员合并失败: {exc}")
+    if not req.dry_run:
+        _bump_sync_state()
+        SystemLogManager.get_instance().add_log(
+            "info",
+            (
+                f"[MediaLibrary] 演员合并完成: {req.mapping_id} -> {result.get('plan', {}).get('target_name')}"
+                f" · {result.get('updated_count', 0)} 部作品"
+                f" · 删除空演员 {len(result.get('deleted_actor_ids') or [])} 个"
+            ),
+            source="media_library.actors",
+        )
+    return result
+
+
+@router.get("/item/{item_id}")
+async def get_item(item_id: str):
+    """Get item details."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        raw = await _get_item(config, item_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取详情失败: {e}")
+
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"未找到媒体项目: {item_id}")
+
+    return raw
+
+
+@router.post("/items/delete-chain")
+async def delete_media_item_chain(req: MediaItemDeleteRequest):
+    config = _load_config()
+    code, delete_dirs, delete_files = await _media_item_delete_plan(req.item_id, config)
+
+    if req.dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,

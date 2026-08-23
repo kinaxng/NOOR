@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import mimetypes
+import re
+import time
+from pathlib import Path
+from typing import Any
+from urllib.parse import urljoin, urlparse
+
+import httpx
+
+from app.core.config import PROJECT_ROOT
+from app.plugins.contracts import PluginManifest, PluginTestResult
+
+PLUGIN_ID = "avdb"
+PLUGIN_CACHE_DIR = PROJECT_ROOT / "data" / "plugin_cache"
+IMAGE_CACHE_TTL_DAYS = 7
+
+
+def _base(config: dict[str, Any]) -> str:
+    return str(config.get("base_url") or "").strip().rstrip("/")
+
+
+def _headers(config: dict[str, Any]) -> dict[str, str]:
+    key = str(config.get("api_key") or "").strip()
+    headers = {"Accept": "application/json", "User-Agent": "NOOR-AVDB-Plugin/0.1"}
+    if key:
+        headers["X-API-Key"] = key
+    return headers
+
+
+def _timeout(config: dict[str, Any]) -> float:
+    try:
+        return max(3.0, min(float(config.get("timeout") or 15), 60.0))
+    except Exception:
+        return 15.0
+
+
+def _image_cache_dir() -> Path:
+    return PLUGIN_CACHE_DIR / PLUGIN_ID / "images"
+
+
+def _image_cache_id(url: str) -> str:
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+
+def _image_meta_path(image_id: str) -> Path:
+    return _image_cache_dir() / f"{image_id}.json"
+
+
+def _guess_image_ext(url: str, content_type: str) -> str:
+    ext = mimetypes.guess_extension((content_type or "").split(";")[0].strip())
+    if ext:
+        return ".jpg" if ext == ".jpe" else ext
+    suffix = Path(urlparse(url).path).suffix.lower()
+    return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp", ".gif"} else ".jpg"
+
+
+def _read_image_meta(image_id: str, ttl_days: int = IMAGE_CACHE_TTL_DAYS) -> dict[str, Any] | None:
+    path = _image_meta_path(image_id)
+    if not path.exists():
+        return None
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if time.time() - float(data.get("created_at") or 0) > ttl_days * 86400:
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def _write_image_meta(image_id: str, payload: dict[str, Any]) -> None:
+    try:
+        import json
+
+        _image_cache_dir().mkdir(parents=True, exist_ok=True)
+        path = _image_meta_path(image_id)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass
+
+
+def _cached_image_url(original_url: str, ttl_days: int = IMAGE_CACHE_TTL_DAYS) -> str:
+    if not original_url:
+        return ""
+    image_id = _image_cache_id(original_url)
+    meta = _read_image_meta(image_id, ttl_days)
+    if not meta or meta.get("failed"):
+        return ""
+    filename = str(meta.get("filename") or "")
+    if filename and (_image_cache_dir() / filename).exists():
+        return f"/api/plugins/{PLUGIN_ID}/images/{image_id}"
+    return ""
+
+
+def _image_headers(url: str) -> dict[str, str]:
+    host = urlparse(url).hostname or ""
+    headers = {
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+    }
+    # Some AVDB preview hosts require a non-empty referer / hotlink context.
+    if host.startswith("tu.") or host.endswith(".la"):
+        headers["Referer"] = "https://www.sehuatang.net/"
+    return headers
+
+
+async def _ensure_cached_image(url: str, timeout: float, ttl_days: int = IMAGE_CACHE_TTL_DAYS) -> str:
+    raw = str(url or "").strip()
+    if not raw.lower().startswith(("http://", "https://")):
+        return ""
+    cached_url = _cached_image_url(raw, ttl_days)
+    if cached_url:
+        return cached_url

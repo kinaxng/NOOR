@@ -1,0 +1,140 @@
+<script setup lang="ts">
+withDefaults(defineProps<{
+  variant?: 'text' | 'contained' | 'outlined' | 'gradient'
+  size?: 'small' | 'medium' | 'large'
+  color?: string
+  circular?: boolean
+  iconOnly?: boolean
+  disabled?: boolean
+  customClass?: string
+}>(), {
+  variant: 'contained',
+  size: 'medium',
+  color: 'white',
+  circular: false,
+  iconOnly: false,
+  disabled: false,
+})
+</script>
+
+<template>
+  <button
+    class="vui-button"
+    :class="[
+      `vui-button--${variant}`,
+      `vui-button--${size}`,
+      { 'vui-button--circular': circular },
+      { 'vui-button--icon-only': iconOnly },
+      customClass,
+    ]"
+    :disabled="disabled"
+  >
+    <slot />
+  </button>
+</template>
+
+<style scoped>
+.vui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font-family: var(--font-display);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.vui-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Sizes */
+.vui-button--small {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  border-radius: var(--radius-button);
+}
+
+.vui-button--medium {
+  padding: 0.6875rem 1.25rem;
+  font-size: 0.875rem;
+  border-radius: var(--radius-button);
+}
+
+.vui-button--large {
+  padding: 0.875rem 1.5rem;
+  font-size: 1rem;
+  border-radius: var(--radius-button);
+}
+
+/* Circular */
+.vui-button--circular {
+  border-radius: 50%;
+  padding: 0.6875rem;
+}
+
+/* Icon Only */
+.vui-button--icon-only.vui-button--small {
+  width: 1.5875rem;
+  height: 1.5875rem;
+  min-width: 1.5875rem;
+  padding: 0;
+}
+
+.vui-button--icon-only.vui-button--medium {
+  width: 2.375rem;
+  height: 2.375rem;
+  min-width: 2.375rem;
+  padding: 0;
+}
+
+.vui-button--icon-only.vui-button--large {
+  width: 3.25rem;
+  height: 3.25rem;
+  min-width: 3.25rem;
+  padding: 0;
+}
+
+/* Contained */
+.vui-button--contained {
+  background: #FFFFFF;
+  color: #344767;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.12), 0 2px 4px -1px rgba(0,0,0,0.07);
+}
+
+.vui-button--contained:hover:not(:disabled) {
+  background: #FFFFFF;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.15), 0 2px 4px -1px rgba(0,0,0,0.1);
+}
+
+.vui-button--contained:focus:not(:hover) {
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.5);
+}
+
+/* Outlined */
+.vui-button--outlined {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  color: #FFFFFF;
+}
+
+.vui-button--outlined:hover:not(:disabled) {
+  background: transparent;
+  border-color: #FFFFFF;
+}
+
+.vui-button--outlined:focus:not(:hover) {
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.4);
+}
+
+/* Gradient - Blue like Vision UI */
+.vui-button--gradient {
+  background: #0075FF;

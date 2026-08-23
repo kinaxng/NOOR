@@ -1,0 +1,80 @@
+"""Shared helpers used by the settings API.
+
+Reconstructed from preserved Python 3.13 bytecode.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import shlex
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import Optional
+
+from app.core.config import DEFAULT_LADA_MODEL_WEIGHTS_DIR, PROJECT_ROOT, get_settings
+
+
+logger = logging.getLogger(__name__)
+_version_cache: dict[str, dict] = {}
+_version_cache_lock = threading.Lock()
+_VERSION_CACHE_TTL = 3600
+LADA_MODEL_WEIGHTS_ENV = "LADA_MODEL_WEIGHTS_DIR"
+ENV_FILE = PROJECT_ROOT / ".env"
+
+WHISPER_MODELS = {
+    "chickenrice-zh": {
+        "name": "ChickenRice JA->ZH",
+        "size": "~3GB",
+        "type": "faster-whisper",
+        "repo": "chickenrice0721/whisper-large-v2-translate-zh-v0.2-st-ct2",
+        "description": "Japanese audio to Chinese subtitle CTranslate2 model",
+    },
+    "anime-whisper": {"name": "Anime-Whisper", "size": "~3GB", "type": "transformers", "repo": "litagin/anime-whisper", "description": "Optimized for anime vocals, Japanese"},
+    "large-v3": {"name": "Large V3", "size": "~3GB", "type": "faster-whisper"},
+    "whisper-vad-onnx": {
+        "name": "Whisper VAD ONNX",
+        "size": "~600MB",
+        "type": "onnx",
+        "repo": "TransWithAI/Whisper-Vad-EncDec-ASMR-onnx",
+        "description": "Optional Whisper-based VAD backend",
+    },
+}
+
+
+def clear_version_cache():
+    with _version_cache_lock:
+        _version_cache.clear()
+
+
+def get_httpx():
+    import httpx
+
+    return httpx
+
+
+def read_env_file() -> dict[str, str]:
+    env_data: dict[str, str] = {}
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            env_data[key.strip()] = value.strip()
+    return env_data
+
+
+def write_env_file(env_data: dict[str, str]) -> None:
+    lines = []
+    for key, value in env_data.items():
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        lines.append(f"{key}={value}")
+    ENV_FILE.write_text("\n".join(lines) + "\n")
+
+
+def set_env_values(updates: dict[str, str], remove_keys: tuple[str, ...] = ()) -> None:
+    env_data = read_env_file()

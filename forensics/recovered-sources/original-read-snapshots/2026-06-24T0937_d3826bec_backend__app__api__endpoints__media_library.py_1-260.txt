@@ -1,0 +1,260 @@
+"""
+Media Library API — direct Emby/Jellyfin adapter.
+"""
+import os
+import re
+import shutil
+import time
+import mimetypes
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+import httpx
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+from app.api.endpoints.media_library_helpers import (
+    ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED,
+    VIDEO_EXTS,
+    env_source_dir as _env_source_dir,
+    config_path as _config_path,
+    get_config as _get_config,
+    headers as _headers,
+    load_config as _load_config,
+    map_path as _map_path,
+    parse_item as _parse_item,
+    parse_tags as _parse_tags,
+    save_config as _save_config,
+    server_url as _server_url,
+)
+
+from app.api.endpoints.media_library_item_detail import (
+    build_stream_url_for_server_impl,
+    resolve_playback_stream_url_impl,
+    get_item_impl,
+    get_main_nfo_impl,
+    get_siblings_impl,
+)
+
+from app.api.endpoints.media_library_hardlinks import (
+    build_hardlink_groups_impl,
+    enrich_hardlink_groups_impl,
+    extract_code_from_path_impl,
+    fetch_emby_item_info_impl,
+    hardlink_groups_path_impl,
+    load_hardlink_groups_impl,
+    save_hardlink_groups_impl,
+    scan_inodes_impl,
+    scan_single_group_impl,
+)
+
+router = APIRouter(prefix="/api/media-library", tags=["media-library"])
+
+_items_cache: dict[str, tuple[list[dict], float]] = {}
+_CACHE_TTL = 86400  # 24h
+
+
+class HardlinkDeleteRequest(BaseModel):
+    file_path: str
+    remove_nfo: bool = True
+    dry_run: bool = False
+
+
+class SourceChainDeleteRequest(BaseModel):
+    source_path: str
+    hardlink_paths: list[str] = []
+    code: str | None = None
+    dry_run: bool = False
+
+
+class HardlinkEntryDeletePayload(BaseModel):
+    source_path: str | None = None
+    hardlink_paths: list[str] = []
+
+
+class GroupDeleteRequest(BaseModel):
+    code: str
+    entries: list[HardlinkEntryDeletePayload]
+    dry_run: bool = False
+
+
+class MediaItemDeleteRequest(BaseModel):
+    item_id: str
+    dry_run: bool = False
+
+
+def _allowed_scan_roots(config: dict) -> tuple[list[Path], list[Path]]:
+    source_roots: list[Path] = []
+    hardlink_roots: list[Path] = []
+    for group in config.get("scan_groups", []) or []:
+        source_dir = group.get("source_dir")
+        hardlink_dir = group.get("hardlink_dir")
+        if source_dir:
+            source_roots.append(Path(source_dir).resolve())
+        if hardlink_dir:
+            hardlink_roots.append(Path(hardlink_dir).resolve())
+    return source_roots, hardlink_roots
+
+
+def _is_under_roots(path: Path, roots: list[Path]) -> bool:
+    for root in roots:
+        if path == root or root in path.parents:
+            return True
+    return False
+
+
+def _assert_safe_path(path: Path, roots: list[Path], *, label: str) -> None:
+    if not roots:
+        raise HTTPException(status_code=400, detail="未配置扫描组路径，无法执行删除")
+    if not _is_under_roots(path, roots):
+        raise HTTPException(status_code=400, detail=f"{label} 不在允许的扫描路径内: {path}")
+
+
+def _remove_file_and_sibling_nfo(path: Path, *, remove_nfo: bool) -> list[str]:
+    deleted: list[str] = []
+    if path.is_file():
+        path.unlink()
+        deleted.append(str(path))
+    if remove_nfo:
+        sibling_nfo = path.with_suffix(".nfo")
+        if sibling_nfo.is_file():
+            sibling_nfo.unlink()
+            deleted.append(str(sibling_nfo))
+    return deleted
+
+
+def _normalize_code_token(value: str | None) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[^A-Z0-9]", "", value.upper())
+
+
+
+
+def _directory_matches_target_videos(dir_path: Path, target_files: set[Path]) -> bool:
+    if not dir_path.is_dir() or not target_files:
+        return False
+
+    target_in_dir = {path.resolve() for path in target_files if path.parent == dir_path}
+    if not target_in_dir:
+        return False
+
+    try:
+        video_files: set[Path] = set()
+        for child in dir_path.rglob("*"):
+            if not child.is_file() or child.suffix.lower() not in VIDEO_EXTS:
+                continue
+            video_files.add(child.resolve())
+    except OSError:
+        return False
+
+    return bool(video_files) and video_files == target_in_dir
+
+def _parent_is_code_bucket(file_path: Path, code: str | None) -> bool:
+    if not code:
+        return False
+    code_token = _normalize_code_token(code)
+    if not code_token:
+        return False
+    parent_token = _normalize_code_token(file_path.parent.name)
+    return bool(parent_token) and code_token in parent_token
+
+
+def _collect_chain_delete_targets(
+    source_path: Path | None,
+    hardlink_paths: list[Path],
+    *,
+    code: str | None,
+    source_roots: list[Path],
+    hardlink_roots: list[Path],
+) -> tuple[set[Path], set[Path]]:
+    delete_dirs: set[Path] = set()
+    delete_files: set[Path] = set()
+    protected_roots = set(source_roots + hardlink_roots)
+
+    if source_path:
+        if _parent_is_code_bucket(source_path, code) and _directory_matches_target_videos(source_path.parent, {source_path}):
+            if source_path.parent in protected_roots:
+                raise HTTPException(status_code=400, detail=f"禁止删除扫描根目录: {source_path.parent}")
+            delete_dirs.add(source_path.parent)
+        else:
+            delete_files.add(source_path)
+
+    hardlink_targets = set(hardlink_paths)
+    for hardlink_path in hardlink_paths:
+        if _parent_is_code_bucket(hardlink_path, code) and _directory_matches_target_videos(hardlink_path.parent, hardlink_targets):
+            if hardlink_path.parent in protected_roots:
+                raise HTTPException(status_code=400, detail=f"禁止删除扫描根目录: {hardlink_path.parent}")
+            delete_dirs.add(hardlink_path.parent)
+        else:
+            delete_files.add(hardlink_path)
+
+    for d in list(delete_dirs):
+        delete_files = {f for f in delete_files if d not in f.parents}
+
+    return delete_dirs, delete_files
+
+
+def _execute_delete_targets(
+    delete_dirs: set[Path],
+    delete_files: set[Path],
+) -> dict:
+    deleted_dirs: list[str] = []
+    missing_dirs: list[str] = []
+    deleted_files: list[str] = []
+    missing_files: list[str] = []
+    errors: list[str] = []
+
+    for target_dir in sorted(delete_dirs, key=lambda p: len(p.parts), reverse=True):
+        if not target_dir.exists():
+            missing_dirs.append(str(target_dir))
+            continue
+        try:
+            shutil.rmtree(target_dir)
+            deleted_dirs.append(str(target_dir))
+        except Exception as e:
+            errors.append(f"{target_dir}: {e}")
+
+    for target_file in sorted(delete_files):
+        if not target_file.exists():
+            missing_files.append(str(target_file))
+            continue
+        try:
+            deleted_files.extend(_remove_file_and_sibling_nfo(target_file, remove_nfo=True))
+        except Exception as e:
+            errors.append(f"{target_file}: {e}")
+
+    if errors:
+        raise HTTPException(status_code=500, detail=f"部分删除失败: {'; '.join(errors)}")
+
+    if not deleted_dirs and not deleted_files and (missing_dirs or missing_files):
+        raise HTTPException(status_code=404, detail="目标不存在")
+
+    return {
+        "deleted_dirs": deleted_dirs,
+        "missing_dirs": missing_dirs,
+        "deleted_files": deleted_files,
+        "missing_files": missing_files,
+    }
+
+
+def _preview_delete_targets(
+    delete_dirs: set[Path],
+    delete_files: set[Path],
+) -> dict:
+    planned_dirs = sorted(str(p) for p in delete_dirs)
+    planned_files: list[str] = []
+    for file_path in sorted(delete_files):
+        planned_files.append(str(file_path))
+        nfo_path = file_path.with_suffix(".nfo")
+        if nfo_path.exists():
+            planned_files.append(str(nfo_path))
+    return {
+        "planned_dirs": planned_dirs,
+        "planned_files": planned_files,
+    }
+
+

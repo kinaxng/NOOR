@@ -1,0 +1,201 @@
+
+@pytest.mark.asyncio
+async def test_get_item_returns_variant_count(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'GET'
+        if url.endswith('/emby/Items/item-1'):
+            return FakeResponse(
+                200,
+                {
+                    'Id': 'item-1',
+                    'Name': 'ABC-123-C',
+                    'MediaType': 'Video',
+                    'MediaSources': [{'Id': 'ms-item-1', 'Container': 'mkv', 'Path': '/data/media/ABC-123/ABC-123-C.mkv'}],
+                    'ParentId': 'parent-1',
+                    'ImageTags': {'Primary': 'primary-tag'},
+                    'BackdropImageTags': [],
+                    'Studios': [],
+                    'Genres': [],
+                },
+            )
+        raise AssertionError(f'unexpected request: {url} {params}')
+
+    monkeypatch.setattr(media_library.httpx, 'AsyncClient', lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs))
+
+    async def fake_get_siblings(config, parent_id, current_id):
+        return [
+            {'id': 'sib-main', 'file_path': '/data/media/ABC-123/ABC-123.mp4', 'label': 'ABC-123', 'name': 'ABC-123', 'media_source_id': 'ms-sib-main', 'container': 'mp4'},
+            {'id': 'sib-u', 'file_path': '/data/media/ABC-123/ABC-123-u.mp4', 'label': 'ABC-123-u', 'name': 'ABC-123-u', 'media_source_id': 'ms-sib-u', 'container': 'mp4'},
+        ]
+
+    monkeypatch.setattr(media_library, '_get_siblings', fake_get_siblings)
+    monkeypatch.setattr(media_library, '_map_path', lambda path, config: path)
+    monkeypatch.setattr(media_library, '_get_main_nfo', lambda file_path: None)
+
+    item = await media_library._get_item(
+        {'server_url': 'http://server', 'api_key': 'token', 'source_dir': '/mnt/media', 'user_id': ''},
+        'item-1',
+    )
+
+    assert item is not None
+    assert item['variant_count'] == 3
+    assert item['stream_url'] == '/api/media-library/stream/item-1?media_source_id=ms-item-1&container=mkv'
+    assert item['siblings'][0]['stream_url'] == '/api/media-library/stream/sib-main?media_source_id=ms-sib-main&container=mp4'
+
+
+@pytest.mark.asyncio
+async def test_resolve_playback_stream_url_prefers_direct_stream(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'POST'
+        assert url.endswith('/emby/Items/item-1/PlaybackInfo')
+        assert json['UserId'] == 'user-1'
+        return FakeResponse(
+            200,
+            {
+                'PlaySessionId': 'play-1',
+                'MediaSources': [
+                    {
+                        'Id': 'ms-1',
+                        'Container': 'mp4',
+                        'SupportsDirectPlay': True,
+                        'SupportsDirectStream': True,
+                        'DirectStreamUrl': '/emby/videos/item-1/stream.mp4?MediaSourceId=ms-1',
+                    }
+                ],
+            },
+        )
+
+    playback = await media_item_detail.resolve_playback_stream_url_impl(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': 'user-1'},
+        'item-1',
+        media_source_id='ms-1',
+        container='mp4',
+        httpx_module=type('FakeHttpx', (), {'AsyncClient': lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs)}),
+        server_url_fn=lambda config: config['server_url'],
+        headers_fn=lambda api_key: {'X-Emby-Token': api_key},
+    )
+
+    assert playback['play_method'] == 'direct_play'
+    assert playback['url'] == 'http://server/emby/videos/item-1/stream.mp4?MediaSourceId=ms-1&api_key=token&PlaySessionId=play-1'
+
+
+@pytest.mark.asyncio
+async def test_resolve_playback_stream_url_uses_transcode_when_direct_stream_missing(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'POST'
+        return FakeResponse(
+            200,
+            {
+                'PlaySessionId': 'play-2',
+                'MediaSources': [
+                    {
+                        'Id': 'ms-2',
+                        'Container': 'mkv',
+                        'SupportsDirectPlay': False,
+                        'SupportsDirectStream': False,
+                        'TranscodingUrl': '/emby/videos/item-2/master.mp4?MediaSourceId=ms-2',
+                    }
+                ],
+            },
+        )
+
+    playback = await media_item_detail.resolve_playback_stream_url_impl(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': 'user-1'},
+        'item-2',
+        media_source_id='ms-2',
+        container='mkv',
+        httpx_module=type('FakeHttpx', (), {'AsyncClient': lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs)}),
+        server_url_fn=lambda config: config['server_url'],
+        headers_fn=lambda api_key: {'X-Emby-Token': api_key},
+    )
+
+    assert playback['play_method'] == 'transcode'
+    assert playback['is_transcode'] is True
+    assert playback['url'] == 'http://server/emby/videos/item-2/master.mp4?MediaSourceId=ms-2&api_key=token&PlaySessionId=play-2'
+
+
+@pytest.mark.asyncio
+async def test_resolve_playback_stream_url_falls_back_without_user_id(monkeypatch: pytest.MonkeyPatch):
+    playback = await media_item_detail.resolve_playback_stream_url_impl(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': ''},
+        'item-3',
+        media_source_id='ms-3',
+        container='mkv',
+        httpx_module=media_library.httpx,
+        server_url_fn=lambda config: config['server_url'],
+        headers_fn=lambda api_key: {'X-Emby-Token': api_key},
+    )
+
+    assert playback['play_method'] == 'direct_stream_fallback'
+    assert playback['url'] == 'http://server/emby/Videos/item-3/stream.mkv?static=true&api_key=token&MediaSourceId=ms-3&Container=mkv'
+
+
+@pytest.mark.asyncio
+async def test_get_item_returns_actors_from_emby_people_when_nfo_missing(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'GET'
+        if url.endswith('/emby/Items/item-1'):
+            return FakeResponse(
+                200,
+                {
+                    'Id': 'item-1',
+                    'Name': 'ABC-123',
+                    'MediaType': 'Video',
+                    'MediaSources': [{'Path': '/data/media/ABC-123/ABC-123.mp4'}],
+                    'ParentId': 'parent-1',
+                    'ImageTags': {'Primary': 'primary-tag'},
+                    'BackdropImageTags': [],
+                    'Studios': [],
+                    'Genres': [],
+                    'People': [
+                        {'Name': 'Actor A', 'Type': 'Actor', 'Role': 'Lead'},
+                        {'Name': 'Director B', 'Type': 'Director'},
+                        {'Name': 'Actor C', 'Type': 'Actor'},
+                    ],
+                },
+            )
+        raise AssertionError(f'unexpected request: {url} {params}')
+
+    monkeypatch.setattr(media_library.httpx, 'AsyncClient', lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs))
+    async def fake_get_siblings(config, parent_id, current_id):
+        return []
+
+    monkeypatch.setattr(media_library, '_get_siblings', fake_get_siblings)
+    monkeypatch.setattr(media_library, '_map_path', lambda path, config: path)
+    monkeypatch.setattr(media_library, '_get_main_nfo', lambda file_path: None)
+
+    item = await media_library._get_item(
+        {'server_url': 'http://server', 'api_key': 'token', 'source_dir': '/mnt/media', 'user_id': ''},
+        'item-1',
+    )
+
+    assert item is not None
+    assert item['actors'] == [
+        {'name': 'Actor A', 'role': 'Lead'},
+        {'name': 'Actor C', 'role': None},
+    ]
+
+@pytest.mark.asyncio
+async def test_get_item_uses_main_sibling_primary_poster_when_current_item_has_no_primary(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'GET'
+        if url.endswith('/emby/Items/item-1'):
+            return FakeResponse(
+                200,
+                {
+                    'Id': 'item-1',
+                    'Name': 'ABC-123.restored-u',
+                    'MediaType': 'Video',
+                    'MediaSources': [{'Path': '/data/media/ABC-123/ABC-123.restored-u.mp4'}],
+                    'ParentId': 'parent-1',
+                    'ImageTags': {'Thumb': 'thumb-tag'},
+                    'BackdropImageTags': [],
+                    'Studios': [],
+                    'Genres': [],
+                },
+            )
+        if url.endswith('/emby/Items') and params.get('ids') == 'main-1':
+            return FakeResponse(
+                200,
+                {
+                    'Items': [

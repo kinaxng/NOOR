@@ -1,0 +1,71 @@
+            return False, "缺少破解"
+        if require_subtitle and not f["has_subtitle"]:
+            return False, "缺少中字"
+    return True, "匹配"
+
+
+def _preference_rank(sub: dict[str, Any], resource: dict[str, Any]) -> tuple[int, int, int]:
+    f = _features(resource)
+    if f.get("is_new_model_uncensored_crack") and f["has_subtitle"]:
+        tier = -1
+    elif f["is_cracked"] and f["has_subtitle"]:
+        tier = 0
+    elif f["is_cracked"]:
+        tier = 1
+    elif f["has_subtitle"]:
+        tier = 2
+    else:
+        tier = 3
+    return (tier, -_score_resource(resource), -int(resource.get("size_bytes") or 0))
+
+
+async def _find_media(code: str, *aliases: Any) -> dict[str, Any] | None:
+    try:
+        from app.api.endpoints import media_library as media_api
+
+        config = media_api._load_config()
+        if not config.get("server_url") or not config.get("api_key"):
+            return None
+        libraries = await media_api._list_libraries(config)
+        raw_enabled = str(config.get("enabled_library_ids") or "")
+        enabled_ids = [x.strip() for x in raw_enabled.split(",") if x.strip()]
+        target_ids = enabled_ids or [lib.get("id") for lib in libraries if lib.get("id")]
+        queries = _code_lookup_values(code, *aliases)
+        targets = {_norm_code(x) for x in queries if _norm_code(x)}
+        if not queries or not targets:
+            return None
+        for library_id in target_ids:
+            for query in queries:
+                items, _ = await media_api._list_items(config, library_id, limit=12, offset=0, q=query)
+                for item in items:
+                    nfo = item.get("nfo") if isinstance(item.get("nfo"), dict) else {}
+                    text = " ".join(str(x or "") for x in [nfo.get("num"), item.get("name"), nfo.get("title"), item.get("path")])
+                    norm_text = _norm_code(text)
+                    if any(target and target in norm_text for target in targets):
+                        return item
+    except Exception:
+        return None
+    return None
+
+
+async def _search_resources(code: str, limit: int = 24) -> list[dict[str, Any]]:
+    from app.plugins.runtime import runtime
+
+    query = {"keyword": code, "q": code, "code": code, "number": code, "limit": limit, "mode": "deep", "page": 1, "max_items": 100}
+    data = await runtime.search_resources(query, limit_per_plugin=limit)
+    groups = data.get("groups") if isinstance(data, dict) else data
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in groups or []:
+        for item in group.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            key = f"{item.get('provider')}:{item.get('id')}:{item.get('url')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+def _classify(media_item: dict[str, Any] | None) -> str:

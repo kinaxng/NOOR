@@ -1,0 +1,81 @@
+          const value = String(item.value || '')
+          optionsWrap.appendChild(sdk.ui.chip({
+            label: item.label,
+            active: draft === value,
+            className: 'noor-plugin-chip--soft',
+            onClick: () => {
+              draft = draft === value ? '' : value
+              renderOptions()
+            },
+          }))
+        })
+    }
+
+    renderOptions()
+  }
+
+  function buildPickerButton(title, values, options, onApply, emptyLabel, unitLabel, titleMeta = '') {
+    const btn = sdk.ui.button({
+      label: pickerMultiLabel(options, values, emptyLabel, unitLabel),
+      className: `noor-control-panel__picker-btn ${uniqueValues(values).length ? '' : 'is-empty'}`.trim(),
+      onClick: () => openMultiPickerModal(title, options, values, onApply, emptyLabel, titleMeta),
+    })
+    return btn
+  }
+
+  function buildSinglePickerButton(title, value, options, onApply, emptyLabel) {
+    const current = String(value || '').trim()
+    const btn = sdk.ui.button({
+      label: pickerSingleLabel(options, current, emptyLabel),
+      className: `noor-control-panel__picker-btn ${current ? '' : 'is-empty'}`.trim(),
+      onClick: () => openSinglePickerModal(title, options, current, onApply, emptyLabel),
+    })
+    return btn
+  }
+
+  function sortChipLabel(option) {
+    if (state.videosSort !== option.value) return option.label
+    return `${option.label} ${state.videosOrder === 'asc' ? '↑' : '↓'}`
+  }
+
+  function renderActorRelationPanel(chip, select) {
+    void ensureVideoActors()
+    const actor = currentActorMeta()
+    const panel = el('section', 'javdb-actor-panel')
+    const identity = el('div', 'javdb-actor-panel__identity')
+    const avatar = el('div', 'javdb-actor-panel__avatar')
+    const actorName = actor?.name_zht || actor?.label || actor?.name || state.relation.label
+    const avatarUrl = actor?.avatar_url || ''
+    if (avatarUrl) {
+      const img = el('img')
+      img.src = avatarUrl
+      img.alt = actorName
+      avatar.appendChild(img)
+    } else {
+      avatar.textContent = String(actorName || '?').slice(0, 1).toUpperCase()
+    }
+
+    const bio = el('div', 'javdb-actor-panel__bio')
+    bio.appendChild(el('strong', '', actorName))
+    const aliasText = [actor?.name, actor?.other_name].filter(Boolean).join(' · ')
+    if (aliasText) bio.appendChild(el('span', '', aliasText))
+    identity.append(avatar, bio)
+
+    const controls = el('div', 'javdb-actor-panel__controls')
+    const quick = el('div', 'javdb-actor-panel__group')
+    quick.appendChild(el('span', 'javdb-actor-panel__label', '快速筛选'))
+    const quickItems = el('div', 'javdb-actor-panel__items')
+    quickItems.appendChild(chip('全部', state.relationActorSelectedFilters.length === 0 && !state.relationActorSingleFilter, () => {
+      state.relationActorSelectedFilters = []
+      state.relationActorSingleFilter = false
+      state.page = 1
+      rerenderCurrentList()
+    }))
+    relationActorBadgeFilters.forEach(([value, label]) => {
+      quickItems.appendChild(chip(label, state.relationActorSelectedFilters.includes(value), () => {
+        state.relationActorSelectedFilters = state.relationActorSelectedFilters.includes(value)
+          ? state.relationActorSelectedFilters.filter(x => x !== value)
+          : [...state.relationActorSelectedFilters, value]
+        state.page = 1
+        rerenderCurrentList()
+      }))

@@ -1,0 +1,1046 @@
+[
+  {
+    "offset": 905434295,
+    "source": "App.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/App.vue",
+    "path": "src/App.vue",
+    "sha256": "861004b52502ff71c8845f819a7d8f1ef6f7dfffb9889da7ce57bd61cc8a0e58",
+    "size": 7147,
+    "lines": 259
+  },
+  {
+    "offset": 905512191,
+    "source": "App.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/App.vue",
+    "path": "src/App.vue",
+    "sha256": "9428a5566bfe51f0377020c9a2b832d1208f5990e2cbcd558af78f56e0191c7f",
+    "size": 7176,
+    "lines": 259
+  },
+  {
+    "offset": 905587777,
+    "source": "VisionSidebar.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/layouts/VisionSidebar.vue",
+    "path": "src/layouts/VisionSidebar.vue",
+    "sha256": "98a299df798edf84d04eb467878240db8a6e60b81b950b4c027824153c371057",
+    "size": 7493,
+    "lines": 297
+  },
+  {
+    "offset": 905624358,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "32365a31ac65e7244f0b059ad65aac28c7c69e82c03676b94bf7375fcfab2700",
+    "size": 11368,
+    "lines": 301
+  },
+  {
+    "offset": 999871641,
+    "source": "App.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/App.vue",
+    "path": "src/App.vue",
+    "sha256": "8b286ff741b3618eccc4cb614efdb88cd15f712f1b0c435fab5066edf123f784",
+    "size": 4113,
+    "lines": 101
+  },
+  {
+    "offset": 1056958051,
+    "source": "MediaGrid.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/MediaGrid.vue",
+    "path": "src/components/MediaGrid.vue",
+    "sha256": "aba51aceff4b9629e59f574c8ab079f3b6e204b4ce6bc99715785de5731d0c31",
+    "size": 1944,
+    "lines": 75
+  },
+  {
+    "offset": 1182811749,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "16401e1a5bf12274ad6beaabfd0c19789eca3612ab353a956bb006067dcb57c7",
+    "size": 23722,
+    "lines": 608
+  },
+  {
+    "offset": 1183100752,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "31979d1e258a5787c3a41bb71067cca6811cf7c0a876136cff6f1fc9c135c666",
+    "size": 21698,
+    "lines": 503
+  },
+  {
+    "offset": 1184736823,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "83745fd51c18854dbf99ca438dbadd28f2262129ff6c3bce63eaa9b1705dec04",
+    "size": 23622,
+    "lines": 607
+  },
+  {
+    "offset": 2127857819,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "780477f4ef1607f095039beb6517792325b92f85cbc5ab549022fc38a2316537",
+    "size": 33116,
+    "lines": 860
+  },
+  {
+    "offset": 2127993085,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "0071e242d9aaa8ef66c47b3c4d198182b444b8e2561c0e79f5f9c0424557992f",
+    "size": 33206,
+    "lines": 862
+  },
+  {
+    "offset": 2294143453,
+    "source": "Home.vue",
+    "file": "/home/kinax/noor/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "e55b02cffce072738f0a5f775612a86f645aadd4c7bd79e5735795e087ecc67a",
+    "size": 23760,
+    "lines": 736
+  },
+  {
+    "offset": 2319174175,
+    "source": "Home.vue",
+    "file": "/home/kinax/noor/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "e760fc8d3a87719268000eab8b471730573e3c5aefe532e7388f6a38de9fd5cd",
+    "size": 23762,
+    "lines": 736
+  },
+  {
+    "offset": 3859866041,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "8b9f5239da0582dd2f530e57e7a8d1bca3baeb0df0e9d84edefdd0c39f3a3bee",
+    "size": 31897,
+    "lines": 840
+  },
+  {
+    "offset": 3860783402,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "56ea2b0c3357aa3e7ef2cf2609ba5f244950d904e45d394e230fddc39a0078d4",
+    "size": 31907,
+    "lines": 840
+  },
+  {
+    "offset": 3861045602,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "987359d7cae39adb25da186d27d3cfbd60961834eebeadbd73e2e3bdc044aec4",
+    "size": 31953,
+    "lines": 840
+  },
+  {
+    "offset": 3876905160,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "4bf3b733422da2da73d5dc954f246d59e31c873b719c684ed95539ba173afd3e",
+    "size": 31861,
+    "lines": 834
+  },
+  {
+    "offset": 3877167996,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "769863cb6b6ac9e4569f97af09ed81f1134efcb01dfad177a3862163caaecad9",
+    "size": 32529,
+    "lines": 850
+  },
+  {
+    "offset": 4662025710,
+    "source": "History.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/History.vue",
+    "path": "src/views/History.vue",
+    "sha256": "f060568010bce7ac29ffc33df29bac1287dc67926c37b4c5c39ac0abe30943b1",
+    "size": 9643,
+    "lines": 355
+  },
+  {
+    "offset": 4662163346,
+    "source": "SystemSettings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/settings/SystemSettings.vue",
+    "path": "src/views/settings/SystemSettings.vue",
+    "sha256": "48c11a70f61c53c7ff196fd63221b1e99e8c41acfb29a1635950458e153e1cf0",
+    "size": 10998,
+    "lines": 329
+  },
+  {
+    "offset": 4663796718,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "289e4b7009f317b8ee6af5a3026bcf0d0d6154bc50096c471109cb9cb0fae8c3",
+    "size": 6801,
+    "lines": 188
+  },
+  {
+    "offset": 4667129712,
+    "source": "RollingDigit.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/RollingDigit.vue",
+    "path": "src/components/RollingDigit.vue",
+    "sha256": "bfc1f715df3e5767984d451dc7fd54a06e12dc60399d0941515147115be7738c",
+    "size": 1940,
+    "lines": 88
+  },
+  {
+    "offset": 4667223033,
+    "source": "RollingDigit.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/RollingDigit.vue",
+    "path": "src/components/RollingDigit.vue",
+    "sha256": "c7a0810ed8d657b01b9c3477c643dbd8eff6307319b6600bd37c947c0fc69158",
+    "size": 1056,
+    "lines": 57
+  },
+  {
+    "offset": 4671805068,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "2c495621cbe677bfe608810ffef52afff792404e4416f2f0000b223a3f68e3b8",
+    "size": 7488,
+    "lines": 205
+  },
+  {
+    "offset": 4672166095,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "41a8879f01b4739e765f32d725b85327a4e5ff1a3429609da3e0b148acc7ca0b",
+    "size": 7808,
+    "lines": 212
+  },
+  {
+    "offset": 4672252072,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "9148682bb941324ba6575f02590c91bf3e574679438fc6fdfa5cab48e8f0fcbe",
+    "size": 7780,
+    "lines": 212
+  },
+  {
+    "offset": 4834301998,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "ff7743f7e4a72502b2bfa5279780b05072ab3243396078e6f5ba6d01f369d37d",
+    "size": 45917,
+    "lines": 1122
+  },
+  {
+    "offset": 6139448763,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "4820e179a7ea8dd13a6887091c2247ad8f95abbc07fb54dc98c72346c5ba2440",
+    "size": 46849,
+    "lines": 1146
+  },
+  {
+    "offset": 6584381638,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "e1fcd093b2341006f8b889dcdf9c2c7535c315461741e92a6be457be4e3c6499",
+    "size": 43969,
+    "lines": 1120
+  },
+  {
+    "offset": 6651154759,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "955531cb21a1ed7a1c606fee0b9f8208176ff6cf9deb074f0028cc33ed213447",
+    "size": 44152,
+    "lines": 1127
+  },
+  {
+    "offset": 6659050736,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "feb964982c09a8cd4491b4553982fb908495a7aa7cda66154df98c71e7acb9ff",
+    "size": 46718,
+    "lines": 1142
+  },
+  {
+    "offset": 6659237645,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "c638ea1aa70f9d78f3d928c9af339e8e9f592859c8d9d3d6adb141e0f6a11253",
+    "size": 45790,
+    "lines": 1116
+  },
+  {
+    "offset": 6659422034,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "83764b2317d10a313fbd76e8b194588e4780da3dd0f221d2c0d0ceeb72705ed8",
+    "size": 45831,
+    "lines": 1117
+  },
+  {
+    "offset": 6659605107,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "d3f6ff2a1aabb12fb4abbf52f2440330f851ac4567f7bef41a36fe9be6d46ed3",
+    "size": 44242,
+    "lines": 1128
+  },
+  {
+    "offset": 6660145643,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "6adae85032d732b7f737c6896566e666dc9e10c08968c97b41375e487183c19d",
+    "size": 44249,
+    "lines": 1128
+  },
+  {
+    "offset": 6859378899,
+    "source": "App.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/App.vue",
+    "path": "src/App.vue",
+    "sha256": "36557e84c36f5a8d95ce4a837d5b5b24e024fb01462b89f5bd86c1b61d6d712b",
+    "size": 6280,
+    "lines": 233
+  },
+  {
+    "offset": 7545214032,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "2a3ea21cd271bc514f467462e49e7d8fbe197451518e957b0ecbaed47eb32f1d",
+    "size": 46890,
+    "lines": 1208
+  },
+  {
+    "offset": 8139207999,
+    "source": "App.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/App.vue",
+    "path": "src/App.vue",
+    "sha256": "7b5ae542e616d0775962d92ea9fde1fe4ed81509856895206507501ca0bcd722",
+    "size": 7391,
+    "lines": 267
+  },
+  {
+    "offset": 8139234689,
+    "source": "VisionSidebar.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/layouts/VisionSidebar.vue",
+    "path": "src/layouts/VisionSidebar.vue",
+    "sha256": "eff44f5ff3db8ef6c6be1c9366c501ff0246abc7696a814f239777b7ceadc607",
+    "size": 7615,
+    "lines": 301
+  },
+  {
+    "offset": 9191572978,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "09d79545a172e11f686e1803a11564b778ebc574a4de5ef97bdc2742cc501760",
+    "size": 47303,
+    "lines": 1214
+  },
+  {
+    "offset": 9191769274,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "f9a4fb2a7d479c4aaf563f6c509eb9b038ccd8ebbcd2d7d29b08ac8a8efec2a4",
+    "size": 47001,
+    "lines": 1208
+  },
+  {
+    "offset": 10092333157,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "5c93b8be3fcdca9d0952623960960029a4907c69d6e135d1a7a4ca9f9f0421bd",
+    "size": 30298,
+    "lines": 805
+  },
+  {
+    "offset": 10092456008,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "59f96590cc15ba91341b41dd69bbe1fc00bbc6001ca0520d99a3b054f91eeb30",
+    "size": 30452,
+    "lines": 812
+  },
+  {
+    "offset": 10094426410,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "595d0717ef0ca5d54d167828f7707686ecd0d56c33d324319027cfd856f03033",
+    "size": 30688,
+    "lines": 818
+  },
+  {
+    "offset": 10100345343,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "6752710da578cf8a5ff326aa8eafa092772fabccdbb7705e9adb16e4c50b9b88",
+    "size": 29745,
+    "lines": 731
+  },
+  {
+    "offset": 10100475033,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "3137a14e2eda3637d8a39077024ccad4df1ff18f299a292d2e93f1fb7b05b795",
+    "size": 33430,
+    "lines": 808
+  },
+  {
+    "offset": 10106878392,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "af705778cd0eced0b9681becdad38a07d78112de9f903d228e90a22f6000f3a9",
+    "size": 29684,
+    "lines": 729
+  },
+  {
+    "offset": 10117237880,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "3d54849d8ee1c501bd8672995517aedf456b4c66b8e125a935bf7cc6cb629568",
+    "size": 28949,
+    "lines": 779
+  },
+  {
+    "offset": 10117356841,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "1e219df3cc633f4bc89b67c393bf4c44ba349f2a46857885d0aa90a30659f64a",
+    "size": 29116,
+    "lines": 781
+  },
+  {
+    "offset": 10121530488,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "f0d24ac9b8ea7bd6b1196eb66b3768cad21c6b71173288d38504444184d2f601",
+    "size": 28837,
+    "lines": 777
+  },
+  {
+    "offset": 10124361077,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "2612e32ffd27c2afe1f4f71554393207a28de70add26f05d720d8458615e50fc",
+    "size": 29184,
+    "lines": 783
+  },
+  {
+    "offset": 11007590634,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "5f411bb15a7331dd45cfd51b4030b3c84e8725c4c1f4af2742d3d10b98e8d281",
+    "size": 43888,
+    "lines": 1119
+  },
+  {
+    "offset": 11007770892,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "8aabf69db6a0233160c68c35557600c208c966c193016548aee602bd686fd13e",
+    "size": 43882,
+    "lines": 1119
+  },
+  {
+    "offset": 11026084091,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "153fa2506edc18ad4df2842f3384515b386c84e9d5ac19a3e74ce20856a96f79",
+    "size": 43885,
+    "lines": 1119
+  },
+  {
+    "offset": 11041537498,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "f8ff930cff7eed386dcf5c11f6b47a280d3fe95701a3e7136371a2639d4a6697",
+    "size": 46902,
+    "lines": 1149
+  },
+  {
+    "offset": 11572945536,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "49f959152a5e91c40a69ab756ab6bec81548f63e9c55da976321fa27da74c502",
+    "size": 11586,
+    "lines": 294
+  },
+  {
+    "offset": 11573162601,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "20428e6d3fd225a71f603958b3caaa53d6696751015bb2dffad3494cac167343",
+    "size": 14332,
+    "lines": 388
+  },
+  {
+    "offset": 11771872985,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "5b5d22461cfb555b873c2d7d5efba54da2c5f319ecda5f70a7da76c351cd48cf",
+    "size": 6928,
+    "lines": 177
+  },
+  {
+    "offset": 11771958883,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "234a06700cad3645de8e5e1f700ebb6462f945b5493d669fe78bbc398fcb9211",
+    "size": 6968,
+    "lines": 178
+  },
+  {
+    "offset": 11782001722,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "37695056cf640590a6843cf6cf197714151bb64b37678c2dd9c5144f6e45f8ca",
+    "size": 6636,
+    "lines": 178
+  },
+  {
+    "offset": 11782372722,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "9fdd5a29a16c8a3a71e5a60b66670e0460d752f7a0976004ee007fc386c07b2a",
+    "size": 8595,
+    "lines": 241
+  },
+  {
+    "offset": 11782561597,
+    "source": "SettingsIndex.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/settings/SettingsIndex.vue",
+    "path": "src/views/settings/SettingsIndex.vue",
+    "sha256": "6012fb90ae80cb3ccfc99b66c778df66518c5115cfe607516faaa08a6ad0611c",
+    "size": 1537,
+    "lines": 43
+  },
+  {
+    "offset": 11784256870,
+    "source": "RollingDigit.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/RollingDigit.vue",
+    "path": "src/components/RollingDigit.vue",
+    "sha256": "42966fa45704c90a55a6c46f0be35cce01ab38462cc23608575ba4ae09d5b332",
+    "size": 1396,
+    "lines": 62
+  },
+  {
+    "offset": 11784535577,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "48651fa1e0aef11935f9e8c90ea229ea4d91c49d16d1fb04ebb16e83cc544f3b",
+    "size": 8479,
+    "lines": 237
+  },
+  {
+    "offset": 11918164848,
+    "source": "SettingsIndex.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/settings/SettingsIndex.vue",
+    "path": "src/views/settings/SettingsIndex.vue",
+    "sha256": "5ef2b885a1ad3a3e28ccf7ce77cf57f8b4ef90ec304067861e40903ca98e04c2",
+    "size": 2593,
+    "lines": 90
+  },
+  {
+    "offset": 11918195225,
+    "source": "SystemSettings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/settings/SystemSettings.vue",
+    "path": "src/views/settings/SystemSettings.vue",
+    "sha256": "5c8d79c7e029cc365fd182ce9aad11f9661ffae26efb3052044509ba07822aaa",
+    "size": 13282,
+    "lines": 417
+  },
+  {
+    "offset": 11918228143,
+    "source": "VuiBadge.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/vision/VuiBadge/VuiBadge.vue",
+    "path": "src/components/vision/VuiBadge/VuiBadge.vue",
+    "sha256": "c9e10f291311776c7f696a3cacbe407a3ab3e6a7297241acbe61ac7b00b38123",
+    "size": 3467,
+    "lines": 193
+  },
+  {
+    "offset": 11919765651,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "dd65b8e452599c1fbef820c22a1f9c7b36498c2f19d78afdff0e6aea3c8b4c53",
+    "size": 15122,
+    "lines": 433
+  },
+  {
+    "offset": 11919913087,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "7fe258764bff700c329ca012e79668e0e01127cdcd90f3e9519990d0d5cbce1a",
+    "size": 15102,
+    "lines": 433
+  },
+  {
+    "offset": 13034381586,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "f31226da8896af7c523cbdb221b411e81fb01cac925bd37eb0bac9c0aadb8da9",
+    "size": 31562,
+    "lines": 836
+  },
+  {
+    "offset": 13086075385,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "73a112ed4c624c2ed2811b1dcd0bd8373184864f2edf50aadd237644b9e3b2c1",
+    "size": 30879,
+    "lines": 821
+  },
+  {
+    "offset": 13103771806,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "98b3ec622d0961aa9f5a3215ea789b1d164b04d271d652b6c0736bbd6274d008",
+    "size": 31611,
+    "lines": 837
+  },
+  {
+    "offset": 13104148729,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "f4ac04275be440419554d3f6cf659aa70c8b7e60f484ded9bfbefaff2ac29ddb",
+    "size": 31806,
+    "lines": 838
+  },
+  {
+    "offset": 15823650870,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "5bb418e5f641b6282f135823f6c27c0002e5d6555c308aa9bcee147a2a8f9acf",
+    "size": 44014,
+    "lines": 1119
+  },
+  {
+    "offset": 16525198424,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "c23b7385e74a45c5deab5a02feb2dbaa6bedfb77178a16d6443fadf8500ff3b7",
+    "size": 52916,
+    "lines": 1311
+  },
+  {
+    "offset": 16531754608,
+    "source": "History.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/History.vue",
+    "path": "src/views/History.vue",
+    "sha256": "f61b6f9b867ddc90054b7dd185447c132613d8a1134ba0722d0aed7198c32b0b",
+    "size": 10024,
+    "lines": 364
+  },
+  {
+    "offset": 16913686638,
+    "source": "SubtitlePanel.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/SubtitlePanel.vue",
+    "path": "src/components/SubtitlePanel.vue",
+    "sha256": "27190ecaa80b6d07a069062decff18ac90ebde41213febeec47d154e98377717",
+    "size": 16192,
+    "lines": 430
+  },
+  {
+    "offset": 16924840027,
+    "source": "SubtitlePanel.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/SubtitlePanel.vue",
+    "path": "src/components/SubtitlePanel.vue",
+    "sha256": "c8ca7f812507758dfe75f628aada0bf05b0053b6ab966cf5a812bdd69da4267e",
+    "size": 16184,
+    "lines": 431
+  },
+  {
+    "offset": 16924917876,
+    "source": "SubtitlePanel.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/SubtitlePanel.vue",
+    "path": "src/components/SubtitlePanel.vue",
+    "sha256": "3042f0bea81925a7ac78f31decdea7d12870e77fb412e74c7dafe2fb9bde1fb7",
+    "size": 16177,
+    "lines": 430
+  },
+  {
+    "offset": 16924995750,
+    "source": "SubtitlePanel.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/SubtitlePanel.vue",
+    "path": "src/components/SubtitlePanel.vue",
+    "sha256": "1c0e44fca10828ddf31fa6f4b831f2b085530c93cb86064c99b2cc8584f39310",
+    "size": 16201,
+    "lines": 431
+  },
+  {
+    "offset": 16981463181,
+    "source": "SubtitlePanel.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/SubtitlePanel.vue",
+    "path": "src/components/SubtitlePanel.vue",
+    "sha256": "9bcd54e6b94b3b8a9360f2a3795815de9bcbc6ab66ce701f42b0f37cbe9ef2ae",
+    "size": 16191,
+    "lines": 430
+  },
+  {
+    "offset": 17002451284,
+    "source": "SubtitlePanel.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/SubtitlePanel.vue",
+    "path": "src/components/SubtitlePanel.vue",
+    "sha256": "36cb0b99bf5cf5633a099be05c0ed7d2ca0be2e0f2b0cd0b1c2df80bf51fe426",
+    "size": 16213,
+    "lines": 431
+  },
+  {
+    "offset": 17759917299,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "af0effef934f44dfdfdfa09f88f88b2d1243a0da0cb9a2eeb2b414de4d11e0cb",
+    "size": 38996,
+    "lines": 1002
+  },
+  {
+    "offset": 17840251124,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "fce07a5b792f5c76bb897d8e14dc603b4af9f70a1c4d542bac5127553f42abb7",
+    "size": 45806,
+    "lines": 1174
+  },
+  {
+    "offset": 19717428810,
+    "source": "MiniStatisticsCard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/vision/MiniStatisticsCard.vue",
+    "path": "src/components/vision/MiniStatisticsCard.vue",
+    "sha256": "6d9ecb502cb3905a73d91883fd869bf622a479bca8ea6d93447124e50aa92de5",
+    "size": 3718,
+    "lines": 157
+  },
+  {
+    "offset": 19717444194,
+    "source": "WelcomeMark.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/vision/WelcomeMark.vue",
+    "path": "src/components/vision/WelcomeMark.vue",
+    "sha256": "2754099f1d112428b01891dc1b4f07556aab6053b57d28c86f4d80321b192559",
+    "size": 3760,
+    "lines": 163
+  },
+  {
+    "offset": 19717454409,
+    "source": "ActivityCard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/vision/ActivityCard.vue",
+    "path": "src/components/vision/ActivityCard.vue",
+    "sha256": "43d377e8f0a2f1781be70b88c712fde663491abc4735fe514ccc54ee824e2c37",
+    "size": 779,
+    "lines": 45
+  },
+  {
+    "offset": 19717641427,
+    "source": "App.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/App.vue",
+    "path": "src/App.vue",
+    "sha256": "b3569ce31b4abc2a2232f6c156f9bacaef37b4f180d04074ad49aded2426897a",
+    "size": 6471,
+    "lines": 240
+  },
+  {
+    "offset": 19857752267,
+    "source": "App.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/App.vue",
+    "path": "src/App.vue",
+    "sha256": "097399a2b9d3c6359f41793347ffbe30ab48c8f7a2b53bf28a1dc2b9fcb25fff",
+    "size": 6272,
+    "lines": 233
+  },
+  {
+    "offset": 19857783750,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "0b1fa491b2efa3a8f8a10a867c6a0fc242eed54e6847e72377fd9b89cc7d90f4",
+    "size": 11342,
+    "lines": 301
+  },
+  {
+    "offset": 20431686261,
+    "source": "SystemMetricsCard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/vision/SystemMetricsCard.vue",
+    "path": "src/components/vision/SystemMetricsCard.vue",
+    "sha256": "54f715927c1a90328fa649bd29fcd322723c8dbe574f114474e3f03d3817b5ad",
+    "size": 2530,
+    "lines": 78
+  },
+  {
+    "offset": 20431764954,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "6c99d1a73756a0fbcc842def873a81f09f63180372a8011d3dc7a1d36f06a650",
+    "size": 8523,
+    "lines": 238
+  },
+  {
+    "offset": 20432081453,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "e8b31258b1767c5b43e1c49faa236f7235f8a4d0ed2ea0db20427e5d27f20e0a",
+    "size": 9438,
+    "lines": 260
+  },
+  {
+    "offset": 20432191824,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "5ff38009df31b2f92c6defecd0c368c8104940382a964e48cb9e764421e6805e",
+    "size": 9309,
+    "lines": 256
+  },
+  {
+    "offset": 20432306265,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "d1d25bdc39cadabbcd5782e9b5b460d4dd8aeba812ff499ed35d7bc60aa42791",
+    "size": 8896,
+    "lines": 243
+  },
+  {
+    "offset": 20432484909,
+    "source": "RollingDigit.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/RollingDigit.vue",
+    "path": "src/components/RollingDigit.vue",
+    "sha256": "441d2c83966da0022a57c19b70fce2317cb41b875b3dc89445051f84c0309376",
+    "size": 4564,
+    "lines": 161
+  },
+  {
+    "offset": 20432566590,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "4618f0540dcd1894b0fa47d57f4653e4cc3bbffeab46d15d41cebc2cbdf347eb",
+    "size": 8424,
+    "lines": 237
+  },
+  {
+    "offset": 20436807359,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "59b7b1d83bec352d5f54037bd1fa8c65a51c2489ce12cbbea752835884b08df2",
+    "size": 8005,
+    "lines": 207
+  },
+  {
+    "offset": 20436894630,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "d1cc172b452032cb2fbbf87fd510ddc187679d7fc52317271e486f57eef3376f",
+    "size": 6500,
+    "lines": 176
+  },
+  {
+    "offset": 20437444849,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "8e9107f915c8c89399933b57f8884d9e461cbe43b7d2a6f316d23de1c91ec4d4",
+    "size": 8236,
+    "lines": 231
+  },
+  {
+    "offset": 20437532242,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "ba8604ba49de584219a7220ec3d5796479141b6df23fc5765bd791436d1813e1",
+    "size": 8858,
+    "lines": 250
+  },
+  {
+    "offset": 20437622077,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "2b276cff483f1cda5b95d3f4cac174d982ce583d7fef9908595657ebf760e323",
+    "size": 8487,
+    "lines": 236
+  },
+  {
+    "offset": 20437712320,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "420749f058bdc9f73c4e466fa6cd75203afc440893ae69caa0322b7d344eeb1c",
+    "size": 8590,
+    "lines": 240
+  },
+  {
+    "offset": 20437802318,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "274c034b26eedd1b26d666db6814614bf83f833d5e53264b2e6a6d76644ea9bb",
+    "size": 8451,
+    "lines": 236
+  },
+  {
+    "offset": 20438107310,
+    "source": "RollingDigit.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/RollingDigit.vue",
+    "path": "src/components/RollingDigit.vue",
+    "sha256": "8a0ef59438980695e36e1fff579f5719c0d3a13f211a8e03f7c322e842e89224",
+    "size": 2649,
+    "lines": 104
+  },
+  {
+    "offset": 20438289930,
+    "source": "SystemMetricsCard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/vision/SystemMetricsCard.vue",
+    "path": "src/components/vision/SystemMetricsCard.vue",
+    "sha256": "bb4ce435701b62dfc021575078834c75540fdd7a0846f06d9026385660bcd083",
+    "size": 3597,
+    "lines": 111
+  },
+  {
+    "offset": 20441249261,
+    "source": "RollingDigit.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/RollingDigit.vue",
+    "path": "src/components/RollingDigit.vue",
+    "sha256": "7899ab677bcbad48cc199096a346f0c403a14f70c17e12adb1d256487e1153a2",
+    "size": 2872,
+    "lines": 117
+  },
+  {
+    "offset": 20446240256,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "ca551a5c01df7a06e69830c160ec2f075cdd3980e9ad7fbf964891764ae3a828",
+    "size": 8624,
+    "lines": 242
+  },
+  {
+    "offset": 20446681793,
+    "source": "RollingDigit.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/components/RollingDigit.vue",
+    "path": "src/components/RollingDigit.vue",
+    "sha256": "120849af9aea0a4e7ab4e27249285d8085fb39b4bb8f7d0eb723ddfe93131e09",
+    "size": 4330,
+    "lines": 158
+  },
+  {
+    "offset": 20447040896,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "86cc3bd78372a668873896a971ff4848d073f9f4c206fbe51ea3aa8ec74e6cf8",
+    "size": 9932,
+    "lines": 266
+  },
+  {
+    "offset": 20529440019,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "27fa7a61d7c1855fb3eb1e154f0182aedc2f59b8defed29392a3857578d80b85",
+    "size": 7125,
+    "lines": 198
+  },
+  {
+    "offset": 20530925135,
+    "source": "Dashboard.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Dashboard.vue",
+    "path": "src/views/Dashboard.vue",
+    "sha256": "2b391d1238d3d254b66dfaf3d4a017c979382bc5404fd2d0fc8b466f38fe29bf",
+    "size": 8510,
+    "lines": 238
+  },
+  {
+    "offset": 20697332745,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "97009101c30a2119e856301db866966860b17b7dcfd1de0e2d859a98019673e5",
+    "size": 10287,
+    "lines": 261
+  },
+  {
+    "offset": 28645566185,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "bd59c6c27697e526cc4a6a313ac163819638adf442d972f2929183608add90c2",
+    "size": 12325,
+    "lines": 372
+  },
+  {
+    "offset": 33375893029,
+    "source": "Home.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Home.vue",
+    "path": "src/views/Home.vue",
+    "sha256": "3280493aed6ce76cb535ea13b22bd7bc6fe897e57b31a335540ee87c5cfc5fbb",
+    "size": 15008,
+    "lines": 399
+  },
+  {
+    "offset": 34020586026,
+    "source": "Settings.vue",
+    "file": "/home/kinax/lada-webui/frontend/src/views/Settings.vue",
+    "path": "src/views/Settings.vue",
+    "sha256": "5970d0c749063d6e109bb8ff11a8397bf69bd5b5845c0db44e77014b97499da1",
+    "size": 34203,
+    "lines": 882
+  }
+]

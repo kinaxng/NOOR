@@ -1,0 +1,46 @@
+  nfo?: MediaNFO
+  siblings?: SiblingItem[]
+  main_nfo?: string
+  variant_count?: number
+}
+
+export interface JobSettings {
+  detection_model?: string
+  restoration_model?: string
+  encoding_preset?: string
+  strategy?: string
+  model?: string
+  pipeline_mode?: string
+  merge_strategy?: string
+  language?: string
+  sensitivity?: string
+  vad_method?: string
+  pass1_pipeline?: string
+  pass2_pipeline?: string
+  translate_to?: string | null
+  source_path?: string
+  source_paths?: string[]
+  execution_provider?: string
+  device_ids?: string
+  processors?: string
+  face_swapper_model?: string
+  face_swapper_pixel_boost?: string
+  face_swapper_weight?: number
+  face_enhancer_model?: string
+  face_enhancer_blend?: number
+  face_enhancer_weight?: number
+  frame_enhancer_model?: string
+  frame_enhancer_blend?: number
+  face_detector_model?: string
+  face_detector_score?: number
+  face_detector_angles?: string
+  face_mask_types?: string
+  face_mask_regions?: string
+  face_mask_blur?: number
+  face_occluder_model?: string
+  face_selector_mode?: string
+  reference_frame_number?: number
+  reference_face_position?: number
+  reference_face_distance?: number
+  output_video_encoder?: string
+  output_video_preset?: string

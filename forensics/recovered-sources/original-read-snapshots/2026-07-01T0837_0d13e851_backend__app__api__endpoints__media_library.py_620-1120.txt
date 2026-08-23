@@ -1,0 +1,501 @@
+    filter: str | None = None,
+    q: str | None = None,
+    force_refresh: bool = False,
+) -> tuple[list[dict], int]:
+    now = time.time()
+    cache_key = library_id
+
+    if not force_refresh and cache_key in _items_cache:
+        cached_items, cached_at = _items_cache[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return _apply_filter_and_paginate(cached_items, filter, q, offset, limit)
+
+    async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+        resp = await client.get(
+            f"{_server_url(config)}/emby/Items",
+            headers=_headers(config.get("api_key", "")),
+            params={
+                "ParentId": library_id,
+                "Fields": "PrimaryImageAspectRatio,MediaSources,DateCreated,Path,Studios,ImageTags,BackdropImageTags",
+                "Limit": 2000,
+                "StartIndex": 0,
+                "Recursive": "true",
+                "SortBy": "DateCreated",
+                "SortOrder": "Descending",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    all_items = []
+    for item in data.get("Items", []):
+        if item.get("Type") != "Movie" and item.get("MediaType") != "Video":
+            continue
+        all_items.append(_parse_item(item, config))
+
+    all_items = _deduplicate_items(all_items)
+
+    _items_cache[cache_key] = (all_items, now)
+    return _apply_filter_and_paginate(all_items, filter, q, offset, limit)
+
+
+
+
+def _item_matches_query(item: dict, query: str | None) -> bool:
+    if not query:
+        return True
+    q = query.strip().lower()
+    if not q:
+        return True
+    fields = [
+        item.get('name'),
+        item.get('path'),
+        (item.get('nfo') or {}).get('title') if isinstance(item.get('nfo'), dict) else None,
+        (item.get('nfo') or {}).get('originaltitle') if isinstance(item.get('nfo'), dict) else None,
+        (item.get('nfo') or {}).get('num') if isinstance(item.get('nfo'), dict) else None,
+    ]
+    haystack = '\n'.join(str(field) for field in fields if field).lower()
+    return q in haystack
+
+def _apply_filter_and_paginate(items: list[dict], filter: str | None, q: str | None, offset: int, limit: int) -> tuple[list[dict], int]:
+    filtered = []
+    for item in items:
+        tags = item.get("tags", {})
+        matches_filter = not filter
+        if filter:
+            if not tags:
+                matches_filter = False
+            elif filter == "cracked":
+                matches_filter = bool(tags.get("is_cracked"))
+            elif filter == "chinese":
+                matches_filter = bool(tags.get("has_chinese"))
+            elif filter == "leaked":
+                matches_filter = tags.get("release_type_key") == "leaked"
+            elif filter == "uncensored":
+                matches_filter = tags.get("release_type_key") == "uncensored"
+        if matches_filter and _item_matches_query(item, q):
+            filtered.append(item)
+    return filtered[offset:offset + limit], len(filtered)
+
+
+
+async def _get_siblings(config: dict, parent_id: str, current_id: str) -> list[dict]:
+    return await get_siblings_impl(
+        config,
+        parent_id,
+        current_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+        map_path_fn=_map_path,
+    )
+
+
+def _get_main_nfo(file_path: str | None) -> str | None:
+    return get_main_nfo_impl(file_path)
+
+
+async def _get_item(config: dict, item_id: str) -> dict | None:
+    return await get_item_impl(
+        config,
+        item_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+        map_path_fn=_map_path,
+        parse_tags_fn=_parse_tags,
+        get_siblings_fn=_get_siblings,
+        get_main_nfo_fn=_get_main_nfo,
+    )
+
+
+# ─── Hardlink group management ─────────────────────────────────────────────────
+
+def _hardlink_groups_path() -> Path:
+    return hardlink_groups_path_impl(_config_path)
+
+
+def _hardlink_groups_last_scanned_at() -> str | None:
+    path = _hardlink_groups_path()
+    if not path.is_file():
+        return None
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+    except OSError:
+        return None
+
+
+def _scan_inodes(dir_path: str) -> dict[tuple[int, int], str]:
+    return scan_inodes_impl(dir_path)
+
+
+def _scan_single_group(source_dir: str, hardlink_dir: str) -> list[dict]:
+    return scan_single_group_impl(source_dir, hardlink_dir, scan_inodes_fn=_scan_inodes)
+
+
+def _fetch_emby_item_info(config: dict, emby_id: str | None) -> tuple[str | None, str | None]:
+    return fetch_emby_item_info_impl(
+        config,
+        emby_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+    )
+
+
+def _extract_code_from_path(file_path: str) -> str:
+    return extract_code_from_path_impl(file_path)
+
+
+async def _build_hardlink_groups() -> list[dict]:
+    return await build_hardlink_groups_impl(
+        _load_config(),
+        scan_single_group_fn=_scan_single_group,
+        extract_code_from_path_fn=_extract_code_from_path,
+    )
+
+
+def _save_hardlink_groups(groups: list[dict]) -> None:
+    save_hardlink_groups_impl(groups, hardlink_groups_path_fn=_hardlink_groups_path)
+
+
+def _load_hardlink_groups() -> list[dict]:
+    return load_hardlink_groups_impl(hardlink_groups_path_fn=_hardlink_groups_path)
+
+
+def _enrich_hardlink_groups(groups: list[dict]) -> dict:
+    return enrich_hardlink_groups_impl(groups)
+
+
+# ─── Schemas ──────────────────────────────────────────────────────────────────
+
+class MediaAdapterMeta(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: str
+    author: str
+
+
+class MediaLibraryStatus(BaseModel):
+    available: bool
+    current: MediaAdapterMeta | None
+    message: str | None
+
+
+# ─── API Endpoints ─────────────────────────────────────────────────────────────
+
+@router.get("", response_model=MediaLibraryStatus)
+async def get_status():
+    """Get media library adapter status."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        return MediaLibraryStatus(
+            available=False,
+            current=None,
+            message=_ADAPTER_NOT_ACTIVATED,
+        )
+    return MediaLibraryStatus(
+        available=True,
+        current=MediaAdapterMeta(
+            id="emby",
+            name="Emby / Jellyfin",
+            version="1.0.0",
+            description="连接 Emby 或 Jellyfin 媒体服务器",
+            author="NOOR",
+        ),
+        message=None,
+    )
+
+
+@router.get("/config")
+async def get_config():
+    """Get saved media library configuration."""
+    return {"config": _ensure_webhook_token(_load_config())}
+
+
+@router.post("/config")
+async def save_config(config: dict):
+    """Partially update media library configuration.
+    Only updates the fields provided; all other fields are preserved.
+    """
+    existing = _load_config()
+    existing.update(config)
+    _save_config(existing)
+    state = _bump_sync_state()
+    return {"ok": True, "sync_state": state}
+
+
+@router.get("/sync-state")
+async def get_sync_state():
+    """Return the media library cache sync state for lightweight polling."""
+    return _sync_state_payload()
+
+
+@router.post("/cache/invalidate")
+async def invalidate_cache():
+    """Clear NOOR's media library cache without touching Emby."""
+    state = _bump_sync_state()
+    SystemLogManager.get_instance().add_log(
+        "info",
+        "[MediaLibrary] 媒体库缓存已手动刷新",
+        source="media_library",
+    )
+    return {"ok": True, "sync_state": state}
+
+
+@router.post("/webhook/emby")
+async def emby_webhook(request: Request, token: str | None = None):
+    """Receive Emby webhook notifications and invalidate NOOR media cache."""
+    config = _ensure_webhook_token(_load_config())
+    expected = str(config.get("webhook_token") or "").strip()
+    provided = (token or request.headers.get("X-NOOR-Webhook-Token") or "").strip()
+    if not expected or not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="Invalid webhook token")
+
+    event_name = ""
+    item_name = ""
+    notification_type = ""
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip() or "unknown"
+    try:
+        payload = await request.json()
+        if isinstance(payload, dict):
+            event_name = str(payload.get("Event") or payload.get("event") or payload.get("NotificationType") or "")
+            notification_type = str(payload.get("NotificationType") or payload.get("Type") or payload.get("type") or "")
+            item = payload.get("Item") if isinstance(payload.get("Item"), dict) else {}
+            item_name = str(item.get("Name") or payload.get("Name") or payload.get("Title") or "")
+    except Exception:
+        payload = None
+
+    state = _bump_sync_state(webhook=True)
+    is_test = any("test" in value.lower() or "测试" in value for value in [event_name, notification_type, item_name])
+    source_ip = _request_source_ip(request)
+    hint_parts = []
+    if is_test:
+        hint_parts.append("测试通知")
+    if event_name:
+        hint_parts.append(f"事件={event_name}")
+    if notification_type and notification_type != event_name:
+        hint_parts.append(f"类型={notification_type}")
+    if item_name:
+        hint_parts.append(f"条目={item_name}")
+    hint_parts.append(f"内容类型={content_type}")
+    hint_parts.append(f"来源={source_ip}")
+    hint = " · ".join(hint_parts)
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 收到 Emby Webhook，已刷新媒体库缓存 · {hint}",
+        source="media_library.webhook",
+    )
+    return {"ok": True, "sync_state": state}
+
+
+@router.post("/test")
+async def test_connection(config: dict | None = None):
+    """Test connection with provided config. Returns available libraries on success."""
+    cfg = config if config is not None else _load_config()
+    if not cfg:
+        return {"ok": False, "message": _ADAPTER_NOT_ACTIVATED, "libraries": []}
+    # Test connection by fetching items (works reliably; MediaFolders may return 502)
+    try:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            resp = await client.get(
+                f"{_server_url(cfg)}/emby/Items",
+                headers=_headers(cfg.get("api_key", "")),
+                params={"limit": 1, "Fields": "BasicSyncInfo"},
+            )
+            resp.raise_for_status()
+        # Also try to get libraries
+        try:
+            libraries = await _list_libraries(cfg)
+        except Exception:
+            libraries = []
+        return {"ok": True, "message": f"已连接至 {cfg.get('server_url', 'Emby/Jellyfin')}", "libraries": libraries}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return {"ok": False, "message": "API Key 无效或已过期", "libraries": []}
+        return {"ok": False, "message": f"连接失败: HTTP {e.response.status_code}", "libraries": []}
+    except httpx.TimeoutException as e:
+        return {"ok": False, "message": f"连接超时（请检查 Emby 地址或网络）: {e}", "libraries": []}
+    except httpx.ConnectError as e:
+        return {"ok": False, "message": f"无法连接到 Emby（请检查地址/端口）: {e}", "libraries": []}
+    except Exception as e:
+        err = str(e).strip() or e.__class__.__name__
+        return {"ok": False, "message": f"连接失败: {err}", "libraries": []}
+
+
+@router.get("/libraries")
+async def get_libraries():
+    """Get list of media libraries."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        libraries = await _list_libraries(config)
+    except Exception:
+        return {"libraries": []}
+
+    return {"libraries": libraries}
+
+
+@router.get("/items")
+async def get_items(
+    library_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    filter: str | None = None,
+    q: str | None = None,
+    force_refresh: bool = Query(False, description="强制刷新缓存"),
+):
+    """Get items from the media library."""
+    import time
+
+    force_refresh = force_refresh if isinstance(force_refresh, bool) else False
+
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    now = time.time()
+
+    if not library_id:
+        raw = config.get("enabled_library_ids", "") if isinstance(config, dict) else ""
+        enabled_ids = [lid.strip() for lid in raw.split(",") if lid.strip()] if raw else []
+
+        try:
+            all_libraries = await _list_libraries(config)
+            target_ids = enabled_ids if enabled_ids else [lib["id"] for lib in all_libraries]
+
+            all_items: list[dict] = []
+            for lid in target_ids:
+                cache_key = f"all_{lid}"
+                if not force_refresh and cache_key in _items_cache:
+                    cached, cached_at = _items_cache[cache_key]
+                    if now - cached_at < _CACHE_TTL:
+                        all_items.extend(cached)
+                        continue
+                items, _ = await _list_items(config, lid, limit=2000, offset=0, force_refresh=force_refresh)
+                _items_cache[cache_key] = (items, now)
+                all_items.extend(items)
+
+            all_items.sort(key=lambda x: x.get("date_created") or "", reverse=True)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"获取媒体失败: {e}")
+
+        all_items = [i for i in all_items if _item_matches_filter(i, filter)] if filter else all_items
+        all_items = [i for i in all_items if _item_matches_query(i, q)] if q else all_items
+
+        total = len(all_items)
+        return {"items": all_items[offset:offset + limit], "total": total}
+
+    cache_key = library_id
+    if not force_refresh and cache_key in _items_cache:
+        cached_items, cached_at = _items_cache[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return _paginate_filter(cached_items, filter, q, offset, limit)
+
+    try:
+        all_items, _ = await _list_items(config, library_id, limit=2000, offset=0, force_refresh=force_refresh)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取媒体失败: {e}")
+
+    _items_cache[cache_key] = (all_items, now)
+    return _paginate_filter(all_items, filter, q, offset, limit)
+
+
+def _item_matches_filter(item: dict, filter_str: str) -> bool:
+    tags = item.get("tags", {})
+    if not tags:
+        return False
+    if filter_str == "cracked" and tags.get("is_cracked"):
+        return True
+    if filter_str == "chinese" and tags.get("has_chinese"):
+        return True
+    if filter_str == "leaked" and tags.get("release_type_key") == "leaked":
+        return True
+    if filter_str == "uncensored" and tags.get("release_type_key") == "uncensored":
+        return True
+    return False
+
+
+def _paginate_filter(all_items: list, filter_str: str | None, q: str | None, offset: int, limit: int):
+    filtered = [i for i in all_items if _item_matches_filter(i, filter_str)] if filter_str else list(all_items)
+    filtered = [i for i in filtered if _item_matches_query(i, q)] if q else filtered
+    total = len(filtered)
+    return {"items": filtered[offset:offset + limit], "total": total}
+
+
+@router.get("/item/{item_id}")
+async def get_item(item_id: str):
+    """Get item details."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        raw = await _get_item(config, item_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取详情失败: {e}")
+
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"未找到媒体项目: {item_id}")
+
+    return raw
+
+
+@router.post("/items/delete-chain")
+async def delete_media_item_chain(req: MediaItemDeleteRequest):
+    config = _load_config()
+    code, delete_dirs, delete_files = await _media_item_delete_plan(req.item_id, config)
+
+    if req.dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            "code": code,
+            **_preview_delete_targets(delete_dirs, delete_files),
+        }
+
+    result = _execute_delete_targets(delete_dirs, delete_files)
+    state = _bump_sync_state()
+    return {
+        "ok": True,
+        "code": code,
+        "sync_state": state,
+        **result,
+    }
+
+
+# ─── Hardlink group endpoints ──────────────────────────────────────────────────
+
+@router.get("/hardlinks/groups")
+async def get_hardlink_groups():
+    """Return current hardlink groups from the stored file.
+    Does NOT scan the filesystem — use POST /hardlinks/scan to refresh.
+    """
+    payload = _enrich_hardlink_groups(_load_hardlink_groups())
+    return {
+        "groups": payload["groups"],
+        "summary": payload["summary"],
+        "count": payload["summary"]["total_groups"],
+        "last_scanned_at": _hardlink_groups_last_scanned_at(),
+    }
+
+
+def _parse_range_header(range_header: str | None, file_size: int) -> tuple[int, int] | None:
+    if not range_header:
+        return None
+    match = re.match(r"bytes=(\d*)-(\d*)$", range_header.strip())
+    if not match:
+        raise HTTPException(status_code=416, detail="无效的 Range 请求")
+
+    start_raw, end_raw = match.groups()
+    if not start_raw and not end_raw:
+        raise HTTPException(status_code=416, detail="无效的 Range 请求")
+
+    if start_raw:
+        start = int(start_raw)
+        end = int(end_raw) if end_raw else file_size - 1
+    else:
+        suffix_length = int(end_raw)

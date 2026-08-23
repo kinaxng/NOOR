@@ -1,0 +1,146 @@
+
+
+async def _media_server_info(config: dict, client: httpx.AsyncClient | None = None) -> dict:
+    close_client = False
+    if client is None:
+        client = httpx.AsyncClient(timeout=10.0, trust_env=False)
+        close_client = True
+    try:
+        data = await _emby_get_json(client, config, "/System/Info")
+        product = str(data.get("ProductName") or data.get("ServerName") or "Emby / Jellyfin")
+        lowered = product.lower()
+        kind = "jellyfin" if "jellyfin" in lowered else "emby"
+        return {
+            "kind": kind,
+            "name": "Jellyfin" if kind == "jellyfin" else "Emby",
+            "server_name": data.get("ServerName") or "",
+            "version": data.get("Version") or "",
+        }
+    except Exception:
+        return {"kind": "emby", "name": "Emby / Jellyfin", "server_name": "", "version": ""}
+    finally:
+        if close_client:
+            await client.aclose()
+
+
+async def _get_actor_profile(config: dict, actor_id: str, *, lang: str | None = None) -> dict:
+    user_id = str(config.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Emby 未配置用户 ID，无法读取演员详情")
+    async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+        data = await _emby_get_json(
+            client,
+            config,
+            f"/Users/{quote(user_id, safe='')}/Items/{quote(str(actor_id), safe='')}",
+            params={"Fields": "ProviderIds,Overview,PrimaryImageAspectRatio,ImageTags,DateCreated,SortName,PremiereDate,EndDate,ProductionLocations,Gender,KnownForDepartment,Homepage,Popularity"},
+        )
+        media_server = await _media_server_info(config, client)
+    actor = _parse_person(config, data)
+    actor["emby_url"] = _actor_web_url(config, actor.get("id"), actor.get("server_id"))
+    actor["media_server"] = media_server
+    actor = _apply_actor_profile_override(actor, _load_actor_profile_overrides().get(str(actor_id)))
+    return _enrich_actor_display_names([actor], lang=lang)[0]
+
+
+async def _update_actor_profile(config: dict, actor_id: str, req: ActorProfileUpdateRequest, *, lang: str | None = None) -> dict:
+    user_id = str(config.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Emby 未配置用户 ID，无法保存演员详情")
+    actor_id = str(actor_id)
+    overrides = _load_actor_profile_overrides()
+    current_override = dict(overrides.get(actor_id) or {})
+    for key, value in {
+        "name": req.name,
+        "sort_name": req.sort_name,
+        "overview": req.overview,
+        "provider_ids": req.provider_ids,
+        "birthday": req.birthday,
+        "deathday": req.deathday,
+        "place_of_birth": req.place_of_birth,
+        "gender": req.gender,
+        "known_for_department": req.known_for_department,
+        "popularity": req.popularity,
+        "homepage": req.homepage,
+        "external_urls": req.external_urls,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }.items():
+        if value is not None:
+            current_override[key] = value
+    identity_names = dict(current_override.get("identity_names") or {})
+    for key, value in {
+        "jp": req.jp_name,
+        "zh_cn": req.zh_cn_name,
+        "zh_tw": req.zh_tw_name,
+    }.items():
+        if value is not None:
+            identity_names[key] = str(value or "").strip()
+    if req.aliases is not None:
+        identity_names["aliases"] = [str(alias).strip() for alias in req.aliases if str(alias).strip()]
+    if identity_names:
+        current_override["identity_names"] = identity_names
+    overrides[actor_id] = current_override
+    _save_actor_profile_overrides(overrides)
+
+    synced = False
+    sync_error = None
+    try:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+            item = await _emby_get_json(
+                client,
+                config,
+                f"/Users/{quote(user_id, safe='')}/Items/{quote(actor_id, safe='')}",
+                params={"Fields": "ProviderIds,Overview,ImageTags,SortName,DateCreated,PremiereDate,EndDate,ProductionLocations,Gender,KnownForDepartment,Homepage,Popularity"},
+            )
+            if req.name is not None:
+                item["Name"] = req.name
+            if req.sort_name is not None:
+                item["SortName"] = req.sort_name
+            if req.overview is not None:
+                item["Overview"] = req.overview
+            if req.birthday is not None:
+                item["PremiereDate"] = req.birthday
+            if req.deathday is not None:
+                item["EndDate"] = req.deathday
+            if req.place_of_birth is not None:
+                item["ProductionLocations"] = [req.place_of_birth] if str(req.place_of_birth).strip() else []
+            if req.gender is not None:
+                item["Gender"] = req.gender
+            if req.known_for_department is not None:
+                item["KnownForDepartment"] = req.known_for_department
+            if req.homepage is not None:
+                item["Homepage"] = req.homepage
+            if req.provider_ids is not None:
+                provider_ids = dict(item.get("ProviderIds") or {})
+                for key, value in req.provider_ids.items():
+                    key = str(key)
+                    text = str(value or "").strip()
+                    if text:
+                        provider_ids[key] = text
+                        continue
+                    for existing_key in list(provider_ids.keys()):
+                        if existing_key.lower() == key.lower():
+                            provider_ids.pop(existing_key, None)
+                item["ProviderIds"] = provider_ids
+            resp = await client.post(
+                f"{_server_url(config)}/emby/Items/{quote(actor_id, safe='')}",
+                headers={**_headers(config.get("api_key", "")), "Content-Type": "application/json"},
+                json=item,
+            )
+            resp.raise_for_status()
+            synced = True
+    except Exception as exc:
+        sync_error = str(exc)
+    actor = await _get_actor_profile(config, actor_id, lang=lang)
+    return {"ok": True, "actor": actor, "synced": synced, "sync_error": sync_error}
+
+
+async def _set_actor_avatar_bytes(
+    config: dict,
+    actor_id: str,
+    content: bytes,
+    *,
+    content_type: str = "image/jpeg",
+    lang: str | None = None,
+) -> dict:
+    if not content:
+        raise HTTPException(status_code=400, detail="头像文件为空")

@@ -1,0 +1,71 @@
+        result = await _set_actor_avatar_from_url(config, actor_id, req.url, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"设置演员头像失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员头像已从 URL 设置: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actor/{actor_id}/metadata/tmdb-preview")
+async def preview_actor_tmdb_metadata(actor_id: str, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        return await _preview_actor_tmdb_metadata(config, actor_id, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"读取 TMDB 演员资料失败: {exc}")
+
+
+@router.post("/actor/{actor_id}/metadata/tmdb-apply")
+async def apply_actor_tmdb_metadata(actor_id: str, req: ActorTmdbApplyRequest, lang: str | None = None):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _apply_actor_tmdb_metadata(config, actor_id, req, lang=lang)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"应用 TMDB 演员资料失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "info",
+        f"[MediaLibrary] 演员 TMDB 资料已应用: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.delete("/actor/{actor_id}")
+async def delete_actor_profile(actor_id: str):
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+    try:
+        result = await _delete_actor_profile(config, actor_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"删除演员失败: {exc}")
+    SystemLogManager.get_instance().add_log(
+        "warning",
+        f"[MediaLibrary] 演员已删除: {actor_id}",
+        source="media_library.actors",
+    )
+    _bump_sync_state()
+    return result
+
+
+@router.post("/actors/mapping/upload")
+async def upload_actor_mapping(file: UploadFile = File(...)):
+    filename = _safe_upload_filename(file.filename)
+    content = await file.read()

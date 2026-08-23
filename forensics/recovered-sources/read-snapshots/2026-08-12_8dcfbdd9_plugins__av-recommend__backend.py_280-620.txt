@@ -1,0 +1,341 @@
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = DATA_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(DATA_FILE)
+
+
+def _text_has_subtitle(value: Any) -> bool:
+    text = _feature_value_text(value)
+    return bool(re.search(r"中字|中文字幕|中文|字幕|sub", text, re.I))
+
+
+def _text_has_cracked(value: Any) -> bool:
+    text = _feature_value_text(value)
+    return bool(re.search(r"破解|无码破解|uncensored|crack|leak|流出", text, re.I))
+
+
+def _feature_value_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, nested in value.items():
+            if key in {"has_subtitle", "has_cnsub", "play_subtitle", "has_magnet_subtitle"} and bool(nested):
+                parts.append("中文字幕")
+            elif key in {"is_cracked", "new_model_uncensored_crack"} and bool(nested):
+                parts.append("破解")
+            else:
+                parts.append(_feature_value_text(nested))
+        return " ".join(part for part in parts if part)
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(_feature_value_text(item) for item in value)
+    if isinstance(value, bool):
+        return ""
+    return str(value or "")
+
+
+def _generic_category_factor(name: Any) -> float:
+    text = str(name or "").strip()
+    if not text:
+        return 0.0
+    upper_text = text.upper()
+    if any(keyword in text or keyword.upper() in upper_text for keyword in GENERIC_CATEGORY_KEYWORDS):
+        return 0.28
+    if len(text) <= 1:
+        return 0.35
+    return 1.0
+
+
+def _title_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return str(value or "").strip()
+    parts: list[str] = []
+    for key in ("display_title", "title", "originaltitle", "name", "label", "summary", "number", "code"):
+        text = str(value.get(key) or "").strip()
+        if text:
+            parts.append(text)
+    for container_name in ("data", "detail", "nfo"):
+        container = value.get(container_name)
+        if not isinstance(container, dict):
+            continue
+        for key in ("display_title", "title", "originaltitle", "sorttitle", "name", "plot", "outline"):
+            text = str(container.get(key) or "").strip()
+            if text:
+                parts.append(text)
+    return " ".join(dict.fromkeys(parts))
+
+
+def _clean_title_text(value: Any) -> str:
+    text = _title_text(value)
+    if not text:
+        return ""
+    text = CODE_RE.sub(" ", text)
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"[\[\]【】『』「」()（）＜＞<>]", " ", text)
+    for pattern in TITLE_NOISE_PATTERNS:
+        text = re.sub(pattern, " ", text, flags=re.I)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _pattern_in_title(text: str, pattern: str) -> bool:
+    if not pattern:
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_ -]+", pattern):
+        return bool(re.search(rf"(?<![A-Za-z0-9]){re.escape(pattern)}(?![A-Za-z0-9])", text, re.I))
+    return pattern.lower() in text.lower()
+
+
+def _analyze_title(value: Any) -> dict[str, Any]:
+    raw = _title_text(value)
+    clean = _clean_title_text(value)
+    if not clean:
+        return {"version": TITLE_PROFILE_VERSION, "raw": raw, "clean": "", "tags": [], "labels": [], "confidence": 0}
+    tags: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for trait in TITLE_TRAIT_PATTERNS:
+        name = str(trait["name"])
+        if name in seen:
+            continue
+        matched = [pattern for pattern in trait.get("patterns") or () if _pattern_in_title(clean, str(pattern))]
+        if not matched:
+            continue
+        seen.add(name)
+        tags.append({
+            "name": name,
+            "key": _norm_key(name),
+            "group": trait.get("group") or "title",
+            "weight": float(trait.get("weight") or 1.0),
+            "matched": matched[:3],
+        })
+    confidence = min(100, round(sum(float(tag.get("weight") or 0) for tag in tags) * 28))
+    return {
+        "version": TITLE_PROFILE_VERSION,
+        "raw": raw,
+        "clean": clean,
+        "tags": tags[:12],
+        "labels": [str(tag["name"]) for tag in tags[:12]],
+        "confidence": confidence,
+    }
+
+
+def _title_trait_labels(analysis: Any, limit: int = 12, min_weight: float = 0.0) -> list[str]:
+    if not isinstance(analysis, dict):
+        return []
+    labels: list[str] = []
+    seen: set[str] = set()
+    for tag in analysis.get("tags") or []:
+        if not isinstance(tag, dict) or float(tag.get("weight") or 0) < min_weight:
+            continue
+        name = str(tag.get("name") or "").strip()
+        key = _norm_key(name)
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        labels.append(name)
+        if len(labels) >= limit:
+            break
+    return labels
+
+
+def _title_mined_terms(value: Any, limit: int = 36) -> list[str]:
+    text = _clean_title_text(value)
+    if not text:
+        return []
+    text = re.sub(r"(?:した|して|する|される|され|れる|られ|ない|に|を|が|と|の|で|へ|から|まで|より|そして|また|その|この)", " ", text)
+    chunks = re.findall(r"[\u3040-\u30ff\u3400-\u9fffA-Za-z]{2,12}", text)
+    terms: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        candidates: list[str] = [chunk]
+        if len(chunk) > 4:
+            for size in (2, 3, 4):
+                candidates.extend(chunk[index:index + size] for index in range(0, len(chunk) - size + 1))
+        for term in candidates:
+            if len(term) < 2 or len(term) > 4:
+                continue
+            if term in TITLE_TERM_STOPWORDS or any(stop in term for stop in TITLE_TERM_STOPWORDS if len(stop) >= 3):
+                continue
+            if re.fullmatch(r"[\u3040-\u309f]+", term) or re.search(r"^[ぁ-ん]+|[ぁ-ん]+$", term):
+                continue
+            if re.fullmatch(r"[A-Za-z]+", term) and len(term) < 3:
+                continue
+            if re.search(r"(?:カップ|タイトル|サンプル|プレビュー)$", term):
+                continue
+            key = _norm_key(term)
+            if key in seen:
+                continue
+            seen.add(key)
+            terms.append(term)
+            if len(terms) >= limit:
+                return terms
+    return terms
+
+
+def _profile_title_term_matches(item: Any, profile_terms: Counter, limit: int = 8) -> list[dict[str, Any]]:
+    matches = [
+        {"name": term, "count": float(profile_terms.get(term) or 0)}
+        for term in _title_mined_terms(item, 80)
+        if float(profile_terms.get(term) or 0) > 0
+    ]
+    matches.sort(key=lambda row: (float(row["count"]), len(str(row["name"]))), reverse=True)
+    return matches[:limit]
+
+
+def _is_actor_name_term(term: str, actor_names: set[str]) -> bool:
+    normalized = _norm_key(term)
+    return any(
+        normalized and actor_key and (normalized == actor_key or normalized in actor_key or actor_key in normalized)
+        for actor_key in (_norm_key(actor) for actor in actor_names)
+    )
+
+
+def _prune_title_term_counter(counter: Counter) -> Counter:
+    trait_labels = {str(trait.get("name") or "") for trait in TITLE_TRAIT_PATTERNS}
+    items = [(str(term), float(count)) for term, count in counter.items() if str(term).strip() and float(count or 0) > 0]
+    kept: Counter = Counter()
+    for term, count in sorted(items, key=lambda row: (len(row[0]), -row[1])):
+        if term in trait_labels:
+            continue
+        if len(term) <= 2 and any(term != longer and term in longer and len(longer) > len(term) and longer_count >= count * 0.5 for longer, longer_count in items):
+            continue
+        kept[term] = count
+    return kept
+
+
+def _ensure_title_profile(item: dict[str, Any]) -> dict[str, Any]:
+    profile = item.get("title_profile")
+    if isinstance(profile, dict) and int(profile.get("version") or 0) == TITLE_PROFILE_VERSION:
+        return profile
+    profile = _analyze_title(item)
+    item["title_profile"] = profile
+    item["title_traits"] = _title_trait_labels(profile)
+    return profile
+
+
+def _merge_title_traits(categories: list[str], title_traits: list[str], limit: int = 16) -> list[str]:
+    return _unique_names([*(categories or []), *(title_traits or [])], limit)
+
+
+def _entity_payload(entity: KnowledgeEntity) -> dict[str, Any]:
+    return {
+        "id": entity.id,
+        "type": entity.entity_type,
+        "key": entity.key,
+        "label": entity.label,
+        "summary": entity.summary,
+        "data": entity.data or {},
+        "source": entity.source,
+        "confidence": entity.confidence,
+    }
+
+
+def _media_preference_weight(entity: KnowledgeEntity) -> float:
+    observed_at = entity.updated_at or entity.created_at
+    if not observed_at:
+        return 1.0
+    try:
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=dt.timezone.utc)
+        age_days = max(0.0, (dt.datetime.now(dt.timezone.utc) - observed_at.astimezone(dt.timezone.utc)).total_seconds() / 86400)
+    except Exception:
+        return 1.0
+    if age_days <= 90:
+        return 1.0
+    return max(0.35, math.pow(0.5, (age_days - 90) / 540))
+
+
+def _title_profile_media_payload(item: KnowledgeEntity) -> dict[str, Any]:
+    data = item.data or {}
+    return {
+        "label": item.label,
+        "summary": item.summary,
+        "data": data,
+        "nfo": data.get("nfo") if isinstance(data, dict) else {},
+        "title": data.get("title") if isinstance(data, dict) else "",
+        "originaltitle": data.get("originaltitle") if isinstance(data, dict) else "",
+        "name": data.get("name") if isinstance(data, dict) else "",
+    }
+
+
+def _title_profile_signature(media: list[KnowledgeEntity], media_weights: dict[str, float]) -> str:
+    rows = []
+    for item in media:
+        observed = item.updated_at or item.created_at
+        rows.append({
+            "id": item.id,
+            "updated_at": observed.isoformat() if observed else "",
+            "weight": round(float(media_weights.get(item.id, 1.0)), 4),
+            "title": _clean_title_text(_title_profile_media_payload(item)),
+        })
+    raw = json.dumps({"version": TITLE_PROFILE_VERSION, "rows": rows}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_title_profile_cache(signature: str) -> dict[str, Counter] | None:
+    try:
+        data = json.loads(TITLE_PROFILE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict) or data.get("signature") != signature or int(data.get("version") or 0) != TITLE_PROFILE_VERSION:
+        return None
+    return {
+        "title_traits": Counter({str(key): float(value) for key, value in (data.get("title_traits") or {}).items()}),
+        "title_terms": Counter({str(key): float(value) for key, value in (data.get("title_terms") or {}).items()}),
+    }
+
+
+def _save_title_profile_cache(signature: str, title_traits: Counter, title_terms: Counter, media_count: int) -> None:
+    TITLE_PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": TITLE_PROFILE_VERSION,
+        "signature": signature,
+        "media_count": media_count,
+        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "title_traits": {str(key): round(float(value), 4) for key, value in title_traits.items()},
+        "title_terms": {str(key): round(float(value), 4) for key, value in title_terms.items()},
+    }
+    temporary = TITLE_PROFILE_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(TITLE_PROFILE_FILE)
+
+
+def _build_title_profile(media: list[KnowledgeEntity], media_weights: dict[str, float], actor_names: set[str]) -> dict[str, Counter]:
+    title_traits: Counter = Counter()
+    title_terms: Counter = Counter()
+    for item in media:
+        payload = _title_profile_media_payload(item)
+        weight = media_weights.get(item.id, 1.0)
+        for tag in _analyze_title(payload).get("tags") or []:
+            name = str(tag.get("name") or "").strip()
+            if name:
+                title_traits[name] += weight * float(tag.get("weight") or 1.0)
+        for term in _title_mined_terms(payload, 80):
+            if not _is_actor_name_term(term, actor_names):
+                title_terms[term] += weight
+    return {"title_traits": title_traits, "title_terms": _prune_title_term_counter(title_terms)}
+
+
+async def _library_profile() -> dict[str, Any]:
+    empty_profile = {
+        "media_count": 0,
+        "codes": set(),
+        "media_by_code": {},
+        "actors": Counter(),
+        "genres": Counter(),
+        "tags": Counter(),
+        "studios": Counter(),
+        "series": Counter(),
+        "directors": Counter(),
+        "title_traits": Counter(),
+        "title_terms": Counter(),
+        "actor_category": Counter(),
+        "local_features": {},
+        "top_media": [],
+    }
+    async with async_session_maker() as db:
+        try:
+            media_rows = await db.execute(select(KnowledgeEntity).where(KnowledgeEntity.entity_type == "media_item"))
+        except SQLAlchemyError:
+            return empty_profile
+        media = list(media_rows.scalars().all())
+        media_ids = [item.id for item in media]

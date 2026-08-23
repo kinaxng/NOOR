@@ -1,0 +1,56 @@
+    monkeypatch.setattr(media_library, '_preview_actor_tmdb_metadata', fake_preview)
+    monkeypatch.setattr(media_library, '_update_actor_profile', fake_update)
+    monkeypatch.setattr(media_library, '_set_actor_avatar_from_url', fake_avatar)
+    monkeypatch.setattr(media_library, '_get_actor_profile', fake_get_profile)
+    monkeypatch.setattr(media_library, '_load_actor_profile_overrides', lambda: saved_avatar_overrides)
+    monkeypatch.setattr(media_library, '_save_actor_profile_overrides', lambda overrides: saved_avatar_overrides.update(overrides))
+
+    result = await media_library._apply_actor_tmdb_metadata(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': 'user-1'},
+        'actor-1',
+        media_library.ActorTmdbApplyRequest(apply_avatar=True),
+        lang='zh-CN',
+    )
+
+    assert result['ok'] is True
+    assert result['synced'] is True
+    assert result['avatar_synced'] is False
+    assert result['avatar_sync_error'] == 'HTTP 500'
+    assert result['actor']['image_url'] == 'https://image.tmdb.org/t/p/original/profile.jpg'
+
+
+@pytest.mark.asyncio
+async def test_delete_actor_profile_deletes_person_and_ignores_ghost(monkeypatch: pytest.MonkeyPatch):
+    ignored = set()
+    saved_overrides = {'actor-1': {'name': '白峰美羽'}}
+
+    def responder(method, url, headers, params, json):
+        if method == 'GET' and url.endswith('/emby/Users/user-1/Items'):
+            assert params['PersonIds'] == 'actor-1'
+            return FakeResponse(200, {'Items': [{'Id': 'movie-1'}]})
+        if method == 'DELETE' and url.endswith('/emby/Items/actor-1'):
+            return FakeResponse(204, {})
+        raise AssertionError(f'unexpected request: {method} {url} {params}')
+
+    monkeypatch.setattr(media_library.httpx, 'AsyncClient', lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs))
+    monkeypatch.setattr(media_library, '_load_actor_merge_ignored_ghosts', lambda: ignored)
+    monkeypatch.setattr(media_library, '_save_actor_merge_ignored_ghosts', lambda actor_ids: ignored.update(actor_ids))
+    monkeypatch.setattr(media_library, '_load_actor_profile_overrides', lambda: saved_overrides)
+    monkeypatch.setattr(media_library, '_save_actor_profile_overrides', lambda overrides: saved_overrides.clear() or saved_overrides.update(overrides))
+
+    result = await media_library._delete_actor_profile(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': 'user-1'},
+        'actor-1',
+    )
+
+    assert result == {'ok': True, 'actor_id': 'actor-1', 'had_related_movies': True}
+    assert 'actor-1' in ignored
+    assert saved_overrides == {}
+
+
+def test_actor_merge_apply_people_rewrites_source_actor_and_deduplicates():
+    item = {
+        "People": [
+            {"Name": "三原ほのか", "Id": "15088", "Type": "Actor", "PrimaryImageTag": "old"},
+            {"Name": "三原ほのか", "Id": "4258", "Type": "Actor", "PrimaryImageTag": "target"},
+            {"Name": "Director", "Id": "d1", "Type": "Director"},

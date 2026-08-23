@@ -1,0 +1,31 @@
+    panelWrap.appendChild(panelFactory({
+      rows,
+      collapsible: true,
+      collapseKey: state.relation ? `javdb-relation-${state.relation.relType}-filter-panel` : `javdb-${state.tab}-filter-panel`,
+      defaultCollapsed: true,
+    }))
+  }
+
+  function renderFilters() {
+    filtersWrap.innerHTML = ''
+    renderFilterPanel()
+    if (state.tab === 'videos') {
+      void ensureVideoCategories()
+      void ensureVideoActors()
+    }
+  }
+
+  function renderLoadingStatus() {
+    loadingStatus.innerHTML = ''
+    loadingStatus.style.display = 'none'
+    if (state.loading) {
+      loadingStatus.classList.remove('is-error')
+      loadingStatus.style.display = 'flex'
+      const message = state.hasLoadedOnce && state.items.length
+        ? '正在刷新当前列表…'
+        : '正在加载 JAVDB 数据…'
+      loadingStatus.appendChild(el('span', 'javdb-loading-status__bar'))
+      loadingStatus.appendChild(el('span', 'javdb-loading-status__spinner'))
+      loadingStatus.appendChild(el('span', 'javdb-loading-status__text', message))
+      return
+    }

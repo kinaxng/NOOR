@@ -1,0 +1,121 @@
+    model_path, hash_path = _deep_swapper_builtin_paths(model_id)
+    downloaded = model_path.is_file() and model_path.stat().st_size > 0
+    status = _deep_swapper_download_status(model_id)
+    size = model_path.stat().st_size if downloaded else status.get("size")
+    return {
+        "id": model_id,
+        "name": model_id,
+        "filename": model_path.name,
+        "path": str(model_path) if downloaded else "",
+        "hash_path": str(hash_path) if hash_path.exists() else "",
+        "source": "known",
+        "size": size,
+        "updated_at": model_path.stat().st_mtime if downloaded else None,
+        "downloaded": downloaded,
+        "downloading": status.get("status") == "running",
+        "download_status": status.get("status") or ("completed" if downloaded else "missing"),
+        "progress": 100 if downloaded else int(status.get("progress") or 0),
+        "message": status.get("message") or ("已下载" if downloaded else "未下载"),
+    }
+
+
+@router.get("/deep-swapper-models")
+async def list_facefusion_deep_swapper_models():
+    custom_root = _deep_swapper_custom_root()
+    custom_root.mkdir(parents=True, exist_ok=True)
+    custom_models = [
+        _deep_swapper_model_payload(path)
+        for path in sorted(custom_root.iterdir(), key=lambda item: item.name.lower())
+        if path.is_file() and path.suffix.lower() in FACEFUSION_DEEP_SWAPPER_MODEL_EXTENSIONS
+    ]
+    known_models = [_deep_swapper_builtin_payload(model_id) for model_id in _known_deep_swapper_model_ids()]
+    return {
+        "success": True,
+        "models": [*custom_models, *known_models],
+    }
+
+
+@router.post("/deep-swapper-models/download")
+async def download_facefusion_deep_swapper_model(req: FaceFusionDeepSwapperDownloadRequest):
+    model_id = (req.model_id or "").strip()
+    if model_id not in set(_known_deep_swapper_model_ids()):
+        raise HTTPException(status_code=404, detail="Deep 模型不存在")
+    model_path, _ = _deep_swapper_builtin_paths(model_id)
+    if model_path.is_file() and model_path.stat().st_size > 0:
+        _set_deep_swapper_download_status(model_id, status="completed", progress=100, message="已下载", size=model_path.stat().st_size)
+        return {"success": True, "message": "模型已存在", "model": _deep_swapper_builtin_payload(model_id)}
+
+    status = _deep_swapper_download_status(model_id)
+    if status.get("status") == "running":
+        return {"success": True, "message": "模型下载已在运行", "model": _deep_swapper_builtin_payload(model_id)}
+
+    _set_deep_swapper_download_status(model_id, status="running", progress=0, message="等待下载")
+    threading.Thread(target=_download_deep_swapper_model, args=(model_id,), daemon=True).start()
+    return {"success": True, "message": "模型下载已开始", "model": _deep_swapper_builtin_payload(model_id)}
+
+
+@router.post("/deep-swapper-models")
+async def upload_facefusion_deep_swapper_model(file: UploadFile = File(...)):
+    original_name = Path(file.filename or "model").name
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in FACEFUSION_DEEP_SWAPPER_MODEL_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"不支持的 Deep 模型格式: {original_name}")
+
+    custom_root = _deep_swapper_custom_root()
+    custom_root.mkdir(parents=True, exist_ok=True)
+    target_path = custom_root / f"{_safe_model_stem(original_name)}{suffix}"
+    if target_path.exists():
+        target_path = custom_root / f"{target_path.stem}_{uuid4().hex[:8]}{suffix}"
+    try:
+        with target_path.open("wb") as handle:
+            while chunk := await file.read(1024 * 1024):
+                handle.write(chunk)
+    finally:
+        await file.close()
+    return {
+        "success": True,
+        "model": _deep_swapper_model_payload(target_path),
+    }
+
+
+@router.post("/source-images")
+async def upload_facefusion_source_images(files: list[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="请选择源脸图片")
+
+    upload_root = _upload_root()
+    upload_root.mkdir(parents=True, exist_ok=True)
+    saved_files: list[dict[str, str]] = []
+    for upload in files:
+        original_name = Path(upload.filename or "source").name
+        suffix = Path(original_name).suffix.lower()
+        if suffix not in FACEFUSION_SOURCE_IMAGE_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"不支持的源脸图片格式: {original_name}")
+        target_path = upload_root / f"{uuid4().hex}{suffix}"
+        try:
+            with target_path.open("wb") as handle:
+                while chunk := await upload.read(1024 * 1024):
+                    handle.write(chunk)
+        finally:
+            await upload.close()
+        image_id = target_path.stem
+        saved_files.append({
+            "id": image_id,
+            "name": original_name,
+            "path": str(target_path),
+            "preview_url": f"/api/facefusion/source-images/{image_id}",
+        })
+    return {
+        "success": True,
+        "files": saved_files,
+    }
+
+
+@router.get("/source-images")
+async def list_facefusion_source_images():
+    upload_root = _upload_root()
+    upload_root.mkdir(parents=True, exist_ok=True)
+    files = [
+        path for path in upload_root.iterdir()
+        if path.is_file() and path.suffix.lower() in FACEFUSION_SOURCE_IMAGE_EXTENSIONS
+    ]

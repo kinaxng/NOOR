@@ -1,0 +1,46 @@
+
+class NetworkConfig(BaseModel):
+    # Kept for compatibility. The effective order is now mirror -> HTTP proxy -> direct.
+    acceleration_mode: str = "auto"
+    http_proxy: str = ""
+    github_mirror: str = "https://ghproxy.com"
+    github_token: str = ""
+    hf_mirror: str = "https://hf-mirror.com"
+    pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
+    hf_token: str = ""  # HuggingFace token for gated repos (e.g. Kotoba v2)
+
+
+class UiConfig(BaseModel):
+    cover_blur_enabled: bool = True
+
+
+@router.get("")
+async def get_settings_all():
+    """Get all settings."""
+    version_info = _get_lada_version_info()
+
+    env_data = read_env_file()
+    lada_model_weights_dir = _get_lada_model_weights_dir_from_env(env_data)
+    whisper_features = _get_whisper_feature_flags()
+
+    return build_settings_payload(
+        env_data=env_data,
+        version_info=version_info,
+        lada_model_weights_dir=lada_model_weights_dir,
+        whisper_features=whisper_features,
+        custom_whisper_config=_parse_custom_config(env_data),
+    )
+
+
+@router.put("/emby")
+async def update_emby_config(config: EmbyConfig):
+    """Update Emby configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Emby 配置...")
+    try:
+        apply_emby_config_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Emby 配置已保存")
+        return {"success": True, "message": "Emby settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Emby 配置保存失败 — {str(e)}")

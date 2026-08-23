@@ -1,0 +1,21 @@
+                  : [...relationActorGenreFilters, item.name]
+                state.page = 1
+                rerenderCurrentList()
+              })),
+            ]),
+          ])
+        }
+      } else {
+        pushRow([
+          buildPanelSection('当前', [chip(state.relation.label, true, () => {})]),
+        ])
+      }
+    } else if (state.tab === 'latest') {
+      pushRow([
+        buildPanelSection('类型', latestTypes.map(([value, label]) => chip(label, state.latestType === value, () => {
+          state.latestType = value
+          state.page = 1
+          loadData()
+        }))),
+      ])
+      pushRow([

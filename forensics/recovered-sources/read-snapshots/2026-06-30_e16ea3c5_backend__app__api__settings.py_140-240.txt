@@ -1,0 +1,101 @@
+    detection_model: str = "v4-fast"
+    restoration_model: str = "basicvsrpp-v1.2"
+    encoding_preset: str = "hevc-nvidia-gpu-hq"
+    max_clip_length: int = 180
+    detect_face_mosaics: bool = False
+
+
+class FaceFusionConfig(BaseModel):
+    dir: str = ""
+    python_path: str = ""
+
+
+class FaceFusionDefaultsConfig(BaseModel):
+    execution_provider: str = "cuda"
+    device_ids: str = "0"
+    thread_count: int = 8
+    video_memory_strategy: str = "strict"
+    system_memory_limit: int = 0
+    log_level: str = "info"
+    download_providers: str = "github huggingface"
+    halt_on_error: bool = False
+    processors: str = ""
+    face_swapper_model: str = "hyperswap_1a_256"
+    face_swapper_pixel_boost: str = "256x256"
+    face_swapper_weight: float = 0.5
+    face_enhancer_model: str = "gfpgan_1.4"
+    face_enhancer_blend: int = 80
+    face_enhancer_weight: float = 0.5
+    frame_enhancer_model: str = "span_kendata_x4"
+    frame_enhancer_blend: int = 80
+    face_detector_model: str = "yolo_face"
+    face_detector_size: str = "640x640"
+    face_detector_score: float = 0.5
+    face_detector_angles: str = "0"
+    face_detector_margin: str = "0 0 0 0"
+    face_landmarker_model: str = "2dfan4"
+    face_landmarker_score: float = 0.5
+    face_selector_mode: str = "reference"
+    face_selector_order: str = "large-small"
+    face_selector_gender: str = ""
+    face_selector_age_start: str = ""
+    face_selector_age_end: str = ""
+    face_selector_race: str = ""
+    reference_frame_number: int = 0
+    reference_face_position: int = 0
+    reference_face_distance: float = 0.3
+    face_mask_types: str = "box"
+    face_mask_areas: str = ""
+    face_mask_regions: str = ""
+    face_mask_blur: float = 0.3
+    face_mask_padding: str = "0 0 0 0"
+    face_occluder_model: str = "xseg_1"
+    face_parser_model: str = "bisenet_resnet_34"
+    output_video_encoder: str = "libx264"
+    output_video_preset: str = "veryfast"
+    output_video_quality: int = 80
+    output_video_scale: str = "1.0"
+    output_video_fps: str = ""
+    output_audio_encoder: str = "aac"
+    output_audio_quality: int = 80
+    output_audio_volume: int = 100
+    output_image_quality: int = 80
+    output_image_scale: str = "1.0"
+    temp_frame_format: str = "png"
+
+
+class FaceFusionModelDownloadRequest(BaseModel):
+    scope: Literal["lite", "full"] = "lite"
+
+
+class CustomPipelineConfig(BaseModel):
+    model: str = "large-v3"  # large-v3 | large-v2 | turbo
+    vad_method: str = "semantic"
+    scene_detector: str = "semantic"
+    enhancers: list[str] = []  # 多选：ffmpeg-dsp, clearvoice, silero-vad, demucs
+    segmenter: str = "silero-v6.2"
+    timestamp_mode: str = "aligner_interpolation"  # aligner_interpolation / vad_only
+    aligner_backend: str = "qwen3"  # qwen3 / none
+    framer_backend: str = "vad-grouped"  # vad-grouped / full-scene
+
+
+class WhisperConfig(BaseModel):
+    strategy: str = "recommended"
+    model: str = "anime-whisper"
+    pipeline_mode: str = "ensemble"
+    merge_strategy: str = "smart_merge"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    vad_method: str = "semantic"
+    audio_preprocess_mode: str = "none"
+    audio_preprocess_model: str = "vocal_balanced"
+    translate_to: str = ""
+    translate_model: str = "gpt-4o-mini"
+    translate_style: str = "adult_explicit"  # adult_explicit | standard
+    translate_base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    translate_api_key: str = ""
+    pass1_pipeline: str = "anime"  # anime | faster | balanced | transformers | qwen(legacy large-v3 baseline key) | custom
+    pass2_pipeline: str = ""  # "" = not selected, or one of the above
+    custom_config: CustomPipelineConfig = CustomPipelineConfig()
+
+

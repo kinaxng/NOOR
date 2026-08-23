@@ -1,0 +1,220 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import BaseModal from '../components/ui/BaseModal.vue'
+import api from '../api'
+import { useToast } from '../composables/useToast'
+
+type PluginListItem = {
+  id: string
+  name: string
+  version?: string
+  type: string
+  description?: string
+  tags?: string[]
+  capabilities?: string[]
+  contributions?: {
+    sidebar?: {
+      route?: string
+    }
+  }
+  enabled?: boolean
+}
+
+type MarketPluginItem = {
+  id: string
+  name?: string
+  version?: string
+  type?: string
+  description?: string
+  tags?: string[]
+  capabilities?: string[]
+  contributions?: {
+    sidebar?: {
+      route?: string
+    }
+  }
+  repo_url?: string
+  installed?: boolean
+}
+
+type PluginConfigField = {
+  type?: string
+  label?: string
+  placeholder?: string
+  description?: string
+  default?: any
+  min?: number
+  max?: number
+  step?: number
+  options?: Array<{ label?: string; value: string }>
+}
+
+type PluginConfigResponse = {
+  plugin: PluginListItem & {
+    config_schema?: Record<string, PluginConfigField>
+    default_config?: Record<string, any>
+  }
+  config: Record<string, any>
+}
+
+type PluginCardItem = {
+  id: string
+  name: string
+  version: string
+  type: string
+  description: string
+  tags: string[]
+  capabilities: string[]
+  contributions?: {
+    sidebar?: {
+      route?: string
+    }
+  }
+  repoUrl: string
+  installed: boolean
+  enabled: boolean
+  source: 'local' | 'market'
+  status: 'enabled' | 'inactive' | 'uninstalled'
+}
+
+const toast = useToast()
+
+const loading = ref(false)
+const error = ref('')
+const installedPlugins = ref<PluginListItem[]>([])
+const marketPlugins = ref<MarketPluginItem[]>([])
+
+const configModalOpen = ref(false)
+const configLoading = ref(false)
+const configSaving = ref(false)
+const configTesting = ref(false)
+const configPlugin = ref<PluginCardItem | null>(null)
+const configSchema = ref<Record<string, PluginConfigField>>({})
+const configDraft = ref<Record<string, any>>({})
+
+const pluginCards = computed<PluginCardItem[]>(() => {
+  const byId = new Map<string, PluginCardItem>()
+
+  for (const item of installedPlugins.value) {
+    byId.set(item.id, {
+      id: item.id,
+      name: item.name,
+      version: item.version || '',
+      type: item.type,
+      description: item.description || '暂无说明',
+      tags: item.tags || [],
+      capabilities: item.capabilities || [],
+      contributions: item.contributions,
+      repoUrl: '',
+      installed: true,
+      enabled: !!item.enabled,
+      source: 'local',
+      status: item.enabled ? 'enabled' : 'inactive',
+    })
+  }
+
+  for (const item of marketPlugins.value) {
+    if (!item.id || !item.name) continue
+    const existing = byId.get(item.id)
+    if (existing) {
+      existing.repoUrl = item.repo_url || existing.repoUrl
+      existing.version = existing.version || item.version || ''
+      existing.description = existing.description || item.description || '暂无说明'
+      existing.tags = existing.tags.length ? existing.tags : (item.tags || [])
+      existing.capabilities = existing.capabilities.length ? existing.capabilities : (item.capabilities || [])
+      existing.contributions = existing.contributions || item.contributions
+      continue
+    }
+    byId.set(item.id, {
+      id: item.id,
+      name: item.name,
+      version: item.version || '',
+      type: item.type || 'plugin',
+      description: item.description || '暂无说明',
+      tags: item.tags || [],
+      capabilities: item.capabilities || [],
+      contributions: item.contributions,
+      repoUrl: item.repo_url || '',
+      installed: false,
+      enabled: false,
+      source: 'market',
+      status: 'uninstalled',
+    })
+  }
+
+  return [...byId.values()].sort((a, b) => {
+    const order = { enabled: 0, inactive: 1, uninstalled: 2 }
+    return order[a.status] - order[b.status] || a.name.localeCompare(b.name, 'zh-CN')
+  })
+})
+
+const stats = computed(() => {
+  const enabled = pluginCards.value.filter(item => item.status === 'enabled').length
+  const inactive = pluginCards.value.filter(item => item.status === 'inactive').length
+  const uninstalled = pluginCards.value.filter(item => item.status === 'uninstalled').length
+  return `仓库共 ${pluginCards.value.length} 个插件 · 已启用 ${enabled} 个 · 未激活 ${inactive} 个 · 未安装 ${uninstalled} 个`
+})
+
+function routeOf(plugin: PluginCardItem) {
+  const route = plugin.contributions?.sidebar?.route
+  if (typeof route === 'string' && route) return route
+  return plugin.capabilities.includes('sidebar_page') ? `/plugins/${plugin.id}` : ''
+}
+
+function pluginCapabilitySummary(plugin: PluginCardItem) {
+  const caps = new Set(plugin.capabilities || [])
+  const labels = [
+    caps.has('sidebar_page') ? '独立页面' : '',
+    caps.has('subtitle_search') ? '字幕源' : '',
+    caps.has('download_submit') ? '下载器' : '',
+    caps.has('dashboard_widget') ? '概览组件' : '',
+  ].filter(Boolean)
+  return labels.join(' · ') || plugin.type || '扩展能力'
+}
+
+function statusLabel(status: PluginCardItem['status']) {
+  return status === 'enabled' ? '已启用' : status === 'inactive' ? '未激活' : '未安装'
+}
+
+async function loadData(force = false) {
+  if (loading.value && !force) return
+  loading.value = true
+  error.value = ''
+  try {
+    const [pluginsRes, marketRes] = await Promise.all([
+      api.get('/plugins'),
+      api.get('/plugins/market/items').catch(() => ({ data: [] })),
+    ])
+    installedPlugins.value = Array.isArray(pluginsRes.data) ? pluginsRes.data : []
+    marketPlugins.value = Array.isArray(marketRes.data)
+      ? marketRes.data.filter((item: any) => item && item.id && !item.error)
+      : []
+  } catch (e: any) {
+    error.value = e?.response?.data?.detail || e?.message || '插件加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function setEnabled(plugin: PluginCardItem, enabled: boolean) {
+  try {
+    await api.post(`/plugins/${plugin.id}/${enabled ? 'enable' : 'disable'}`)
+    toast.success(enabled ? '插件已启用' : '插件已停用')
+    await loadData(true)
+  } catch (e: any) {
+    toast.error(e?.response?.data?.detail || e?.message || '操作失败')
+  }
+}
+
+async function installPlugin(plugin: PluginCardItem) {
+  if (!plugin.repoUrl) {
+    toast.error('缺少插件仓库来源，无法安装')
+    return
+  }
+  try {
+    await api.post('/plugins/market/install', {
+      repo_url: plugin.repoUrl,
+      plugin_id: plugin.id,
+    })

@@ -1,0 +1,36 @@
+          current.categories = Array.isArray(detail.categories) ? detail.categories : (current.categories || [])
+          current.has_cnsub = !!(current.has_cnsub || current.play_subtitle || detectCnsub(detail))
+          current.is_cracked = !!(current.is_cracked || detectCracked(detail))
+          if (detail.library && typeof detail.library === 'object') current.library = detail.library
+          current.__detailEnriched = true
+        } catch {
+          current.__detailEnriched = true
+          if (current.actor_count == null) current.actor_count = 0
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+  }
+
+  function renderTabs() {
+    if (!tabControl) {
+      tabControl = sdk.ui.tabs({
+        tabs: tabDefs,
+        value: state.tab,
+        route: {
+          mode: 'path',
+          defaultReplace: false,
+          subPath: () => sdk.route?.subPath || '',
+          push: path => sdk.route?.push?.(path),
+          replace: path => sdk.route?.replace?.(path),
+        },
+        onChange: setTab,
+      })
+      tabsWrap.appendChild(tabControl)
+    }
+    tabControl.__noorSetValue?.(state.tab)
+  }
+
+  function buildPanelGroup(label, children) {
+    if (sdk.ui?.filterPanelGroup) return sdk.ui.filterPanelGroup({ label, items: children })
+    if (sdk.ui?.controlPanelGroup) return sdk.ui.controlPanelGroup({ label, items: children })

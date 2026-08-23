@@ -1,0 +1,151 @@
+  const options = facefusionPixelBoostOptions.value
+  if (!options.includes(String(facefusionSettings.value.face_swapper_pixel_boost || ''))) {
+    facefusionSettings.value.face_swapper_pixel_boost = options[0]
+  }
+})
+
+function splitTokens(value: string) {
+  return String(value || '').split(/[\s,]+/).map(item => item.trim()).filter(Boolean)
+}
+
+function hasFacefusionToken(key: string, token: string) {
+  const settingsValue = facefusionSettings.value as Record<string, unknown>
+  return splitTokens(String(settingsValue[key] || '')).includes(token)
+}
+
+function toggleFacefusionToken(key: string, token: string) {
+  const settingsValue = facefusionSettings.value as Record<string, unknown>
+  const values = splitTokens(String(settingsValue[key] || ''))
+  const next = values.includes(token)
+    ? values.filter(item => item !== token)
+    : [...values, token]
+  settingsValue[key] = next.join(' ')
+}
+
+function quadPart(value: unknown, index: number) {
+  return splitTokens(String(value || '')).slice(0, 4)[index] || '0'
+}
+
+function updateQuadPart(key: string, index: number, nextValue: string) {
+  const settingsValue = facefusionSettings.value as Record<string, unknown>
+  const items = ['0', '0', '0', '0']
+  splitTokens(String(settingsValue[key] || '')).slice(0, 4).forEach((item, itemIndex) => {
+    items[itemIndex] = item
+  })
+  items[index] = nextValue === '' ? '0' : String(nextValue)
+  settingsValue[key] = items.join(' ')
+}
+
+function handleClose() {
+  emit('close')
+}
+
+async function loadSourceImageLibrary() {
+  sourceLibraryLoading.value = true
+  try {
+    const resp = await api.get('/facefusion/source-images')
+    sourceLibraryImages.value = Array.isArray(resp.data?.files)
+      ? resp.data.files.map((item: any) => ({
+        id: item.id || '',
+        name: item.name || '源脸图片',
+        path: item.path || '',
+        preview_url: item.preview_url || '',
+        updated_at: item.updated_at,
+      })).filter((item: any) => item.id && item.path)
+      : []
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || '图片库读取失败')
+  } finally {
+    sourceLibraryLoading.value = false
+  }
+}
+
+async function toggleSourceLibrary() {
+  sourceLibraryOpen.value = !sourceLibraryOpen.value
+  if (sourceLibraryOpen.value) {
+    await loadSourceImageLibrary()
+  }
+}
+
+function isSourceSelected(path: string) {
+  return uploadedSourceImages.value.some(item => item.path === path)
+}
+
+function toggleLibraryImage(image: { id: string; path: string }) {
+  if (isSourceSelected(image.path)) return
+  selectedLibraryImageIds.value = selectedLibraryImageIds.value.includes(image.id)
+    ? selectedLibraryImageIds.value.filter(id => id !== image.id)
+    : [...selectedLibraryImageIds.value, image.id]
+}
+
+function addSelectedLibraryImages() {
+  const selected = sourceLibraryImages.value.filter(item => selectedLibraryImageIds.value.includes(item.id) && !isSourceSelected(item.path))
+  if (!selected.length) return
+  uploadedSourceImages.value = [
+    ...uploadedSourceImages.value,
+    ...selected.map(item => ({
+      id: item.id,
+      name: item.name,
+      path: item.path,
+      preview_url: item.preview_url,
+    })),
+  ]
+  selectedLibraryImageIds.value = []
+  if (previewUrl.value) previewStale.value = true
+}
+
+async function loadFaceFusionPreviewMetadata() {
+  previewMetadataLoading.value = true
+  try {
+    const resp = await api.post('/facefusion/preview/metadata', {
+      input_path: selectedSubmitPath.value,
+    })
+    previewFrameTotal.value = Number(resp.data?.frame_total || 0)
+    if (previewFrameTotal.value > 0 && previewFrameNumber.value > previewFrameMax.value) {
+      previewFrameNumber.value = previewFrameMax.value
+    }
+  } catch (e) {
+    previewFrameTotal.value = 0
+  } finally {
+    previewMetadataLoading.value = false
+  }
+}
+
+function markPreviewFrameChanged() {
+  if (previewUrl.value) {
+    previewStale.value = true
+  }
+}
+
+async function handlePreviewSliderCommit() {
+  markPreviewFrameChanged()
+  if (facefusionSourcePaths.value.length && !previewLoading.value) {
+    await handleGenerateFaceFusionPreview()
+  }
+}
+
+async function handleSubmitJob() {
+  if (!selectedSubmitPath.value) return
+
+  submitting.value = true
+  submitStatus.value = 'running'
+  submitProgress.value = 12
+  try {
+    const createdJob = await jobsStore.createJob({
+      emby_item_id: selectedSubmitId.value,
+      emby_item_name: displayTitle.value,
+      input_path: selectedSubmitPath.value,
+      settings: settings.value,
+    })
+    submitProgress.value = 72
+    await jobsStore.fetchJobs()
+    submitProgress.value = 100
+    submitStatus.value = 'success'
+    handleClose()
+    toast.success(t('ladaPanel.submitQueued'))
+    await openJobsFocus({ jobId: createdJob.id, chainId: createdJob.chain_id })
+  } catch (e) {
+    console.error(e)
+    submitProgress.value = 100
+    submitStatus.value = 'error'
+    toast.error(t('ladaPanel.submitFailed'))

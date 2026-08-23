@@ -1,0 +1,89 @@
+  }
+
+  function renderGrid() {
+    grid.innerHTML = ''
+    grid.classList.toggle('javdb-grid--actors', isActorRankingFrame())
+    grid.classList.toggle('is-refreshing', state.loading && state.items.length > 0)
+    const items = filteredItems()
+
+    if (state.loading && !items.length) {
+      renderSkeletonGrid()
+      return
+    }
+
+    if (!items.length) {
+      grid.appendChild(sdk.ui.emptyState({ text: '暂无符合条件的作品' }))
+      return
+    }
+
+    const start = (state.page - 1) * state.limit
+    const visible = usesRemotePaging() ? items : items.slice(start, start + state.limit)
+
+    visible.forEach(item => {
+      if (isActorRankingFrame()) {
+        const actorTitle = item.name_zht || item.name || '-'
+        const actorMeta = [item.name, item.other_name].filter(Boolean).join(' · ')
+        const actorCard = el('button', 'javdb-actor-card')
+        actorCard.type = 'button'
+        actorCard.onclick = () => setRelation('actor', item.id, actorTitle)
+        const avatar = el('div', 'javdb-actor-avatar')
+        if (item.avatar_url) {
+          const img = el('img')
+          img.src = item.avatar_url
+          img.alt = actorTitle
+          avatar.appendChild(img)
+        }
+        actorCard.appendChild(avatar)
+        actorCard.appendChild(el('div', 'javdb-actor-name', actorTitle))
+        actorCard.appendChild(el('div', 'javdb-actor-meta', actorMeta || ''))
+        const badgeRow = el('div', 'javdb-actor-badges')
+        if (item.uncensored) badgeRow.appendChild(sdk.ui.badge({ label: '无码', tone: 'info' }))
+        actorCard.appendChild(badgeRow)
+        grid.appendChild(actorCard)
+        return
+      }
+      const badges = []
+      const magnetText = magnetLabel(item)
+      if (magnetText) badges.push(sdk.ui.badge({ label: magnetText, tone: 'info' }))
+      if (item.has_cnsub || item.play_subtitle) badges.push(sdk.ui.badge({ label: '中字', tone: 'success' }))
+      if (item.is_cracked) badges.push(sdk.ui.badge({ label: '破解', tone: 'danger' }))
+      if (item.library?.in_library) badges.push(sdk.ui.badge({ label: '已入库', tone: 'info' }))
+
+      const actionModel = subscriptionActionModel(item)
+      const subscribeAction = el('button', `noor-plugin-badge javdb-subscribe-action javdb-subscribe-action--${actionModel.state}`, actionModel.label)
+      subscribeAction.type = 'button'
+      subscribeAction.disabled = !!actionModel.disabled
+      subscribeAction.onclick = event => {
+        event.stopPropagation()
+        event.preventDefault()
+        if (!actionModel.disabled) openSubscription(item)
+      }
+      const card = sdk.ui.mediaCard({
+        title: titleOf(item),
+        cover: item.cover_url || item.thumb_url,
+        sharp: true,
+        meta: [classifyCategory(item), fmtMin(item.duration)].filter(Boolean),
+        badges,
+        coverOnClick: () => openDetail(item),
+        titleOnClick: () => openDetail(item),
+        className: 'javdb-card',
+      })
+      const badgeHost = card.querySelector('.noor-plugin-media-card__badges')
+      if (badgeHost) badgeHost.appendChild(subscribeAction)
+      grid.appendChild(card)
+    })
+  }
+
+  function renderPager() {
+    pager.innerHTML = ''
+    let totalItems = Number(state.total || 0)
+    if (state.relation?.relType === 'actor') {
+      totalItems = filteredItems().length
+    } else if (state.tab === 'latest' && state.latestSelectedFilters.length && latestRemoteFilter() === 'all') {
+      totalItems = filteredItems().length
+    }
+    if (totalItems <= state.limit) return
+    pager.appendChild(sdk.ui.pagination({
+      page: state.page,
+      totalPages: Math.ceil(totalItems / state.limit),
+      onPage: next => {

@@ -1,0 +1,120 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const upgrading = ref(false)
+const activeSection = ref<'runtime' | 'execution' | 'detection' | 'masking' | 'output'>('runtime')
+
+const sections = [
+  { key: 'runtime', label: '源码与路径' },
+  { key: 'execution', label: '执行' },
+  { key: 'detection', label: '检测选择' },
+  { key: 'masking', label: '遮罩' },
+  { key: 'output', label: '输出' },
+] as const
+
+const executionProviderOptions = ['cpu', 'cuda', 'tensorrt', 'openvino', 'directml', 'rocm', 'coreml']
+const downloadProviderOptions = ['github', 'huggingface']
+const processorOptions = [
+  'age_modifier',
+  'background_remover',
+  'deep_swapper',
+  'expression_restorer',
+  'face_debugger',
+  'face_editor',
+  'face_enhancer',
+  'face_swapper',
+  'frame_colorizer',
+  'frame_enhancer',
+  'lip_syncer',
+]
+const detectorAngleOptions = ['0', '90', '180', '270']
+const maskTypeOptions = ['box', 'occlusion', 'area', 'region']
+const maskAreaOptions = ['upper-face', 'lower-face', 'mouth']
+const maskRegionOptions = ['skin', 'left-eyebrow', 'right-eyebrow', 'left-eye', 'right-eye', 'glasses', 'nose', 'mouth', 'upper-lip', 'lower-lip']
+const genderOptions = ['', 'female', 'male']
+const raceOptions = ['', 'white', 'black', 'latino', 'asian', 'indian', 'arabic']
+const scaleOptions = Array.from({ length: 32 }, (_, index) => {
+  const value = (index + 1) * 0.25
+  return Number.isInteger(value) ? value.toFixed(1) : String(value)
+})
+
+const facefusionDir = ref('')
+const facefusionPythonPath = ref('')
+const nativeModelDir = ref('')
+const resolvedFacefusionDir = ref('')
+const facefusionSourceMode = ref('')
+const facefusionVersion = ref('')
+const facefusionUpstreamRevision = ref('')
+const facefusionUpstreamShortRevision = ref('')
+const facefusionUpstreamUpdatedAt = ref('')
+const facefusionRuntimeVersions = ref<Record<string, string | null>>({})
+const facefusionExecutionProviders = ref<string[]>([])
+const facefusionPythonExecutable = ref('')
+const facefusionCanSelfUpgrade = ref(false)
+const facefusionUpgradeHint = ref('')
+const facefusionUpstreamRepo = ref('')
+const executionProvider = ref('cuda')
+const deviceIds = ref('0')
+const threadCount = ref(8)
+const videoMemoryStrategy = ref('strict')
+const systemMemoryLimit = ref(0)
+const logLevel = ref('info')
+const downloadProviders = ref('github huggingface')
+const haltOnError = ref(false)
+const processors = ref('')
+const faceDetectorModel = ref('yolo_face')
+const faceDetectorSize = ref('640x640')
+const faceDetectorScore = ref(0.5)
+const faceDetectorAngles = ref('0')
+const faceDetectorMargin = ref('0 0 0 0')
+const faceLandmarkerModel = ref('2dfan4')
+const faceLandmarkerScore = ref(0.5)
+const faceSelectorMode = ref('reference')
+const faceSelectorOrder = ref('large-small')
+const faceSelectorGender = ref('')
+const faceSelectorAgeStart = ref('')
+const faceSelectorAgeEnd = ref('')
+const faceSelectorRace = ref('')
+const referenceFrameNumber = ref(0)
+const referenceFacePosition = ref(0)
+const referenceFaceDistance = ref(0.3)
+const faceMaskTypes = ref('box')
+const faceMaskAreas = ref('')
+const faceMaskRegions = ref('')
+const faceMaskBlur = ref(0.3)
+const faceMaskPadding = ref('0 0 0 0')
+const faceOccluderModel = ref('xseg_1')
+const faceParserModel = ref('bisenet_resnet_34')
+const outputVideoEncoder = ref('libx264')
+const outputVideoPreset = ref('veryfast')
+const outputVideoQuality = ref(80)
+const outputVideoScale = ref('1.0')
+const outputVideoFps = ref('')
+const outputAudioEncoder = ref('aac')
+const outputAudioQuality = ref(80)
+const outputAudioVolume = ref(100)
+const outputImageQuality = ref(80)
+const outputImageScale = ref('1.0')
+const tempFrameFormat = ref('png')
+
+function splitTokens(value: string) {
+  return String(value || '').split(/[\s,]+/).map(item => item.trim()).filter(Boolean)
+}
+
+function hasToken(value: string, token: string) {
+  return splitTokens(value).includes(token)
+}
+
+function toggleToken(value: string, token: string) {

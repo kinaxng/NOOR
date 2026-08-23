@@ -1,0 +1,26 @@
+                  color="secondary"
+                  size="large"
+                  @click="handleClose"
+                >
+                  {{ t('common.cancel') }}
+                </VuiButton>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </div>
+    </Transition>
+
+    <Transition name="panel">
+      <div v-if="deepModelDialogOpen" class="facefusion-model-dialog">
+        <div class="facefusion-model-dialog__backdrop" @click="deepModelDialogOpen = false"></div>
+        <div class="facefusion-model-dialog__panel">
+          <div class="facefusion-model-dialog__head">
+            <div>
+              <span>Deep 换脸模型</span>
+              <strong>{{ facefusionSettings.deep_swapper_model || '未选择' }}</strong>
+            </div>
+            <button type="button" @click="deepModelDialogOpen = false">关闭</button>
+          </div>
+

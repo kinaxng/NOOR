@@ -1,0 +1,361 @@
+  }
+  window.addEventListener('keydown', onKeydown)
+  ;(wrap as any).__noorDispose = () => window.removeEventListener('keydown', onKeydown)
+  return wrap
+}
+
+function makeFilterPanelSection(options: any = {}) {
+  const section = document.createElement('div')
+  section.className = 'noor-control-panel__section'
+  if (options.label) {
+    const label = document.createElement('span')
+    label.className = 'noor-control-panel__section-label'
+    label.textContent = String(options.label)
+    section.appendChild(label)
+  }
+  const body = document.createElement('div')
+  body.className = 'noor-control-panel__section-body'
+  for (const item of (Array.isArray(options.items) ? options.items : [options.items]).filter(Boolean)) body.appendChild(item)
+  section.appendChild(body)
+  return section
+}
+
+function makeFilterPanelGroup(options: any = {}) {
+  const group = document.createElement('div')
+  group.className = 'noor-control-panel__group'
+  if (options.label) {
+    const label = document.createElement('span')
+    label.className = 'noor-control-panel__group-label'
+    label.textContent = String(options.label)
+    group.appendChild(label)
+  }
+  const items = document.createElement('div')
+  items.className = 'noor-control-panel__group-items'
+  for (const item of (Array.isArray(options.items) ? options.items : [options.items]).filter(Boolean)) items.appendChild(item)
+  group.appendChild(items)
+  return group
+}
+
+function makeFilterPanel(options: any = {}) {
+  const panel = document.createElement('section')
+  panel.className = ['noor-control-panel', options.className || '', options.collapsible ? 'is-collapsible' : ''].filter(Boolean).join(' ')
+  const storageKey = options.collapseKey ? `noor:filter-panel:${options.collapseKey}` : ''
+  let collapsed = false
+  if (options.collapsible) {
+    const saved = storageKey ? window.localStorage.getItem(storageKey) : null
+    collapsed = saved == null ? !!options.defaultCollapsed : saved === '1'
+    panel.classList.toggle('is-collapsed', collapsed)
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'noor-control-panel__collapse-btn'
+    button.title = collapsed ? '展开筛选面板' : '收起筛选面板'
+    const icon = document.createElement('span')
+    icon.className = 'noor-control-panel__collapse-icon'
+    icon.textContent = '⌃'
+    button.appendChild(icon)
+    button.onclick = () => {
+      collapsed = !collapsed
+      panel.classList.toggle('is-collapsed', collapsed)
+      button.title = collapsed ? '展开筛选面板' : '收起筛选面板'
+      if (storageKey) window.localStorage.setItem(storageKey, collapsed ? '1' : '0')
+    }
+    panel.appendChild(button)
+  }
+  if (options.title || options.summary) {
+    const header = document.createElement('div')
+    header.className = 'noor-control-panel__header'
+    const main = document.createElement('div')
+    main.className = 'noor-control-panel__header-main'
+    if (options.title) {
+      const title = document.createElement('strong')
+      title.className = 'noor-control-panel__title'
+      title.textContent = String(options.title)
+      main.appendChild(title)
+    }
+    if (options.summary) {
+      const summary = document.createElement('span')
+      summary.className = 'noor-control-panel__summary'
+      summary.textContent = String(options.summary)
+      main.appendChild(summary)
+    }
+    header.appendChild(main)
+    panel.appendChild(header)
+  }
+  for (const [index, row] of (Array.isArray(options.rows) ? options.rows : []).entries()) {
+    const rowEl = document.createElement('div')
+    rowEl.className = `noor-control-panel__row noor-control-panel__row--${index === 0 ? 'primary' : index === 1 ? 'secondary' : 'tertiary'}`
+    for (const section of (Array.isArray(row?.sections) ? row.sections : []).filter(Boolean)) rowEl.appendChild(section)
+    panel.appendChild(rowEl)
+  }
+  return panel
+}
+
+function makeSubmitButton(options: any = {}) {
+  const btn = makeButton({ label: '', tone: 'primary', className: ['noor-submit-btn', options.className || ''].filter(Boolean).join(' ') })
+  const bar = document.createElement('i')
+  bar.className = 'noor-submit-btn__bar'
+  const text = document.createElement('span')
+  text.className = 'noor-submit-btn__text'
+  btn.append(bar, text)
+  const normalize = (state: string) => state === 'submitting' ? 'running' : (state || 'idle')
+  const labelFor = (state: string, progress = 0, label = '') => {
+    if (label) return label
+    if (state === 'success') return options.successLabel || '已完成'
+    if (state === 'error') return options.errorLabel || '失败'
+    if (state === 'running') return options.submittingLabel || options.runningLabel || (progress > 0 ? `${Math.round(progress)}%` : '提交中')
+    return options.idleLabel || options.label || '提交'
+  }
+  const setState = (state: string, progress = 0, label = '') => {
+    const next = normalize(state)
+    const pct = Math.max(0, Math.min(100, Number(progress || 0)))
+    btn.dataset.state = next
+    btn.classList.toggle('is-running', next === 'running')
+    btn.classList.toggle('is-success', next === 'success')
+    btn.classList.toggle('is-error', next === 'error')
+    btn.style.setProperty('--submit-progress', `${pct}%`)
+    text.textContent = labelFor(next, pct, label)
+    if (options.disableWhileRunning !== false && next === 'running') btn.disabled = true
+    else if (next === 'success' && options.disableOnSuccess !== false) btn.disabled = true
+    else btn.disabled = !!options.disabled
+  }
+  btn.onclick = event => {
+    if (btn.disabled) return
+    options.onClick?.(event)
+  }
+  ;(btn as any).__setState = setState
+  setState(options.status || 'idle', Number(options.progress || 0), options.labelOverride || '')
+  return btn
+}
+
+function appendChildren(parent: HTMLElement, children?: any) {
+  if (!children) return parent
+  const list = Array.isArray(children) ? children : [children]
+  for (const child of list) {
+    if (!child) continue
+    if (child instanceof Node) parent.appendChild(child)
+    else parent.appendChild(document.createTextNode(String(child)))
+  }
+  return parent
+}
+
+function makeTopBar(options: any = {}) {
+  const bar = document.createElement('div')
+  bar.className = ['noor-plugin-topbar', options.className || ''].filter(Boolean).join(' ')
+  const tabs = document.createElement('div')
+  tabs.className = 'noor-plugin-topbar__tabs'
+  const actions = document.createElement('div')
+  actions.className = 'noor-plugin-topbar__actions'
+  appendChildren(tabs, options.tabs || options.left)
+  appendChildren(actions, options.actions || options.right)
+  bar.append(tabs, actions)
+  return { el: bar, tabs, actions }
+}
+
+function makeActionRow(options: any = {}) {
+  const row = document.createElement('div')
+  row.className = ['noor-plugin-action-row', options.className || ''].filter(Boolean).join(' ')
+  appendChildren(row, options.children || options.items)
+  return row
+}
+
+function makeStatCard(options: any = {}) {
+  const card = document.createElement(options.onClick ? 'button' : 'div') as HTMLElement
+  card.className = ['noor-plugin-stat-card', options.tone ? `noor-plugin-stat-card--${options.tone}` : '', options.className || ''].filter(Boolean).join(' ')
+  if (options.onClick) {
+    ;(card as HTMLButtonElement).type = 'button'
+    ;(card as HTMLButtonElement).onclick = options.onClick
+  }
+  const label = document.createElement('span')
+  label.className = 'noor-plugin-stat-card__label'
+  label.textContent = options.label || ''
+  const value = document.createElement('strong')
+  value.className = 'noor-plugin-stat-card__value'
+  value.textContent = String(options.value ?? '-')
+  card.append(label, value)
+  if (options.hint) {
+    const hint = document.createElement('small')
+    hint.className = 'noor-plugin-stat-card__hint'
+    hint.textContent = String(options.hint)
+    card.appendChild(hint)
+  }
+  return card
+}
+
+function makeStatGrid(options: any = {}) {
+  const grid = document.createElement('div')
+  grid.className = ['noor-plugin-stat-grid', options.className || ''].filter(Boolean).join(' ')
+  const items = Array.isArray(options.items) ? options.items : []
+  for (const item of items) grid.appendChild(makeStatCard(item))
+  return grid
+}
+
+function makeMediaCard(options: any = {}) {
+  const card = document.createElement(options.onClick ? 'button' : options.href ? 'a' : 'div') as HTMLElement
+  card.className = ['noor-plugin-media-card', options.sharp ? 'noor-plugin-media-card--sharp' : '', options.className || ''].filter(Boolean).join(' ')
+  if (options.href) {
+    ;(card as HTMLAnchorElement).href = options.href
+    ;(card as HTMLAnchorElement).target = options.target || '_self'
+  }
+  if (options.onClick) {
+    ;(card as HTMLButtonElement).type = 'button'
+    ;(card as HTMLButtonElement).onclick = options.onClick
+  }
+  const cover = document.createElement('div')
+  cover.className = ['noor-plugin-media-card__cover', options.coverOnClick ? 'is-clickable' : ''].filter(Boolean).join(' ')
+  if (options.coverOnClick) cover.onclick = (e) => { e.stopPropagation(); options.coverOnClick() }
+  if (options.image || options.cover || options.coverUrl) {
+    const img = document.createElement('img')
+    img.src = options.image || options.cover || options.coverUrl
+    img.loading = options.loading || 'lazy'
+    cover.appendChild(img)
+  } else {
+    const ph = document.createElement('div')
+    ph.className = 'noor-plugin-media-card__placeholder'
+    ph.textContent = options.placeholder || 'NO IMAGE'
+    cover.appendChild(ph)
+  }
+  const body = document.createElement('div')
+  body.className = 'noor-plugin-media-card__body'
+  const title = document.createElement('div')
+  title.className = ['noor-plugin-media-card__title', options.titleOnClick ? 'is-clickable' : ''].filter(Boolean).join(' ')
+  title.textContent = options.title || ''
+  if (options.titleOnClick) title.onclick = (e) => { e.stopPropagation(); options.titleOnClick() }
+  body.appendChild(title)
+  if (options.meta) {
+    const meta = document.createElement('div')
+    meta.className = 'noor-plugin-media-card__meta'
+    const metaItems = Array.isArray(options.meta) ? options.meta : [options.meta]
+    for (const text of metaItems.filter(Boolean)) {
+      const span = document.createElement('span')
+      span.textContent = String(text)
+      meta.appendChild(span)
+    }
+    body.appendChild(meta)
+  }
+  if (options.badges) {
+    const badges = document.createElement('div')
+    badges.className = 'noor-plugin-media-card__badges'
+    appendChildren(badges, options.badges)
+    body.appendChild(badges)
+  }
+  if (options.actions) {
+    const actions = document.createElement('div')
+    actions.className = 'noor-plugin-media-card__actions'
+    appendChildren(actions, options.actions)
+    body.appendChild(actions)
+  }
+  card.append(cover, body)
+  return card
+}
+
+function makeLoadingState(options: any = {}) {
+  const d = document.createElement('div')
+  d.className = ['noor-plugin-state', 'noor-plugin-state--loading', options.className || ''].filter(Boolean).join(' ')
+  const spinner = document.createElement('span')
+  spinner.className = 'noor-plugin-spinner'
+  const text = document.createElement('span')
+  text.textContent = options.text || '加载中…'
+  d.append(spinner, text)
+  return d
+}
+
+function lastSavepathKey(downloaderId: string) {
+  return `noor:last-download-savepath:${downloaderId || 'default'}`
+}
+
+function readLastSavepath(downloaderId: string) {
+  try { return localStorage.getItem(lastSavepathKey(downloaderId)) || '' } catch { return '' }
+}
+
+function writeLastSavepath(downloaderId: string, value: string) {
+  try {
+    if (value) localStorage.setItem(lastSavepathKey(downloaderId), value)
+  } catch {}
+}
+
+function escapeHtml(value: any) {
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]!))
+}
+
+function renderResourcePreview(resourceState: any) {
+  const d = document.createElement('div')
+  d.className = 'noor-downloader-preview'
+  if (!resourceState.options?.supports_resource_preview) return d
+  if (resourceState.loading) {
+    d.innerHTML = '<div class="noor-downloader-preview__head"><span>资源预览</span><em>读取中...</em></div>'
+    return d
+  }
+  if (resourceState.error) {
+    d.innerHTML = `<div class="noor-downloader-preview__head"><span>资源预览</span><em class="is-error">${escapeHtml(resourceState.error)}</em></div>`
+    return d
+  }
+  const files = Array.isArray(resourceState.data?.files) ? resourceState.data.files : []
+  if (!files.length) {
+    d.innerHTML = '<div class="noor-downloader-preview__head"><span>资源预览</span><em>暂无文件信息</em></div>'
+    return d
+  }
+  const visible = files.slice(0, 6)
+  d.innerHTML = `<div class="noor-downloader-preview__head"><span>资源预览</span><em>${escapeHtml(resourceState.data?.total_size_formatted || '')} · ${files.length} 个文件</em></div>
+  <div class="noor-downloader-preview__files">${visible.map((file: any) => `<div class="noor-downloader-preview__file"><span>${escapeHtml(file.name || file.full_path || '')}</span><em>${escapeHtml(file.size_formatted || '')}</em></div>`).join('')}${files.length > visible.length ? `<div class="noor-downloader-preview__more">还有 ${files.length - visible.length} 个文件</div>` : ''}</div>`
+  return d
+}
+
+function createDownloaderDialogContext(sourcePluginId: string) {
+  let progressTimer: number | null = null
+
+  async function postJson(url: string, payload: any) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || data?.ok === false) throw new Error(data?.detail || data?.message || '请求失败')
+    return data
+  }
+
+  async function open(options: any = {}) {
+    const allowBatchUrls = !!options.allowBatchUrls
+    const showDownloaderField = options.showDownloaderField !== false
+    const previewEnabled = options.preview !== false
+    const maxUrls = Number(options.maxUrls || 0)
+    const submitIdleLabel = String(options.submitIdleLabel || (allowBatchUrls ? '创建任务' : '推送下载'))
+    const submitSuccessLabel = String(options.submitSuccessLabel || (allowBatchUrls ? '创建成功' : '推送成功'))
+    const submitErrorLabel = String(options.submitErrorLabel || (allowBatchUrls ? '创建失败' : '推送失败'))
+    const submitPartialLabel = String(options.submitPartialLabel || '部分失败')
+    const state: any = {
+      downloaderId: String(options.downloaderId || '').trim(),
+      title: String(options.title || ''),
+      name: String(options.name || options.rename || options.title || ''),
+      rename: String(options.rename || options.name || options.title || ''),
+      titleOptions: Array.isArray(options.titleOptions) ? options.titleOptions.filter(Boolean) : [],
+      titleMode: String(options.titleMode || ''),
+      url: String(options.url || options.magnet || options.urls || ''),
+      urlsText: String(options.urlsText || options.urls || options.url || options.magnet || ''),
+      itemTitle: String(options.itemTitle || options.title || ''),
+      fileIndices: 'auto',
+      savepath: '',
+      selectedPath: '',
+      category: '',
+      minFileSizeMb: '',
+      options: null,
+      error: '',
+      loading: true,
+      previewLoading: false,
+      previewError: '',
+      previewData: null,
+      submitStatus: 'idle',
+      submitProgress: 0,
+      submitting: false,
+      submitButton: null as any,
+    }
+
+    if (!state.downloaderId) throw new Error('未绑定下载器')
+    if (!allowBatchUrls && !state.url) throw new Error('缺少下载链接')
+    if (!state.titleMode && state.titleOptions.length) state.titleMode = String(state.titleOptions[0]?.key || '')
+
+    const modal = makeModal({
+      title: String(options.modalTitle || (allowBatchUrls ? '新建下载任务' : '推送下载')),
+      width: 'md',
+      closeOnMask: false,
+      onClose: () => {

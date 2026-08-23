@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from collections import deque
+from datetime import datetime
+import logging
+import os
+import platform
+import threading
+from typing import Any
+from pathlib import Path
+
+import json
+
+from fastapi import APIRouter, HTTPException, Query, Request
+
+from app.core.runtime_paths import data_path
+
+router = APIRouter(prefix='/api', tags=['system'])
+
+
+def _ui_settings_path() -> Path:
+    return data_path('ui_settings.json')
+
+
+def _ui_settings() -> dict[str, Any]:
+    try:
+        value = json.loads(_ui_settings_path().read_text(encoding='utf-8'))
+        return value if isinstance(value, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_ui_settings(value: dict[str, Any]) -> None:
+    path = _ui_settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+
+class SystemLogManager:
+    _instance: 'SystemLogManager | None' = None
+    _instance_lock = threading.Lock()
+
+    def __init__(self, max_entries: int = 1000) -> None:
+        self._entries: deque[dict[str, Any]] = deque(maxlen=max_entries)
+        self._lock = threading.Lock()
+        self._cursor = 0
+
+    @classmethod
+    def get_instance(cls) -> 'SystemLogManager':
+        with cls._instance_lock:

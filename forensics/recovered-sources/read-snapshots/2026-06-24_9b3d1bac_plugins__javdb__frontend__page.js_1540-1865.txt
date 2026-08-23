@@ -1,0 +1,326 @@
+  async function openDetail(item) {
+    if (state.activePanel) state.activePanel.close()
+    const code = item.number || item.code || item.id
+    const panel = sdk.ui.panel({ title: '影片详情', eyebrow: 'JavDB', scroll: true })
+    state.activePanel = panel
+    panel.body.appendChild(sdk.ui.loadingState({ text: '正在调取详情数据...' }))
+
+    try {
+      const expectedMagnetsCount = Number(item?.magnets_count || item?.magnet_count || 0)
+      const res = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code, expected_magnets_count: expectedMagnetsCount } })
+      const video = res.data.data
+      panel.body.innerHTML = ''
+
+      const content = el('div', 'javdb-detail')
+      const previewList = Array.isArray(video.previews) ? video.previews : []
+      const images = [video.cover_url, ...previewList].filter(Boolean)
+      const isSingleImage = images.length <= 1
+
+      const gallery = el('div', 'javdb-detail-gallery')
+      if (isSingleImage) gallery.classList.add('is-single')
+      const galleryViewport = el('div', 'javdb-detail-gallery__viewport')
+      const galleryRail = el('div', 'javdb-detail-gallery__rail')
+      images.forEach(src => {
+        const frame = el('button', 'javdb-gallery-frame')
+        frame.type = 'button'
+        const img = el('img', 'javdb-gallery-img')
+        img.src = src
+        img.alt = detailTitle(video)
+        frame.onclick = () => sdk.ui.previewImage?.(src, images)
+        frame.appendChild(img)
+        galleryRail.appendChild(frame)
+      })
+      if (!images.length) galleryRail.appendChild(sdk.ui.emptyState({ text: '暂无封面与剧照' }))
+      galleryViewport.appendChild(galleryRail)
+      gallery.appendChild(galleryViewport)
+      if (images.length > 1) {
+        const scrollGallery = direction => {
+          const amount = Math.max(320, galleryViewport.clientWidth)
+          galleryViewport.scrollBy({ left: direction * amount, behavior: 'smooth' })
+        }
+        const prevBtn = sdk.ui.button({ label: '‹', className: 'javdb-gallery-nav javdb-gallery-nav--prev', onClick: () => scrollGallery(-1) })
+        const nextBtn = sdk.ui.button({ label: '›', className: 'javdb-gallery-nav javdb-gallery-nav--next', onClick: () => scrollGallery(1) })
+        const syncGalleryNav = () => {
+          const maxLeft = Math.max(0, galleryViewport.scrollWidth - galleryViewport.clientWidth)
+          const left = galleryViewport.scrollLeft
+          prevBtn.classList.toggle('javdb-is-hidden', left <= 4)
+          nextBtn.classList.toggle('javdb-is-hidden', left >= maxLeft - 4)
+        }
+        galleryViewport.addEventListener('scroll', syncGalleryNav, { passive: true })
+        requestAnimationFrame(syncGalleryNav)
+        gallery.append(prevBtn, nextBtn)
+      }
+      content.appendChild(gallery)
+
+      const hero = el('section', 'javdb-detail-section javdb-detail-hero')
+      const heroHead = el('div', 'javdb-detail-hero__head')
+      const heroMeta = el('div', 'javdb-detail-hero__meta')
+      const codeText = detailCode(video)
+      if (codeText) heroMeta.appendChild(el('span', 'javdb-detail-hero__code', codeText))
+      heroMeta.appendChild(el('h2', 'javdb-detail-hero__title', detailTitle(video)))
+      const subtitle = String(video?.origin_title || '').trim()
+      if (subtitle && subtitle !== String(video?.title || '').trim()) {
+        heroMeta.appendChild(el('p', 'javdb-detail-hero__subtitle', subtitle))
+      }
+      const heroBadges = el('div', 'javdb-detail-hero__badges')
+      const categoryText = classifyCategory(video)
+      if (categoryText) heroBadges.appendChild(sdk.ui.badge({ label: categoryText, tone: 'info' }))
+      if (detectCnsub(video)) heroBadges.appendChild(sdk.ui.badge({ label: '中字', tone: 'success' }))
+      if (detectCracked(video)) heroBadges.appendChild(sdk.ui.badge({ label: '破解', tone: 'danger' }))
+      if (Number(video?.magnets?.length || 0) > 0) heroBadges.appendChild(sdk.ui.badge({ label: `${video.magnets.length} 磁链`, tone: 'info' }))
+      heroMeta.appendChild(heroBadges)
+      heroHead.appendChild(heroMeta)
+      hero.appendChild(heroHead)
+
+      const overview = el('div', 'javdb-detail-overview')
+      ;[
+        ['上映日期', formatReleaseDate(video?.date || video?.release_date)],
+        ['时长', fmtMin(video?.duration)],
+        ['评分', numericScore(video?.score) ? String(video.score) : ''],
+        ['来源', String(video?.source || video?.site || 'JavDB').trim()],
+      ].filter(([, value]) => value).forEach(([label, value]) => {
+        const card = el('div', 'javdb-overview-card')
+        card.appendChild(el('span', 'javdb-overview-card__label', label))
+        card.appendChild(el('strong', 'javdb-overview-card__value', value))
+        overview.appendChild(card)
+      })
+      if (overview.childNodes.length) hero.appendChild(overview)
+      content.appendChild(hero)
+
+      const detailSection = el('section', 'javdb-detail-section')
+      const detailHead = el('div', 'javdb-detail-section__head')
+      detailHead.appendChild(el('span', 'javdb-detail-section__title', '作品信息'))
+      detailSection.appendChild(detailHead)
+
+      const meta = el('div', 'javdb-detail-meta')
+      const appendMetaRow = (label, source, relType) => {
+        if (!source) return
+        const list = (Array.isArray(source) ? source : [source]).filter(Boolean)
+        if (!list.length) return
+        const row = el('div', 'javdb-meta-row')
+        row.appendChild(el('span', 'javdb-meta-label', label))
+        const badges = el('div', 'javdb-meta-badges')
+        list.forEach(entry => {
+          const name = entry?.name || entry?.label || String(entry || '')
+          const id = entry?.id || entry?.external_id || name
+          badges.appendChild(sdk.ui.badge({
+            label: name,
+            tone: relType === 'category' ? undefined : 'info',
+            onClick: () => {
+              panel.close()
+              setRelation(relType, id, name)
+            },
+          }))
+        })
+        row.appendChild(badges)
+        meta.appendChild(row)
+      }
+
+      appendMetaRow('演员', video.actors, 'actor')
+      appendMetaRow('系列', video.series, 'series')
+      appendMetaRow('导演', video.director, 'director')
+      appendMetaRow('制作商', video.maker, 'maker')
+      appendMetaRow('发行商', video.publisher, 'publisher')
+      appendMetaRow('类型', video.categories, 'category')
+      if (meta.childNodes.length) {
+        detailSection.appendChild(meta)
+        content.appendChild(detailSection)
+      }
+
+      const fallbackResources = (Array.isArray(video.magnets) ? video.magnets : []).map((magnet, index) => ({
+        id: `javdb:fallback:${index}`,
+        provider: 'javdb',
+        provider_label: 'JavDB',
+        title: magnet.name || detailTitle(video),
+        subtitle: [magnet.size || '', magnet.date || '', magnet.site || 'JavDB'].filter(Boolean).join(' · '),
+        url: magnet.magnet || '',
+        tags: Array.isArray(magnet.tags) ? magnet.tags : [],
+        features: {
+          has_subtitle: textHasKeywords(magnet.tags || magnet.name || '', ['中字', '字幕', '中文', '中文字幕', 'chs', 'cht']),
+          is_cracked: textHasKeywords(magnet.tags || magnet.name || '', ['破解', '破解版', '无码破解', 'uncensored leak']),
+          is_private_tracker: false,
+        },
+        requirements: String(magnet.magnet || '').startsWith('magnet:?') ? { accepts_public_magnet: true } : {},
+        compatible_downloaders: [],
+        preferred_downloader: null,
+      }))
+      const sortResources = list => list.slice().sort((a, b) => {
+          const providerDiff = resourceProviderOrder(a) - resourceProviderOrder(b)
+          if (providerDiff) return providerDiff
+          const subA = String(a?.subtitle || '')
+          const subB = String(b?.subtitle || '')
+          return subA.localeCompare(subB)
+        })
+      let resources = sortResources(fallbackResources)
+
+      const openResourceDownload = async resource => {
+        const resolved = (await sdk.api.post('/plugins/resources/resolve-download', {
+              provider_id: resource.provider,
+              item: resource,
+            })).data
+        const resolvedItem = resolved?.item || resource
+        const resolvedUrl = resolved?.url || resolvedItem?.url
+        const downloaderIds = Array.isArray(resolvedItem?.compatible_downloaders) ? resolvedItem.compatible_downloaders.filter(Boolean) : []
+        const downloaderId = resolvedItem?.preferred_downloader || downloaderIds[0]
+        if (!downloaderId) throw new Error('没有兼容的下载器')
+        if (!resolvedUrl) throw new Error('资源链接解析失败')
+        return sdk.downloads.open({
+          downloaderId,
+          downloaderIds,
+          url: resolvedUrl,
+          title: titleOf(video),
+          rename: titleCandidates(video)[0]?.value || titleOf(video),
+          titleOptions: titleCandidates(video),
+        })
+      }
+
+      const magnetSection = el('section', 'javdb-detail-section')
+      const magnetHead = el('div', 'javdb-detail-section__head')
+      magnetHead.appendChild(el('span', 'javdb-detail-section__title', '下载资源'))
+      const magnetCount = el('span', 'javdb-detail-section__meta', `${resources.length}`)
+      magnetHead.appendChild(magnetCount)
+      magnetSection.appendChild(magnetHead)
+      const magnetList = el('div', 'javdb-magnets')
+      const providerBar = el('div', 'javdb-resource-providers')
+      let providerGroups = []
+      let selectedProvider = ''
+
+      function rebuildProviderGroups(keepSelection = true) {
+        const providerMap = new Map()
+        resources.forEach(resource => {
+          const key = String(resource.provider || resource.provider_label || 'other')
+          const existing = providerMap.get(key) || {
+            key,
+            label: String(resource.provider_label || resource.provider || '未知来源'),
+            count: 0,
+            isPrivateTracker: false,
+          }
+          existing.count += 1
+          existing.isPrivateTracker = existing.isPrivateTracker || !!resource?.features?.is_private_tracker
+          providerMap.set(key, existing)
+        })
+        providerGroups = Array.from(providerMap.values()).sort((a, b) => resourceProviderOrder(a) - resourceProviderOrder(b))
+        if (!keepSelection || !providerGroups.some(group => group.key === selectedProvider)) {
+          selectedProvider = providerGroups[0]?.key || ''
+        }
+      }
+
+      function renderProviderBar() {
+        providerBar.innerHTML = ''
+        providerGroups.forEach(group => {
+          const pill = document.createElement('button')
+          pill.type = 'button'
+          pill.className = `javdb-resource-pill${selectedProvider === group.key ? ' is-active' : ''}`
+          if (group.isPrivateTracker) pill.dataset.tone = 'warning'
+          pill.textContent = `${group.label} ${group.count}`
+          pill.onclick = () => {
+            if (selectedProvider === group.key) return
+            selectedProvider = group.key
+            renderProviderBar()
+            renderResourceList()
+          }
+          providerBar.appendChild(pill)
+        })
+      }
+
+      function renderResourceList() {
+        magnetCount.textContent = `${resources.length}`
+        magnetList.innerHTML = ''
+        const visibleResources = resources.filter(resource => String(resource.provider || resource.provider_label || 'other') === selectedProvider)
+        if (!visibleResources.length) {
+          magnetList.appendChild(el('div', 'javdb-no-data', '暂无磁链资源'))
+          return
+        }
+        visibleResources.forEach(resource => {
+          const row = el('div', 'javdb-magnet-row')
+          const info = el('div', 'javdb-magnet-info')
+          info.appendChild(el('div', 'javdb-magnet-name', resource.title || '未知资源'))
+          const magnetMeta = el('div', 'javdb-magnet-meta')
+          ;[compactResourceSubtitle(resource)].filter(Boolean).forEach((text, index, array) => {
+            magnetMeta.appendChild(el('span', 'javdb-magnet-meta__item', text))
+            if (index < array.length - 1) magnetMeta.appendChild(el('span', 'javdb-magnet-meta__dot', '·'))
+          })
+          info.appendChild(magnetMeta)
+          const tagRow = el('div', 'javdb-magnet-tags')
+          resourceBadgeModels(resource).forEach(tag => {
+            tagRow.appendChild(sdk.ui.badge({ label: tag.label, tone: tag.tone }))
+          })
+          if (tagRow.childNodes.length) info.appendChild(tagRow)
+
+          const pushBtn = sdk.ui.submitButton({
+            idleLabel: '推送下载',
+            successLabel: '已加入',
+            onClick: () => openResourceDownload(resource),
+          })
+          const compatibleDownloaders = Array.isArray(resource.compatible_downloaders) ? resource.compatible_downloaders : []
+          if (compatibleDownloaders.length) {
+            pushBtn.title = `可用下载器：${compatibleDownloaders.join(' / ')}`
+          }
+
+          row.append(info, pushBtn)
+          magnetList.appendChild(row)
+        })
+      }
+
+      function renderResources(keepSelection = true) {
+        rebuildProviderGroups(keepSelection)
+        providerBar.innerHTML = ''
+        if (providerGroups.length) {
+          renderProviderBar()
+          if (!providerBar.parentNode) magnetSection.insertBefore(providerBar, magnetList)
+        } else if (providerBar.parentNode) {
+          providerBar.remove()
+        }
+        renderResourceList()
+      }
+
+      magnetSection.appendChild(magnetList)
+      renderResources(false)
+      content.appendChild(magnetSection)
+      panel.body.appendChild(content)
+
+      sdk.api.post('/plugins/resources/search', {
+        query: { code, title: titleOf(item), expected_magnets_count: expectedMagnetsCount },
+        providers: ['javdb', 'avdb', 'mteam-plugin'],
+        limit_per_plugin: 6,
+      }).then(resourceRes => {
+        if (state.activePanel !== panel) return
+        const brokerResources = Array.isArray(resourceRes?.data?.items) ? resourceRes.data.items : []
+        resources = sortResources(mergeResources(brokerResources, fallbackResources))
+        renderResources(true)
+      }).catch(error => {
+        if (isPluginUnmountError(error)) return
+        if (state.activePanel === panel && !resources.length) {
+          magnetList.innerHTML = ''
+          magnetList.appendChild(el('div', 'javdb-no-data', '资源搜索失败，暂无磁链资源'))
+        }
+      })
+    } catch (e) {
+      if (isPluginUnmountError(e)) return
+      sdk.toast.error(e.message || '加载详情失败')
+      panel.close()
+    }
+  }
+
+  renderTabs()
+  loadData()
+
+  const onResize = () => {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(() => {
+      const oldLimit = state.limit
+      estimatePageSize()
+      if (state.limit !== oldLimit) {
+        state.page = 1
+        if (isActorRankingFrame()) {
+          renderGrid()
+          renderPager()
+        } else {
+          renderPager()
+        }
+      }
+    }, 120)
+  }
+  window.addEventListener('resize', onResize)
+  
+  return () => {

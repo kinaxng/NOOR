@@ -1,0 +1,46 @@
+      ]"
+    >
+      <!-- Top Navbar -->
+      <header
+        v-if="i18nReady"
+        class="sticky top-0 z-30 h-16 flex items-center justify-between px-4 md:px-6"
+        style="background: linear-gradient(123.64deg, rgba(255,255,255,0) -22.38%, rgba(255,255,255,0.039) 70.38%); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.04);"
+      >
+        <!-- Left: Mobile menu + Page title -->
+        <div class="flex items-center gap-3">
+          <!-- Hamburger (mobile only) -->
+          <button
+            class="navbar-icon-btn hidden lg:hidden"
+            @click="mobileSidebarOpen = true"
+          >
+            <BaseIcon name="menu" class="w-4 h-4" />
+          </button>
+          <h1 class="text-base font-semibold text-white font-display">
+            {{ activeNavName }}
+          </h1>
+        </div>
+
+        <!-- Right: Controls -->
+        <div class="flex items-center gap-2 md:gap-3">
+          <!-- Global Search -->
+          <button
+            @click="globalSearchOpen = true"
+            class="navbar-search-trigger"
+            title="全局搜索 Ctrl/⌘ K"
+          >
+            <BaseIcon name="search" class="w-4 h-4" />
+            <span class="navbar-search-trigger__text">搜索</span>
+            <span class="navbar-search-trigger__kbd">⌘K</span>
+          </button>
+
+          <!-- Blur toggle -->
+          <button
+            @click="toggleBlur"
+            class="navbar-icon-btn"
+            :class="{ 'navbar-icon-btn--active': blurEnabled }"
+            :title="blurTitle"
+          >
+            <BaseIcon :name="blurEnabled ? 'eye-off' : 'eye'" class="w-4 h-4" />
+          </button>
+
+          <!-- Language toggle -->

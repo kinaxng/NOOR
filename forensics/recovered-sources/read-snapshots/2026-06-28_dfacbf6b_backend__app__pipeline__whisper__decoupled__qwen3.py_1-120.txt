@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import importlib.util
+import logging
+import re
+from pathlib import Path
+from typing import Any
+
+from .types import AlignmentResult, WordTimestamp
+
+logger = logging.getLogger(__name__)
+
+_SENTENCE_END_RE = re.compile(r"[。！？?!]$")
+_SOFT_BREAK_RE = re.compile(r"[、，,]$")
+_HARD_BREAK_RE = re.compile(r"[。！？?!」』\"]$")
+
+
+def _iter_hf_repo_paths(base_dir: str, model_id: str) -> list[Path]:
+    base = Path(base_dir)
+    repo_dir = f"models--{model_id.replace('/', '--')}"
+    return [
+        base / repo_dir,
+        base / "hub" / repo_dir,
+        base / "huggingface" / "hub" / repo_dir,
+    ]
+
+
+def _resolve_hf_model_source(base_dir: str, model_id: str) -> tuple[str, dict[str, Any]]:
+    for repo_path in _iter_hf_repo_paths(base_dir, model_id):
+        if not repo_path.exists():
+            continue
+        ref_file = repo_path / "refs" / "main"
+        if ref_file.exists():
+            revision = ref_file.read_text().strip()
+            snapshot_path = repo_path / "snapshots" / revision
+            if snapshot_path.exists() and any(snapshot_path.iterdir()):
+                return str(snapshot_path), {"local_files_only": True}
+        if any(repo_path.iterdir()):
+            return str(repo_path), {"local_files_only": True}
+    return model_id, {"cache_dir": base_dir}
+
+
+def _get_whisper_model_dir() -> str:
+    from app.core.config import get_settings
+    from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+
+    settings = get_settings()
+    whisper_model_dir = ensure_directory(settings.whisper_model_dir)
+    whisper_cache_dir = ensure_directory(settings.whisper_cache_dir)
+    apply_whisper_cache_env(whisper_model_dir, whisper_cache_dir)
+    return whisper_model_dir
+
+
+def _normalize_language(language: str) -> str:
+    normalized = (language or "").strip().lower()
+    if normalized in {"ja", "jp", "japanese", "日本語"}:
+        return "Japanese"
+    if normalized in {"zh", "zh-cn", "zh-tw", "chinese", "中文"}:
+        return "Chinese"
+    if normalized in {"en", "english"}:
+        return "English"
+    return language or "Japanese"
+
+
+def qwen3_aligner_available() -> bool:
+    try:
+        return importlib.util.find_spec("qwen_asr") is not None
+    except Exception:
+        return False
+
+
+def merge_master_with_timestamps(master_text: str, timestamps: list[Any]) -> list[dict[str, float | str]]:
+    if not master_text or not master_text.strip():
+        return []
+    if not timestamps:
+        return [{"word": master_text.strip(), "start": 0.0, "end": 0.0}]
+
+    def get_attr(obj: Any, attr: str):
+        if hasattr(obj, attr):
+            return getattr(obj, attr)
+        if isinstance(obj, dict):
+            return obj.get(attr)
+        return None
+
+    result: list[dict[str, float | str]] = []
+    master_pos = 0
+
+    for ts in timestamps:
+        ts_word = get_attr(ts, "text")
+        ts_start = get_attr(ts, "start_time")
+        ts_end = get_attr(ts, "end_time")
+        if not ts_word:
+            continue
+
+        word_start = master_text.find(ts_word, master_pos)
+        if word_start == -1:
+            result.append({
+                "word": ts_word,
+                "start": float(ts_start) if ts_start is not None else 0.0,
+                "end": float(ts_end) if ts_end is not None else 0.0,
+            })
+            continue
+
+        word_end = word_start + len(ts_word)
+        if word_start > master_pos:
+            gap = master_text[master_pos:word_start]
+            if result:
+                result[-1]["word"] += gap
+            else:
+                ts_word = gap + ts_word
+
+        result.append({
+            "word": ts_word,
+            "start": float(ts_start) if ts_start is not None else 0.0,
+            "end": float(ts_end) if ts_end is not None else 0.0,
+        })
+        master_pos = word_end
+
+    if master_pos < len(master_text):
+        trailing = master_text[master_pos:]

@@ -1,0 +1,26 @@
+
+                    <label class="whisper-todo-step whisper-todo-step--optional" :class="{ 'is-enabled': whisperTranslateEnabled && !isDirectWhisperTranslationBackend(whisperDefaultModelBackend) }">
+                      <input v-model="whisperTranslateEnabled" type="checkbox" :disabled="whisperRunning || isDirectWhisperTranslationBackend(whisperDefaultModelBackend)" />
+                      <span class="whisper-todo-step__mark"></span>
+                      <span class="whisper-todo-step__body">
+                        <span class="whisper-todo-step__title">{{ isDirectWhisperTranslationBackend(whisperDefaultModelBackend) ? '直出中文字幕' : '翻译成中文' }}</span>
+                        <span class="whisper-todo-step__desc">{{ isDirectWhisperTranslationBackend(whisperDefaultModelBackend) ? 'ChickenRice 已在识别阶段直接输出中文，不再追加大模型翻译。' : '可选。生成 ja.srt 后继续提交翻译，当前：' + whisperTranslationSummary }}</span>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div class="whisper-default-summary__meta">
+                    <span v-if="whisperHasRunOverrides" class="whisper-default-summary__chip whisper-default-summary__chip--info">{{ t('subtitle.whisperRunOverrideActive') }}</span>
+                  </div>
+                  <p v-if="whisperExperimentalHint" class="whisper-default-summary__hint whisper-default-summary__hint--warning">{{ whisperExperimentalHint }}</p>
+                  <p v-if="whisperQueuedHint" class="whisper-default-summary__hint">{{ whisperQueuedHint }}</p>
+
+                  <div class="whisper-default-summary__action whisper-default-summary__action--bottom">
+                    <VuiSubmitButton
+                      full
+                      size="lg"
+                      :status="whisperSubmitStatus"
+                      :progress="whisperFeedbackVisible ? whisperProgress : 0"
+                      :disabled="whisperRunning"
+                      idle-label="任务提交"
+                      :running-label="whisperSubmitButtonLabel"

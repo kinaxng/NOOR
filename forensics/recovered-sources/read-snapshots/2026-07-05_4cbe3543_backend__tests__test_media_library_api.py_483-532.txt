@@ -1,0 +1,50 @@
+    monkeypatch.setattr(media_library.os, 'environ', {})
+
+    with pytest.raises(HTTPException) as exc_info:
+        await media_library._preview_actor_tmdb_metadata(
+            {'server_url': 'http://server', 'api_key': 'token', 'user_id': 'user-1'},
+            'actor-1',
+        )
+
+    assert exc_info.value.status_code == 400
+    assert 'TMDB API Key' in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_apply_actor_tmdb_metadata_keeps_profile_when_avatar_sync_fails(monkeypatch: pytest.MonkeyPatch):
+    saved_avatar_overrides = {}
+
+    async def fake_preview(config, actor_id, *, lang=None):
+        return {
+            'current': {'id': actor_id, 'name': '白峰美羽', 'overview': '', 'provider_ids': {'Tmdb': '3219331'}},
+            'proposal': {
+                'name': '白峰ミウ',
+                'sort_name': '白峰ミウ',
+                'overview': 'TMDB 简介',
+                'provider_ids': {'Tmdb': '3219331', 'Imdb': 'nm123'},
+                'image_url': 'https://image.tmdb.org/t/p/original/profile.jpg',
+            },
+            'diffs': [],
+        }
+
+    async def fake_update(config, actor_id, req, *, lang=None):
+        assert req.name == '白峰美羽'
+        assert req.overview == 'TMDB 简介'
+        return {'ok': True, 'actor': {'id': actor_id, 'name': '白峰美羽'}, 'synced': True, 'sync_error': None}
+
+    async def fake_avatar(config, actor_id, url, *, lang=None):
+        raise RuntimeError('HTTP 500')
+
+    async def fake_get_profile(config, actor_id, *, lang=None):
+        return {'id': actor_id, 'name': '白峰美羽', 'image_url': saved_avatar_overrides[actor_id]['image_url']}
+
+    monkeypatch.setattr(media_library, '_preview_actor_tmdb_metadata', fake_preview)
+    monkeypatch.setattr(media_library, '_update_actor_profile', fake_update)
+    monkeypatch.setattr(media_library, '_set_actor_avatar_from_url', fake_avatar)
+    monkeypatch.setattr(media_library, '_get_actor_profile', fake_get_profile)
+    monkeypatch.setattr(media_library, '_load_actor_profile_overrides', lambda: saved_avatar_overrides)
+    monkeypatch.setattr(media_library, '_save_actor_profile_overrides', lambda overrides: saved_avatar_overrides.update(overrides))
+
+    result = await media_library._apply_actor_tmdb_metadata(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': 'user-1'},
+        'actor-1',

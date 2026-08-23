@@ -1,0 +1,43 @@
+  letter-spacing: 0.05em;
+}
+
+.settings-card__subtitle {
+  margin: 0;
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.34);
+}
+
+.settings-input {
+  padding: 0.625rem 0.875rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  color: #FFFFFF;
+  outline: none;
+  transition: all var(--transition-fast);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-input:focus {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(0, 117, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.1);
+}
+
+.webhook-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.webhook-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+

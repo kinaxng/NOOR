@@ -1,0 +1,121 @@
+  // Fire-and-forget preload: call immediately when store is first imported
+  if (!_librariesCache.loaded) {
+    _librariesWarmupPromise = _fetchLibrariesBg().finally(() => {
+      _librariesWarmupPromise = null
+    })
+  } else {
+    allLibraries.value = _librariesCache.data
+    enabledLibraryIds.value = _librariesCache.enabledIds
+  }
+
+  // Filter libraries based on enabled IDs (empty = show all)
+  const libraries = computed(() => {
+    if (enabledLibraryIds.value.length === 0) {
+      return allLibraries.value
+    }
+    return allLibraries.value.filter(lib => enabledLibraryIds.value.includes(lib.id))
+  })
+
+  async function _fetchItemsBg(libraryId: string, page: number, cacheKey: string, filterOverride?: string | null, searchOverride?: string, forceRefresh = false) {
+    try {
+      const offset = (page - 1) * pageSize.value
+      const effectiveFilter = filterOverride !== undefined ? filterOverride : filterTag.value
+      const effectiveSearch = searchOverride !== undefined ? searchOverride : searchQuery.value
+      const resp = await api.get('/media-library/items', {
+        params: {
+          library_id: libraryId || undefined,
+          limit: pageSize.value,
+          offset,
+          filter: effectiveFilter || undefined,
+          q: effectiveSearch.trim() || undefined,
+          force_refresh: forceRefresh || undefined,
+        }
+      })
+      items.value = resp.data.items
+      total.value = resp.data.total
+      currentPage.value = page
+      if (page === 1) {
+        _itemsCache.items = resp.data.items
+        _itemsCache.total = resp.data.total
+        _itemsCache.key = cacheKey
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
+  async function fetchItems(libraryId: string, page: number = 1, filterOverride?: string | null, searchOverride?: string, forceRefresh = false) {
+    const effectiveFilter = filterOverride !== undefined ? filterOverride : filterTag.value
+    const effectiveSearch = searchOverride !== undefined ? searchOverride : searchQuery.value
+    const cacheKey = `lib:${libraryId}:${effectiveFilter || 'all'}:${effectiveSearch.trim() || 'all'}:${page}`
+    // Optimistic: if page 1 and we have cache, show immediately
+    if (!forceRefresh && page === 1 && _itemsCache.key === cacheKey && _itemsCache.items.length > 0) {
+      items.value = _itemsCache.items
+      total.value = _itemsCache.total
+      currentPage.value = page
+      // Refresh in background
+      _fetchItemsBg(libraryId, page, cacheKey, effectiveFilter, effectiveSearch)
+      return
+    }
+    loading.value = true
+    error.value = null
+    if (forceRefresh) {
+      _itemsCache.items = []
+      _itemsCache.key = ''
+    }
+    await _fetchItemsBg(libraryId, page, cacheKey, effectiveFilter, effectiveSearch, forceRefresh)
+    loading.value = false
+  }
+
+  async function _fetchAllItemsBg(page: number, cacheKey: string, searchOverride?: string, forceRefresh = false) {
+    try {
+      const offset = (page - 1) * pageSize.value
+      const effectiveSearch = searchOverride !== undefined ? searchOverride : searchQuery.value
+      const resp = await api.get('/media-library/items', {
+        params: {
+          limit: pageSize.value,
+          offset,
+          filter: filterTag.value || undefined,
+          q: effectiveSearch.trim() || undefined,
+          force_refresh: forceRefresh || undefined,
+        }
+      })
+      items.value = resp.data.items
+      total.value = resp.data.total
+      currentPage.value = page
+      if (page === 1) {
+        _itemsCache.items = resp.data.items
+        _itemsCache.total = resp.data.total
+        _itemsCache.key = cacheKey
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
+  async function fetchAllItems(page: number = 1, searchOverride?: string, forceRefresh = false) {
+    const effectiveSearch = searchOverride !== undefined ? searchOverride : searchQuery.value
+    const cacheKey = `all:${filterTag.value || 'all'}:${effectiveSearch.trim() || 'all'}:${page}`
+    // Optimistic: if page 1 and we have cache, show immediately
+    if (!forceRefresh && page === 1 && _itemsCache.key === cacheKey && _itemsCache.items.length > 0) {
+      items.value = _itemsCache.items
+      total.value = _itemsCache.total
+      currentPage.value = page
+      // Refresh in background
+      _fetchAllItemsBg(page, cacheKey, effectiveSearch)
+      return
+    }
+    loading.value = true
+    error.value = null
+    if (forceRefresh) {
+      _itemsCache.items = []
+      _itemsCache.key = ''
+    }
+    await _fetchAllItemsBg(page, cacheKey, effectiveSearch, forceRefresh)
+    loading.value = false
+  }
+
+  async function fetchItemDetail(itemId: string) {
+    detailLoading.value = true
+    error.value = null
+    try {

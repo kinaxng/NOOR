@@ -1,0 +1,36 @@
+    await ensureLibraryReady()
+  }
+})
+
+function handleSelectVideo(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  showDetailPanel.value = true
+  void loadItemDetail(item)
+}
+
+function handleQuickAction(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  showLadaPanel.value = true
+  void loadItemDetail(item)
+}
+
+async function handleSubtitleAction(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  subtitleVideoId.value = item.id
+  const detail = await loadItemDetail(item)
+  if (!detail) return
+  subtitleVideoPath.value = detail.file_path || item.path || ''
+  const allPaths = [subtitleVideoPath.value]
+  if (detail.siblings) {
+    for (const s of detail.siblings) {
+      if (s.file_path && !allPaths.includes(s.file_path)) {
+        allPaths.push(s.file_path)
+      }
+    }
+  }
+  subtitleFolderPaths.value = allPaths
+  showSubtitlePanel.value = true
+}

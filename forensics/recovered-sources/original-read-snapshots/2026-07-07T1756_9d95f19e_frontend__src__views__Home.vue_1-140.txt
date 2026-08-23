@@ -1,0 +1,140 @@
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useI18n } from '../composables/useI18n'
+import MediaCard from '../components/noor/MediaCard.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import NoorPagination from '../components/ui/Pagination.vue'
+import { useRouteTabs } from '../composables/useRouteTabs'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
+import api from '../api'
+
+// Lazy-load panels that are only shown on demand
+const AsyncMediaDetailPanel = defineAsyncComponent(() => import('../components/noor/MediaDetailPanel.vue'))
+const AsyncLadaPanel = defineAsyncComponent(() => import('../components/noor/LadaPanel.vue'))
+const AsyncSubtitlePanel = defineAsyncComponent(() => import('../components/noor/SubtitlePanel.vue'))
+import type { MediaItem } from '../api/types'
+
+const { t, i18nVersion } = useI18n()
+const mediaLibraryStore = useMediaLibraryStore()
+const toast = useToast()
+const { confirm } = useConfirm()
+const route = useRoute()
+const router = useRouter()
+
+type LibraryFilter = 'all' | 'cracked' | 'chinese' | 'leaked' | 'uncensored'
+const activeFilterTab = useRouteTabs<LibraryFilter>({
+  route,
+  router,
+  basePath: '/library',
+  paramName: 'libraryFilter',
+  tabs: ['all', 'cracked', 'chinese', 'leaked', 'uncensored'],
+  defaultTab: 'all',
+})
+const activeFilter = computed({
+  get: () => activeFilterTab.value === 'all' ? '' : activeFilterTab.value,
+  set: (value: string) => {
+    activeFilterTab.value = (value || 'all') as LibraryFilter
+  },
+})
+const filters = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: 'all', label: t('library.filter.all') },
+    { key: 'cracked', label: t('library.filter.cracked') },
+    { key: 'chinese', label: t('library.filter.chinese') },
+    { key: 'leaked', label: t('library.filter.leaked') },
+    { key: 'uncensored', label: t('library.filter.uncensored') },
+  ]
+})
+
+const searchQuery = ref(String(route.query.q || mediaLibraryStore.searchQuery || ''))
+const searchPlaceholder = computed(() => {
+  void i18nVersion.value
+  return t('library.search.placeholder')
+})
+
+const visibleItems = computed(() => mediaLibraryStore.filteredItems)
+
+type LibraryImageMode = 'cover' | 'backdrop'
+const IMAGE_MODE_KEY = 'noor-library-image-mode'
+const imageMode = ref<LibraryImageMode>((localStorage.getItem(IMAGE_MODE_KEY) as LibraryImageMode) || 'cover')
+const gridEl = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | null = null
+let resizeTimer: ReturnType<typeof setTimeout> | null = null
+let mediaSyncTimer: ReturnType<typeof setInterval> | null = null
+let mediaSyncVersion: number | null = null
+
+const gridMinWidth = computed(() => imageMode.value === 'backdrop' ? 320 : 160)
+const gridTemplateColumns = computed(() => `repeat(auto-fill, minmax(${gridMinWidth.value}px, 1fr))`)
+const imageModeTitle = computed(() => imageMode.value === 'backdrop' ? '切换为封面图' : '切换为背景图')
+
+function toggleImageMode() {
+  imageMode.value = imageMode.value === 'cover' ? 'backdrop' : 'cover'
+  localStorage.setItem(IMAGE_MODE_KEY, imageMode.value)
+  schedulePageSizeUpdate(true)
+}
+
+function estimatePageSize() {
+  const el = gridEl.value
+  if (!el) return 18
+  const width = el.clientWidth || window.innerWidth
+  const top = el.getBoundingClientRect().top
+  const availableHeight = Math.max(360, window.innerHeight - top - 88)
+  const gap = 16
+  const minWidth = gridMinWidth.value
+  const columns = Math.max(1, Math.floor((width + gap) / (minWidth + gap)))
+  const cardWidth = Math.max(minWidth, (width - gap * Math.max(0, columns - 1)) / columns)
+  const imageHeight = imageMode.value === 'backdrop' ? cardWidth * 1468 / 2184 : cardWidth * 3 / 2
+  const cardHeight = imageHeight + (imageMode.value === 'backdrop' ? 64 : 74)
+  const measuredRows = Math.max(1, Math.floor((availableHeight + gap) / (cardHeight + gap)))
+  const rows = imageMode.value === 'cover' ? Math.max(3, measuredRows) : measuredRows
+  const maxItems = imageMode.value === 'backdrop' ? 96 : 144
+  return Math.max(imageMode.value === 'cover' ? columns * 3 : columns, Math.min(maxItems, columns * rows))
+}
+
+function schedulePageSizeUpdate(refetch = false) {
+  if (resizeTimer) clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(async () => {
+    await nextTick()
+    const changed = mediaLibraryStore.setPageSize(estimatePageSize())
+    if ((changed || refetch) && mediaLibraryStore.selectedLibrary?.id) {
+      await mediaLibraryStore.fetchItems(mediaLibraryStore.selectedLibrary.id, 1, activeFilter.value || null, searchQuery.value)
+    } else if ((changed || refetch) && mediaLibraryStore.enabledLibraryIds.length === 0) {
+      await mediaLibraryStore.fetchAllItems(1, searchQuery.value)
+    }
+  }, 120)
+}
+
+
+
+
+const showDetailPanel = ref(false)
+const showLadaPanel = ref(false)
+const selectedVideo = ref<MediaItem | null>(null)
+const videoDetail = ref<any>(null)
+const loadingDetail = ref(false)
+const detailError = ref<string | null>(null)
+
+const showSubtitlePanel = ref(false)
+const subtitleVideoPath = ref('')
+const subtitleVideoId = ref('')
+const subtitleFolderPaths = ref<string[]>([])
+let detailRequestToken = 0
+const deletingItemIds = ref(new Set<string>())
+
+function resetPanelState(options: { keepSelectedVideo?: boolean } = {}) {
+  showDetailPanel.value = false
+  showLadaPanel.value = false
+  showSubtitlePanel.value = false
+  loadingDetail.value = false
+  videoDetail.value = null
+  detailError.value = null
+  subtitleVideoPath.value = ''
+  subtitleVideoId.value = ''
+  subtitleFolderPaths.value = []
+  if (!options.keepSelectedVideo) {

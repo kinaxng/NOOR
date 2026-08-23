@@ -1,0 +1,361 @@
+            event_queue=self.get_event_queue(job_id),
+            status="completed" if success else "failed",
+            success=success,
+            output_path=output_path if success else None,
+            error_message=None if success else "Process exited with non-zero status",
+            progress=100 if success else None,
+            log_message="FaceFusion 任务完成" if success else "FaceFusion 任务失败",
+        )
+
+    async def _run_whisper(self, job_id: str, job_data: JobCreate):
+        """执行 Whisper 任务"""
+        from app.pipeline.whisper import (
+            WhisperConfig,
+            WhisperModel,
+            PipelineMode,
+            MergeStrategy,
+            Sensitivity,
+        )
+        from app.pipeline.whisper.strategy import build_whisper_execution_plan
+        from app.pipeline.whisper.runtime import (
+            launch_whisper_process,
+            launch_translation_process,
+        )
+        from app.pipeline.whisper.progress import AsyncProgressReporter
+        import queue
+        import threading
+        import re as re_module
+
+        input_path = job_data.input_path
+        settings_dict = job_data.settings.model_dump() if hasattr(job_data, 'settings') else {}
+        execution_plan = build_whisper_execution_plan(
+            settings_dict,
+            settings_dict.get("strategy") or settings_dict.get("preset"),
+        )
+        settings_dict = execution_plan.runtime_settings
+        settings_dict["translate_to"] = None
+        strategy_name = execution_plan.strategy
+
+        event_queue = self.get_event_queue(job_id)
+
+        # 构建 Whisper 配置
+        model_str = settings_dict.get("model", "chickenrice-zh")
+        pipeline_mode_str = settings_dict.get("pipeline_mode", "faster")
+
+        config = WhisperConfig(
+            strategy=strategy_name or "chickenrice",
+            executor_key=execution_plan.executor_key,
+            subtitle_profile=settings_dict.get("subtitle_profile", "standard"),
+            model_backend=settings_dict.get("model_backend") or model_str,
+            whisper_task=settings_dict.get("whisper_task") or ("translate" if model_str == "chickenrice-zh" else "transcribe"),
+            vad_backend=settings_dict.get("vad_backend", "energy"),
+            chunker=settings_dict.get("chunker", "smart_vad_chunk"),
+            target_chunk_duration_s=float(settings_dict.get("target_chunk_duration_s") or 30.0),
+            max_chunk_duration_s=float(settings_dict.get("max_chunk_duration_s") or 30.0),
+            segment_merge_max_gap_ms=int(settings_dict.get("segment_merge_max_gap_ms") or 2000),
+            segment_merge_max_duration_ms=int(settings_dict.get("segment_merge_max_duration_ms") or 20000),
+            model=WhisperModel(model_str),
+            pipeline_mode=PipelineMode(pipeline_mode_str),
+            merge_strategy=MergeStrategy(settings_dict.get("merge_strategy", "smart_merge")),
+            language=settings_dict.get("language", "ja"),
+            sensitivity=Sensitivity(settings_dict.get("sensitivity", "balanced")),
+            audio_preprocess_mode=settings_dict.get("audio_preprocess_mode", "none"),
+            audio_preprocess_model=settings_dict.get("audio_preprocess_model", "vocal_balanced"),
+            pass1_pipeline=PipelineMode(settings_dict.get("pass1_pipeline", "anime")) if settings_dict.get("pass1_pipeline") else PipelineMode.ANIME,
+            pass2_pipeline=PipelineMode(settings_dict.get("pass2_pipeline", "faster")) if settings_dict.get("pass2_pipeline") else PipelineMode.FASTER,
+            # Decoupled pipeline 设置（custom 模式）
+            timestamp_mode=settings_dict.get("timestamp_mode", "aligner_interpolation"),
+            aligner_backend=settings_dict.get("aligner_backend", "qwen3"),
+            framer_backend=settings_dict.get("framer_backend", "vad-grouped"),
+            # 翻译设置
+            translate_to=settings_dict.get("translate_to"),
+            translate_base_url=settings_dict.get("translate_base_url", "https://api.openai.com/v1"),
+            translate_api_key=settings_dict.get("translate_api_key", ""),
+            translate_model=settings_dict.get("translate_model", "llama3.2"),
+            translate_style=settings_dict.get("translate_style", "adult_explicit"),
+        )
+        # 处理 custom_config（当 pass1_pipeline 或 pass2_pipeline 为 custom 时使用）
+        custom_config = settings_dict.get("custom_config", {})
+        if custom_config:
+            from app.pipeline.whisper.types import VADMethod
+            cfg_model_str = custom_config.get("model", model_str)
+            cfg_vad = custom_config.get("vad_method", "semantic")
+            cfg_enhancers = custom_config.get("enhancers", [])
+            cfg_timestamp_mode = custom_config.get("timestamp_mode", "aligner_interpolation")
+            cfg_aligner_backend = custom_config.get("aligner_backend", "qwen3")
+            cfg_framer_backend = custom_config.get("framer_backend", "vad-grouped")
+            try:
+                config.vad_method = VADMethod(cfg_vad)
+            except ValueError:
+                config.vad_method = VADMethod.SEMANTIC
+            config.enhancers = cfg_enhancers
+            config.timestamp_mode = cfg_timestamp_mode
+            config.aligner_backend = cfg_aligner_backend
+            config.framer_backend = cfg_framer_backend
+            # custom pipeline 时，使用 custom_config 中的模型
+            if config.pass1_pipeline == PipelineMode.CUSTOM:
+                try:
+                    config.pass1_model = WhisperModel(cfg_model_str)
+                except ValueError:
+                    config.pass1_model = WhisperModel.LARGE_V3
+            if config.pass2_pipeline == PipelineMode.CUSTOM:
+                try:
+                    config.pass2_model = WhisperModel(cfg_model_str)
+                except ValueError:
+                    config.pass2_model = WhisperModel.LARGE_V3
+
+        p1 = config.pass1_pipeline.value
+        p2 = config.pass2_pipeline.value if config.pass2_pipeline else "none"
+
+        # 日志记录 pipeline 架构和配置
+        old_arch_model_map = {
+            PipelineMode.FASTER: "tiny",
+            PipelineMode.BALANCED: "large-v3",
+            PipelineMode.TRANSFORMERS: "kotoba-whisper-v2.2",
+            PipelineMode.ANIME: "anime-whisper",
+            PipelineMode.QWEN: "large-v3",
+            PipelineMode.REAZON: "reazonspeech-nemo-v2",
+            PipelineMode.SINGLE: config.model.value,
+        }
+        actual_model = old_arch_model_map.get(config.pipeline_mode, config.model.value)
+        if config.model == WhisperModel.CHICKENRICE_ZH:
+            actual_model = config.model.value
+        await self.add_log(job_id, "Whisper 架构: NOOR Whisper Pipeline")
+        if strategy_name:
+            await self.add_log(job_id, f"  策略: {strategy_name}")
+        await self.add_log(job_id, f"  模式: {execution_plan.summary}")
+        for detail_line in execution_plan.detail_lines:
+            await self.add_log(job_id, f"  {detail_line}")
+        await self.add_log(job_id, f"  Pipeline: {p1} | 模型: {actual_model} | 任务: {config.whisper_task} | Merge: {config.merge_strategy.value}")
+        if config.translate_to:
+            await self.add_log(job_id, f"  翻译: {config.translate_model} → {config.translate_to} | 风格: {config.translate_style}")
+        await self.add_log(job_id, "开始 Whisper 字幕生成...")
+        await self._ensure_gpu_memory_for_job(job_id, "whisper", "Whisper", settings_dict)
+
+        # 日志文件
+        log_file = self._log_file_path(job_id)
+
+        process_handle = launch_whisper_process(
+            config,
+            input_path,
+            os.path.splitext(os.path.basename(input_path))[0],
+        )
+        worker_process = process_handle.process
+        worker_message_queue = process_handle.message_queue
+        worker_cancel_event = process_handle.cancel_event
+
+        control_queue: queue.Queue = queue.Queue()
+        running = [True]  # 用列表便于在线程中修改
+        progress_update_futures = []
+
+        def schedule_on_main_loop(coro):
+            try:
+                future = asyncio.run_coroutine_threadsafe(coro, main_loop)
+            except RuntimeError as e:
+                close = getattr(coro, "close", None)
+                if callable(close):
+                    close()
+                logger.warning("Main loop unavailable while streaming whisper job %s: %s", job_id, e)
+                return None
+            progress_update_futures.append(future)
+            return future
+
+        # 独立线程：从队列读取 + 发 SSE + 更新数据库
+        main_loop = asyncio.get_running_loop()  # 在 async 函数中获取
+
+        # 进度报告器（替代硬编码模式匹配）
+        reporter = AsyncProgressReporter(job_id, event_queue)
+        max_reported_progress = [0]
+
+        def reader_thread_fn():
+            while running[0] or worker_process.is_alive():
+                try:
+                    item = worker_message_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+
+                if item.get("type") != "log":
+                    control_queue.put(item)
+                    continue
+
+                msg = item.get("line", "")
+                p = item.get("progress")
+
+                try:
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(msg + "\n")
+                        f.flush()
+                except Exception as e:
+                    logger.warning("Failed to write whisper log for job %s: %s", job_id, e)
+
+                line = msg
+                estimated = p
+                phase_key = None
+                phase_label = None
+                phase_progress = None
+                detail = None
+
+                update = reporter.parse_line(line)
+                if update:
+                    phase_key = update.phase_key
+                    phase_label = update.phase_label
+                    phase_progress = max(0, min(100, int(update.phase_progress * 100)))
+                    detail = update.detail
+                    if estimated is None:
+                        estimated = update.overall_progress
+
+                # 更新内存
+                if job_id not in self._logs:
+                    self._logs[job_id] = []
+                self._logs[job_id].append(line)
+
+                if estimated is not None:
+                    estimated = max(max_reported_progress[0], int(estimated))
+                    max_reported_progress[0] = estimated
+
+                # 发 SSE（通过 run_coroutine_threadsafe 发送到主事件循环）
+                if estimated is not None:
+                    schedule_on_main_loop(
+                        self._emit_progress_event(
+                            job_id,
+                            progress=estimated,
+                            phase_key=phase_key,
+                            phase_label=phase_label,
+                            phase_progress=phase_progress,
+                            detail=detail,
+                        )
+                    )
+                schedule_on_main_loop(event_queue.put({"type": "log", "line": line}))
+
+        reader = threading.Thread(target=reader_thread_fn, daemon=True)
+        reader.start()
+
+        error_msg = None
+        child_result_srt_path = None
+        child_result_metadata = None
+        child_reported_cancelled = False
+
+        def consume_control_messages():
+            nonlocal child_result_srt_path, child_result_metadata, error_msg, child_reported_cancelled
+            while True:
+                try:
+                    item = control_queue.get_nowait()
+                except queue.Empty:
+                    break
+
+                item_type = item.get("type")
+                if item_type == "result":
+                    child_result_srt_path = item.get("srt_path")
+                    child_result_metadata = item.get("result_metadata") or {}
+                elif item_type == "error":
+                    error_msg = item.get("error") or "Unknown error"
+                elif item_type == "cancelled":
+                    child_reported_cancelled = True
+                    error_msg = item.get("error") or "Whisper pipeline cancelled"
+
+        async def consume_messages():
+            consume_control_messages()
+
+        cancel_requested = await self._wait_process_exit_with_cancellation(
+            job_id,
+            process=worker_process,
+            worker_cancel_event=worker_cancel_event,
+            consume_messages=consume_messages,
+            cancel_log_message="Whisper 取消请求已收到；等待当前识别线程安全退出...",
+            force_terminate_log_message="Whisper 子进程未及时退出，正在强制终止...",
+            poll_interval=0.5,
+        )
+
+        cancelled = cancel_requested or child_reported_cancelled
+
+        if not cancelled and worker_process.exitcode not in (0, None):
+            error_msg = error_msg or f"Whisper worker exited with code {worker_process.exitcode}"
+
+        if cancelled:
+            success = False
+            output_path = None
+        elif error_msg:
+            success = False
+            output_path = None
+            await self.add_log(job_id, f"错误: {error_msg}")
+        elif child_result_srt_path:
+            srt_path = child_result_srt_path
+        else:
+            success = False
+            output_path = None
+
+        if child_result_srt_path and not cancelled and not error_msg:
+            video_dir = os.path.dirname(input_path)
+            clean_name = re_module.sub(r'[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)', '', os.path.splitext(os.path.basename(input_path))[0], flags=re_module.IGNORECASE)
+            target_srt = os.path.join(video_dir, f"{clean_name}.ja.srt")
+            if os.path.exists(srt_path):
+                shutil.copy(srt_path, target_srt)
+                await self.add_log(job_id, f"字幕已保存: {target_srt}")
+                success = True
+                output_path = target_srt
+            else:
+                success = False
+                output_path = None
+                error_msg = error_msg or f"Whisper worker reported missing subtitle output: {srt_path}"
+                await self.add_log(job_id, f"错误: {error_msg}")
+
+        # 通知 reader 退出
+        running[0] = False
+        reader.join(timeout=1)
+
+        for closable in (worker_message_queue,):
+            close = getattr(closable, "close", None)
+            if callable(close):
+                close()
+        join_thread = getattr(worker_message_queue, "join_thread", None)
+        if callable(join_thread):
+            join_thread()
+
+        while progress_update_futures:
+            future = progress_update_futures.pop(0)
+            try:
+                await asyncio.wrap_future(future)
+            except Exception as e:
+                logger.warning("DB update error while streaming whisper progress for job %s: %s", job_id, e)
+
+        if self._cancel_event_for(job_id).is_set():
+            await self._finish_cancelled_job(
+                job_id,
+                event_queue=event_queue,
+                log_message="Whisper 任务已取消",
+            )
+            return
+
+        final_status = "completed" if success else "failed"
+        final_error_message = None if success else (error_msg or "Unknown error")
+        whisper_execution_metadata = {
+            "strategy": strategy_name,
+            "executor_key": execution_plan.executor_key,
+            "summary": execution_plan.summary,
+            "detail_lines": list(execution_plan.detail_lines),
+            "model": actual_model,
+            "pipeline_mode": config.pipeline_mode.value,
+            "merge_strategy": config.merge_strategy.value,
+            "language": config.language,
+            "pass1_pipeline": config.pass1_pipeline.value if config.pass1_pipeline else None,
+            "pass2_pipeline": config.pass2_pipeline.value if config.pass2_pipeline else None,
+        }
+        final_result_metadata = None
+        if success:
+            final_result_metadata = {
+                **(child_result_metadata or {}),
+                "whisper_execution": whisper_execution_metadata,
+            }
+        await self._finalize_parent_job_chain(
+            job_id,
+            event_queue=event_queue,
+            status=final_status,
+            success=success,
+            output_path=output_path,
+            error_message=final_error_message,
+            progress=100 if success else None,
+            log_message="Whisper 任务完成" if success else "Whisper 任务失败",
+            result_metadata=final_result_metadata,
+            skipped_reason="上游转写任务失败，翻译任务跳过",
+        )
+

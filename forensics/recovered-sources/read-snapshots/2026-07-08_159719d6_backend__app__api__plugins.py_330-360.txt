@@ -1,0 +1,31 @@
+
+@router.get("/dashboard/widgets")
+async def get_dashboard_widgets(plugin_ids: str | None = Query(default=None)):
+    active_plugin_ids = None
+    if plugin_ids is not None:
+        active_plugin_ids = {pid.strip() for pid in plugin_ids.split(",") if pid.strip()}
+        if not active_plugin_ids:
+            return []
+    widgets = await runtime.get_dashboard_widgets(active_plugin_ids)
+    return [w.model_dump() for w in widgets]
+
+
+@router.get("/background/tasks")
+async def get_background_tasks():
+    items = await runtime.get_background_tasks()
+    items.extend(await _get_core_background_tasks())
+    return {"ok": True, "items": items, "total": len(items)}
+
+
+@router.get("/{plugin_id}/rss/items")
+async def get_rss_items(plugin_id: str, limit: int = 30, refresh: bool = False, images: bool = False):
+    start = time.perf_counter()
+    try:
+        result = await runtime.get_rss_items(plugin_id, limit=limit, force_refresh=refresh, include_images=images)
+        count = len(result.get("items") or []) if isinstance(result, dict) else 0
+        _plugin_log("info", plugin_id, f"RSS 获取完成 items={count} limit={limit} refresh={refresh} images={images} cost={(time.perf_counter() - start) * 1000:.0f}ms")
+        return result
+    except KeyError:
+        _plugin_log("error", plugin_id, "RSS 获取失败：plugin not found")
+        raise HTTPException(status_code=404, detail="plugin not found")
+    except Exception as e:

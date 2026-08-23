@@ -1,0 +1,91 @@
+        "total": len(files),
+        "matched": matched,
+        "scan_roots": [str(root) for root in _restore_scan_roots(config)],
+        "path_mappings": [{"local": left, "remote": right} for left, right in _restore_path_mappings(config)],
+    }
+
+
+async def _delete_restore_file(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    target_path = str(payload.get("path") or "").strip()
+    if not target_path:
+        raise ValueError("missing xltd path")
+    path = Path(target_path).expanduser().resolve()
+    allowed = [root.resolve() for root in _restore_scan_roots(config)]
+    if not any(path == root or root in path.parents for root in allowed):
+        raise ValueError("残留文件不在允许扫描目录内")
+    if path.suffix.lower() not in {".xltd", ".xtld"}:
+        raise ValueError("只允许删除 .xltd / .xtld 残留文件")
+    if not path.exists() or not path.is_file():
+        raise ValueError("残留文件不存在")
+    stat = path.stat()
+    path.unlink()
+    return {"ok": True, "deleted": True, "path": str(path), "size": stat.st_size, "size_formatted": _format_size(stat.st_size)}
+
+async def test(config: dict[str, Any]) -> PluginTestResult:
+    try:
+        async with await _client(config, timeout=10.0) as client:
+            pan_auth = await _pan_auth(config, client)
+            device_id, info = await _device_id(config, client, pan_auth)
+        return PluginTestResult(ok=True, message="xunlei remote connected", details={"base_url": _base(config), "device_id": device_id, "target": info.get("target")})
+    except Exception as e:
+        return PluginTestResult(ok=False, message=f"xunlei remote failed: {e}")
+
+
+def _extract_download_urls(payload: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in ("urls", "url", "magnet"):
+        raw = payload.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, (list, tuple, set)):
+            values.extend(str(item or "").strip() for item in raw)
+        else:
+            values.extend(part.strip() for part in str(raw).splitlines())
+    out: list[str] = []
+    for item in values:
+        if item and item not in out:
+            out.append(item)
+    return out
+
+
+async def _submit_single_download(config: dict[str, Any], payload: dict[str, Any], url: str) -> dict[str, Any]:
+    if not url:
+        raise ValueError("missing url/magnet")
+    explicit_savepath = "savepath" in payload and str(payload.get("savepath") or "").strip()
+    savepath = str(payload.get("savepath") or config.get("savepath") or DEFAULT_SAVE_PATH).strip() or DEFAULT_SAVE_PATH
+    raw_file_indices = str(payload.get("file_indices") or payload.get("file_range") or config.get("file_indices") or "auto").strip() or "auto"
+    file_indices = raw_file_indices
+    min_file_size_mb = _min_file_size_mb_value(config, payload)
+    min_keep_bytes = int(min_file_size_mb * 1024 * 1024)
+
+    async with await _client(config, timeout=float(config.get("timeout") or 30)) as client:
+        pan_auth = await _pan_auth(config, client)
+        device_id, device_info = await _device_id(config, client, pan_auth)
+        daily_limit = _extract_task_daily_limit(device_info)
+        resource = await _resource_info(config, client, pan_auth, url)
+        files = resource["files"]
+        if not files:
+            raise ValueError("无法获取磁力资源文件信息，迅雷未返回可下载文件")
+        if file_indices.lower() == "auto":
+            file_indices = _auto_file_indices(files, min_keep_bytes=min_keep_bytes)
+        parent_folder_id = str(payload.get("parent_folder_id") or payload.get("folder_id") or "").strip()
+        if not parent_folder_id:
+            if explicit_savepath:
+                parent_folder_id = await _require_parent_folder_id_for_explicit_savepath(config, client, pan_auth, savepath)
+            else:
+                parent_folder_id = await _resolve_parent_folder_id(config, client, pan_auth, savepath)
+        total_files = int(resource["total_files"] or len(files))
+        total_size = int(resource["total_size_bytes"] or 0)
+        task_name = _pick_task_name(payload, files, url)
+        first_file = max(files, key=lambda f: int(f.get("size_bytes") or 0))
+        if file_indices == "--1":
+            download_count = total_files
+            download_size = total_size
+        else:
+            wanted = set[int]()
+            for part in file_indices.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                if "-" in part:
+                    start, end = part.split("-", 1)

@@ -1,0 +1,46 @@
+  page.value = 1
+  loadActors()
+}
+
+function openActor(actor: MediaActor) {
+  if (!actor.id) return
+  router.push({
+    path: `/actors/${encodeURIComponent(actor.id)}`,
+    query: { returnTo: '/files/actors', actorLang: actorNameLang.value },
+  })
+}
+
+watch(query, () => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    page.value = 1
+    loadActors()
+  }, 260)
+})
+
+watch(page, () => {
+  loadActors()
+})
+
+watch(currentLang, () => {
+  loadActors()
+})
+
+watch(actorNameLang, () => {
+  page.value = 1
+  loadActors()
+  if (showMappingMatches.value) void previewMappingMatches()
+  if (tmdbBackfill.value) void previewTmdbBackfill()
+})
+
+onMounted(() => {
+  loadActors()
+  loadMappingStatus()
+})
+</script>
+
+<template>
+  <div class="actor-management">
+    <div class="page-header">
+      <div class="page-header__left">
+        <div>

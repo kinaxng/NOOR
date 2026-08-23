@@ -1,0 +1,280 @@
+"""Implementation helpers for Emby media-library item detail requests.
+
+Reconstructed from preserved Python 3.13 bytecode.
+"""
+from __future__ import annotations
+
+import os
+import re
+import xml.etree.ElementTree as ET
+from typing import Any, Callable
+from urllib.parse import urlencode, urljoin
+
+
+_VARIANT_MARKER_RE = re.compile(
+    r"(^|[-_.\s])(restored-u|u\d*|c\d*|chs|cht|cn|tw|zh|字幕|中文|破解|流出|uncensored|leaked)(?=$|[-_.\s])",
+    re.IGNORECASE,
+)
+
+
+def _sibling_variant_penalty(item: dict) -> int:
+    path = (item.get("file_path") or "").lower()
+    name = (item.get("name") or item.get("label") or "").lower()
+    basename = os.path.splitext(os.path.basename(path))[0] if path else name
+    penalty = 0
+    if _VARIANT_MARKER_RE.search(basename):
+        penalty += 60
+    if ".restored-u" in path:
+        penalty += 120
+    return penalty
+
+
+def _sort_siblings(items: list[dict]) -> list[dict]:
+    def sort_key(item: dict) -> tuple:
+        path = item.get("file_path") or ""
+        name = item.get("name") or item.get("label") or ""
+        return (
+            bool(path),
+            -_sibling_variant_penalty(item),
+            -(len(os.path.basename(path)) if path else len(name)),
+            name.lower(),
+        )
+
+    return sorted(items, key=sort_key, reverse=True)
+
+
+def build_stream_url_for_server_impl(
+    server_url: str,
+    api_key: str,
+    item_id: str,
+    media_source_id: str | None = None,
+    container: str | None = None,
+) -> str:
+    _ = (server_url, api_key)
+    normalized_container = (container or "").strip().lower()
+    if normalized_container and not re.fullmatch(r"[a-z0-9]+", normalized_container):
+        normalized_container = ""
+    params: dict[str, str] = {}
+    if media_source_id:
+        params["media_source_id"] = media_source_id
+    if normalized_container:
+        params["container"] = normalized_container
+    query = f"?{urlencode(params)}" if params else ""
+    return f"/api/media-library/stream/{item_id}{query}"
+
+
+def build_direct_stream_upstream_url_impl(
+    server_url: str,
+    api_key: str,
+    item_id: str,
+    media_source_id: str | None = None,
+    container: str | None = None,
+    play_session_id: str | None = None,
+) -> str:
+    normalized_container = (container or "").strip().lower()
+    if normalized_container and not re.fullmatch(r"[a-z0-9]+", normalized_container):
+        normalized_container = ""
+    suffix = f".{normalized_container}" if normalized_container else ""
+    params = {"static": "true", "api_key": api_key or ""}
+    if media_source_id:
+        params["MediaSourceId"] = media_source_id
+    if normalized_container:
+        params["Container"] = normalized_container
+    if play_session_id:
+        params["PlaySessionId"] = play_session_id
+    return f"{server_url}/emby/Videos/{item_id}/stream{suffix}?{urlencode(params)}"
+
+
+def _append_query_value(url: str, key: str, value: str | None) -> str:
+    if not value or f"{key}=" in url:
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{key}={value}"
+
+
+def _normalize_emby_url(server_url: str, url: str | None) -> str | None:
+    if not url:
+        return None
+    return urljoin(f"{server_url.rstrip('/')}/", url.lstrip("/"))
+
+
+def _select_playback_source(sources: list[dict], media_source_id: str | None = None) -> dict | None:
+    if not sources:
+        return None
+    if media_source_id:
+        for source in sources:
+            if source.get("Id") == media_source_id:
+                return source
+    for source in sources:
+        if source.get("SupportsDirectPlay") or source.get("SupportsDirectStream"):
+            return source
+    return sources[0]
+
+
+async def resolve_playback_stream_url_impl(
+    config: dict,
+    item_id: str,
+    media_source_id: str | None = None,
+    container: str | None = None,
+    *,
+    httpx_module: Any,
+    server_url_fn: Callable[[dict], str],
+    headers_fn: Callable[[str], dict],
+) -> dict:
+    server_url = server_url_fn(config)
+    api_key = config.get("api_key", "")
+    user_id = config.get("user_id", "")
+    fallback_url = build_direct_stream_upstream_url_impl(
+        server_url,
+        api_key,
+        item_id,
+        media_source_id=media_source_id,
+        container=container,
+    )
+    fallback = {
+        "url": fallback_url,
+        "play_method": "direct_stream_fallback",
+        "play_session_id": None,
+        "media_source_id": media_source_id,
+        "container": container,
+        "is_transcode": False,
+    }
+    if not server_url or not api_key or not user_id:
+        return fallback
+
+    try:
+        async with httpx_module.AsyncClient(timeout=20.0, trust_env=False) as client:
+            response = await client.post(
+                f"{server_url}/emby/Items/{item_id}/PlaybackInfo",
+                headers={**headers_fn(api_key), "content-type": "application/json"},
+                json={
+                    "UserId": user_id,
+                    "StartTimeTicks": 0,
+                    "IsPlayback": False,
+                    "AutoOpenLiveStream": True,
+                    "MaxStreamingBitrate": 120000000,
+                },
+            )
+        if response.status_code != 200:
+            return {**fallback, "play_method": f"playbackinfo_http_{response.status_code}"}
+        data = response.json()
+    except Exception:
+        return {**fallback, "play_method": "playbackinfo_error"}
+
+    play_session_id = data.get("PlaySessionId")
+    source = _select_playback_source(data.get("MediaSources", []), media_source_id)
+    if not source:
+        return {
+            **fallback,
+            "url": _append_query_value(fallback_url, "PlaySessionId", play_session_id),
+            "play_session_id": play_session_id,
+        }
+
+    resolved_media_source_id = source.get("Id") or media_source_id
+    resolved_container = source.get("Container") or container
+    direct_url = _normalize_emby_url(server_url, source.get("DirectStreamUrl"))
+    if direct_url:
+        direct_url = _append_query_value(direct_url, "api_key", api_key)
+        direct_url = _append_query_value(direct_url, "PlaySessionId", play_session_id)
+        return {
+            "url": direct_url,
+            "play_method": "direct_play" if source.get("SupportsDirectPlay") else "direct_stream",
+            "play_session_id": play_session_id,
+            "media_source_id": resolved_media_source_id,
+            "container": resolved_container,
+            "is_transcode": False,
+        }
+
+    transcode_url = _normalize_emby_url(server_url, source.get("TranscodingUrl") or data.get("TranscodingUrl"))
+    if transcode_url:
+        transcode_url = _append_query_value(transcode_url, "api_key", api_key)
+        transcode_url = _append_query_value(transcode_url, "PlaySessionId", play_session_id)
+        return {
+            "url": transcode_url,
+            "play_method": "transcode",
+            "play_session_id": play_session_id,
+            "media_source_id": resolved_media_source_id,
+            "container": resolved_container,
+            "is_transcode": True,
+        }
+
+    return {
+        "url": build_direct_stream_upstream_url_impl(
+            server_url,
+            api_key,
+            item_id,
+            media_source_id=resolved_media_source_id,
+            container=resolved_container,
+            play_session_id=play_session_id,
+        ),
+        "play_method": "direct_stream_fallback",
+        "play_session_id": play_session_id,
+        "media_source_id": resolved_media_source_id,
+        "container": resolved_container,
+        "is_transcode": False,
+    }
+
+
+def get_main_nfo_impl(file_path: str | None) -> str | None:
+    if not file_path:
+        return None
+    folder = os.path.dirname(file_path)
+    base, _ = os.path.splitext(os.path.basename(file_path))
+    base_code = re.sub(
+        r"[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?|restored-u|u\d*|c\d*)[-_.]*",
+        "",
+        base,
+        flags=re.IGNORECASE,
+    ).rstrip("_-")
+    if not base_code:
+        return None
+    candidate = os.path.join(folder, f"{base_code}.nfo")
+    return candidate if os.path.isfile(candidate) else None
+
+
+def _nfo_text(root: ET.Element, tag: str) -> str:
+    value = root.findtext(tag)
+    return (value or '').strip()
+
+
+def _nfo_list(root: ET.Element, tag: str) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for node in root.findall(tag):
+        text = (node.text or '').strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        values.append(text)
+    return values
+
+
+def parse_nfo_file_impl(nfo_path: str | None) -> dict:
+    if not nfo_path or not os.path.isfile(nfo_path):
+        return {}
+    try:
+        root = ET.parse(nfo_path).getroot()
+    except Exception:
+        return {}
+
+    nfo: dict[str, Any] = {}
+    scalar_fields = (
+        'title',
+        'originaltitle',
+        'sorttitle',
+        'year',
+        'premiered',
+        'studio',
+        'plot',
+        'outline',
+        'director',
+        'rating',
+        'set',
+        'id',
+        'tagline',
+        'votes',
+        'maker',
+        'publisher',
+        'label',
+        'num',
+    )

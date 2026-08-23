@@ -1,0 +1,146 @@
+  white-space: nowrap;
+}
+
+.facefusion-model-select span {
+  flex: none;
+  color: #8fc2ff;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.facefusion-model-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.facefusion-model-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 12, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.facefusion-model-dialog__panel {
+  position: relative;
+  display: grid;
+  width: min(42rem, 100%);
+  max-height: min(42rem, calc(100vh - 2rem));
+  gap: 0.85rem;
+  overflow: hidden;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--color-bg-surface);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+}
+
+.facefusion-model-dialog__head,
+.facefusion-model-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.facefusion-model-dialog__head strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 0.94rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facefusion-model-dialog__head button,
+.facefusion-model-toolbar button,
+.facefusion-model-upload {
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+}
+
+.facefusion-model-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.facefusion-model-upload input {
+  display: none;
+}
+
+.facefusion-model-upload span {
+  font-weight: 780;
+}
+
+.facefusion-model-dialog__empty {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.facefusion-model-list {
+  display: grid;
+  gap: 0.32rem;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.facefusion-model-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.35rem;
+  padding: 0.58rem 0.75rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+
+.facefusion-model-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  font-weight: 820;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facefusion-model-item b {
+  flex: none;
+  color: #7ec2ff;
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.facefusion-model-item.is-active {
+  border-color: rgba(0, 117, 255, 0.72);
+  background: rgba(0, 117, 255, 0.14);
+}
+
+.facefusion-model-item.is-missing {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.facefusion-model-item.is-missing b {
+  color: #f6c86f;
+}
+
+.facefusion-model-item.is-downloading {
+  border-color: rgba(0, 117, 255, 0.56);
+  background: rgba(0, 117, 255, 0.1);
+}
+
+@media (max-width: 1180px) {

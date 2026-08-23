@@ -1,0 +1,49 @@
+    cmd += ["--output-audio-encoder", str(job_settings.get("output_audio_encoder", settings.facefusion_output_audio_encoder))]
+    cmd += ["--output-audio-quality", str(job_settings.get("output_audio_quality", settings.facefusion_output_audio_quality))]
+    cmd += ["--output-audio-volume", str(job_settings.get("output_audio_volume", settings.facefusion_output_audio_volume))]
+    cmd += ["--output-image-quality", str(job_settings.get("output_image_quality", settings.facefusion_output_image_quality))]
+    output_image_scale = job_settings.get("output_image_scale", settings.facefusion_output_image_scale)
+    if output_image_scale:
+        cmd += ["--output-image-scale", str(output_image_scale)]
+    cmd += ["--temp-frame-format", str(job_settings.get("temp_frame_format", settings.facefusion_temp_frame_format))]
+    cmd += ["--log-level", str(job_settings.get("log_level", settings.facefusion_log_level))]
+
+    env = _build_env(
+        facefusion_cache_dir=facefusion_cache_dir,
+        facefusion_temp_dir=facefusion_temp_dir,
+    )
+    return cmd, facefusion_cache_dir, env, native_model_dir
+
+
+async def run_facefusion_restoration(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    job_settings: dict,
+    progress_queue: asyncio.Queue,
+    cancel_event: asyncio.Event | None = None,
+) -> bool:
+    cmd, cwd, env, native_model_dir = _build_command(input_path, output_path, job_settings)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    await progress_queue.put(_progress_event(
+        progress=1,
+        phase_key="prepare",
+        phase_progress=10,
+        detail="初始化 FaceFusion CLI",
+    ))
+    await progress_queue.put({"type": "log", "line": f"Starting command: {' '.join(cmd)}"})
+    await progress_queue.put({"type": "log", "line": f"FaceFusion model directory: {native_model_dir}"})
+    await progress_queue.put({"type": "log", "line": f"FaceFusion runtime cache directory: {cwd}"})
+
+    result = {"returncode": None, "cancelled": False}
+    proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
+    proc_lock = threading.Lock()
+    terminate_requested = threading.Event()
+    progress_state = {"overall": 1}
+    state_lock = threading.Lock()
+
+    def push(item: dict) -> None:
+        try:
+            progress_queue.put_nowait(item)
+        except Exception:

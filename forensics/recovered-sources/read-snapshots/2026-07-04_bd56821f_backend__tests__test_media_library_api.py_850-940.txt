@@ -1,0 +1,91 @@
+@pytest.mark.asyncio
+async def test_preview_actor_mapping_keeps_ignored_actor_in_candidates(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            'id': '3219331',
+            'jp': '白峰ミウ',
+            'zh_cn': '白峰美羽',
+            'zh_tw': '白峰美羽',
+            'tmdb_id': '3219331',
+            'verified': True,
+            'names': ['白峰ミウ', '白峰美羽'],
+        }
+    ])
+
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending', lang=None, include_ignored=False):
+        assert include_ignored is True
+        return [
+            {'id': 'ignored-actor', 'name': '白峰美羽', 'tmdb_id': '3219331'},
+            {'id': 'live-actor', 'name': '白峰ミウ', 'tmdb_id': '3219331'},
+        ], 2
+
+    async def fake_related_movies(client, config, actor_id, *, limit=5000):
+        return [{'Id': 'movie-1'}]
+
+    monkeypatch.setattr(media_library, '_list_actors', fake_list_actors)
+    monkeypatch.setattr(media_library, '_emby_related_movies_for_actor', fake_related_movies)
+    monkeypatch.setattr(media_library, '_load_actor_merge_ignored_ghosts', lambda: {'ignored-actor'})
+
+    result = await media_library._preview_actor_mapping_matches({'server_url': 'http://server', 'api_key': 'token'}, only_candidates=True)
+
+    assert result['candidate_groups'] == 1
+    assert result['rejected_actors'] == 0
+    group = result['groups'][0]
+    assert {actor['id'] for actor in group['actors']} == {'ignored-actor', 'live-actor'}
+    ignored_actor = next(actor for actor in group['actors'] if actor['id'] == 'ignored-actor')
+    assert ignored_actor['mapping_warning_reason'] == 'ignored_person'
+
+
+@pytest.mark.asyncio
+async def test_preview_actor_tmdb_backfill_uses_verified_mapping(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            'id': '3283399',
+            'jp': '倉本すみれ',
+            'zh_cn': '仓本菫',
+            'zh_tw': '仓本菫',
+            'tmdb_id': '3283399',
+            'verified': True,
+            'names': ['倉本すみれ', '仓本菫'],
+        }
+    ])
+
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending', lang=None, include_ignored=False):
+        return [
+            {'id': '1547', 'name': '仓本堇', 'provider_ids': {}},
+        ], 1
+
+    monkeypatch.setattr(media_library, '_list_actors', fake_list_actors)
+
+    result = await media_library._preview_actor_tmdb_backfill({'server_url': 'http://server', 'api_key': 'token'}, lang='zh-CN')
+
+    assert result['summary']['high_confidence_count'] == 1
+    assert result['candidates'][0]['actor_id'] == '1547'
+    assert result['candidates'][0]['tmdb_id'] == '3283399'
+    assert result['candidates'][0]['confidence'] == 'high'
+
+
+@pytest.mark.asyncio
+async def test_preview_actor_mapping_matches_groups_aliases(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [
+        {
+            'id': '2599695',
+            'jp': '水卜さくら',
+            'zh_cn': '水卜樱',
+            'zh_tw': '水卜櫻',
+            'tmdb_id': '2599695',
+            'verified': True,
+            'names': ['水卜さくら', '水卜樱', '水卜櫻', '水トさくら', 'Sakura Miura'],
+        }
+    ])
+
+    async def fake_list_actors(config, *, limit=60, offset=0, q=None, sort_by='SortName', sort_order='Ascending', lang=None, include_ignored=False):
+        return [
+            {'id': 'emby-1', 'name': '水卜さくら', 'tmdb_id': '2599695', 'image_url': 'http://server/image.jpg'},
+            {'id': 'emby-2', 'name': '水トさくら'},
+            {'id': 'emby-3', 'name': 'Unmatched'},
+        ], 3
+
+    async def fake_related_movies(client, config, actor_id, *, limit=5000):
+        return [{'Id': f'movie-{actor_id}'}]
+

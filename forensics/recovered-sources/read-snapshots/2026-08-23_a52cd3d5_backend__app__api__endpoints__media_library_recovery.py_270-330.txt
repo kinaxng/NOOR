@@ -1,0 +1,61 @@
+    ]
+
+
+async def _detail_from_raw(raw: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    item_id = str(raw.get("Id") or "")
+    file_path = _media_source_path(raw, config)
+    media_sources = raw.get("MediaSources") if isinstance(raw.get("MediaSources"), list) else []
+    selected_source = next((source for source in media_sources if source.get("Type") == "Default"), None)
+    if selected_source is None and media_sources:
+        selected_source = media_sources[0]
+    media_source_id = (selected_source or {}).get("Id")
+    media_container = str((selected_source or {}).get("Container") or Path(file_path or "").suffix.lstrip("."))
+    sibling_raws = await _fetch_sibling_raws(config, str(raw.get("ParentId") or ""), item_id)
+    siblings = _sort_siblings([_sibling_from_raw(item, config) for item in sibling_raws])
+    studios = [s.get("Name") for s in raw.get("Studios", []) if isinstance(s, dict) and s.get("Name")]
+    actors = [
+        {"name": person.get("Name"), "role": person.get("Role")}
+        for person in (raw.get("People") or [])
+        if isinstance(person, dict) and person.get("Name") and person.get("Type") == "Actor"
+    ]
+    sibling_tags = []
+    for sibling in siblings:
+        sibling_tags.append(media._parse_tags(sibling.get("name") or sibling.get("label") or "", studios, sibling.get("file_path")))
+        sibling["tags"] = sibling_tags[-1]
+
+    image_tags = raw.get("ImageTags") if isinstance(raw.get("ImageTags"), dict) else {}
+    backdrop_tags = raw.get("BackdropImageTags") if isinstance(raw.get("BackdropImageTags"), list) else []
+    poster_url = f"{_base(config)}/emby/Items/{item_id}/Images/Primary?tag={image_tags['Primary']}" if image_tags.get("Primary") else None
+    if not poster_url and image_tags.get("Thumb"):
+        poster_url = f"{_base(config)}/emby/Items/{item_id}/Images/Thumb?tag={image_tags['Thumb']}"
+    backdrop_url = None
+    if backdrop_tags:
+        backdrop_url = f"{_base(config)}/emby/Items/{item_id}/Images/Backdrop?tag={backdrop_tags[0]}"
+    elif image_tags.get("Thumb"):
+        backdrop_url = f"{_base(config)}/emby/Items/{item_id}/Images/Thumb?tag={image_tags['Thumb']}"
+
+    tags = media._parse_tags(str(raw.get("Name") or ""), studios, file_path)
+    if any(tag.get("has_chinese") for tag in sibling_tags):
+        tags["has_chinese"] = True
+    if any(tag.get("is_cracked") for tag in sibling_tags):
+        tags["is_cracked"] = True
+    if any(tag.get("is_leaked") for tag in sibling_tags):
+        tags["is_leaked"] = True
+    if any(tag.get("has_facefusion") for tag in sibling_tags):
+        tags["has_facefusion"] = True
+
+    main_nfo = get_main_nfo_impl(file_path) if file_path else None
+    nfo = _parse_nfo(main_nfo)
+    return {
+        "id": item_id,
+        "name": raw.get("Name", "Unknown"),
+        "type": raw.get("Type", "Movie"),
+        "media_type": raw.get("MediaType", "Video"),
+        "file_path": file_path,
+        "path": file_path,
+        "emby_path": raw.get("Path"),
+        "stream_url": build_stream_url_for_server_impl(
+            _base(config), str(config.get("api_key") or ""), item_id, media_source_id, media_container,
+        ),
+        "date_created": raw.get("DateCreated"),
+        "premiered": raw.get("PremiereDate"),

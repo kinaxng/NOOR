@@ -1,0 +1,61 @@
+  simswap_unofficial_512: ['512x512', '768x768', '1024x1024'],
+  uniface_256: ['256x256', '512x512', '768x768', '1024x1024'],
+}
+const facefusionFaceEnhancerModelOptions = ['gfpgan_1.2', 'gfpgan_1.3', 'gfpgan_1.4', 'gpen_bfr_256', 'gpen_bfr_512', 'restoreformer_plus_plus']
+const facefusionFrameEnhancerModelOptions = ['span_kendata_x4', 'real_esrgan_x2', 'real_esrgan_x2_fp16', 'real_esrgan_x4', 'real_esrgan_x4_fp16', 'real_hatgan_x4', 'ultra_sharp_x4']
+
+function facefusionOptionLabel(group: keyof typeof facefusionOptionLabels, value: string) {
+  const label = facefusionOptionLabels[group]?.[value]
+  return label ? `${label} · ${value || 'none'}` : value
+}
+
+// Load settings from backend when panel opens
+watch(() => props.open, async (isOpen) => {
+  if (!isOpen) return
+
+  try {
+    const resp = await api.get('/settings')
+    const ffDefaults = resp.data?.facefusion_defaults || {}
+    facefusionSettings.value = {
+      ...facefusionSettings.value,
+      preview_mode: ffDefaults.preview_mode || 'default',
+      preview_resolution: ffDefaults.preview_resolution || '768x768',
+      execution_provider: ffDefaults.execution_provider || 'cuda',
+      device_ids: ffDefaults.device_ids || '0',
+      thread_count: ffDefaults.thread_count ?? 8,
+      video_memory_strategy: ffDefaults.video_memory_strategy || 'strict',
+      system_memory_limit: ffDefaults.system_memory_limit ?? 0,
+      log_level: ffDefaults.log_level || 'info',
+      download_providers: ffDefaults.download_providers || 'github huggingface',
+      halt_on_error: ffDefaults.halt_on_error ?? false,
+      processors: ffDefaults.processors || 'face_swapper',
+      face_swapper_model: ffDefaults.face_swapper_model || 'hyperswap_1a_256',
+      face_swapper_pixel_boost: ffDefaults.face_swapper_pixel_boost || '256x256',
+      face_swapper_weight: ffDefaults.face_swapper_weight ?? 0.5,
+      face_enhancer_model: ffDefaults.face_enhancer_model || 'gfpgan_1.4',
+      face_enhancer_blend: ffDefaults.face_enhancer_blend ?? 80,
+      face_enhancer_weight: ffDefaults.face_enhancer_weight ?? 0.5,
+      frame_enhancer_model: ffDefaults.frame_enhancer_model || 'span_kendata_x4',
+      frame_enhancer_blend: ffDefaults.frame_enhancer_blend ?? 80,
+      face_detector_model: ffDefaults.face_detector_model || 'yolo_face',
+      face_detector_size: ffDefaults.face_detector_size || '640x640',
+      face_detector_score: ffDefaults.face_detector_score ?? 0.5,
+      face_detector_angles: ffDefaults.face_detector_angles || '0',
+      face_detector_margin: ffDefaults.face_detector_margin || '0 0 0 0',
+      face_landmarker_model: ffDefaults.face_landmarker_model || '2dfan4',
+      face_landmarker_score: ffDefaults.face_landmarker_score ?? 0.5,
+      face_selector_mode: ffDefaults.face_selector_mode || 'reference',
+      face_selector_order: ffDefaults.face_selector_order || 'large-small',
+      face_selector_gender: ffDefaults.face_selector_gender || '',
+      face_selector_age_start: ffDefaults.face_selector_age_start || '',
+      face_selector_age_end: ffDefaults.face_selector_age_end || '',
+      face_selector_race: ffDefaults.face_selector_race || '',
+      reference_frame_number: ffDefaults.reference_frame_number ?? 0,
+      reference_face_position: ffDefaults.reference_face_position ?? 0,
+      reference_face_distance: ffDefaults.reference_face_distance ?? 0.3,
+      face_mask_types: ffDefaults.face_mask_types || 'box',
+      face_mask_areas: ffDefaults.face_mask_areas || '',
+      face_mask_regions: ffDefaults.face_mask_regions || '',
+      face_mask_blur: ffDefaults.face_mask_blur ?? 0.3,
+      face_mask_padding: ffDefaults.face_mask_padding || '0 0 0 0',
+      face_occluder_model: ffDefaults.face_occluder_model || 'xseg_1',

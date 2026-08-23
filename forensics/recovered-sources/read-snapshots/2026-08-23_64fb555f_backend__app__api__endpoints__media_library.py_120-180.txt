@@ -1,0 +1,61 @@
+@router.post('/webhook/emby')
+async def emby_webhook(request:Request,token:str|None=None):
+ config=_ensure_webhook_token(_load_config());expected=str(config.get('webhook_token') or '').strip();provided=str(token or request.headers.get('X-NOOR-Webhook-Token') or '').strip()
+ if not expected or not secrets.compare_digest(provided,expected):raise HTTPException(403,'Invalid webhook token')
+ body=await request.body()
+ if len(body)>1024*1024:raise HTTPException(413,'Webhook 请求超过 1 MB')
+ payload=None
+ if body:
+  try:
+   import json
+   payload=json.loads(body)
+  except Exception:payload=None
+ state=_bump_sync_state(webhook=True);source=_webhook_source(request);summary=_webhook_summary(payload)
+ SystemLogManager.get_instance().add_log('info',f'[MediaLibrary] 收到 Emby Webhook，已刷新媒体库缓存 · {summary}',source=f'Emby · {source}',event_type=(payload.get('Event') if isinstance(payload,dict) else None))
+ return {'ok':True,'source':source,'summary':summary,'sync_state':state}
+@router.post('/test')
+async def test_connection(config:dict|None=None):
+ cfg=config if config is not None else _load_config()
+ if not cfg:return {'ok':False,'message':_ADAPTER_NOT_ACTIVATED,'libraries':[]}
+ ok,msg=await _test_connection(cfg)
+ try:libs=await _list_libraries(cfg)
+ except Exception:libs=[]
+ return {'ok':ok,'message':msg,'libraries':libs}
+@router.get('/libraries')
+async def get_libraries():
+ config=_load_config();_configured(config)
+ try:return {'libraries':await _list_libraries(config)}
+ except Exception:return {'libraries':[]}
+@router.get('/items')
+async def get_items(library_id:str|None=None,limit:int=50,offset:int=0,filter:str|None=None,q:str|None=None,force_refresh:bool=Query(False)):
+ config=_load_config();_configured(config);now=time.time()
+ try:
+  if not library_id:
+   enabled=[x.strip() for x in config.get('enabled_library_ids','').split(',') if x.strip()]
+   ids=enabled or [x['id'] for x in await _list_libraries(config)];all_items=[]
+   for lid in ids:
+    key='all_'+lid;cached=_items_cache.get(key)
+    if cached and not force_refresh and now-cached[1]<_CACHE_TTL:items=cached[0]
+    else:items,_=await _list_items(config,lid,2000,0,force_refresh=force_refresh);_items_cache[key]=(items,now)
+    all_items.extend(items)
+   all_items.sort(key=lambda x:x.get('date_created') or '',reverse=True);return _apply_filter_and_paginate(all_items,filter,q,offset,limit)
+  cached=_items_cache.get(library_id)
+  if cached and not force_refresh and now-cached[1]<_CACHE_TTL:return _apply_filter_and_paginate(cached[0],filter,q,offset,limit)
+  all_items,_=await _list_items(config,library_id,2000,0,force_refresh=force_refresh);_items_cache[library_id]=(all_items,now);return _apply_filter_and_paginate(all_items,filter,q,offset,limit)
+ except Exception as e:raise HTTPException(502,f'获取媒体失败: {e}')
+@router.get('/item/{item_id}')
+async def get_item(item_id:str):
+ config=_load_config();_configured(config)
+ try:
+  item=await _get_item(config,item_id)
+  if not item:raise HTTPException(404,f'未找到媒体项目: {item_id}')
+  return item
+ except HTTPException:raise
+ except Exception as e:raise HTTPException(502,f'获取详情失败: {e}')
+@router.get('/hardlinks/groups')
+async def get_hardlink_groups():return {**_enrich_hardlink_groups(_load_hardlink_groups()),'last_scanned_at':_hardlink_groups_last_scanned_at()}
+@router.get('/stream/{item_id}')
+async def stream_emby_item(request:Request,item_id:str,media_source_id:str|None=Query(default=None),container:str|None=Query(default=None)):
+ config=_load_config();server_url=_server_url(config);api_key=config.get('api_key','')
+ if not server_url or not api_key:raise HTTPException(400,'Emby 未配置，无法播放')
+ playback=await resolve_playback_stream_url_impl(config,item_id,media_source_id=media_source_id,container=container,httpx_module=httpx,server_url_fn=_server_url,headers_fn=_headers)

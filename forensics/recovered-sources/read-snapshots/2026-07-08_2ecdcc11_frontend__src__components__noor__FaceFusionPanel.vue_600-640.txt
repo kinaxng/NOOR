@@ -1,0 +1,41 @@
+    toast.error(e.response?.data?.detail || '图片库读取失败')
+  } finally {
+    sourceLibraryLoading.value = false
+  }
+}
+
+async function toggleSourceLibrary() {
+  sourceLibraryOpen.value = !sourceLibraryOpen.value
+  if (sourceLibraryOpen.value) {
+    await loadSourceImageLibrary()
+  }
+}
+
+function isSourceSelected(path: string) {
+  return uploadedSourceImages.value.some(item => item.path === path)
+}
+
+function toggleLibraryImage(image: { id: string; path: string }) {
+  if (isSourceSelected(image.path)) return
+  selectedLibraryImageIds.value = selectedLibraryImageIds.value.includes(image.id)
+    ? selectedLibraryImageIds.value.filter(id => id !== image.id)
+    : [...selectedLibraryImageIds.value, image.id]
+}
+
+function addSelectedLibraryImages() {
+  const selected = sourceLibraryImages.value.filter(item => selectedLibraryImageIds.value.includes(item.id) && !isSourceSelected(item.path))
+  if (!selected.length) return
+  uploadedSourceImages.value = [
+    ...uploadedSourceImages.value,
+    ...selected.map(item => ({
+      id: item.id,
+      name: item.name,
+      path: item.path,
+      preview_url: item.preview_url,
+    })),
+  ]
+  selectedLibraryImageIds.value = []
+  if (previewUrl.value) previewStale.value = true
+}
+
+async function loadFaceFusionPreviewMetadata() {

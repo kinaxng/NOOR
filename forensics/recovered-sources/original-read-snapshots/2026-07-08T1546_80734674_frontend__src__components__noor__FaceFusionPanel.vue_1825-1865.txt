@@ -1,0 +1,41 @@
+
+.facefusion-native-fields label > span {
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.facefusion-native-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.facefusion-native-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.facefusion-native-fields label:has(.facefusion-choice-chips) {
+  grid-column: 1 / -1;
+}
+
+.facefusion-reference-box--native {
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1fr);
+}
+
+.facefusion-panel-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.facefusion-panel-layout--wide {
+  grid-template-columns: minmax(20rem, 0.9fr) minmax(24rem, 1.1fr) minmax(28rem, 1.2fr);
+  align-items: start;
+}
+
+.facefusion-panel-column {

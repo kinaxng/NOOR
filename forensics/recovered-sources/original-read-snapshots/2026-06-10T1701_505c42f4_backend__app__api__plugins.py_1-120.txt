@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import asyncio
+import time
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+
+from app.plugins.runtime import PLUGINS_DIR, runtime
+from app.plugins.handlers import get_plugin_handler
+from app.api.system import SystemLogManager
+
+router = APIRouter(prefix="/api/plugins", tags=["plugins"])
+NOISY_PLUGIN_ACTIONS = {
+    "metrics",
+    "overview",
+    "status",
+    "refresh-status",
+    "refresh_status",
+    "stats",
+}
+NOISY_PLUGIN_PATH_PARTS = (
+    "/ws/overview",
+    "/ws/metrics",
+)
+
+
+def _plugin_log(level: str, plugin_id: str, message: str, *, source: str | None = None):
+    try:
+        SystemLogManager.get_instance().add_log(level, message, source=source or f"plugin.{plugin_id}")
+    except Exception:
+        pass
+
+
+def _payload_hint(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return type(payload).__name__
+    keys = ", ".join(list(payload.keys())[:8])
+    more = "" if len(payload) <= 8 else f", +{len(payload) - 8}"
+    return f"keys=[{keys}{more}]"
+
+
+def _request_hint(request: Request | None) -> str:
+    if not request:
+        return ""
+    referer = str(request.headers.get("referer") or "")
+    ua = str(request.headers.get("user-agent") or "")
+    client = request.client.host if request.client else ""
+    parts = []
+    if client:
+        parts.append(f"client={client}")
+    if referer:
+        # Keep only path/query for same-origin referers to avoid noisy full URLs.
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            ref = f"{parsed.path}{('?' + parsed.query) if parsed.query else ''}" or referer
+        except Exception:
+            ref = referer
+        parts.append(f"referer={ref}")
+    if ua:
+        parts.append(f"ua={ua[:60]}")
+    return " ".join(parts)
+
+
+def _is_noisy_plugin_action(action: str) -> bool:
+    value = str(action or "").lower().strip()
+    return value in NOISY_PLUGIN_ACTIONS or value.endswith("_status") or value.endswith("-status")
+
+
+class ConfigPayload(BaseModel):
+    config: dict[str, Any]
+
+
+class DownloadPayload(BaseModel):
+    payload: dict[str, Any]
+
+
+class FeedPushPayload(BaseModel):
+    item: dict[str, Any]
+
+
+class PluginActionPayload(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class MarketRepoPayload(BaseModel):
+    repo_url: str
+
+
+class MarketInstallPayload(BaseModel):
+    repo_url: str
+    plugin_id: str
+
+
+class ResourceSearchPayload(BaseModel):
+    query: dict[str, Any] | str = Field(default_factory=dict)
+    providers: list[str] = Field(default_factory=list)
+    limit_per_plugin: int = 12
+    requested_downloader_id: str = ""
+
+
+class ResourceResolvePayload(BaseModel):
+    provider_id: str
+    item: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("")
+async def list_plugins():
+    return [p.model_dump() for p in runtime.list_plugins()]
+
+
+@router.post("/reload")
+async def reload_plugins():
+    start = time.perf_counter()
+    await runtime.stop_background_tasks()
+    runtime.reload()

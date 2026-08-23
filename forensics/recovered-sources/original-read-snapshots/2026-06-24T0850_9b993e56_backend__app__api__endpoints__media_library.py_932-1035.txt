@@ -1,0 +1,104 @@
+async def get_item(item_id: str):
+    """Get item details."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        raw = await _get_item(config, item_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取详情失败: {e}")
+
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"未找到媒体项目: {item_id}")
+
+    return raw
+
+
+@router.post("/items/delete-chain")
+async def delete_media_item_chain(req: MediaItemDeleteRequest):
+    config = _load_config()
+    code, delete_dirs, delete_files = await _media_item_delete_plan(req.item_id, config)
+
+    if req.dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            "code": code,
+            **_preview_delete_targets(delete_dirs, delete_files),
+        }
+
+    result = _execute_delete_targets(delete_dirs, delete_files)
+    _items_cache.clear()
+    return {
+        "ok": True,
+        "code": code,
+        **result,
+    }
+
+
+# ─── Hardlink group endpoints ──────────────────────────────────────────────────
+
+@router.get("/hardlinks/groups")
+async def get_hardlink_groups():
+    """Return current hardlink groups from the stored file.
+    Does NOT scan the filesystem — use POST /hardlinks/scan to refresh.
+    """
+    payload = _enrich_hardlink_groups(_load_hardlink_groups())
+    return {
+        "groups": payload["groups"],
+        "summary": payload["summary"],
+        "count": payload["summary"]["total_groups"],
+        "last_scanned_at": _hardlink_groups_last_scanned_at(),
+    }
+
+
+def _parse_range_header(range_header: str | None, file_size: int) -> tuple[int, int] | None:
+    if not range_header:
+        return None
+    match = re.match(r"bytes=(\d*)-(\d*)$", range_header.strip())
+    if not match:
+        raise HTTPException(status_code=416, detail="无效的 Range 请求")
+
+    start_raw, end_raw = match.groups()
+    if not start_raw and not end_raw:
+        raise HTTPException(status_code=416, detail="无效的 Range 请求")
+
+    if start_raw:
+        start = int(start_raw)
+        end = int(end_raw) if end_raw else file_size - 1
+    else:
+        suffix_length = int(end_raw)
+        if suffix_length <= 0:
+            raise HTTPException(status_code=416, detail="无效的 Range 请求")
+        start = max(file_size - suffix_length, 0)
+        end = file_size - 1
+
+    if start < 0 or end < start or start >= file_size:
+        raise HTTPException(status_code=416, detail="Range 超出文件范围")
+
+    end = min(end, file_size - 1)
+    return start, end
+
+
+def _iter_file_range(target: Path, start: int, end: int, *, chunk_size: int = 1024 * 1024):
+    with target.open("rb") as fh:
+        fh.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            chunk = fh.read(min(chunk_size, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+@router.get("/stream/{item_id}")
+async def stream_emby_item(
+    request: Request,
+    item_id: str,
+    media_source_id: str | None = Query(default=None),
+    container: str | None = Query(default=None),
+):
+    config = _load_config()
+    server_url = _server_url(config)

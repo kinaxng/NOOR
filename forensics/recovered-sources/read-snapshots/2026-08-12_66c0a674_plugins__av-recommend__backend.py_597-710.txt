@@ -1,0 +1,114 @@
+async def _library_profile() -> dict[str, Any]:
+    empty_profile = {
+        "media_count": 0,
+        "codes": set(),
+        "media_by_code": {},
+        "actors": Counter(),
+        "genres": Counter(),
+        "tags": Counter(),
+        "studios": Counter(),
+        "series": Counter(),
+        "directors": Counter(),
+        "title_traits": Counter(),
+        "title_terms": Counter(),
+        "actor_category": Counter(),
+        "local_features": {},
+        "top_media": [],
+    }
+    async with async_session_maker() as db:
+        try:
+            media_rows = await db.execute(select(KnowledgeEntity).where(KnowledgeEntity.entity_type == "media_item"))
+        except SQLAlchemyError:
+            return empty_profile
+        media = list(media_rows.scalars().all())
+        media_ids = [item.id for item in media]
+        media_weights = {item.id: _media_preference_weight(item) for item in media}
+        profile = {
+            "media_count": len(media),
+            "codes": set(),
+            "media_by_code": {},
+            "actors": Counter(),
+            "genres": Counter(),
+            "tags": Counter(),
+            "studios": Counter(),
+            "series": Counter(),
+            "directors": Counter(),
+            "title_traits": Counter(),
+            "title_terms": Counter(),
+            "actor_category": Counter(),
+            "local_features": {},
+            "top_media": [_entity_payload(item) for item in media[:8]],
+        }
+        if not media_ids:
+            return profile
+        try:
+            rows = await db.execute(
+                select(KnowledgeEdge, KnowledgeEntity)
+                .join(KnowledgeEntity, KnowledgeEntity.id == KnowledgeEdge.target_entity_id)
+                .where(KnowledgeEdge.source_entity_id.in_(media_ids))
+            )
+        except SQLAlchemyError:
+            return profile
+        media_by_id = {item.id: item for item in media}
+        relations_by_media: dict[str, dict[str, set[str]]] = defaultdict(lambda: {
+            "actors": set(),
+            "categories": set(),
+            "studios": set(),
+        })
+        for edge, target in rows.all():
+            rel = edge.relation_type
+            if rel == "HAS_CODE":
+                code = _norm_code(target.label or target.key)
+                if code:
+                    profile["codes"].add(code)
+                    profile["media_by_code"][code] = _entity_payload(media_by_id.get(edge.source_entity_id)) if media_by_id.get(edge.source_entity_id) else None
+            elif rel == "HAS_ACTOR":
+                profile["actors"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+                relations_by_media[edge.source_entity_id]["actors"].add(target.label)
+            elif rel == "HAS_GENRE":
+                profile["genres"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+                relations_by_media[edge.source_entity_id]["categories"].add(target.label)
+            elif rel == "HAS_TAG":
+                profile["tags"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+                relations_by_media[edge.source_entity_id]["categories"].add(target.label)
+            elif rel in {"HAS_STUDIO", "HAS_LABEL"}:
+                profile["studios"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+                relations_by_media[edge.source_entity_id]["studios"].add(target.label)
+            elif rel == "IN_SERIES":
+                profile["series"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+            elif rel == "HAS_DIRECTOR":
+                profile["directors"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+        for media_id, rels in relations_by_media.items():
+            weight = media_weights.get(media_id, 1.0)
+            for actor in rels["actors"]:
+                for category in rels["categories"]:
+                    profile["actor_category"][(actor, category)] += weight
+        actor_names = {str(name) for name in profile["actors"] if str(name or "").strip()}
+        signature = _title_profile_signature(media, media_weights)
+        title_profile = _load_title_profile_cache(signature)
+        if title_profile is None:
+            title_profile = _build_title_profile(media, media_weights, actor_names)
+            with contextlib.suppress(Exception):
+                _save_title_profile_cache(signature, title_profile["title_traits"], title_profile["title_terms"], len(media))
+        profile["title_traits"] = title_profile["title_traits"]
+        profile["title_terms"] = title_profile["title_terms"]
+        for item in media:
+            data = item.data or {}
+            code = _norm_code(json.dumps(data, ensure_ascii=False) + " " + item.label)
+            if code:
+                profile["local_features"][code] = {
+                    "has_subtitle": _text_has_subtitle(data),
+                    "is_cracked": _text_has_cracked(data),
+                }
+        return profile
+
+
+def _top(counter: Counter, limit: int = 12) -> list[dict[str, Any]]:
+    return [{"name": str(name), "count": round(float(count), 1)} for name, count in counter.most_common(limit)]
+
+
+def _names(items: Any) -> list[str]:
+    if not isinstance(items, list):
+        return []
+    out = []
+    for item in items:

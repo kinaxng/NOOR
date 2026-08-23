@@ -1,0 +1,31 @@
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.put("/facefusion/defaults")
+async def update_facefusion_defaults(config: FaceFusionDefaultsConfig):
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 FaceFusion 默认参数...")
+    try:
+        apply_facefusion_defaults_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] FaceFusion 默认参数已保存")
+        return {"success": True, "message": "FaceFusion defaults saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] FaceFusion 默认参数保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+def _facefusion_model_context() -> tuple[str, str, dict[str, str], str]:
+    settings = get_settings()
+    source = resolve_facefusion_source(settings.facefusion_dir)
+    python_path = resolve_facefusion_python(source.source_dir, settings.facefusion_python_path)
+    model_dir, _mode = resolve_facefusion_model_dir(source.source_dir, settings.facefusion_model_dir)
+    env = build_facefusion_python_env(source.source_dir, os.environ.copy())
+    return python_path, str(source.source_dir), env, model_dir
+
+
+def _crc32_file(path: str) -> str:
+    checksum = 0
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            checksum = zlib.crc32(chunk, checksum)

@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+from pathlib import Path
+
+from app.api.settings_helpers import read_env_file, set_env_values
+
+SUBTITLE_EXTS = {'.srt', '.ass', '.ssa', '.sub', '.sbv', '.vtt', '.sup'}
+VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.webm', '.mpg', '.mpeg'}
+
+UNCENSORED_STUDIOS = {
+    'fc2', 'fc2ppv', 'fc2-ppv',
+    'カリビアン', 'caribbean', 'carib', 'caribbeancom',
+    'ステージ2メディア', 's2media', 's2-media',
+    'エンパイア', 'empire', 'empiremedia',
+    '一本道', 'ichi', 'ippondo',
+    '东京热', 'tokyohot', 'tokyo-hot', 'tokyohotn', 'n1',
+    '热狼', 'heck', 'hot',
+    '加勒比', 'caribbean',
+    'kaater', 'kbn',
+    'd伞', 'd伞 Studios', 'd3s',
+    'mow', 'mow-av',
+    '自然资源', '天然素材',
+    'パコパコ団', 'pacopaco',
+    '大臣', 'daijin',
+    '无忌', 'nozoki', 'nozoki',
+    '一本画', 'ipponga',
+    '光date', 'hikari',
+    'ArFORD', 'arford',
+    '10musume', '10mu',
+    '30s', '30多岁',
+    'bangbrokers', '番号商店',
+    'rocket', 'rocket-ch',
+    'honmono',
+    'black', 'ebony',
+    'geinou', 'geino',
+    'n0598', 'n0599',
+    'HEYZO', 'heyzo',
+    'SUPERSTUDIO', 'supercard',
+    '一本', 'IP',
+    '無修正', '無碼', '无码', 'uncensored',
+    'untouched', 'unedited',
+    'freak', '|-|鹰',
+    'shame', 'shameless',
+}
+
+UNCENSORED_PATH_KEYWORDS = {
+    'uncensored', 'unco', '流出', '無碼', '无码', '無修正',
+    'fc2', 'carib', 'カリビアン', 'heyzo', 'heyzo',
+    'n0598', 'n0599', 'n0842', 'n0843',
+    '10mu', '10musume',
+    'tokyo-hot', 'toph', 'n1pon', 'n1',
+    'saika', 'saika-', 'blacked', 'blacked',
+}
+
+ADAPTER_NOT_ACTIVATED = "媒体库适配器未配置，请在设置中配置 Emby / Jellyfin 服务器地址"
+MEDIA_LIBRARY_SCAN_GROUPS_ENV = "MEDIA_LIBRARY_SCAN_GROUPS"
+MEDIA_LIBRARY_PATH_PREFIX_ENV = "MEDIA_LIBRARY_PATH_PREFIX"
+MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV = "MEDIA_LIBRARY_LOCAL_PATH_PREFIX"
+MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV = "MEDIA_LIBRARY_WEBHOOK_TOKEN"
+
+
+def config_path() -> Path:
+    project_root = Path(__file__).parent.parent.parent.parent
+    data_dir = project_root / 'data'
+    data_dir.mkdir(exist_ok=True)
+    return data_dir / 'media_library_config.json'
+
+
+def _parse_scan_groups(raw_value: str) -> list[dict]:
+    if not raw_value:
+        return []
+    try:
+        payload = json.loads(raw_value)
+    except Exception:
+        return []
+    if not isinstance(payload, list):
+        return []
+    groups: list[dict] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        groups.append({
+            "name": str(item.get("name", "") or ""),
+            "source_dir": str(item.get("source_dir", "") or ""),
+            "hardlink_dir": str(item.get("hardlink_dir", "") or ""),
+        })
+    return groups
+
+
+def _scan_groups_to_env(groups: list[dict]) -> str:
+    normalized = []
+    for item in groups or []:
+        if not isinstance(item, dict):
+            continue
+        normalized.append({
+            "name": str(item.get("name", "") or ""),
+            "source_dir": str(item.get("source_dir", "") or ""),
+            "hardlink_dir": str(item.get("hardlink_dir", "") or ""),
+        })
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def _env_backed_config(env_data: dict[str, str]) -> dict:
+    return {
+        "server_url": env_data.get("EMBY_SERVER", ""),
+        "api_key": env_data.get("EMBY_API_KEY", ""),
+        "user_id": env_data.get("EMBY_USER_ID", ""),
+        "enabled_library_ids": env_data.get("EMBY_ENABLED_LIBRARY_IDS", ""),
+        "path_prefix": env_data.get(MEDIA_LIBRARY_PATH_PREFIX_ENV, "/data/media"),
+        "local_path_prefix": env_data.get(MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV, env_data.get("SOURCE_DIR", "")),
+        "scan_groups": _parse_scan_groups(env_data.get(MEDIA_LIBRARY_SCAN_GROUPS_ENV, "")),
+        "webhook_token": env_data.get(MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV, ""),
+    }
+
+
+def _build_env_updates_from_config(config: dict) -> dict[str, str]:
+    return {
+        "EMBY_SERVER": str(config.get("server_url", "") or ""),
+        "EMBY_API_KEY": str(config.get("api_key", "") or ""),
+        "EMBY_USER_ID": str(config.get("user_id", "") or ""),
+        "EMBY_ENABLED_LIBRARY_IDS": str(config.get("enabled_library_ids", "") or ""),
+        MEDIA_LIBRARY_PATH_PREFIX_ENV: str(config.get("path_prefix", "/data/media") or "/data/media"),
+        MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV: str(config.get("local_path_prefix", "") or ""),
+        MEDIA_LIBRARY_SCAN_GROUPS_ENV: _scan_groups_to_env(config.get("scan_groups", []) or []),
+        MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV: str(config.get("webhook_token", "") or ""),
+    }
+
+
+def load_config() -> dict:
+    return _env_backed_config(read_env_file())
+
+
+def save_config(config: dict) -> None:
+    current = load_config()
+    current.update(config)
+    if "local_path_prefix" not in current or not str(current.get("local_path_prefix", "")).strip():
+        current["local_path_prefix"] = str(current.get("local_path_prefix", "") or current.get("source_dir", "") or "")
+    set_env_values(_build_env_updates_from_config(current))
+
+
+def get_config() -> dict:
+    return load_config()
+
+
+def headers(api_key: str) -> dict:
+    return {'X-Emby-Token': api_key}
+
+
+def server_url(config: dict) -> str:
+    return config.get('server_url', 'http://localhost:8096').rstrip('/')
+
+
+def env_source_dir() -> str:
+    return read_env_file().get("SOURCE_DIR", "")
+
+
+
+
+def local_media_root(config: dict) -> str:
+    scan_groups = config.get('scan_groups', []) or []
+    hardlink_parents = []
+    for group in scan_groups:
+        hardlink_dir = group.get('hardlink_dir')
+        if hardlink_dir:
+            hardlink_parents.append(str(Path(hardlink_dir).resolve().parent))
+    if hardlink_parents:
+        try:
+            return os.path.commonpath(hardlink_parents)
+        except Exception:
+            return hardlink_parents[0]
+
+    source_dir = env_source_dir()
+    if source_dir:
+        return source_dir
+    return ''
+
+def map_path(server_path: str, config: dict) -> str:

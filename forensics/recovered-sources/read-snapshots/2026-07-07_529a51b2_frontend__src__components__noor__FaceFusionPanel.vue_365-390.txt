@@ -1,0 +1,26 @@
+  const settingsValue = facefusionSettings.value as Record<string, unknown>
+  const values = splitTokens(String(settingsValue[key] || ''))
+  const next = values.includes(token)
+    ? values.filter(item => item !== token)
+    : [...values, token]
+  settingsValue[key] = next.join(' ')
+}
+
+function handleClose() {
+  emit('close')
+}
+
+async function loadSourceImageLibrary() {
+  sourceLibraryLoading.value = true
+  try {
+    const resp = await api.get('/facefusion/source-images')
+    sourceLibraryImages.value = Array.isArray(resp.data?.files)
+      ? resp.data.files.map((item: any) => ({
+        id: item.id || '',
+        name: item.name || '源脸图片',
+        path: item.path || '',
+        preview_url: item.preview_url || '',
+        updated_at: item.updated_at,
+      })).filter((item: any) => item.id && item.path)
+      : []
+  } catch (e: any) {

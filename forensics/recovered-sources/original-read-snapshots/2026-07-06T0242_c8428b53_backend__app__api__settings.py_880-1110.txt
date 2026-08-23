@@ -1,0 +1,231 @@
+@router.post("/whisper/check")
+async def check_whisper_dependencies():
+    """Check Whisper dependencies and environment."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Whisper] 正在检查依赖环境...")
+
+    settings = get_settings()
+    whisper_model_dir = settings.whisper_model_dir
+    deps, cuda_available, cuda_info = inspect_whisper_python_dependencies()
+    models_info = inspect_whisper_model_cache(
+        whisper_model_dir=whisper_model_dir,
+        whisper_models=WHISPER_MODELS,
+    )
+    log_whisper_dependency_summary(
+        log_mgr,
+        deps=deps,
+        cuda_available=cuda_available,
+        cuda_info=cuda_info,
+    )
+
+    return {
+        "dependencies": deps,
+        "cuda_available": cuda_available,
+        "models": models_info,
+        "whisper_model_dir": whisper_model_dir,
+        "features": _get_whisper_feature_flags(),
+    }
+
+
+class ModelDownloadRequest(BaseModel):
+    model: str  # e.g., "anime-whisper", "large-v3"
+
+
+class InstallDepsRequest(BaseModel):
+    torch_variant: Literal["gpu", "cpu"] = "gpu"
+    torch_current_cuda: bool = False  # current install has CUDA
+
+
+@router.post("/whisper/models/download")
+async def download_whisper_model(req: ModelDownloadRequest):
+    """Download a Whisper model in background thread."""
+    model_name = req.model
+    model_info = WHISPER_MODELS.get(model_name)
+    if not model_info:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
+    import threading
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", f"[Whisper] 正在下载模型 {model_info['name']}...")
+
+    # Save initial status to JSON file
+    status_file = model_download_status_path()
+    write_status_file(status_file, build_status_payload(
+        status="running",
+        progress=0,
+        message=f"Downloading {model_info['name']}...",
+        model=model_name,
+        output=None,
+    ))
+
+    def download_in_background():
+        import subprocess
+
+        bg_log_mgr = SystemLogManager.get_instance()
+
+        def update_status(status: str, progress: int, message: str, output: str = None):
+            try:
+                status_file = model_download_status_path()
+                write_status_file(status_file, build_status_payload(
+                    status=status,
+                    progress=progress,
+                    message=message,
+                    model=model_name,
+                    output=output or "",
+                ))
+            except Exception as e:
+                logger.warning("Failed to update download status: %s", e)
+
+        # Apply network settings based on acceleration_mode
+        settings = get_settings()
+        settings.apply_network_env()
+
+        # Unified Whisper model/cache layout.
+        whisper_model_dir = ensure_directory(settings.whisper_model_dir)
+        whisper_cache_dir = ensure_directory(settings.whisper_cache_dir)
+        apply_whisper_cache_env(whisper_model_dir, whisper_cache_dir)
+
+        # HF mirror and HF Token are not mutually exclusive. Token is only used
+        # for authentication; endpoint order stays mirror -> official HF.
+        def get_hf_endpoints() -> list[str | None]:
+            candidates: list[str | None] = []
+            if settings.hf_mirror:
+                candidates.append(settings.hf_mirror or "https://hf-mirror.com")
+            candidates.append("https://huggingface.co")
+            deduped: list[str | None] = []
+            seen: set[str] = set()
+            for endpoint in candidates:
+                key = endpoint or ""
+                if key not in seen:
+                    seen.add(key)
+                    deduped.append(endpoint)
+            return deduped
+
+        hf_endpoints = get_hf_endpoints()
+        if hf_endpoints and hf_endpoints[0]:
+            os.environ["HF_ENDPOINT"] = hf_endpoints[0]
+
+        try:
+            if model_info["type"] in {"transformers", "onnx-vad"}:
+                # Download snapshot-style HuggingFace repos (transformers and auxiliary ONNX assets).
+                update_status("running", 10, f"Downloading {model_info['name']}...")
+                bg_log_mgr.add_log("info", f"[Whisper] 正在下载 {model_info['name']} ({model_info['type']})...")
+                try:
+                    from huggingface_hub import snapshot_download
+                    model_id = model_info["repo"]
+                    update_status("running", 30, f"Downloading files...")
+                    last_error = None
+                    for endpoint in hf_endpoints:
+                        try:
+                            label = "镜像" if endpoint and endpoint != "https://huggingface.co" else "官方"
+                            update_status("running", 30, f"Downloading files via {label}...")
+                            if endpoint:
+                                os.environ["HF_ENDPOINT"] = endpoint
+                            else:
+                                os.environ.pop("HF_ENDPOINT", None)
+                            snapshot_download(
+                                repo_id=model_id,
+                                cache_dir=whisper_model_dir,
+                                endpoint=endpoint,
+                                token=settings.hf_token or None,
+                            )
+                            last_error = None
+                            break
+                        except Exception as endpoint_error:
+                            last_error = endpoint_error
+                            bg_log_mgr.add_log("warning", f"[Whisper] {model_info['name']} 通过 {endpoint or '官方'} 下载失败，尝试下一个源 — {str(endpoint_error)[:140]}")
+                    if last_error:
+                        raise last_error
+                    update_status("completed", 100, f"{model_info['name']} downloaded successfully")
+                    bg_log_mgr.add_log("success", f"[Whisper] 模型 {model_info['name']} 下载完成")
+                except Exception as e:
+                    update_status("failed", 0, f"Download failed: {str(e)}")
+                    bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+            elif model_info.get("repo"):
+                # Custom repo (e.g., faster-whisper with custom HuggingFace repo)
+                update_status("running", 10, f"Downloading {model_info['name']} (faster-whisper, custom repo)...")
+                bg_log_mgr.add_log("info", f"[Whisper] 正在下载 {model_info['name']} (faster-whisper, repo: {model_info['repo']})...")
+                try:
+                    from faster_whisper import WhisperModel
+                    update_status("running", 30, f"Downloading {model_info['name']}...")
+                    last_error = None
+                    for endpoint in hf_endpoints:
+                        try:
+                            if endpoint:
+                                os.environ["HF_ENDPOINT"] = endpoint
+                            else:
+                                os.environ.pop("HF_ENDPOINT", None)
+                            WhisperModel(model_info["repo"], device="cpu", download_root=whisper_model_dir)
+                            last_error = None
+                            break
+                        except Exception as endpoint_error:
+                            last_error = endpoint_error
+                            bg_log_mgr.add_log("warning", f"[Whisper] {model_info['name']} 通过 {endpoint or '官方'} 下载失败，尝试下一个源 — {str(endpoint_error)[:140]}")
+                    if last_error:
+                        raise last_error
+                    update_status("completed", 100, f"{model_info['name']} downloaded successfully")
+                    bg_log_mgr.add_log("success", f"[Whisper] 模型 {model_info['name']} 下载完成")
+                except Exception as e:
+                    update_status("failed", 0, f"Download failed: {str(e)}")
+                    bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+            else:
+                # Download faster-whisper model
+                update_status("running", 10, f"Downloading {model_info['name']} via faster-whisper...")
+                bg_log_mgr.add_log("info", f"[Whisper] 正在下载 {model_info['name']} (faster-whisper)...")
+                try:
+                    from faster_whisper import WhisperModel
+                    update_status("running", 50, f"Downloading {model_info['name']}...")
+                    last_error = None
+                    for endpoint in hf_endpoints:
+                        try:
+                            if endpoint:
+                                os.environ["HF_ENDPOINT"] = endpoint
+                            else:
+                                os.environ.pop("HF_ENDPOINT", None)
+                            WhisperModel(model_name, device="cpu", download_root=whisper_model_dir)
+                            last_error = None
+                            break
+                        except Exception as endpoint_error:
+                            last_error = endpoint_error
+                            bg_log_mgr.add_log("warning", f"[Whisper] {model_info['name']} 通过 {endpoint or '官方'} 下载失败，尝试下一个源 — {str(endpoint_error)[:140]}")
+                    if last_error:
+                        raise last_error
+                    update_status("completed", 100, f"{model_info['name']} downloaded successfully")
+                    bg_log_mgr.add_log("success", f"[Whisper] 模型 {model_info['name']} 下载完成")
+                except Exception as e:
+                    update_status("failed", 0, f"Download failed: {str(e)}")
+                    bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+        except Exception as e:
+            update_status("failed", 0, f"Download failed: {str(e)}")
+            bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+
+    # Run download in background thread
+    thread = threading.Thread(target=download_in_background)
+    thread.start()
+
+    return {"success": True, "message": f"Download started in background"}
+
+
+@router.get("/whisper/models/download-status")
+async def get_model_download_status():
+    """Get current model download status from JSON file."""
+    try:
+        response = read_model_download_status_response()
+        return {
+            "status": response["status"],
+            "progress": response["progress"],
+            "message": response["message"],
+            "output": response["output"],
+        }
+    except Exception:
+        return {"status": "idle", "progress": 0, "message": "", "output": None}
+
+
+@router.delete("/whisper/models/{model_name}")
+async def delete_whisper_model(model_name: str):
+    """Delete a downloaded Whisper model."""
+    model_info = WHISPER_MODELS.get(model_name)
+    if not model_info:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
+
+    log_mgr = SystemLogManager.get_instance()

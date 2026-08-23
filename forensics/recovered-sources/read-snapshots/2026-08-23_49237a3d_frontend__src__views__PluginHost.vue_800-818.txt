@@ -1,0 +1,19 @@
+        return ws
+      },
+    },
+    toast: {
+      success: (msg: string) => toast.success(msg),
+      error: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.error(msg) },
+      info: (msg: string) => toast.info(msg),
+      warning: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.warning(msg) },
+    },
+    downloads,
+    subscription: {
+      open: (options: any) => openSubscriptionDialog(options),
+    },
+    ui: {
+      button: makeButton,
+      input: makeInput,
+      select: makeSelect,
+      field: makeField,
+      modal: makeModal,

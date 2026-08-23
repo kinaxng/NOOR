@@ -1,0 +1,196 @@
+        params=_tmdb_request_params(config, params),
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data if isinstance(data, dict) else {}
+
+
+def _tmdb_profile_url(profile_path: str | None) -> str:
+    path = str(profile_path or "").strip()
+    if not path:
+        return ""
+    return f"https://image.tmdb.org/t/p/original{path if path.startswith('/') else '/' + path}"
+
+
+def _tmdb_external_urls(external_ids: dict, tmdb_id: str | None = None) -> dict[str, str]:
+    urls: dict[str, str] = {}
+    if tmdb_id:
+        urls["tmdb"] = f"https://www.themoviedb.org/person/{quote(str(tmdb_id), safe='')}"
+    imdb_id = str(external_ids.get("imdb_id") or "").strip()
+    if imdb_id:
+        urls["imdb"] = f"https://www.imdb.com/name/{quote(imdb_id, safe='')}/"
+    twitter_id = str(external_ids.get("twitter_id") or "").strip().lstrip("@")
+    if twitter_id:
+        urls["x"] = f"https://x.com/{quote(twitter_id, safe='')}"
+    instagram_id = str(external_ids.get("instagram_id") or "").strip().lstrip("@")
+    if instagram_id:
+        urls["instagram"] = f"https://www.instagram.com/{quote(instagram_id, safe='')}/"
+    tiktok_id = str(external_ids.get("tiktok_id") or "").strip().lstrip("@")
+    if tiktok_id:
+        urls["tiktok"] = f"https://www.tiktok.com/@{quote(tiktok_id, safe='')}"
+    youtube_id = str(external_ids.get("youtube_id") or "").strip()
+    if youtube_id:
+        urls["youtube"] = f"https://www.youtube.com/{quote(youtube_id, safe='')}"
+    wikidata_id = str(external_ids.get("wikidata_id") or "").strip()
+    if wikidata_id:
+        urls["wikidata"] = f"https://www.wikidata.org/wiki/{quote(wikidata_id, safe='')}"
+    facebook_id = str(external_ids.get("facebook_id") or "").strip()
+    if facebook_id:
+        urls["facebook"] = f"https://www.facebook.com/{quote(facebook_id, safe='')}"
+    return urls
+
+
+def _tmdb_gender_label(value: object) -> str:
+    try:
+        gender = int(value or 0)
+    except Exception:
+        gender = 0
+    return {1: "female", 2: "male", 3: "non-binary"}.get(gender, "")
+
+
+def _tmdb_pick_biography(person: dict, lang: str | None = None) -> str:
+    biography = str(person.get("biography") or "").strip()
+    if biography:
+        return biography
+    translations = ((person.get("translations") or {}).get("translations") or person.get("translations", {}).get("data") or [])
+    if not isinstance(translations, list):
+        return ""
+    by_lang: dict[str, str] = {}
+    for item in translations:
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        bio = str(data.get("biography") or "").strip()
+        if not bio:
+            continue
+        iso = str(item.get("iso_639_1") or "").lower()
+        country = str(item.get("iso_3166_1") or "").upper()
+        by_lang[f"{iso}-{country}"] = bio
+        by_lang.setdefault(iso, bio)
+    for candidate in _tmdb_lang_candidates(lang):
+        key = candidate.lower()
+        if key in by_lang:
+            return by_lang[key]
+        short = key.split("-", 1)[0]
+        if short in by_lang:
+            return by_lang[short]
+    return next(iter(by_lang.values()), "")
+
+
+async def _tmdb_person_payload(config: dict, actor: dict, *, lang: str | None = None) -> dict:
+    tmdb_id = str(actor.get("tmdb_id") or "").strip()
+    imdb_id = str(actor.get("imdb_id") or "").strip()
+    async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
+        if not tmdb_id and imdb_id:
+            found = await _tmdb_get_json(
+                client,
+                config,
+                f"/find/{quote(imdb_id, safe='')}",
+                params={"external_source": "imdb_id", "language": _tmdb_lang_candidates(lang)[0]},
+            )
+            people = found.get("person_results") if isinstance(found.get("person_results"), list) else []
+            if people:
+                tmdb_id = str(people[0].get("id") or "").strip()
+        if not tmdb_id:
+            raise HTTPException(status_code=400, detail="该演员没有 TMDB ID，且无法通过 IMDB ID 反查")
+        person = await _tmdb_get_json(
+            client,
+            config,
+            f"/person/{quote(tmdb_id, safe='')}",
+            params={"language": _tmdb_lang_candidates(lang)[0], "append_to_response": "external_ids,translations,images"},
+        )
+    external_ids = person.get("external_ids") if isinstance(person.get("external_ids"), dict) else {}
+    profile_url = _tmdb_profile_url(person.get("profile_path"))
+    proposal_provider_ids = dict(actor.get("provider_ids") or {})
+    proposal_provider_ids["Tmdb"] = str(person.get("id") or tmdb_id)
+    if external_ids.get("imdb_id"):
+        proposal_provider_ids["Imdb"] = str(external_ids.get("imdb_id"))
+    if external_ids.get("twitter_id"):
+        proposal_provider_ids["Twitter"] = str(external_ids.get("twitter_id")).lstrip("@")
+    if external_ids.get("instagram_id"):
+        proposal_provider_ids["Instagram"] = str(external_ids.get("instagram_id")).lstrip("@")
+    if external_ids.get("tiktok_id"):
+        proposal_provider_ids["TikTok"] = str(external_ids.get("tiktok_id")).lstrip("@")
+    if external_ids.get("youtube_id"):
+        proposal_provider_ids["YouTube"] = str(external_ids.get("youtube_id"))
+    if external_ids.get("wikidata_id"):
+        proposal_provider_ids["Wikidata"] = str(external_ids.get("wikidata_id"))
+    if external_ids.get("facebook_id"):
+        proposal_provider_ids["Facebook"] = str(external_ids.get("facebook_id"))
+    tmdb_id_final = str(person.get("id") or tmdb_id)
+    external_urls = _tmdb_external_urls(external_ids, tmdb_id_final)
+    homepage = str(person.get("homepage") or "").strip()
+    if homepage:
+        external_urls["homepage"] = homepage
+    return {
+        "name": str(person.get("name") or "").strip(),
+        "sort_name": str(person.get("name") or "").strip(),
+        "overview": _tmdb_pick_biography(person, lang=lang),
+        "provider_ids": proposal_provider_ids,
+        "tmdb_id": tmdb_id_final,
+        "imdb_id": str(external_ids.get("imdb_id") or actor.get("imdb_id") or ""),
+        "image_url": profile_url,
+        "birthday": person.get("birthday") or "",
+        "deathday": person.get("deathday") or "",
+        "place_of_birth": person.get("place_of_birth") or "",
+        "known_for_department": person.get("known_for_department") or "",
+        "gender": _tmdb_gender_label(person.get("gender")),
+        "popularity": person.get("popularity"),
+        "adult": bool(person.get("adult")),
+        "homepage": homepage,
+        "also_known_as": person.get("also_known_as") if isinstance(person.get("also_known_as"), list) else [],
+        "external_urls": external_urls,
+        "source": "tmdb",
+    }
+
+
+def _actor_metadata_diff(current: dict, proposal: dict) -> list[dict]:
+    fields = [
+        ("name", "名称"),
+        ("sort_name", "排序名"),
+        ("overview", "简介"),
+        ("birthday", "出生日期"),
+        ("deathday", "去世日期"),
+        ("place_of_birth", "出生地"),
+        ("gender", "性别"),
+        ("known_for_department", "领域"),
+        ("homepage", "主页"),
+        ("tmdb_id", "TMDB"),
+        ("imdb_id", "IMDB"),
+        ("image_url", "头像"),
+    ]
+    diffs = []
+    for key, label in fields:
+        old = str(current.get(key) or "").strip()
+        new = str(proposal.get(key) or "").strip()
+        if old != new and new:
+            diffs.append({"field": key, "label": label, "current": old, "proposed": new})
+    return diffs
+
+
+async def _preview_actor_tmdb_metadata(config: dict, actor_id: str, *, lang: str | None = None) -> dict:
+    actor = await _get_actor_profile(config, actor_id, lang=lang)
+    proposal = await _tmdb_person_payload(config, actor, lang=lang)
+    return {"ok": True, "current": actor, "proposal": proposal, "diffs": _actor_metadata_diff(actor, proposal)}
+
+
+async def _apply_actor_tmdb_metadata(config: dict, actor_id: str, req: ActorTmdbApplyRequest, *, lang: str | None = None) -> dict:
+    preview = await _preview_actor_tmdb_metadata(config, actor_id, lang=lang)
+    current = preview["current"]
+    proposal = preview["proposal"]
+    update_req = ActorProfileUpdateRequest(
+        name=proposal.get("name") if req.apply_name else current.get("name"),
+        sort_name=proposal.get("sort_name") if req.apply_name else current.get("sort_name"),
+        overview=proposal.get("overview") if req.apply_overview else current.get("overview"),
+        provider_ids=proposal.get("provider_ids") if req.apply_provider_ids else current.get("provider_ids"),
+        birthday=proposal.get("birthday"),
+        deathday=proposal.get("deathday"),
+        place_of_birth=proposal.get("place_of_birth"),
+        gender=proposal.get("gender"),
+        known_for_department=proposal.get("known_for_department"),
+        popularity=proposal.get("popularity"),
+        homepage=proposal.get("homepage"),
+        external_urls=proposal.get("external_urls"),
+    )
+    result = await _update_actor_profile(config, actor_id, update_req, lang=lang)
+    avatar_result = None

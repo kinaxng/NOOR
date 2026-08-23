@@ -1,0 +1,41 @@
+                self.log("后处理策略: subtitle-safety")
+            else:
+                post_processor = JapanesePostProcessor(
+                    min_segment_duration=0.8,
+                    max_segment_duration=8.0,
+                    min_gap_threshold=0.3,
+                    merge_below=1.2,
+                )
+            result = post_processor.process(result)
+            self.log(f"后处理完成: {len(result.segments)} 片段", 95)
+        except Exception as e:
+            self.log(f"后处理失败（跳过）: {e}")
+
+        # Phase: 生成 SRT
+        self.log("=" * 50)
+        self.log("生成 SRT 文件", 97)
+        self.log("=" * 50)
+
+        # 清理视频名用于字幕文件
+        self._raise_if_cancelled()
+        clean_name = self._clean_video_name(video_name)
+
+        # 生成字幕 SRT。ChickenRice 主链路为日中直出，其余转录后端默认输出日文原文。
+        subtitle_lang = "zh" if getattr(self.config, "whisper_task", "transcribe") == "translate" else "ja"
+        srt_path = output_dir / f"{clean_name}.{subtitle_lang}.srt"
+        generate_srt(result.segments, str(srt_path))
+        self.log(f"字幕已保存: {srt_path}", 97)
+
+        # 翻译由 manager 统一调用 translate_srt 任务处理（不在 pipeline 内 inline 翻译）
+        self.log(f"SRT 已保存: {srt_path}", 97)
+
+        # 清理临时音频
+        try:
+            os.remove(audio_path)
+        except:
+            pass
+
+        return result, str(srt_path)
+
+    async def _process_faster_segment(
+        self,

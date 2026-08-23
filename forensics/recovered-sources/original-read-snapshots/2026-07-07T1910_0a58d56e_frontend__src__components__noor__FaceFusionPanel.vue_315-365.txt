@@ -1,0 +1,51 @@
+      previewStale.value = true
+    }
+  }
+)
+
+watch(facefusionSettings, () => {
+  if (previewUrl.value) {
+    previewStale.value = true
+  }
+}, { deep: true })
+
+const displayTitle = computed(() => {
+  if (!props.detail) return ''
+  return props.detail.nfo?.title || props.detail.nfo?.originaltitle || props.detail.name
+})
+
+const previewFrameMax = computed(() => Math.max(0, previewFrameTotal.value > 0 ? previewFrameTotal.value - 1 : 0))
+const previewTimeLabel = computed(() => {
+  if (!previewFrameTotal.value) return `帧 ${previewFrameNumber.value}`
+  return `帧 ${previewFrameNumber.value} / ${previewFrameMax.value}`
+})
+const facefusionSourcePaths = computed(() => {
+  const uploadedPaths = uploadedSourceImages.value.map(item => item.path).filter(Boolean)
+  return Array.from(new Set(uploadedPaths))
+})
+const selectedFacefusionProcessors = computed(() => splitTokens(String(facefusionSettings.value.processors || '')))
+const selectedFacefusionMaskTypes = computed(() => splitTokens(String(facefusionSettings.value.face_mask_types || '')))
+const facefusionReferenceMode = computed(() => String(facefusionSettings.value.face_selector_mode || 'reference') === 'reference')
+const facefusionPixelBoostOptions = computed(() => {
+  const model = String(facefusionSettings.value.face_swapper_model || 'hyperswap_1a_256')
+  return facefusionPixelBoostOptionsByModel[model] || ['256x256']
+})
+
+watch(() => facefusionSettings.value.face_swapper_model, () => {
+  const options = facefusionPixelBoostOptions.value
+  if (!options.includes(String(facefusionSettings.value.face_swapper_pixel_boost || ''))) {
+    facefusionSettings.value.face_swapper_pixel_boost = options[0]
+  }
+})
+
+function splitTokens(value: string) {
+  return String(value || '').split(/[\s,]+/).map(item => item.trim()).filter(Boolean)
+}
+
+function hasFacefusionToken(key: string, token: string) {
+  const settingsValue = facefusionSettings.value as Record<string, unknown>
+  return splitTokens(String(settingsValue[key] || '')).includes(token)
+}
+
+function toggleFacefusionToken(key: string, token: string) {
+  const settingsValue = facefusionSettings.value as Record<string, unknown>

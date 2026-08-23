@@ -1,0 +1,75 @@
+async def test_preview_actor_tmdb_metadata_returns_diffs(monkeypatch: pytest.MonkeyPatch):
+    def responder(method, url, headers, params, json):
+        assert method == 'GET'
+        if url.endswith('/emby/Users/user-1/Items/actor-1'):
+            return FakeResponse(
+                200,
+                {
+                    'Id': 'actor-1',
+                    'Name': '白峰美羽',
+                    'SortName': '白峰美羽',
+                    'ServerId': 'server-1',
+                    'ProviderIds': {'Tmdb': '3219331'},
+                },
+            )
+        if url.endswith('/emby/System/Info'):
+            return FakeResponse(200, {'ProductName': 'Emby Server'})
+        if url.endswith('/3/person/3219331'):
+            assert params['api_key'] == 'tmdb-key'
+            assert params['language'] == 'zh-CN'
+            return FakeResponse(
+                200,
+                {
+                    'id': 3219331,
+                    'name': '白峰ミウ',
+                    'biography': 'TMDB 简介',
+                    'profile_path': '/profile.jpg',
+                    'birthday': '1997-02-16',
+                    'place_of_birth': 'Fukuoka, Japan',
+                    'gender': 1,
+                    'known_for_department': 'Acting',
+                    'popularity': 22.7,
+                    'homepage': 'https://example.com/miu',
+                    'external_ids': {
+                        'imdb_id': 'nm123',
+                        'twitter_id': 'shiromine_miu',
+                        'instagram_id': 'miu_shiromine',
+                        'tiktok_id': 'miu_tok',
+                        'youtube_id': 'channel-1',
+                        'wikidata_id': 'Q123',
+                        'facebook_id': 'miu.fb',
+                    },
+                },
+            )
+        raise AssertionError(f'unexpected request: {method} {url} {params}')
+
+    monkeypatch.setattr(media_library.httpx, 'AsyncClient', lambda *args, **kwargs: FakeAsyncClient(responder, *args, **kwargs))
+    monkeypatch.setattr(media_library, '_load_actor_profile_overrides', lambda: {})
+    monkeypatch.setattr(media_library, '_load_actor_mapping_records', lambda: [])
+
+    result = await media_library._preview_actor_tmdb_metadata(
+        {'server_url': 'http://server', 'api_key': 'token', 'user_id': 'user-1', 'tmdb_api_key': 'tmdb-key'},
+        'actor-1',
+        lang='zh-CN',
+    )
+
+    assert result['proposal']['overview'] == 'TMDB 简介'
+    assert result['proposal']['image_url'] == 'https://image.tmdb.org/t/p/original/profile.jpg'
+    assert result['proposal']['provider_ids']['Imdb'] == 'nm123'
+    assert result['proposal']['provider_ids']['Twitter'] == 'shiromine_miu'
+    assert result['proposal']['provider_ids']['Instagram'] == 'miu_shiromine'
+    assert result['proposal']['provider_ids']['TikTok'] == 'miu_tok'
+    assert result['proposal']['provider_ids']['YouTube'] == 'channel-1'
+    assert result['proposal']['provider_ids']['Wikidata'] == 'Q123'
+    assert result['proposal']['gender'] == 'female'
+    assert result['proposal']['known_for_department'] == 'Acting'
+    assert result['proposal']['popularity'] == 22.7
+    assert result['proposal']['homepage'] == 'https://example.com/miu'
+    assert result['proposal']['external_urls']['x'] == 'https://x.com/shiromine_miu'
+    assert result['proposal']['external_urls']['instagram'] == 'https://www.instagram.com/miu_shiromine/'
+    assert result['proposal']['external_urls']['tiktok'] == 'https://www.tiktok.com/@miu_tok'
+    assert result['proposal']['external_urls']['youtube'] == 'https://www.youtube.com/channel-1'
+    assert result['proposal']['external_urls']['wikidata'] == 'https://www.wikidata.org/wiki/Q123'
+    assert {item['field'] for item in result['diffs']} >= {'name', 'overview', 'birthday', 'place_of_birth', 'gender', 'known_for_department', 'homepage', 'imdb_id', 'image_url'}
+
+

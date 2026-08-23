@@ -1,0 +1,51 @@
+        if "?" in text:
+            alias = text.rsplit("?", 1)[-1].strip()
+            if alias:
+                aliases.add(alias)
+    overview = str(actor.get("overview") or "")
+    for alias in re.findall(r"[（(]([^()（）]{2,40})[）)]", overview):
+        alias = alias.strip()
+        if alias:
+            aliases.add(alias)
+    aliases.discard(str(actor.get("name") or "").strip())
+    return aliases
+
+
+def _person_image_url(config: dict, person: dict) -> str | None:
+    person_id = person.get("Id")
+    if not person_id:
+        return None
+    tag = person.get("PrimaryImageTag") or (person.get("ImageTags") or {}).get("Primary")
+    if not tag:
+        return None
+    return f"{_server_url(config)}/emby/Items/{person_id}/Images/Primary?tag={tag}"
+
+
+def _parse_person(config: dict, person: dict) -> dict:
+    provider_ids = person.get("ProviderIds") if isinstance(person.get("ProviderIds"), dict) else {}
+    item_counts = person.get("ItemCounts") if isinstance(person.get("ItemCounts"), dict) else {}
+    movie_count = person.get("MovieCount") or item_counts.get("Movie") or item_counts.get("Movies")
+    return {
+        "id": person.get("Id"),
+        "server_id": person.get("ServerId") or "",
+        "name": person.get("Name") or "Unknown",
+        "sort_name": person.get("SortName") or person.get("Name") or "",
+        "overview": person.get("Overview") or "",
+        "image_url": _person_image_url(config, person),
+        "provider_ids": provider_ids,
+        "tmdb_id": _provider_id(provider_ids, "Tmdb", "TMDB", "tmdb"),
+        "imdb_id": _provider_id(provider_ids, "Imdb", "IMDB", "imdb"),
+        "movie_count": movie_count,
+        "premiere_date": person.get("PremiereDate"),
+        "date_created": person.get("DateCreated"),
+    }
+
+
+def _actor_web_url(config: dict, actor_id: str | None, server_id: str | None = None) -> str | None:
+    if not actor_id:
+        return None
+    url = f"{_server_url(config)}/web/index.html#!/item?id={quote(str(actor_id), safe='')}"
+    if server_id:
+        url += f"&serverId={quote(str(server_id), safe='')}"
+    return url
+

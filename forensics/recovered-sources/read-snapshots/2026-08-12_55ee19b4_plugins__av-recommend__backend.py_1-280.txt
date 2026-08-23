@@ -1,0 +1,280 @@
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import datetime as dt
+import hashlib
+import json
+import math
+import re
+import time
+from collections import Counter, defaultdict
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.config import PROJECT_ROOT
+from app.core.database import async_session_maker
+from app.knowledge.models import KnowledgeActionState, KnowledgeEdge, KnowledgeEntity
+from app.plugins.contracts import PluginManifest, PluginTestResult
+
+PLUGIN_ID = "av-recommend"
+DATA_FILE = PROJECT_ROOT / "data" / "av_recommend" / "feedback.json"
+TITLE_PROFILE_FILE = PROJECT_ROOT / "data" / "av_recommend" / "title_profile.json"
+TITLE_PROFILE_VERSION = 2
+CACHE_TTL = 300
+_CACHE: dict[str, Any] = {"ts": 0, "key": "", "value": None}
+_pool_lock = asyncio.Lock()
+_scheduler_task: asyncio.Task[None] | None = None
+_scheduler_stop: asyncio.Event | None = None
+
+CODE_RE = re.compile(r"\b(FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,8}[-_ ]?\d{2,7}|\d{6}[-_]\d{2,5})\b", re.I)
+GENERIC_CATEGORY_KEYWORDS = (
+    "单体作品",
+    "精选综合",
+    "美少女电影",
+    "高清",
+    "高画质",
+    "独家",
+    "推荐",
+    "热门",
+    "有码",
+    "无码",
+    "4K",
+    "8K",
+    "FHD",
+    "HD",
+    "VR",
+    "HDR",
+    "60FPS",
+)
+TITLE_NOISE_PATTERNS = (
+    r"\b(?:4k|8k|fhd|hd|uhd|vr|hdr|60fps|1080p|2160p)\b",
+    r"(?:高画質|高画质|高清|超清|完全版|完整版|ノーカット|無修正|无码|有码|中文字幕|中字|字幕|破解|流出)",
+    r"(?:独占|独家|先行配信|配信限定|限定配信|最新作|新作|人気|話題|おすすめ|推荐)",
+)
+TITLE_TERM_STOPWORDS = {
+    "作品", "動画", "映画", "完全", "高清", "高画質", "高画质", "中文字幕", "字幕", "无码", "有码",
+    "水卜", "さくら", "水ト", "ちゃん", "さん", "彼女", "女優", "セックス", "SEX", "AV",
+    "する", "され", "した", "ない", "よう", "この", "その", "から", "まで", "ため", "こと",
+    "に住", "住む", "住む地", "助け", "助ける", "女子", "秘密", "女囚",
+    "雷系", "系女", "雷系女", "系女子", "地雷系女", "雷系女子", "的女", "ング", "アへ", "我的",
+}
+TITLE_TRAIT_PATTERNS: tuple[dict[str, Any], ...] = (
+    {"name": "人妻", "group": "relationship", "weight": 1.0, "patterns": ("人妻", "既婚", "若妻", "奥さん", "奥様", "married")},
+    {"name": "熟女", "group": "actor_type", "weight": 0.9, "patterns": ("熟女", "美熟女", "淑女", "アラサー", "アラフォー", "おばさん")},
+    {"name": "素人", "group": "style", "weight": 0.9, "patterns": ("素人", "しろうと", "一般人", "amateur", "初撮り")},
+    {"name": "新人", "group": "style", "weight": 0.8, "patterns": ("新人", "デビュー", "初登場", "初出演")},
+    {"name": "制服", "group": "costume", "weight": 0.85, "patterns": ("制服", "セーラー", "ブレザー", "コスプレ", "cosplay")},
+    {"name": "学生", "group": "role", "weight": 0.8, "patterns": ("女子校生", "jk", "学生", "女子大生", "校生")},
+    {"name": "教师", "group": "role", "weight": 0.85, "patterns": ("教師", "先生", "女教師", "家庭教師", "講師")},
+    {"name": "护士", "group": "role", "weight": 0.85, "patterns": ("看護師", "ナース", "护士", "nurse")},
+    {"name": "OL", "group": "role", "weight": 0.8, "patterns": ("OL", "オフィス", "会社員", "職場", "職員", "受付嬢", "秘書")},
+    {"name": "偶像", "group": "role", "weight": 0.75, "patterns": ("アイドル", "地下アイドル", "idol", "グラドル")},
+    {"name": "出差旅行", "group": "scene", "weight": 0.75, "patterns": ("出張", "旅行", "温泉", "旅館", "ホテル", "宿泊")},
+    {"name": "剧情", "group": "style", "weight": 0.75, "patterns": ("ドラマ", "剧情", "物語", "ストーリー", "演技", "台本")},
+    {"name": "纪录实录", "group": "style", "weight": 0.65, "patterns": ("ドキュメント", "密着", "記録", "実録", "纪录")},
+    {"name": "企划", "group": "style", "weight": 0.55, "patterns": ("企画", "企划", "検証", "チャレンジ", "実験")},
+    {"name": "系列企划", "group": "style", "weight": 0.6, "patterns": ("総集編", "ベスト", "BEST", "合集", "傑作選", "精选")},
+    {"name": "NTR", "group": "theme", "weight": 0.95, "patterns": ("NTR", "寝取", "ねとられ", "寝取られ", "寝取り")},
+    {"name": "痴女", "group": "theme", "weight": 0.9, "patterns": ("痴女", "逆ナン", "誘惑", "挑発", "攻め")},
+    {"name": "职场", "group": "scene", "weight": 0.75, "patterns": ("職場", "会社", "オフィス", "上司", "部下", "同僚", "社長")},
+    {"name": "邻居", "group": "scene", "weight": 0.85, "patterns": ("隣人", "邻居", "鄰居", "近所", "邻家", "隣の", "隔壁")},
+    {"name": "家庭亲属", "group": "scene", "weight": 0.75, "patterns": ("義母", "義姉", "義妹", "母", "姉", "妹", "家庭", "继母", "義父", "義兄")},
+    {"name": "巨乳", "group": "body", "weight": 0.8, "patterns": ("巨乳", "爆乳", "美乳", "Gカップ", "Hカップ", "Iカップ", "Jカップ", "big tits", "big breast")},
+    {"name": "苗条", "group": "body", "weight": 0.65, "patterns": ("スレンダー", "美脚", "細身", "モデル体型")},
+    {"name": "运动", "group": "scene", "weight": 0.65, "patterns": ("スポーツ", "ジム", "ヨガ", "水泳", "競泳", "体操")},
+    {"name": "脏乱房间", "group": "scene", "weight": 0.88, "patterns": ("汚部屋", "污部屋", "ゴミ部屋", "ゴミ屋敷", "脏房间", "髒房間")},
+    {"name": "地雷系", "group": "style", "weight": 0.84, "patterns": ("地雷系", "量産型", "病みかわ", "メンヘラ", "病娇", "病嬌")},
+    {"name": "逃脱囚禁", "group": "theme", "weight": 0.78, "patterns": ("脱獄", "逃獄", "逃狱", "監禁", "囚禁", "拘束", "監禁部屋")},
+    {"name": "怀孕", "group": "theme", "weight": 0.85, "patterns": ("妊娠", "孕ませ", "怀孕", "懷孕", "受胎", "中出し妊娠", "孕婦", "孕妇")},
+    {"name": "强制", "group": "theme", "weight": 0.82, "patterns": ("強姦", "强奸", "強制", "レイプ", "レ×プ", "無理やり", "無理矢理", "脅して", "脅迫", "轮奸", "輪姦")},
+    {"name": "药物", "group": "theme", "weight": 0.72, "patterns": ("媚薬", "春薬", "薬漬け", "ザーメン", "大量注入", "药物", "媚药", "催眠薬", "睡眠薬")},
+    {"name": "催眠", "group": "theme", "weight": 0.78, "patterns": ("催眠", "洗脳", "洗脑", "マインドコントロール")},
+    {"name": "女佣", "group": "role", "weight": 0.78, "patterns": ("メイド", "女佣", "女僕", "女仆", "家政婦", "家事代行")},
+    {"name": "中出", "group": "theme", "weight": 0.82, "patterns": ("中出し", "中出", "内射", "膣内射精", "種付け", "种付")},
+    {"name": "肛交", "group": "theme", "weight": 0.72, "patterns": ("アナル", "ケツ穴", "肛交", "肛門", "后庭")},
+    {"name": "性处理", "group": "theme", "weight": 0.74, "patterns": ("性処理", "便女", "肉便器", "処理係", "泄欲")},
+    {"name": "万引少女", "group": "scene", "weight": 0.68, "patterns": ("万引き", "偷窃", "偷竊", "店長", "コンビニ")},
+    {"name": "羞辱惩罚", "group": "theme", "weight": 0.7, "patterns": ("お仕置き", "懲罰", "惩罚", "羞辱", "分からせ")},
+    {"name": "高潮绝顶", "group": "theme", "weight": 0.66, "patterns": ("絶頂", "イキ", "イキ狂", "高潮", "痙攣", "快感")},
+    {"name": "美体肉感", "group": "body", "weight": 0.62, "patterns": ("肉感", "恵体", "極上ボディ", "美ボディ", "ドエロボディ")},
+)
+
+
+def _pool_path() -> Path:
+    return PROJECT_ROOT / "data" / "av_recommend" / "candidate_pool.json"
+
+
+def _subscription_path() -> Path:
+    return PROJECT_ROOT / "data" / "subscription_core" / "subscriptions.json"
+
+
+def _pool() -> dict[str, Any]:
+    try:
+        data = json.loads(_pool_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_pool(pool: dict[str, Any]) -> None:
+    path = _pool_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pool["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(pool, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _pool_scan_due(pool: dict[str, Any], interval_minutes: int = 360) -> bool:
+    previous = (pool.get("last_full_scan") or {}).get("at")
+    try:
+        value = dt.datetime.fromisoformat(str(previous).replace("Z", "+00:00"))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.timezone.utc)
+        return (dt.datetime.now(dt.timezone.utc) - value.astimezone(dt.timezone.utc)).total_seconds() >= interval_minutes * 60
+    except (TypeError, ValueError):
+        return True
+
+
+def _scan_interval_minutes(config: dict[str, Any]) -> int:
+    """Read both the historical and temporary names used during recovery."""
+    raw = config.get("full_scan_interval_minutes")
+    if raw in (None, ""):
+        raw = config.get("scan_interval_minutes")
+    try:
+        value = int(raw or 360)
+    except (TypeError, ValueError):
+        value = 360
+    return max(30, min(value, 1440))
+
+
+def _merge_candidate(existing: dict[str, Any] | None, item: dict[str, Any], source: str, label: str) -> dict[str, Any]:
+    current = dict(existing or {})
+    if not current:
+        current.update(item)
+        current["first_seen_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    else:
+        for key, value in item.items():
+            if value not in (None, "", [], {}) and (not current.get(key) or key in {"magnets_count", "has_cnsub", "is_cracked"}):
+                current[key] = max(int(current.get(key) or 0), int(value or 0)) if key == "magnets_count" else bool(current.get(key) or value) if key in {"has_cnsub", "is_cracked"} else value
+    tags = current.get("source_tags") if isinstance(current.get("source_tags"), list) else []
+    if not any(isinstance(tag, dict) and tag.get("id") == source for tag in tags):
+        tags.append({"id": source, "label": label, "date": dt.date.today().isoformat()})
+    current["source_tags"] = tags[:16]
+    current["last_seen_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    current["is_today_increment"] = bool(current.get("first_seen_at", "").startswith(dt.date.today().isoformat()))
+    _ensure_title_profile(current)
+    return current
+
+
+def _candidate_pool_stats(pool: dict[str, Any]) -> dict[str, Any]:
+    items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+    return {
+        "total": len(items),
+        "today_increment": sum(bool(item.get("is_today_increment")) for item in items.values() if isinstance(item, dict)),
+        "last_full_scan": pool.get("last_full_scan") or {},
+        "background": pool.get("background") or {},
+    }
+
+
+def _backfill_candidate_pool_title_profiles(pool: dict[str, Any]) -> int:
+    items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+    changed = 0
+    for code, item in list(items.items()):
+        if not isinstance(item, dict):
+            continue
+        profile = item.get("title_profile")
+        if isinstance(profile, dict) and int(profile.get("version") or 0) == TITLE_PROFILE_VERSION:
+            continue
+        _ensure_title_profile(item)
+        items[code] = item
+        changed += 1
+    if changed:
+        pool["items"] = items
+    return changed
+
+
+def _subscription_codes() -> set[str]:
+    try:
+        data = json.loads(_subscription_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    rows = data.get("subscriptions") if isinstance(data, dict) else data
+    return {_norm_code(row.get("code") if isinstance(row, dict) else row) for row in (rows or []) if _norm_code(row.get("code") if isinstance(row, dict) else row)}
+
+
+def _manifest() -> PluginManifest:
+    return PluginManifest(**json.loads((Path(__file__).with_name("plugin.json")).read_text(encoding="utf-8")))
+
+
+manifest = _manifest()
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _norm_code(value: Any) -> str:
+    text = str(value or "")
+    match = CODE_RE.search(text)
+    if not match:
+        return ""
+    raw = re.sub(r"[_ ]+", "-", match.group(1).upper())
+    fc2 = re.match(r"FC2-?(?:PPV-?)?(\d{4,9})$", raw, re.I)
+    if fc2:
+        return f"FC2-PPV-{fc2.group(1)}"
+    compact = re.match(r"^([A-Z]{2,8})(\d{2,7})$", raw)
+    if compact:
+        return f"{compact.group(1)}-{compact.group(2)}"
+    return raw
+
+
+def _norm_key(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _feedback_codes(entries: Any) -> set[str]:
+    return {_norm_code(x.get("code") if isinstance(x, dict) else x) for x in (entries or []) if _norm_code(x.get("code") if isinstance(x, dict) else x)}
+
+
+def _feedback_counter(entries: Any, key: str) -> Counter:
+    counter: Counter = Counter()
+    for entry in entries or []:
+        if not isinstance(entry, dict):
+            continue
+        for value in entry.get(key) or []:
+            text = str(value or "").strip()
+            if text:
+                counter[text] += 1
+    return counter
+
+
+def _ensure_store() -> dict[str, Any]:
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if not DATA_FILE.exists():
+        data = {"version": 1, "ignored": [], "liked": [], "disliked": []}
+        DATA_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return data
+    try:
+        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("invalid feedback store")
+        data.setdefault("ignored", [])
+        data.setdefault("liked", [])
+        data.setdefault("disliked", [])
+        return data
+    except Exception:
+        backup = DATA_FILE.with_suffix(f".{int(time.time())}.bak")
+        try:
+            DATA_FILE.replace(backup)
+        except Exception:
+            pass
+        return _ensure_store()
+
+
+def _save_store(data: dict[str, Any]) -> None:
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)

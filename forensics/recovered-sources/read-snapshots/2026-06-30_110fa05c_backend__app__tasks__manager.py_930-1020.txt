@@ -1,0 +1,91 @@
+
+        await self._finalize_and_emit_terminal(
+            job_id,
+            event_queue=self.get_event_queue(job_id),
+            status="completed" if success else "failed",
+            success=success,
+            output_path=output_path if success else None,
+            error_message=None if success else "Process exited with non-zero status",
+            progress=100 if success else None,
+            log_message="Lada 任务完成" if success else "Lada 任务失败",
+        )
+
+    async def _run_facefusion(self, job_id: str, job_data: JobCreate):
+        settings = get_settings()
+        input_path = job_data.input_path
+        output_path = build_facefusion_output_path(input_path, settings.source_dir, settings.output_dir)
+        progress_queue: asyncio.Queue = asyncio.Queue()
+
+        async def progress_reader():
+            while True:
+                try:
+                    msg = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
+                    if msg.get("type") == "progress":
+                        await self._emit_progress_event(
+                            job_id,
+                            progress=msg["progress"],
+                            phase_key=msg.get("phase_key", "process"),
+                            phase_label=msg.get("phase_label") or get_phase_label(msg.get("phase_key", "process"), "FaceFusion 处理中"),
+                            phase_progress=msg.get("phase_progress", msg["progress"]),
+                            detail=msg.get("detail") or msg.get("line"),
+                        )
+                        await self.add_log(job_id, msg.get("line", f"Progress: {msg.get('progress', 0)}%"))
+                    elif msg.get("type") == "log":
+                        line = msg.get("line")
+                        if line:
+                            await self._append_job_log(job_id, line, emit_event=True)
+                except asyncio.TimeoutError:
+                    continue
+                except Exception:
+                    break
+
+        reader_task = asyncio.create_task(progress_reader())
+        settings_dict = job_data.settings.model_dump() if hasattr(job_data, 'settings') else {}
+
+        await self.add_log(job_id, "开始 FaceFusion 处理...")
+        cancel_event = self._cancel_event_for(job_id)
+        success = await run_facefusion_restoration(
+            job_id=job_id,
+            input_path=input_path,
+            output_path=output_path,
+            job_settings=settings_dict,
+            progress_queue=progress_queue,
+            cancel_event=cancel_event,
+        )
+
+        reader_task.cancel()
+        try:
+            await reader_task
+        except asyncio.CancelledError:
+            pass
+
+        if cancel_event.is_set():
+            await self._finish_cancelled_job(
+                job_id,
+                event_queue=self.get_event_queue(job_id),
+                log_message="FaceFusion 任务已取消",
+            )
+            return
+
+        await self._finalize_and_emit_terminal(
+            job_id,
+            event_queue=self.get_event_queue(job_id),
+            status="completed" if success else "failed",
+            success=success,
+            output_path=output_path if success else None,
+            error_message=None if success else "Process exited with non-zero status",
+            progress=100 if success else None,
+            log_message="FaceFusion 任务完成" if success else "FaceFusion 任务失败",
+        )
+
+    async def _run_whisper(self, job_id: str, job_data: JobCreate):
+        """执行 Whisper 任务"""
+        from app.pipeline.whisper import (
+            WhisperConfig,
+            WhisperModel,
+            PipelineMode,
+            MergeStrategy,
+            Sensitivity,
+        )
+        from app.pipeline.whisper.strategy import build_whisper_execution_plan
+        from app.pipeline.whisper.runtime import (

@@ -1,0 +1,151 @@
+
+        try:
+            # ChickenRice 主链路复用任务主模型；旧 Faster 兼容模式仍使用 tiny 快速模型。
+            if self._faster_processor is None:
+                if self.config.model == WhisperModel.CHICKENRICE_ZH or self.config.model_backend == "chickenrice-zh":
+                    faster_config = self.config
+                else:
+                    faster_config = WhisperConfig(
+                        model=WhisperModel.TINY,  # 使用小模型快速处理
+                        device=self.config.device,
+                        language=self.config.language,
+                        vad_filter=False,  # 清洁音频不需要 VAD
+                    )
+                self._faster_processor = FasterWhisperProcessor(faster_config, self.progress_callback, self.cancel_callback)
+            result = await asyncio.to_thread(self._faster_processor.process, tmp_path, "")
+            self.log(f"Faster 段落 {seg_idx + 1} 完成: {len(result.segments)} 片段")
+            return result
+        finally:
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+
+    async def _process_anime_segment(
+        self,
+        audio_file: str,
+        seg_start: float,
+        seg_end: float,
+        seg_idx: int
+    ) -> TranscriptionResult:
+        """Anime 模式: anime-whisper + TEN VAD，JAV 优化"""
+        import tempfile
+        import soundfile as sf
+        import librosa
+        self._raise_if_cancelled()
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode="wb", dir=_get_whisper_runtime_paths()[2]) as tmp:
+            tmp_path = tmp.name
+
+        seg_duration = seg_end - seg_start
+
+        try:
+            y, sr = librosa.load(audio_file, sr=16000, mono=True,
+                                 offset=seg_start, duration=seg_duration)
+            sf.write(tmp_path, y, sr)
+        except Exception as e:
+            self.log(f"段落 {seg_idx + 1} 音频提取失败: {e}")
+            return TranscriptionResult(
+                segments=[],
+                language="ja",
+                duration=seg_duration,
+                source="anime-segment-failed",
+                metadata={"error": str(e)}
+            )
+
+        try:
+            # Anime 模式使用 anime-whisper（Transformers ASR pipeline）
+            if self._anime_processor is None:
+                anime_config = WhisperConfig(
+                    model=WhisperModel.ANIME,
+                    device=self.config.device,
+                    language=self.config.language,
+                    vad_filter=True,
+                )
+                self._anime_processor = AnimeWhisperProcessor(anime_config, self.progress_callback, self.cancel_callback)
+            result = await asyncio.to_thread(self._anime_processor.process, tmp_path, "")
+            self.log(f"Anime 段落 {seg_idx + 1} 完成: {len(result.segments)} 片段")
+            return result
+        finally:
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+
+    def _merge_all_results(self, results: list[TranscriptionResult]) -> TranscriptionResult:
+        """合并多个段落的结果（按时间排序拼接）"""
+        all_segments = []
+        for r in results:
+            all_segments.extend(r.segments)
+
+        # 按 start_time 排序
+        all_segments.sort(key=lambda s: s.start_time)
+
+        # 重新编号
+        for i, seg in enumerate(all_segments):
+            seg.index = i + 1
+
+        return TranscriptionResult(
+            segments=all_segments,
+            language=results[0].language if results else "ja",
+            duration=sum(r.duration for r in results),
+            source="scene-merged",
+            metadata={"n_segments": len(results), "n_subtitles": len(all_segments)}
+        )
+
+    def _clean_video_name(self, name: str) -> str:
+        """清理视频名用于字幕文件"""
+        import re
+        # 移除常见后缀
+        name = re.sub(r'[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)', '', name, flags=re.IGNORECASE)
+        # 移除扩展名
+        name = re.sub(r'\.(mp4|mkv|avi|mov|wmv|flv|m4v)$', '', name, flags=re.IGNORECASE)
+        return name.strip()
+
+
+# 全局任务存储
+_tasks = {}
+
+
+def create_task(video_path: str, config: WhisperConfig) -> WhisperTask:
+    """创建 Whisper 任务"""
+    task_id = str(uuid.uuid4())
+    task = WhisperTask(
+        id=task_id,
+        video_path=video_path,
+        config=config
+    )
+    _tasks[task_id] = task
+    return task
+
+
+def get_task(task_id: str) -> Optional[WhisperTask]:
+    """获取任务"""
+    return _tasks.get(task_id)
+
+
+async def run_whisper_task(
+    task_id: str,
+    progress_callback: Optional[Callable] = None,
+    cancel_callback: Optional[Callable[[], bool]] = None,
+) -> tuple[TranscriptionResult, str]:
+    """运行 Whisper 任务"""
+    task = _tasks.get(task_id)
+    if not task:
+        raise ValueError(f"Task {task_id} not found")
+
+    task.status = "running"
+
+    def log_callback(msg: str):
+        task.log_lines.append(msg)
+        if progress_callback:
+            progress_callback(msg)
+
+    pipeline = WhisperPipeline(task.config, log_callback, cancel_callback=cancel_callback)
+
+    try:
+        result, srt_path = await pipeline.process(task.video_path)
+        task.result = result
+        task.status = "completed"
+        return result, srt_path
+    except WhisperCancellationRequested as e:

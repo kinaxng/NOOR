@@ -1,0 +1,123 @@
+      if (typeof status === 'string') candidates.push(status)
+      else if (status && typeof status === 'object') candidates.push(status.message, status.error, status.detail, status.msg)
+    }
+    const picked = candidates.map(v => String(v || '').trim()).find(Boolean)
+    return picked || phaseText(task?.phase) || '未知原因'
+  }
+  const isResumedPhase = task => ['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING', 'PHASE_TYPE_COMPLETE'].includes(task?.phase)
+
+  async function reloadTasksForVerify() {
+    const r = await api('/actions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload: { phase: state.filter, limit: 200 } }) })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok || data.ok === false) throw new Error(data.detail || data.message || '操作已提交，但刷新任务状态失败')
+    state.tasks = Array.isArray(data.tasks) ? data.tasks : []
+    state.error = ''
+    return state.tasks
+  }
+
+  function openDeleteConfirm(task) {
+    return new Promise(resolve => {
+      let settled = false
+      const name = task?.name || task?.id || '当前任务'
+      const box = document.createElement('div')
+      box.className = 'xunlei-remote-delete-confirm'
+      box.innerHTML = `
+        <div class="xunlei-remote-delete-confirm__title">确认删除这个迅雷任务？</div>
+        <div class="xunlei-remote-delete-confirm__name">${esc(name)}</div>
+        <label class="xunlei-remote-delete-confirm__option">
+          <input type="checkbox" data-role="deleteFiles">
+          <span>
+            <strong>删除已下载的文件</strong>
+            <small>主要用于已完成任务；勾选后会请求迅雷同时删除任务文件。</small>
+          </span>
+        </label>
+      `
+      const cancelBtn = sdk.ui?.button
+        ? sdk.ui.button({ label: '取消', className: 'xunlei-remote-btn' })
+        : Object.assign(document.createElement('button'), { type: 'button', className: 'xunlei-remote-btn', textContent: '取消' })
+      const deleteBtn = sdk.ui?.button
+        ? sdk.ui.button({ label: '删除', tone: 'danger', className: 'xunlei-remote-btn xunlei-remote-btn--danger' })
+        : Object.assign(document.createElement('button'), { type: 'button', className: 'xunlei-remote-btn xunlei-remote-btn--danger', textContent: '删除' })
+      const finish = value => {
+        if (settled) return
+        settled = true
+        modal.close()
+        resolve(value)
+      }
+      const modal = modalApi({
+        title: '删除任务',
+        width: 'sm',
+        content: box,
+        footer: [cancelBtn, deleteBtn],
+        onClose: () => finish(null),
+      })
+      cancelBtn.onclick = () => finish(null)
+      deleteBtn.onclick = () => finish({ deleteFiles: !!box.querySelector('[data-role="deleteFiles"]')?.checked })
+    })
+  }
+
+  function verifyOperationResult(action, label, before, after, options = {}) {
+    const verb = label || (action === 'delete_tasks' ? '删除' : action === 'pause_task' ? '暂停' : '开始')
+    if (action === 'delete_tasks') {
+      if (options.deleteFiles) return { ok: true, message: '删除已提交，迅雷正在删除任务及已下载文件', settled: true }
+      if (!after) return { ok: true, message: '删除成功', settled: true }
+      return { ok: false, message: `删除失败：任务仍存在（${taskReason(after)}）`, settled: true }
+    }
+    if (!after) return { ok: false, message: `${verb}后未找到任务，可能已被迅雷移除或列表尚未同步`, settled: true }
+    if (action === 'pause_task') {
+      if (after.phase === 'PHASE_TYPE_PAUSED') return { ok: true, message: '暂停成功', settled: true }
+      const stillRunning = after.phase === 'PHASE_TYPE_RUNNING' || after.phase === 'PHASE_TYPE_PENDING'
+      return { ok: false, message: `暂停失败：${taskReason(after)}`, settled: !stillRunning }
+    }
+    if (action === 'resume_task' || action === 'retry_task') {
+      if (isResumedPhase(after)) return { ok: true, message: `${verb}成功`, settled: true }
+      const still = before?.phase === after.phase ? `仍为${phaseText(after.phase)}` : `当前为${phaseText(after.phase)}`
+      return { ok: false, message: `${verb}失败：${still}，${taskReason(after)}`, settled: after.phase === 'PHASE_TYPE_ERROR' }
+    }
+    return { ok: true, message: `${verb}成功`, settled: true }
+  }
+
+  async function verifyAfterOperation(action, id, actionLabel, before, options = {}) {
+    if (action === 'delete_tasks' && options.deleteFiles) {
+      await reloadTasksForVerify().catch(() => null)
+      return verifyOperationResult(action, actionLabel, before, findTask(id), options)
+    }
+    let result = null
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 900))
+      await reloadTasksForVerify()
+      result = verifyOperationResult(action, actionLabel, before, findTask(id), options)
+      if (result.ok || result.settled || attempt === 3) return result
+    }
+    return result || { ok: false, message: '操作后未拿到任务状态', settled: true }
+  }
+
+  async function operate(action, id, actionLabel = '') {
+    if (!id || !action || state.actioning.has(id)) return
+    const before = findTask(id)
+    let payload = { id, ids: [id] }
+    if (action === 'delete_tasks') {
+      const confirmed = await openDeleteConfirm(before)
+      if (!confirmed) return
+      payload.delete_files = !!confirmed.deleteFiles
+    }
+    state.actioning.add(id)
+    state.tableSignature = ''
+    renderTable()
+    try {
+      const r = await api(`/actions/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload }) })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok || data.ok === false) throw new Error(data.detail || data.message || '操作失败')
+
+      const result = await verifyAfterOperation(action, id, actionLabel, before, { deleteFiles: !!payload.delete_files })
+      toast(result.ok ? 'success' : 'error', result.message)
+    } catch (e) {
+      toast('error', e.message || '操作失败')
+      try { await reloadTasksForVerify() } catch (_) {}
+    } finally {
+      state.actioning.delete(id)
+      state.tableSignature = ''
+      render()
+    }
+  }
+

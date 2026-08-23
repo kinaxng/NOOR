@@ -1,0 +1,46 @@
+   ============================================= */
+@layer components {
+  .ui-card {
+    background: rgb(26, 31, 55);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 1.5rem;
+  }
+
+  /* Settings form input */
+  .settings-input {
+    padding: 0.625rem 0.875rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    font-family: var(--font-display);
+    font-size: var(--font-size-sm);
+    color: #FFFFFF;
+    outline: none;
+    transition: all var(--transition-fast);
+    width: 100%;
+  }
+  .settings-input:focus {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.1);
+  }
+  .settings-input::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+  }
+  select.settings-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(255,255,255,0.3)' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: calc(100% - 0.875rem) center;
+    padding-right: 2.5rem;
+  }
+  select.settings-input option {
+    background: #0f123b;
+    color: #FFFFFF;
+  }
+
+  select option {
+    background: var(--color-bg-elevated, rgb(30, 37, 68));
+    color: #FFFFFF;

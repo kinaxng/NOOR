@@ -1,0 +1,101 @@
+    pluginId: id,
+    route: {
+      basePath,
+      get path() { return route.path },
+      get fullPath() { return route.fullPath },
+      get subPath() { return routeSubPath() },
+      push: (subPath = '', options: any = {}) => router.push({ path: pluginPath(subPath), query: options.query ?? route.query }),
+      replace: (subPath = '', options: any = {}) => router.replace({ path: pluginPath(subPath), query: options.query ?? route.query }),
+      onChange: (callback: (payload: any) => void) => {
+        const handler = (event: Event) => {
+          const detail = (event as CustomEvent).detail || {}
+          if (!detail.pluginId || detail.pluginId === id) callback(detail)
+        }
+        window.addEventListener('noor-plugin-route-change', handler)
+        const cleanup = () => window.removeEventListener('noor-plugin-route-change', handler)
+        const off = onUnmount(cleanup)
+        return () => { cleanup(); off() }
+      },
+    },
+    api: {
+      plugin: pluginFetch,
+      wsUrl: (path: string) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`,
+      get: sdkGet,
+      post: sdkPost,
+    },
+    lifecycle: {
+      signal: controller.signal,
+      get aborted() { return controller.signal.aborted },
+      onUnmount,
+    },
+    timers: {
+      setTimeout: (handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        ensureActive()
+        const timer = window.setTimeout(handler, timeout, ...args)
+        const off = onUnmount(() => window.clearTimeout(timer))
+        return { id: timer, clear: () => { window.clearTimeout(timer); off() } }
+      },
+      setInterval: (handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        ensureActive()
+        const timer = window.setInterval(handler, timeout, ...args)
+        const off = onUnmount(() => window.clearInterval(timer))
+        return { id: timer, clear: () => { window.clearInterval(timer); off() } }
+      },
+    },
+    events: {
+      on: (target: EventTarget, type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean) => {
+        ensureActive()
+        target.addEventListener(type, listener, options)
+        const cleanup = () => target.removeEventListener(type, listener, options)
+        const off = onUnmount(cleanup)
+        return () => { cleanup(); off() }
+      },
+    },
+    net: {
+      webSocket: (path: string) => {
+        ensureActive()
+        const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`
+        const ws = new WebSocket(url)
+        onUnmount(() => {
+          try { ws.close() } catch {}
+        })
+        return ws
+      },
+    },
+    toast: {
+      success: (msg: string) => toast.success(msg),
+      error: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.error(msg) },
+      info: (msg: string) => toast.info(msg),
+      warning: (msg: string) => { if (!isLifecycleCancelMessage(msg)) toast.warning(msg) },
+    },
+    downloads: downloads,
+    subscription: {
+      open: (options: any) => openSubscriptionDialog(options),
+    },
+    avatar: {
+      resolve: (options: any = {}) => sdkPost('/plugins/gfriends/actions/resolve', { payload: options }).then((r: any) => r.data),
+    },
+    ui: {
+      button: makeButton,
+      input: makeInput,
+      select: makeSelect,
+      field: makeField,
+      modal: makeModal,
+      panel: makePanel,
+      tabs: makeTabs,
+      pagination: makePagination,
+      submitButton: makeSubmitButton,
+      topBar: makeTopBar,
+      filterPanel: makeControlPanel,
+      filterPanelGroup: makeControlPanelGroup,
+      filterPanelSection: makeControlPanelSection,
+      filterPanelRow: makeControlPanelRow,
+      controlPanel: makeControlPanel,
+      controlPanelGroup: makeControlPanelGroup,
+      controlPanelSection: makeControlPanelSection,
+      controlPanelRow: makeControlPanelRow,
+      actionRow: makeActionRow,
+      statCard: makeStatCard,
+      statGrid: makeStatGrid,
+      mediaCard: makeMediaCard,
+      loadingState: makeLoadingState,
