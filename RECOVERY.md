@@ -203,7 +203,7 @@ the recovered bytecode modules remain unchanged.
 - 2026-08-23 新增字节级前端证据恢复：`composables/useTheme.ts`、`main.ts` 按原始
   Vite source map 恢复；`components/noor/SubtitlePreview.vue` 与 4 月预接管原始
   工作树字节一致；`components/ui/FilterPanel.vue` 与早期会话补丁回放字节一致。
-  `forensics/current-byte-level-matches.tsv` 已更新到 31 个字节级匹配文件，
+  `forensics/current-byte-level-matches.tsv` 已更新到 32 个字节级匹配文件，
   新增回放证据已归档到 `forensics/recovered-sources/`。
 
 - 2026-08-23 新增原始 `git status` 路径清单

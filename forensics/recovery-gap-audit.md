@@ -96,7 +96,7 @@
   和 `main.ts` 恢复原版后不触发 `vue-tsc` 未使用变量错误。
 
 - 字节级匹配扫描：新增 `forensics/current-byte-level-matches.tsv`，当前
-  31 个前端文件已与 Vite source map、浏览器缓存或早期会话证据完全一致；其中
+  32 个前端文件已与 Vite source map、浏览器缓存或早期会话证据完全一致；其中
   `JobCard`、`JobChainPanel`、`MediaCard`、`VuiProgress`、`History`、
   `LadaSettings` 本次按证据补回仅有的空行/换行差异，已恢复字节级一致。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
@@ -364,7 +364,7 @@
   期望的 WhisperSettings/i18n 状态不在备份中，说明该备份不是 rollout 的精确
   起点。因此“全历史线性回放”不能直接成立；后续应改为按文件使用会话内的
   原始读取快照作为 pre-patch seed，再回放该文件后续成功补丁。
-- 当前恢复树字节级直接匹配证据仍为 31 个路径（`current-byte-level-matches.tsv`），
+- 当前恢复树字节级直接匹配证据仍为 32 个路径（`current-byte-level-matches.tsv`），
   另有大量文件已按源 map/缓存/会话 diff 核对为等价恢复，但不是磁盘原文件。
 - 本轮验证：后端 `pytest` 228 项通过、前端 `vue-tsc && vite build` 通过、
   插件校验仅剩余已知警告。
@@ -424,3 +424,14 @@
 - 移除此前重建中新增的硬编码中文标题、duration 计时条和 271 行重设计；
   原版是通用 i18n 消息 toast，不绑定中文文案。
 - 验证：`vue-tsc && vite build` 通过。
+
+## 媒体库拆分函数清单复核（2026-08-23）
+
+- 以 `forensics/recovered-sources/media_library.final-replayed.py` 为基准，
+  对当前 `endpoints/media_library*.py` 与 `endpoints/actors.py` 做顶层名称复核。
+- 原版顶层 286 个名称中，公开名称仅有 `base64` 这个标准库导入名未在当前模块重复；
+  其余公开函数、类、请求模型和兼容别名均已由当前拆分模块提供。
+- 剩余差异全部为私有 helper 的内部命名，不影响外部导入或原版路由契约；
+  已由 `backend/tests/test_actor_routes.py` 与媒体库路由测试继续锁定。
+- `current-byte-level-matches.tsv` 已更新到 32 个字节级匹配文件，
+  `MediaDetailPanel.vue` 与 `BaseToast.vue` 均登记证据来源。
