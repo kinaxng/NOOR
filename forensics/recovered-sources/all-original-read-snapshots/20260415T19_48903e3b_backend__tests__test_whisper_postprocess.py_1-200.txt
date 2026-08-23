@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+from app.pipeline.whisper.japanese_post import RecommendedSubtitlePostProcessor
+from app.pipeline.whisper.types import SubtitleSegment, TranscriptionResult
+
+
+def test_recommended_subtitle_postprocessor_merges_adjacent_duplicates():
+    processor = RecommendedSubtitlePostProcessor()
+    result = TranscriptionResult(
+        segments=[
+            SubtitleSegment(index=1, start_time=0.0, end_time=1.0, text="すごいです。", words=[]),
+            SubtitleSegment(index=2, start_time=1.0, end_time=2.0, text="すごいです", words=[]),
+            SubtitleSegment(index=3, start_time=2.0, end_time=3.0, text="本当にすごいです", words=[]),
+        ],
+        language="ja",
+        duration=3.0,
+        source="anime-whisper",
+    )
+
+    processed = processor.process(result)
+
+    assert len(processed.segments) == 2
+    assert processed.segments[0].start_time == 0.0
+    assert processed.segments[0].end_time == 2.0
+    assert processed.metadata["recommended_strategy_post_processed"] is True
+    assert processed.metadata["recommended_cleanup_before_segments"] == 3
+    assert processed.metadata["recommended_cleanup_after_segments"] == 2
+    assert processed.metadata["recommended_cleanup_deduped_segments"] == 1
+    assert processed.metadata["recommended_cleanup_adjacent_deduped_segments"] == 1
+    assert processed.metadata["recommended_cleanup_window_echo_segments"] == 0
+
+
+def test_recommended_subtitle_postprocessor_suppresses_short_window_echo():
+    processor = RecommendedSubtitlePostProcessor()
+    result = TranscriptionResult(
+        segments=[
+            SubtitleSegment(index=1, start_time=0.0, end_time=1.2, text="今日はやめてください", words=[]),
+            SubtitleSegment(index=2, start_time=1.6, end_time=2.7, text="本当にお願いします", words=[]),
+            SubtitleSegment(index=3, start_time=3.0, end_time=4.1, text="今日はやめてください。", words=[]),
+        ],
+        language="ja",
+        duration=4.1,
+        source="anime-whisper",
+    )
+
+    processed = processor.process(result)
+
+    assert len(processed.segments) == 2
+    assert processed.metadata["recommended_cleanup_window_echo_segments"] == 1
+    assert processed.metadata["recommended_cleanup_adjacent_deduped_segments"] == 0
+
+
+def test_recommended_subtitle_postprocessor_drops_noise_only_segments():
+    processor = RecommendedSubtitlePostProcessor()
+    result = TranscriptionResult(
+        segments=[
+            SubtitleSegment(index=1, start_time=0.0, end_time=1.0, text="…", words=[]),
+            SubtitleSegment(index=2, start_time=1.0, end_time=2.0, text="ちゅぱっ、ちゅぱっ、ちゅるっ", words=[]),
+            SubtitleSegment(index=3, start_time=2.0, end_time=3.5, text="今日は休みたい", words=[]),
+        ],
+        language="ja",
+        duration=3.5,
+        source="anime-whisper",
+    )
+
+    processed = processor.process(result)
+
+    assert [seg.text for seg in processed.segments] == ["今日は休みたい"]
+    assert processed.metadata["recommended_cleanup_noise_only_segments"] == 2
+
+
+def test_recommended_subtitle_postprocessor_keeps_dialogue_with_fillers():
+    processor = RecommendedSubtitlePostProcessor()
+    result = TranscriptionResult(
+        segments=[
+            SubtitleSegment(index=1, start_time=0.0, end_time=1.5, text="あ、今日はやめて", words=[]),
+        ],
+        language="ja",
+        duration=1.5,
+        source="anime-whisper",
+    )
+
+    processed = processor.process(result)
+
+    assert [seg.text for seg in processed.segments] == ["あ、今日はやめて"]
+    assert processed.metadata["recommended_cleanup_noise_only_segments"] == 0

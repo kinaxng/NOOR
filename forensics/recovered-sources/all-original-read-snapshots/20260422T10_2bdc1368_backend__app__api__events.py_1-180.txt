@@ -1,0 +1,194 @@
+import asyncio
+import json
+from fastapi import APIRouter, HTTPException
+from sse_starlette.sse import EventSourceResponse
+from app.tasks.manager import job_manager
+
+router = APIRouter(prefix="/api/jobs", tags=["events"])
+
+
+@router.get("/{job_id}/events")
+async def job_events(job_id: str):
+    """SSE endpoint for job progress updates."""
+
+    async def event_generator():
+        event_queue = job_manager.get_event_queue(job_id)
+
+        # Send initial connection event
+        yield {
+            "event": "connected",
+            "data": json.dumps({"job_id": job_id}),
+        }
+
+        while True:
+            try:
+                msg = await asyncio.wait_for(event_queue.get(), timeout=60.0)
+
+                if msg.get("type") == "progress":
+                    yield {
+                        "event": "progress",
+                        "data": json.dumps({
+                            "type": "progress",
+                            "progress": msg["progress"],
+                            "phase_key": msg.get("phase_key"),
+                            "phase_label": msg.get("phase_label"),
+                            "phase_progress": msg.get("phase_progress"),
+                            "detail": msg.get("detail"),
+                        }),
+                    }
+                elif msg.get("type") == "log":
+                    yield {
+                        "event": "log",
+                        "data": json.dumps({
+                            "type": "log",
+                            "line": msg["line"],
+                        }),
+                    }
+                elif msg.get("type") in ("queued", "blocked"):
+                    yield {
+                        "event": msg["type"],
+                        "data": json.dumps({
+                            "type": msg["type"],
+                            "job_id": msg.get("job_id"),
+                            "phase_key": msg.get("phase_key"),
+                            "phase_label": msg.get("phase_label"),
+                            "phase_progress": msg.get("phase_progress"),
+                            "detail": msg.get("detail"),
+                        }),
+                    }
+                elif msg.get("type") in ("completed", "failed", "cancelled", "skipped"):
+                    yield {
+                        "event": "done",
+                        "data": json.dumps({
+                            "type": msg["type"],
+                            "success": msg.get("success", False),
+                            "error": msg.get("error"),
+                        }),
+                    }
+                    await job_manager.remove_event_queue(job_id)
+                    break
+
+            except asyncio.TimeoutError:
+                # Send keepalive
+                yield {
+                    "event": "keepalive",
+                    "data": json.dumps({"time": asyncio.get_event_loop().time()}),
+                }
+
+    return EventSourceResponse(event_generator())
+
+---store---
+
+    es.addEventListener('log', (e) => {
+      const data = JSON.parse(e.data)
+      logs.value.push({ jobId, line: data.line })
+      if (logs.value.length > MAX_BUFFERED_LOGS) {
+        logs.value.splice(0, logs.value.length - MAX_BUFFERED_LOGS)
+      }
+      onMessage({ type: 'log', line: data.line })
+    })
+
+    es.addEventListener('queued', (e) => {
+      const data = JSON.parse(e.data)
+      onMessage({
+        type: 'queued',
+        phase_key: data.phase_key,
+        phase_label: data.phase_label,
+        phase_progress: data.phase_progress,
+        detail: data.detail,
+      })
+    })
+
+    es.addEventListener('blocked', (e) => {
+      const data = JSON.parse(e.data)
+      onMessage({
+        type: 'blocked',
+        phase_key: data.phase_key,
+        phase_label: data.phase_label,
+        phase_progress: data.phase_progress,
+        detail: data.detail,
+      })
+    })
+
+    es.addEventListener('done', async (e) => {
+      const data = JSON.parse(e.data)
+      onMessage({ type: data.type, success: data.success, detail: data.error })
+      es.close()
+      eventSources.value.delete(jobId)
+      // Re-fetch to ensure store has authoritative status from backend
+      await fetchJobs()
+    })
+
+    es.addEventListener('keepalive', () => {
+      // ignore
+    })
+  }
+
+  function disconnectFromEvents() {
+    if (eventSource.value) {
+      eventSource.value.close()
+      eventSource.value = null
+    }
+    eventSources.value.forEach(es => es.close())
+    eventSources.value.clear()
+  }
+
+  function clearLogs() {
+    logs.value = []
+  }
+
+  return {
+    jobs,
+
+---jobs terminal handlers---
+    if (!jobStatuses.value[jobId]) {
+      jobStatuses.value[jobId] = { status: '', progress: 0, phaseKey: '', phaseLabel: '', detail: '', phaseProgress: 0 }
+    }
+
+    if (event.type === 'progress') {
+      const progress = clampJobProgress(jobId, event.progress)
+      jobStatuses.value[jobId].progress = progress
+      jobStatuses.value[jobId].status = getRunningBadgeLabel.value({ status: 'running' }, '')
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, progress, undefined, { phase_label: event.phase_label, phase_key: event.phase_key, phase_progress: event.phase_progress, detail: event.detail })
+    } else if (event.type === 'log' && event.line) {
+      if (selectedJobId.value === jobId || selectedJobId.value === null) {
+        appendVisibleLog({ time, line: event.line })
+      }
+    } else if (event.type === 'completed') {
+      jobStatuses.value[jobId].status = completedStatusLabel.value
+      jobStatuses.value[jobId].progress = 100
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, 100, 'completed', { phase_label: completedStatusLabel.value, phase_progress: 100 })
+    } else if (event.type === 'cancelled') {
+      jobStatuses.value[jobId].status = cancelledStatusLabel.value
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, jobStatuses.value[jobId]?.progress || 0, 'cancelled', { phase_label: cancelledStatusLabel.value })
+    } else if (event.type === 'failed') {
+      jobStatuses.value[jobId].status = failedStatusLabel.value
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      jobsStore.updateJobProgress(jobId, jobStatuses.value[jobId]?.progress || 0, 'failed', { phase_label: failedStatusLabel.value, detail: event.detail })
+    } else if (event.type === 'skipped') {
+      jobStatuses.value[jobId].status = t('jobs.status.skipped')
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, jobStatuses.value[jobId]?.progress || 0, 'skipped', {
+        phase_label: t('jobs.status.skipped'),
+        detail: event.detail,
+      })
+    } else if (event.type === 'queued') {
+      jobStatuses.value[jobId].status = queuedStatusLabel.value
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey || ''
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel || ''
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail || ''
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress ?? 0
+      sseConnected.value.add(jobId)
+    } else if (event.type === 'blocked') {
+      jobStatuses.value[jobId].status = blockedStatusLabel.value
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey || ''
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel || ''
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail || ''

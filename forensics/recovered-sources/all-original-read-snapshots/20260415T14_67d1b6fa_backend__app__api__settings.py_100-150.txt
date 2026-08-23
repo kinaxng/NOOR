@@ -1,0 +1,51 @@
+    fp16: bool = True
+    detection_model: str = "v4-fast"
+    restoration_model: str = "basicvsrpp-v1.2"
+    encoding_preset: str = "hevc-nvidia-gpu-hq"
+    max_clip_length: int = 180
+    detect_face_mosaics: bool = False
+
+
+class CustomPipelineConfig(BaseModel):
+    model: str = "large-v3"  # large-v3 | large-v2 | turbo
+    vad_method: str = "semantic"
+    scene_detector: str = "semantic"
+    enhancers: list[str] = []  # 多选：ffmpeg-dsp, clearvoice, silero-vad, demucs
+    segmenter: str = "silero-v6.2"
+    timestamp_mode: str = "aligner_interpolation"  # aligner_interpolation / vad_only
+    aligner_backend: str = "qwen3"  # qwen3 / none
+    framer_backend: str = "vad-grouped"  # vad-grouped / full-scene
+
+
+class WhisperConfig(BaseModel):
+    strategy: str = "best"
+    model: str = "anime-whisper"
+    pipeline_mode: str = "ensemble"
+    merge_strategy: str = "smart_merge"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    vad_method: str = "semantic"
+    translate_to: str = ""
+    translate_model: str = "gpt-4o-mini"
+    translate_style: str = "adult_explicit"  # adult_explicit | standard
+    translate_base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    translate_api_key: str = ""
+    pass1_pipeline: str = "anime"  # anime | faster | balanced | transformers | qwen | custom
+    pass2_pipeline: str = ""  # "" = not selected, or one of the above
+    custom_config: CustomPipelineConfig = CustomPipelineConfig()
+
+
+def _assert_custom_pipeline_supported(*pipeline_values: Optional[str]) -> None:
+    if any(value == "custom" for value in pipeline_values if value):
+        feature = _get_whisper_feature_flags()["custom_pipeline"]
+        if not feature["available"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Custom Whisper pipeline 当前不可用：{feature['reason']}",
+            )
+
+
+class NetworkConfig(BaseModel):
+    acceleration_mode: str = "mirror"  # "none" / "proxy" / "mirror"
+    http_proxy: str = ""
+    github_mirror: str = "https://ghproxy.com"

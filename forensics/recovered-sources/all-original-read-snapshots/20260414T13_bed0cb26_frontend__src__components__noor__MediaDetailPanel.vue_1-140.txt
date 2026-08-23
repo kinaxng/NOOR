@@ -1,0 +1,140 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import BaseModal from '../ui/BaseModal.vue'
+import { useI18n } from '../../composables/useI18n'
+import type { MediaItem, MediaItemDetail } from '../../api/types'
+import PanelHeader from './panels/PanelHeader.vue'
+
+const { t, i18nVersion, currentLang } = useI18n()
+
+const directorLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.director')
+})
+const errorLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.error')
+})
+const closeLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.close')
+})
+const codeLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.code')
+})
+const releaseLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.release')
+})
+const addedLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.added')
+})
+const ratingLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.rating')
+})
+const seriesLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.series')
+})
+const publisherLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.publisher')
+})
+const plotLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.plot')
+})
+const pathLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.path')
+})
+const notAvailableLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.notAvailable')
+})
+const previewUnsupportedLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.previewUnsupported')
+})
+
+const props = defineProps<{
+  open: boolean
+  item: MediaItem | null
+  detail: MediaItemDetail | null
+  loading: boolean
+  error: string | null
+}>()
+
+const emit = defineEmits<{
+  close: []
+  openSubtitle: []
+}>()
+
+const previewVideoPath = ref('')
+
+// Merge genres from NFO and Emby, removing duplicates
+// Filter out genres containing ":" (these are labeled fields like "发行: kawaii", "片商: kawaii" from 刮削 tools)
+const allGenres = computed(() => {
+  if (!props.detail) return []
+  const nfoGenres = (props.detail.nfo?.genres || []).filter((g: string) => !g.includes(':'))
+  const embyGenres = (props.detail.genres || []).filter((g: string) => !g.includes(':'))
+  return [...new Set([...nfoGenres, ...embyGenres])]
+})
+
+// All file paths in the same folder (current + siblings)
+const allFolderPaths = computed(() => {
+  if (!props.detail?.file_path) return []
+  const paths = [props.detail.file_path]
+  for (const s of (props.detail.siblings || [])) {
+    if (s.file_path && !paths.includes(s.file_path)) {
+      paths.push(s.file_path)
+    }
+  }
+  return paths
+})
+
+const previewVideoName = computed(() => previewVideoPath.value.split('/').pop() || previewVideoPath.value)
+
+const previewVideoUrl = computed(() => {
+  if (!previewVideoPath.value) return ''
+  return `/api/media-library/hardlinks/preview-file?path=${encodeURIComponent(previewVideoPath.value)}`
+})
+
+function handleClose() {
+  emit('close')
+}
+
+function openPreview() {
+  if (!props.detail?.file_path) return
+  previewVideoPath.value = props.detail.file_path
+}
+
+function closePreview() {
+  previewVideoPath.value = ''
+}
+
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return notAvailableLabel.value
+  return new Date(dateStr).toLocaleDateString(currentLang.value === 'zh' ? 'zh-CN' : 'en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <Transition name="panel">
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex justify-end"
+      >
+        <!-- Backdrop -->
+        <div
+          class="absolute inset-0 bg-bg-void/80 backdrop-blur-sm"

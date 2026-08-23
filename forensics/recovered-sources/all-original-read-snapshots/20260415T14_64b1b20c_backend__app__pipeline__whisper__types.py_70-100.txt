@@ -1,0 +1,31 @@
+class Sensitivity(str, Enum):
+    """识别敏感度"""
+    CONSERVATIVE = "conservative"  # 保守，减少误识别
+    BALANCED = "balanced"          # 平衡
+    AGGRESSIVE = "aggressive"      # 激进，更多检测
+
+
+class TranslateProvider(str, Enum):
+    """翻译 Provider"""
+    OLLAMA = "ollama"
+    OPENAI = "openai"
+
+
+@dataclass
+class WhisperConfig:
+    """Whisper 处理配置"""
+    strategy: str = "advanced"
+    executor_key: str = "advanced"
+
+    # 模型设置
+    model: WhisperModel = WhisperModel.ANIME
+    device: str = "auto"  # auto/cuda/cpu
+    compute_type: str = "default"  # default/float16/int8
+
+    # Pass 模式
+    # 管线设置
+    pipeline_mode: PipelineMode = PipelineMode.ENSEMBLE
+    merge_strategy: MergeStrategy = MergeStrategy.SMART
+
+    # VAD 设置
+    vad_method: VADMethod = VADMethod.SEMANTIC

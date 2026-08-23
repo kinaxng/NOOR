@@ -1,0 +1,51 @@
+from app.pipeline.whisper.decoupled.qwen3 import WordTimestamp, split_aligned_words_into_segments
+
+
+def test_split_aligned_words_breaks_on_sentence_end():
+    words = [
+        WordTimestamp(word="今日は", start=0.0, end=0.8),
+        WordTimestamp(word="ありがとう。", start=0.8, end=1.6),
+        WordTimestamp(word="また", start=1.7, end=2.2),
+        WordTimestamp(word="来てね。", start=2.2, end=3.0),
+    ]
+    segments = split_aligned_words_into_segments(words)
+    assert segments == [
+        (0.0, 1.6, "今日はありがとう。"),
+        (1.7, 3.0, "また来てね。"),
+    ]
+
+
+def test_split_aligned_words_merges_tiny_trailing_segment():
+    words = [
+        WordTimestamp(word="これは少し長めの本文", start=0.0, end=2.5),
+        WordTimestamp(word="です", start=2.5, end=2.9),
+        WordTimestamp(word="。", start=2.9, end=3.0),
+        WordTimestamp(word="はい", start=3.0, end=3.3),
+    ]
+    segments = split_aligned_words_into_segments(words, max_chars=12, max_duration=2.8, min_chars=4, min_duration=0.9)
+    assert len(segments) == 1
+    assert segments[0][2].endswith("。はい")
+
+--- progress test maybe
+from app.pipeline.whisper.progress import AsyncProgressReporter
+
+
+class _DummyQueue:
+    async def put(self, item):
+        return None
+
+
+def test_progress_reporter_maps_retry_phase():
+    reporter = AsyncProgressReporter('job-1', _DummyQueue())
+    update = reporter.parse_line('[Anime+Qwen3] 补救识别: 命中污染段，切 Qwen3-ASR 二次识别...')
+    assert update is not None
+    assert update.phase_key == 'retry'
+    assert update.phase_label == '补救识别'
+
+
+def test_progress_reporter_maps_chain_completion_to_align():
+    reporter = AsyncProgressReporter('job-1', _DummyQueue())
+    update = reporter.parse_line('Anime+Qwen3 链路完成: 对齐 3/5 · fallback 2 · hardening 5')
+    assert update is not None
+    assert update.phase_key == 'align'
+    assert '已对齐 3 / 5 段' == update.detail

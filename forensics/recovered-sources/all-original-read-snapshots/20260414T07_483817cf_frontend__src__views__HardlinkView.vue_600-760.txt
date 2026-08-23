@@ -1,0 +1,161 @@
+        </VuiButton>
+    </div>
+
+    <div v-else-if="visibleGroups.length === 0" class="empty-state">
+        <BaseIcon name="search" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ emptyFilteredLabel }}</p>
+    </div>
+
+    <div v-else class="groups-list">
+        <div
+          v-for="group in pagedGroups"
+          :key="group.code"
+          class="hl-group"
+          :class="{ 'hl-group--issue': group.status === 'issue' }"
+        >
+          <div class="hl-group__header">
+            <div class="hl-group__summary">
+              <span class="hl-group__code font-mono">{{ group.code }}</span>
+              <span class="hl-group__meta">
+                {{ groupSourceCount(group) }} src · {{ groupHardlinkCount(group) }} hl
+              </span>
+            </div>
+            <div class="hl-group__badges">
+              <VuiBadge v-if="group.status === 'issue'" variant="gradient" color="warning" size="xs">
+                {{ abnormalLabel }}
+              </VuiBadge>
+              <VuiBadge v-if="(group.orphan_count || 0) > 0" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ orphanLabel }} × {{ group.orphan_count }}
+              </VuiBadge>
+              <VuiBadge v-if="group.issues?.includes('unparsed_code')" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ unparsedLabel }}
+              </VuiBadge>
+              <VuiBadge
+                v-if="(group.orphan_count || 0) >= (group.entry_count || group.entries.length)"
+                variant="gradient"
+                color="secondary"
+                size="xs"
+              >
+                {{ orphanSkippedLabel }}
+              </VuiBadge>
+            </div>
+          </div>
+
+          <div class="hl-group__entries">
+            <div
+              v-for="(entry, index) in group.entries"
+              :key="`${group.code}-${entry.source_path || 'orphan'}-${index}`"
+              class="hl-entry-row"
+              :class="{ 'hl-entry--issue': entry.status === 'issue' }"
+            >
+              <div class="hl-col hl-col--source">
+                <div class="hl-col__label">{{ t('hardlinks.mainFile') }}</div>
+                <div class="hl-row hl-row--source" :class="{ 'hl-row--missing': entry.issues?.includes('orphan_source') }">
+                  <span
+                    v-if="entry.source_path"
+                    class="hl-row__path font-mono text-xs"
+                    :title="previewPathLabel"
+                    @click="openVideoPreview(entry.source_path)"
+                  >{{ entry.source_path }}</span>
+                  <span v-else class="hl-row__empty font-mono text-xs">{{ t('hardlinks.missingSource') }}</span>
+                  <button
+                    v-if="entry.source_path"
+                    type="button"
+                    class="row-action-btn row-action-btn--danger row-action-btn--hover-only"
+                    :disabled="isDeletingSource(entry.source_path)"
+                    @click.stop="deleteSourceChain(entry)"
+                  >
+                    {{ deleteSourceChainLabel }}
+                  </button>
+                </div>
+              </div>
+              <div class="hl-col hl-col--hardlinks">
+                <div class="hl-col__label">{{ t('hardlinks.hardlinks') }}</div>
+                <div
+                  v-for="hl in entry.hardlink_paths"
+                  :key="hl"
+                  class="hl-row hl-row--hardlink"
+                >
+                  <span class="hl-row__hl-arrow">→</span>
+                  <span
+                    class="hl-row__path font-mono text-xs"
+                    :title="previewPathLabel"
+                    @click="openVideoPreview(hl)"
+                  >{{ hl }}</span>
+                  <button
+                    type="button"
+                    class="row-action-btn row-action-btn--danger row-action-btn--hover-only"
+                    :disabled="isDeletingHardlink(hl)"
+                    @click.stop="deleteHardlink(hl)"
+                  >
+                    {{ deleteHardlinkLabel }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="hl-group__footer">
+              <VuiButton
+                variant="text"
+                color="secondary"
+                size="small"
+                @click="previewGroupDelete(group)"
+              >
+                {{ previewDeleteLabel }}
+              </VuiButton>
+              <VuiButton
+                variant="text"
+                color="error"
+                size="small"
+                :loading="isDeletingGroup(group.code)"
+                @click="deleteGroup(group)"
+              >
+                {{ deleteGroupLabel }}
+              </VuiButton>
+            </div>
+          </div>
+        </div>
+    </div>
+
+    <div v-if="visibleGroups.length > pageSize" class="pagination-bar pagination-bar--bottom">
+        <span class="pagination-bar__meta">{{ pageCounterLabel }}</span>
+        <div class="pagination-bar__actions">
+          <VuiButton variant="text" color="secondary" size="small" :disabled="currentPage <= 1" @click="goPrevPage">
+            {{ prevPageLabel }}
+          </VuiButton>
+          <VuiButton variant="text" color="secondary" size="small" :disabled="currentPage >= totalPages" @click="goNextPage">
+            {{ nextPageLabel }}
+          </VuiButton>
+        </div>
+    </div>
+
+    <div v-if="mediaStore.hardlinkScanning" class="scan-overlay">
+      <div class="scan-overlay__card">
+        <div class="scan-overlay__spinner"></div>
+        <span>{{ scanBtnLabel }}</span>
+      </div>
+    </div>
+
+    <BaseModal
+      v-if="previewVideoPath"
+      :title="previewVideoName"
+      size="lg"
+      @close="closeVideoPreview"
+    >
+      <div class="preview-modal">
+        <div class="preview-modal__meta font-mono text-xs">{{ previewVideoPath }}</div>
+        <video
+          :key="previewVideoUrl"
+          class="preview-modal__player"
+          :src="previewVideoUrl"
+          controls
+          autoplay
+          preload="metadata"
+        />
+        <p class="preview-modal__hint">{{ previewUnsupportedLabel }}</p>
+      </div>
+    </BaseModal>
+  </div>
+</template>
+
+<style scoped>
+.page-header {

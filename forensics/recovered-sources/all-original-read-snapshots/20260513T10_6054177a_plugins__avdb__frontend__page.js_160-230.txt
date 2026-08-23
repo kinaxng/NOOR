@@ -1,0 +1,55 @@
+    const head = el('div', 'avdb-modal-head')
+    head.append(el('strong', '', it.number || it.title || 'AVDB 元数据'))
+    const close = el('button', 'avdb-modal-close', '×')
+    close.onclick = closeModal
+    head.appendChild(close)
+    const content = el('div', 'avdb-modal-body', '加载中…')
+    modal.append(head, content)
+    mask.appendChild(modal)
+    modalRoot.appendChild(mask)
+    mask.onclick = (e) => { if (e.target === mask) closeModal() }
+    try {
+      const r = await sdk.api.post('/plugins/avdb/actions/emby_meta', { payload: { id: it.id } })
+      const data = r.data.data || {}
+      content.innerHTML = ''
+      content.append(el('h3', '', data.title || it.title || ''))
+      if (Array.isArray(data.actors) && data.actors.length) content.append(el('div', 'avdb-modal-line', `演员：${data.actors.join('、')}`))
+      content.append(el('p', 'avdb-overview', data.overview || '暂无简介'))
+    } catch (e) {
+      content.textContent = e?.response?.data?.detail || e?.message || '元数据读取失败'
+    }
+  }
+
+  function updatePushButton(id, status, pct, label = '') {
+    state.pushState[id] = { status, pct }
+    const btn = state.pushButtons[id]
+    if (btn?.__setState) btn.__setState(status, pct, label)
+  }
+  async function pushDownload(it) {
+    if (state.pushState[it.id]?.status === 'running') return
+    updatePushButton(it.id, 'running', 8, '8%')
+    const timer = setInterval(() => {
+      const ps = state.pushState[it.id]
+      if (!ps || ps.status !== 'running') return
+      const next = Math.min(92, Number(ps.pct || 0) + 9)
+      updatePushButton(it.id, 'running', next, `${Math.round(next)}%`)
+    }, 180)
+    try {
+      const opts = await sdk.api.post('/plugins/avdb/actions/download_options', { payload: {} })
+      const downloader = opts.data.downloader_binding || 'none'
+      if (!downloader || downloader === 'none') throw new Error('AVDB 未绑定下载器')
+      const r = await sdk.api.post(`/plugins/${downloader}/downloads`, { payload: { url: it.download_url, urls: it.download_url, title: it.title, name: it.title, source_plugin: 'avdb' } })
+      if (!r.data?.ok) throw new Error(r.data?.message || '推送失败')
+      updatePushButton(it.id, 'success', 100, '已推送')
+      sdk.toast.success('已推送到下载器')
+    } catch (e) {
+      updatePushButton(it.id, 'error', 100, '重试')
+      sdk.toast.error(e?.response?.data?.detail || e?.message || '推送失败')
+    } finally {
+      clearInterval(timer)
+    }
+  }
+
+  await Promise.all([loadStats(), loadItems()])
+  return () => { disposed = true; clearTimeout(timer); root.innerHTML = '' }
+}

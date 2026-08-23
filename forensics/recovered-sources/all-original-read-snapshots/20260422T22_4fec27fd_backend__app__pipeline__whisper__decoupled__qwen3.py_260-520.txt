@@ -1,0 +1,99 @@
+        duration = max(0.0, end - start)
+        is_tiny = len(cleaned) < min_chars or duration < min_duration
+        punctuation_only = bool(cleaned) and all(ch in '、，,。.!！？?…・' for ch in cleaned)
+        if merged and (is_tiny or punctuation_only):
+            prev_start, prev_end, prev_text = merged[-1]
+            combined_text = f"{prev_text}{cleaned}"
+            combined_duration = max(0.0, end - float(prev_start))
+            if len(combined_text) <= max_chars + 6 and combined_duration <= max_duration + 1.5:
+                merged[-1] = [prev_start, end, combined_text]
+                continue
+        merged.append([start, end, cleaned])
+
+    if len(merged) >= 2:
+        last_start, last_end, last_text = merged[-1]
+        last_duration = max(0.0, float(last_end) - float(last_start))
+        if len(str(last_text)) < min_chars or last_duration < min_duration:
+            prev_start, prev_end, prev_text = merged[-2]
+            merged[-2] = [prev_start, last_end, f"{prev_text}{last_text}"]
+            merged.pop()
+
+    return [(float(start), float(end), str(text)) for start, end, text in merged if str(text).strip()]
+
+
+class Qwen3TextGenerator:
+    def __init__(
+        self,
+        *,
+        model_id: str = "Qwen/Qwen3-ASR-1.7B",
+        device: str = "auto",
+        dtype: str = "auto",
+        batch_size: int = 1,
+        max_new_tokens: int = 512,
+    ) -> None:
+        self.model_id = model_id
+        self.device = device
+        self.dtype = dtype
+        self.batch_size = batch_size
+        self.max_new_tokens = max_new_tokens
+        self._model = None
+
+    def _resolve_device_dtype(self) -> tuple[str, Any]:
+        import torch
+        if self.device == "auto":
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        elif self.device == "cuda":
+            device = "cuda:0"
+        else:
+            device = self.device
+
+        if self.dtype == "auto":
+            if device.startswith("cuda"):
+                dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+            else:
+                dtype = torch.float32
+        else:
+            dtype = getattr(torch, self.dtype)
+        return device, dtype
+
+    def load(self) -> None:
+        if self._model is not None:
+            return
+        from qwen_asr import Qwen3ASRModel
+        device, dtype = self._resolve_device_dtype()
+        logger.info("[Qwen3TextGen] loading %s (%s, %s)", self.model_id, device, dtype)
+        self._model = Qwen3ASRModel.from_pretrained(
+            self.model_id,
+            dtype=dtype,
+            device_map=device,
+            max_inference_batch_size=self.batch_size,
+            max_new_tokens=self.max_new_tokens,
+        )
+
+    def unload(self) -> None:
+        if self._model is None:
+            return
+        self._model = None
+        try:
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except Exception:
+            pass
+
+    def transcribe_one(self, audio_path: Path, *, language: str = 'ja', context: str = '') -> str:
+        if self._model is None:
+            raise RuntimeError('Qwen3TextGenerator.transcribe_one() called before load()')
+        normalized_language = _normalize_language(language)
+        result = self._model.transcribe(
+            audio=[str(audio_path)],
+            context=[context],
+            language=normalized_language,
+            return_time_stamps=False,
+        )
+        if not result:
+            return ''
+        return (getattr(result[0], 'text', '') or '').strip()

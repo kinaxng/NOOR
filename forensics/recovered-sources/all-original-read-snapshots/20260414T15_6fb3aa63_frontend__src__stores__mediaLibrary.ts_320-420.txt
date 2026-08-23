@@ -1,0 +1,101 @@
+      }
+      return { ok: true, count: resp.data.total_count, totalEntries: resp.data.total_entries }
+    } catch (e: any) {
+      return { ok: false, error: e?.response?.data?.detail || e.message }
+    } finally {
+      hardlinkScanning.value = false
+    }
+  }
+
+  const filteredItems = computed(() => {
+    if (!filterTag.value) return items.value
+
+    return items.value.filter(item => {
+      const tags = item.tags
+      if (!tags) return false
+
+      switch (filterTag.value) {
+        case 'cracked':
+          return tags.is_cracked
+        case 'chinese':
+          return tags.has_chinese
+        case 'leaked':
+          return tags.release_type_key === 'leaked'
+        case 'uncensored':
+          return tags.release_type_key === 'uncensored'
+        default:
+          return true
+      }
+    })
+  })
+
+  // Tag counts for dashboard stats (same filter logic as filteredItems)
+  const tagCounts = computed(() => {
+    const all = items.value
+    function setSearch(query: string) {
+    searchQuery.value = query
+    currentPage.value = 1
+    if (selectedLibrary.value) {
+      fetchItems(selectedLibrary.value.id, 1, filterTag.value, query)
+      return
+    }
+    const fallbackLibrary = libraries.value[0] || null
+    if (fallbackLibrary) {
+      selectLibrary(fallbackLibrary)
+      fetchItems(fallbackLibrary.id, 1, filterTag.value, query)
+    }
+  }
+
+  return {
+      total: total.value,
+      cracked: all.filter(i => i.tags?.is_cracked).length,
+      chinese: all.filter(i => i.tags?.has_chinese).length,
+      leaked: all.filter(i => i.tags?.release_type_key === 'leaked').length,
+      uncensored: all.filter(i => i.tags?.release_type_key === 'uncensored').length,
+    }
+  })
+
+  function setSearch(query: string) {
+    searchQuery.value = query
+    currentPage.value = 1
+    if (selectedLibrary.value) {
+      fetchItems(selectedLibrary.value.id, 1, filterTag.value, query)
+      return
+    }
+    const fallbackLibrary = libraries.value[0] || null
+    if (fallbackLibrary) {
+      selectLibrary(fallbackLibrary)
+      fetchItems(fallbackLibrary.id, 1, filterTag.value, query)
+    }
+  }
+
+  return {
+    allLibraries,
+    libraries,
+    enabledLibraryIds,
+    items,
+    selectedLibrary,
+    selectedItem,
+    loading,
+    detailLoading,
+    error,
+    total,
+    currentPage,
+    pageSize,
+    filterTag,
+    searchQuery,
+    totalPages,
+    filteredItems,
+    tagCounts,
+    fetchLibraries,
+    fetchItems,
+    fetchAllItems,
+    fetchItemDetail,
+    selectLibrary,
+    clearSelectedItem,
+    setFilter,
+    setSearch,
+    nextPage,
+    prevPage,
+    invalidateCache,
+    hardlinkGroups,

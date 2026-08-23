@@ -1,0 +1,234 @@
+                <div v-if="detail.nfo?.outline || detail.nfo?.plot" class="detail-panel-block">
+                  <span class="text-[10px] text-text-muted uppercase tracking-wider">{{ plotLabel }}</span>
+                  <div class="mt-2 space-y-2">
+                    <p v-if="detail.nfo?.outline" class="text-sm text-text-secondary leading-relaxed">
+                      {{ detail.nfo.outline }}
+                    </p>
+                    <p v-if="detail.nfo?.plot" class="text-sm text-text-secondary leading-relaxed">
+                      {{ detail.nfo.plot }}
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="ui-card detail-panel-section">
+                <div class="detail-panel-section__head">
+                  <span class="detail-panel-section__title">{{ filesLabel }}</span>
+                  <span v-if="variantCount > 1" class="detail-panel-section__meta">{{ variantCount }} · {{ selectedVariantName }}</span>
+                </div>
+                <div v-if="variantCount > 1" class="detail-panel-strip">
+                  选择下方版本后，顶部播放按钮会直接播放当前选中的版本。
+                </div>
+
+                <div v-if="variantRows.length">
+                  <span class="text-[10px] text-text-muted uppercase tracking-wider">{{ pathLabel }}</span>
+                  <div class="mt-2 space-y-2">
+                    <div
+                      v-for="variant in variantRows"
+                      :key="variant.path"
+                      class="detail-variant-card rounded-lg border border-white/6 bg-bg-elevated/80 p-2.5"
+                      :class="{ 'detail-variant-card--active': selectedVariant?.path === variant.path }"
+                      @click="selectVariant(variant.path)"
+                    >
+                      <div class="mb-2 flex items-center justify-between gap-2">
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs font-medium text-text-primary">{{ variant.name }}</span>
+                            <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/45">{{ variant.label }}</span>
+                            <span v-if="selectedVariant?.path === variant.path" class="detail-variant-card__selected">已选中</span>
+                            <span
+                              v-for="tag in variantTagItems(variant.tags)"
+                              :key="`${variant.path}-${tag.key}`"
+                              class="rounded-full px-2 py-0.5 text-[10px]"
+                              :class="{
+                                'border border-emerald-400/20 bg-emerald-500/10 text-emerald-200': tag.tone === 'green',
+                                'border border-sky-400/20 bg-sky-500/10 text-sky-200': tag.tone === 'blue',
+                                'border border-amber-400/20 bg-amber-500/10 text-amber-200': tag.tone === 'amber',
+                                'border border-white/15 bg-white/10 text-white/75': tag.tone === 'slate',
+                              }"
+                            >
+                              {{ tag.label }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <p class="break-all rounded bg-black/15 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-text-secondary">
+                        {{ variant.path }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Fixed Close Button -->
+              <button
+                @click="handleClose"
+                class="absolute top-4 right-4 w-10 h-10 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-default transition-colors shadow-lg"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+            </div>
+          </template>
+
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <BaseModal
+    v-if="previewVideoPath"
+    :title="previewVideoName"
+    size="lg"
+    @close="closePreview"
+  >
+    <div class="preview-modal">
+      <div class="preview-modal__meta font-mono text-xs">{{ previewVideoPath }}</div>
+      <video
+        :key="previewVideoUrl"
+        class="preview-modal__player"
+        :src="previewVideoUrl"
+        controls
+        autoplay
+        preload="metadata"
+      />
+      <p class="preview-modal__hint">{{ previewUnsupportedLabel }}</p>
+    </div>
+  </BaseModal>
+</template>
+
+<style scoped>
+
+.detail-variant-card {
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.detail-variant-card:hover {
+  border-color: rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+}
+
+.detail-variant-card--active {
+  border-color: rgba(0, 117, 255, 0.45);
+  background: rgba(0, 117, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(0, 117, 255, 0.14);
+}
+
+.detail-variant-card__selected {
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 10px;
+  color: rgba(189, 225, 255, 0.95);
+  background: rgba(0, 117, 255, 0.18);
+  border: 1px solid rgba(0, 117, 255, 0.24);
+}
+
+
+.detail-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.detail-panel-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.detail-panel-section__title {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.detail-panel-section__meta {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.detail-panel-strip {
+  margin-top: -0.25rem;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.04);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.detail-panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.panel-enter-active {
+  transition: opacity 0.25s ease;
+}
+.panel-enter-active .bg-bg-surface {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.panel-enter-from {
+  opacity: 0;
+}
+.panel-enter-from .bg-bg-surface {
+  transform: translateX(100%);
+}
+.panel-leave-active {
+  transition: opacity 0.2s ease;
+}
+.panel-leave-to {
+  opacity: 0;
+}
+.panel-leave-from .bg-bg-surface {
+  transform: translateX(100%);
+}
+
+.preview-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.preview-modal__meta {
+  color: var(--color-text-muted);
+
+--- i18n detail keys around here ---
+  'detail.added': '入库',
+  'detail.rating': '评分',
+  'detail.actors': '演员',
+  'detail.genres': '类型',
+  'detail.director': '导演',
+  'detail.series': '系列',
+  'detail.publisher': '发行方',
+  'detail.plot': '剧情',
+  'detail.path': '路径',
+  'detail.overview': '基本信息',
+  'detail.files': '文件 / 版本',
+  'detail.actions': '操作',
+  'detail.openSubtitle': '字幕 / Whisper',
+  'detail.openLada': 'LADA 处理',
+  'detail.variant.current': '当前版本',
+  'detail.variant.primary': '主版本',
+  'detail.variant.other': '其他版本',
+  'detail.selectFile': '选择文件',
+  'detail.collapseActors': '收起',
+  'detail.duration': '时长',
+  'detail.year': '年份',
+  'detail.studio': '片商',
+  'detail.unwatched': '未看',
+  'detail.watched': '已看',
+  'detail.quickCrack': '快速破解',
+  'detail.selectSubtitle': '选择字幕',
+  'detail.noSubtitles': '暂无字幕',
+  'detail.downloadSubtitle': '下载字幕',
+  'detail.playPreview': '播放预览',
+
+  // 字幕

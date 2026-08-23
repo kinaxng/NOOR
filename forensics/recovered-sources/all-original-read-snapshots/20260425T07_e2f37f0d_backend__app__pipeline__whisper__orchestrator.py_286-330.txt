@@ -1,0 +1,55 @@
+                "stepdown_segments": 0,
+                "aligner_empty_segments": 0,
+                "hardened_segments": 0,
+                "stepdown_window_total": 0,
+                "segments": [],
+            }
+
+        segment_rows: list[dict] = []
+        aligned_segments = 0
+        qwen_retry_segments = 0
+        stepdown_segments = 0
+        aligner_empty_segments = 0
+        hardened_segments = 0
+        stepdown_window_total = 0
+
+        for idx, result in enumerate(results, start=1):
+            metadata = result.metadata or {}
+            chain_state = str(metadata.get("anime_qwen3_chain") or "")
+            aligned = chain_state == "qwen3_forced_aligner"
+            qwen_retry = bool(metadata.get("recommended_qwen_retry") or metadata.get("anime_qwen3_retry"))
+            stepdown = bool(metadata.get("recommended_stepdown_retry"))
+            aligner_empty = chain_state == "aligner_empty"
+            hardened = bool(metadata.get("hardening_applied"))
+            window_count = int(metadata.get("recommended_stepdown_window_count") or 0)
+            qwen_reason = str(metadata.get("recommended_qwen_retry_reason") or "")
+            stepdown_reason = str(metadata.get("recommended_stepdown_reason") or "")
+
+            aligned_segments += int(aligned)
+            qwen_retry_segments += int(qwen_retry)
+            stepdown_segments += int(stepdown)
+            aligner_empty_segments += int(aligner_empty)
+            hardened_segments += int(hardened)
+            stepdown_window_total += window_count
+
+            segment_rows.append({
+                "index": idx,
+                "source": result.source,
+                "subtitle_count": len(result.segments),
+                "chain_state": chain_state or metadata.get("chain_stage") or "",
+                "qwen_retry": qwen_retry,
+                "qwen_retry_reason": qwen_reason,
+                "stepdown": stepdown,
+                "stepdown_reason": stepdown_reason,
+                "stepdown_window_count": window_count,
+                "aligner_empty": aligner_empty,
+---
+                f"Qwen fallback {recommended_segment_diagnostics['qwen_retry_segments']} · "
+                f"step-down {recommended_segment_diagnostics['stepdown_segments']}",
+            )
+        if len(all_results) == 1:
+            result = all_results[0]
+        else:
+            result = self._merge_all_results(all_results)
+            self.log(f"段落合并完成: {len(result.segments)} 片段", 90)
+        if recommended_segment_diagnostics is not None:

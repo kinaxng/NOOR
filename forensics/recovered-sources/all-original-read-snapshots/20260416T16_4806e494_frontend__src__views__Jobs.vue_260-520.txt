@@ -1,0 +1,202 @@
+    if (status === 'running') return runningStatusLabel.value(0)
+    if (status === 'blocked') return blockedStatusLabel.value
+    if (status === 'queued') return queuedStatusLabel.value
+    if (status === 'completed') return completedStatusLabel.value
+    if (status === 'failed') return failedStatusLabel.value
+    if (status === 'cancelled') return cancelledStatusLabel.value
+    if (status === 'skipped') return skippedStatusLabel.value
+    return status
+  }
+})
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <VisionTabs v-model="activeTab" :tabs="filterTabs" />
+      <VuiButton variant="gradient" color="info" size="small" @click="cleanupOrphanedJobs">
+        {{ cleanupLabel }}
+      </VuiButton>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Jobs List -->
+      <div class="lg:col-span-2 space-y-4">
+
+        <!-- Running/Queued jobs -->
+        <div v-if="showRunning && runningTabJobs.length > 0" class="space-y-3">
+          <div
+            v-for="job in runningTabJobs"
+            :key="job.id"
+            class="job-card ui-card p-4 cursor-pointer"
+            :class="selectedJobId === job.id ? 'job-card--selected' : ''"
+            @click="selectJob(job)"
+          >
+            <div class="flex items-start gap-3">
+              <div class="job-card__icon" :class="job.status === 'running' ? 'job-card__icon--running' : 'job-card__icon--queued'">
+                <BaseIcon :name="job.status === 'running' ? 'loading' : 'clock'" class="w-4 h-4" :class="job.status === 'running' ? 'animate-spin' : ''" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span
+                      v-if="job.job_type === 'translate-srt' || job.job_type === 'subtitle_translate'"
+                      class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 shrink-0"
+                    >{{ t('jobs.translateTag') }}</span>
+                    <p class="text-sm font-medium truncate text-white font-display">
+                      {{ job.emby_item_name || job.input_path?.split('/').pop() }}
+                    </p>
+                  </div>
+                  <VuiBadge variant="gradient" :color="job.status === 'running' ? 'info' : 'warning'" size="xs">
+                    {{ job.status === 'running' ? (getJobStatus(job.id) || runningStatusLabel(0)) : fallbackJobStatusLabel(job.status) }}
+                  </VuiBadge>
+                </div>
+                <p v-if="getJobPhaseLabel(job)" class="text-xs text-white/50 mb-2">{{ getJobPhaseLabel(job) }}</p>
+                <p v-if="getJobDetail(job)" class="text-xs text-white/35 mb-2 truncate">{{ getJobDetail(job) }}</p>
+                <template v-if="job.status === 'running'">
+                  <div class="flex items-center gap-2">
+                    <VuiProgress :value="getJobProgress(job.id)" color="primary" variant="gradient" class="flex-1" />
+                    <span class="text-xs text-white/40 min-w-[2.5rem]">{{ getJobProgress(job.id) }}%</span>
+                    <VuiButton variant="outlined" color="error" size="small" @click.stop="cancelJob(job.id)">
+                      {{ cancelTaskLabel }}
+                    </VuiButton>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Completed jobs -->
+        <div v-if="showCompleted && completedTabJobs.length > 0" class="space-y-3">
+          <div
+            v-for="job in completedTabJobs"
+            :key="job.id"
+            class="job-card ui-card p-4 cursor-pointer"
+            :class="selectedJobId === job.id ? 'job-card--selected' : ''"
+            @click="selectJob(job)"
+          >
+            <div class="flex items-start gap-3">
+              <div class="job-card__icon job-card__icon--completed">
+                <BaseIcon name="check" class="w-4 h-4" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-sm font-medium truncate text-white font-display">
+                    {{ job.emby_item_name || job.input_path?.split('/').pop() }}
+                  </p>
+                  <VuiBadge variant="gradient" color="success" size="xs">{{ tabCompletedLabel }}</VuiBadge>
+                </div>
+                <p class="text-xs text-white/40">{{ job.completed_at ? new Date(job.completed_at).toLocaleString(currentLang === 'zh' ? 'zh-CN' : 'en-US') : '' }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Failed jobs -->
+        <div v-if="showFailed && failedTabJobs.length > 0" class="space-y-3">
+          <div
+            v-for="job in failedTabJobs"
+            :key="job.id"
+            class="job-card ui-card p-4 cursor-pointer"
+            :class="selectedJobId === job.id ? 'job-card--selected' : ''"
+            @click="selectJob(job)"
+          >
+            <div class="flex items-start gap-3">
+              <div class="job-card__icon job-card__icon--failed">
+                <BaseIcon name="x" class="w-4 h-4" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-sm font-medium truncate text-white font-display">
+                    {{ job.emby_item_name || job.input_path?.split('/').pop() }}
+                  </p>
+                  <VuiBadge variant="gradient" color="error" size="xs">{{ tabFailedLabel }}</VuiBadge>
+                </div>
+                <p class="text-xs text-white/40 truncate">{{ job.error_message }}</p>
+                <p class="text-xs text-white/40">{{ job.completed_at ? new Date(job.completed_at).toLocaleString(currentLang === 'zh' ? 'zh-CN' : 'en-US') : '' }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div
+          v-if="currentTabJobs.length === 0"
+          class="empty-state-card ui-card flex flex-col items-center justify-center py-16 text-center"
+        >
+          <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 empty-state-icon">
+            <BaseIcon name="jobs" class="w-7 h-7 text-white/20" />
+          </div>
+          <h3 class="text-base font-medium mb-1 text-white font-display">{{ currentTabTitle }}</h3>
+          <p class="text-sm text-white/30">{{ currentEmptyLabel }}</p>
+        </div>
+      </div>
+
+      <!-- Log Viewer -->
+      <div class="lg:col-span-1">
+        <div class="log-card ui-card sticky top-24">
+          <div class="px-4 py-3 flex items-center justify-between log-card__header">
+            <h3 class="text-sm font-medium log-card__title">{{ logsTitleLabel }}</h3>
+            <span v-if="selectedJobId" class="text-xs font-mono text-white/30">
+              {{ getJobStatus(selectedJobId) || t('jobs.status.connecting') }}
+            </span>
+          </div>
+          <LogViewer :logs="logs" :auto-scroll="true" />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.job-card {
+  transition: all var(--transition-normal);
+}
+
+.job-card:hover {
+  border-color: rgba(0, 117, 255, 0.3);
+  box-shadow: 0 8px 26px -4px rgba(0, 117, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.job-card--selected {
+  border-color: rgba(0, 117, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(0, 117, 255, 0.2), 0 8px 26px -4px rgba(0, 117, 255, 0.25);
+}
+
+.job-card__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.job-card__icon--running {
+  background: rgba(0, 117, 255, 0.15);
+  color: #0075FF;
+}
+
+.job-card__icon--queued {
+  background: rgba(255, 181, 71, 0.15);
+  color: #FFB547;
+}
+
+.job-card__icon--completed {
+  background: rgba(1, 181, 116, 0.15);
+  color: #01B574;
+}
+
+.job-card__icon--failed {
+  background: rgba(227, 26, 26, 0.15);
+  color: #E31A1A;
+}
+
+.log-card {
+  min-width: 0;
+}
+</style>

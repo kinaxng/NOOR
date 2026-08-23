@@ -1,0 +1,361 @@
+async function selectJob(job: any) {
+  selectedJobId.value = job.id
+  logs.value = []
+
+  try {
+    const resp = await api.get(`/jobs/${job.id}/logs`)
+    const historicalLogs = Array.isArray(resp.data) ? resp.data :
+                           Array.isArray(resp.data?.logs) ? resp.data.logs : []
+    for (const line of historicalLogs.slice(-MAX_VISIBLE_LOG_LINES)) {
+      appendVisibleLog({ time: '', line: line })
+    }
+  } catch (e) {
+    console.error('Failed to load job logs:', e)
+  }
+
+  if (shouldWatchJob(job) && !watchedJobIds.value.has(job.id)) {
+    void watchJob(job.id)
+  }
+}
+
+async function cancelJob(jobId: string) {
+  try {
+    await api.post(`/jobs/${jobId}/cancel`)
+    await jobsStore.fetchJobs()
+
+    const refreshedJob = jobsStore.jobs.find(j => j.id === jobId)
+    if (refreshedJob) {
+      const progress = refreshedJob.progress || jobStatuses.value[jobId]?.progress || 0
+      jobStatuses.value[jobId] = {
+        status: refreshedJob.status === 'running'
+          ? getRunningBadgeLabel.value({ status: 'running' }, '')
+          : fallbackStatusLabel.value(refreshedJob.status),
+        progress,
+        phaseKey: refreshedJob.phase_key,
+        phaseLabel: refreshedJob.phase_label,
+        detail: refreshedJob.detail,
+        phaseProgress: refreshedJob.phase_progress,
+      }
+    }
+
+    toast.success(t(refreshedJob?.status === 'cancelled' ? 'jobs.cancelSuccess' : 'jobs.cancelRequested'))
+  } catch (e: any) {
+    console.error('Cancel failed:', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message }))
+  }
+}
+
+async function cleanupOrphanedJobs() {
+  try {
+    const resp = await api.post('/jobs/cleanup')
+    const cleaned = resp.data.cleaned
+    const cleanedJobIds: string[] = Array.isArray(resp.data.cleaned_job_ids) ? resp.data.cleaned_job_ids : []
+    if (cleaned > 0) {
+      toast.success(t('jobs.cleanup.done', { n: cleaned }))
+      jobsStore.pruneJobs(cleanedJobIds)
+      for (const jobId of cleanedJobIds) {
+        delete jobStatuses.value[jobId]
+      }
+    } else {
+      toast.info(t('jobs.cleanup.none'))
+    }
+  } catch (e: any) {
+    console.error('Cleanup failed:', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message }))
+  }
+}
+
+const tabRunningLabel = computed(() => t('jobs.running'))
+const tabCompletedLabel = computed(() => t('history.filter.completed'))
+const tabFailedLabel = computed(() => t('history.filter.failed'))
+const emptyRunningLabel = computed(() => t('jobs.noRunning'))
+const emptyCompletedLabel = computed(() => t('history.noHistory'))
+const emptyFailedLabel = computed(() => t('history.noHistory'))
+const cleanupLabel = computed(() => t('jobs.cleanup'))
+const cancelTaskLabel = computed(() => t('jobs.cancelTask'))
+const logsTitleLabel = computed(() => t('jobs.logsTitle'))
+const chainTitleLabel = computed(() => t('jobs.chain.title'))
+
+// Tab: running / completed / failed (includes cancelled)
+const activeTab = ref<'running' | 'completed' | 'failed'>('running')
+const filterTabs = computed(() => [
+  { key: 'running', label: `${tabRunningLabel.value} ${runningTabJobs.value.length}` },
+  { key: 'completed', label: `${tabCompletedLabel.value} ${completedTabJobs.value.length}` },
+  { key: 'failed', label: `${tabFailedLabel.value} ${failedTabJobs.value.length}` },
+])
+
+function getCreatedAt(job: any) {
+  return new Date(job.created_at || 0).getTime()
+}
+
+function getChainSortOrder(job: any) {
+  if (job.depends_on_task_id) return 1
+  if (job.parent_task_id) return 1
+  return 0
+}
+
+function sortJobsForList(jobs: any[]) {
+  return [...jobs].sort((a, b) => {
+    if (a.chain_id && b.chain_id && a.chain_id === b.chain_id) {
+      const orderDiff = getChainSortOrder(a) - getChainSortOrder(b)
+      if (orderDiff !== 0) return orderDiff
+    }
+    return getCreatedAt(b) - getCreatedAt(a)
+  })
+}
+
+const runningTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'running' || j.status === 'queued' || j.status === 'blocked')))
+const completedTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'completed')))
+const failedTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'failed' || j.status === 'cancelled' || j.status === 'skipped')))
+
+const currentTabJobs = computed(() => {
+  if (activeTab.value === 'running') return runningTabJobs.value
+  if (activeTab.value === 'completed') return completedTabJobs.value
+  return failedTabJobs.value
+})
+
+const currentTabTitle = computed(() => {
+  if (activeTab.value === 'running') return tabRunningLabel.value
+  if (activeTab.value === 'completed') return tabCompletedLabel.value
+  return tabFailedLabel.value
+})
+const currentEmptyLabel = computed(() => {
+  if (activeTab.value === 'running') return emptyRunningLabel.value
+  if (activeTab.value === 'completed') return emptyCompletedLabel.value
+  return emptyFailedLabel.value
+})
+
+function getJobProgress(jobId: string) {
+  return jobStatuses.value[jobId]?.progress ?? jobsStore.jobs.find(j => j.id === jobId)?.progress ?? 0
+}
+
+function getJobStatus(jobId: string) {
+  return jobStatuses.value[jobId]?.status ?? ''
+}
+
+
+function getJobPhaseLabel(job: any) {
+  return getEffectiveViewState.value(job, {
+    phaseKey: jobStatuses.value[job.id]?.phaseKey,
+    phaseLabel: jobStatuses.value[job.id]?.phaseLabel,
+    detail: jobStatuses.value[job.id]?.detail,
+  }).phaseLabel
+}
+
+function getJobPhaseProgress(job: any) {
+  return jobStatuses.value[job.id]?.phaseProgress ?? job.phase_progress ?? 0
+}
+
+const selectedJob = computed(() => selectedJobId.value ? (jobsStore.jobs.find(job => job.id === selectedJobId.value) || null) : null)
+const selectedJobChain = computed(() => selectedJob.value ? getChainMembers.value(selectedJob.value) : [])
+
+function getChainMemberStatus(member: any) {
+  return getEffectiveViewState.value(member, {
+    status: getJobStatus(member.id),
+  }).statusLabel
+}
+
+function getChainMemberColor(member: any) {
+  return getStatusTone.value(member)
+}
+
+function getChainMemberPhaseLine(member: any) {
+  return getDisplayPhaseLine.value(member, {
+    phaseKey: jobStatuses.value[member.id]?.phaseKey,
+    phaseLabel: jobStatuses.value[member.id]?.phaseLabel,
+    detail: jobStatuses.value[member.id]?.detail,
+  })
+}
+
+function getChainMemberProgress(member: any) {
+  return getJobProgress(member.id)
+}
+
+function getChainMemberProgressText(member: any) {
+  if (member.status === 'completed') return '100%'
+  if (member.status === 'queued' || member.status === 'blocked') return '—'
+  const phaseProgress = getJobPhaseProgress(member)
+  if (member.status === 'running' && phaseProgress > 0) return `${getChainMemberProgress(member)}% · ${phaseProgress}%`
+  const progress = getChainMemberProgress(member)
+  return progress > 0 ? `${progress}%` : '—'
+}
+
+function isTranslateJob(job: any) {
+  return job.job_type === 'translate-srt' || job.job_type === 'subtitle_translate'
+}
+
+function isPrimaryChainJob(job: any) {
+  return getChainRoleLabel.value(job) === t('jobs.chain.rolePrimary')
+}
+
+function isFollowupChainJob(job: any) {
+  return getChainRoleLabel.value(job) === t('jobs.chain.roleFollowup')
+}
+
+function getJobCardClass(job: any) {
+  return {
+    'job-card--selected': selectedJobId.value === job.id,
+    'job-card--flash': flashJobId.value === job.id,
+    'job-card--chain-primary': isPrimaryChainJob(job),
+    'job-card--chain-followup': isFollowupChainJob(job),
+  }
+}
+
+function getJobChainLine(job: any) {
+  if (!job.chain_id) return ''
+  return getChainFlowLabel.value(job)
+}
+
+function getJobCardView(job: any) {
+  return getCardView.value(job, {
+    status: getJobStatus(job.id),
+    phaseKey: jobStatuses.value[job.id]?.phaseKey,
+    phaseLabel: jobStatuses.value[job.id]?.phaseLabel,
+    detail: jobStatuses.value[job.id]?.detail,
+  })
+}
+
+function getJobProgressView(job: any) {
+  return getProgressView.value(job, {
+    progress: getJobProgress(job.id),
+    phaseKey: jobStatuses.value[job.id]?.phaseKey,
+    phaseLabel: jobStatuses.value[job.id]?.phaseLabel,
+    phaseProgress: getJobPhaseProgress(job),
+    detail: jobStatuses.value[job.id]?.detail,
+  })
+}
+
+function getJobDescriptionView(job: any) {
+  return getDescriptionView.value(job, {
+    status: getJobStatus(job.id),
+    phaseKey: jobStatuses.value[job.id]?.phaseKey,
+    phaseLabel: jobStatuses.value[job.id]?.phaseLabel,
+    detail: jobStatuses.value[job.id]?.detail,
+  })
+}
+
+function showJobTypeChip() {
+  return activeTab.value === 'running'
+}
+
+function showJobProgressPanel() {
+  return activeTab.value === 'running'
+}
+
+function showJobSummaryLine() {
+  return activeTab.value === 'running'
+}
+
+function showJobMetaLine() {
+  return activeTab.value === 'failed'
+}
+
+function showJobCompletedAt() {
+  return activeTab.value === 'completed' || activeTab.value === 'failed'
+}
+
+function getJobCompletedAt(job: Job) {
+  if (!job.completed_at) return ''
+  return new Date(job.completed_at).toLocaleString(currentLang.value === 'zh' ? 'zh-CN' : 'en-US')
+}
+
+
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <!-- Header -->
+    <div class="jobs-toolbar flex items-center justify-between gap-4">
+      <VisionTabs v-model="activeTab" :tabs="filterTabs" />
+      <VuiButton variant="contained" color="info" size="small" customClass="jobs-toolbar__action" @click="cleanupOrphanedJobs">
+        {{ cleanupLabel }}
+      </VuiButton>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Jobs List -->
+      <div class="lg:col-span-2 space-y-4">
+        <div v-if="currentTabJobs.length > 0" class="space-y-3">
+          <div
+            v-for="job in currentTabJobs"
+            :key="job.id"
+            class="job-card ui-card p-4 cursor-pointer"
+            :class="getJobCardClass(job)"
+            @click="selectJob(job)"
+          >
+            <div class="flex items-start gap-3">
+              <div class="job-card__icon" :class="getJobCardView(job).iconClass">
+                <BaseIcon :name="getJobCardView(job).iconName" class="w-4 h-4" :class="job.status === 'running' ? 'animate-spin' : ''" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span
+                      v-if="showJobTypeChip()"
+                      class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0"
+                      :class="isTranslateJob(job) ? 'bg-accent-cyan/20 text-accent-cyan border-accent-cyan/30' : 'bg-accent-magenta/20 text-accent-magenta border-accent-magenta/30'"
+                    >{{ isTranslateJob(job) ? t('jobs.translateTag') : t('jobs.type.' + (job.job_type === 'whisper' || job.job_type === 'whisper_transcribe' ? 'whisper' : 'lada')) }}</span>
+                    <p class="text-sm font-medium truncate text-white font-display">
+                      {{ job.emby_item_name || job.input_path?.split('/').pop() }}
+                    </p>
+                  </div>
+                  <VuiBadge variant="gradient" :color="getJobCardView(job).badgeTone" size="xs">{{ getJobCardView(job).badgeLabel }}</VuiBadge>
+                </div>
+                <div class="flex flex-wrap items-center gap-2" :class="showJobProgressPanel() ? 'mb-2' : 'mt-1'">
+                  <p v-if="showJobProgressPanel() && getJobPhaseLabel(job)" class="text-xs text-white/55">{{ getJobPhaseLabel(job) }}</p>
+                  <span v-if="job.chain_id" class="text-[11px] text-white/34 border border-white/10 rounded-full px-2 py-0.5">{{ getChainStepLabel(job) }}</span>
+                  <span v-if="getChainRoleLabel(job)" class="text-[11px] text-accent-cyan/80 border border-accent-cyan/20 rounded-full px-2 py-0.5">{{ getChainRoleLabel(job) }}</span>
+                  <span v-if="getChainPositionLabel(job)" class="text-[11px] text-white/30 border border-white/10 rounded-full px-2 py-0.5">{{ getChainPositionLabel(job) }}</span>
+                  <span v-if="getChainStatusSummary(job)" class="text-[11px] text-white/30 border border-white/10 rounded-full px-2 py-0.5">{{ getChainStatusSummary(job) }}</span>
+                  <span v-if="getChainWaitingLabel(job)" class="text-[11px] text-white/40 border border-white/10 rounded-full px-2 py-0.5">{{ getChainWaitingLabel(job) }}</span>
+                  <span v-else-if="getJobChainHint(job)" class="text-[11px] text-white/30 border border-white/10 rounded-full px-2 py-0.5">{{ getJobChainHint(job) }}</span>
+                  <p v-if="showJobCompletedAt()" class="text-xs text-white/40">{{ getJobCompletedAt(job) }}</p>
+                </div>
+                <p v-if="getJobChainLine(job)" class="job-card__chain-line" :class="{ 'job-card__chain-line--compact': !showJobProgressPanel() }">{{ getJobChainLine(job) }}</p>
+                <p v-if="showJobSummaryLine() && getJobDescriptionView(job).summaryLine" class="text-xs text-white/35 mb-2 truncate">{{ getJobDescriptionView(job).summaryLine }}</p>
+                <p v-if="showJobMetaLine() && getJobDescriptionView(job).metaLine" class="text-xs text-white/40 truncate">{{ getJobDescriptionView(job).metaLine }}</p>
+                <template v-if="showJobProgressPanel() && getJobProgressView(job).showOverall">
+                  <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-white/32 shrink-0">{{ t('jobs.progress.overall') }}</span>
+                      <VuiProgress :value="getJobProgressView(job).overallValue" color="primary" variant="gradient" class="flex-1" />
+                      <span class="text-xs text-white/40 min-w-[2.5rem]">{{ getJobProgressView(job).overallText }}</span>
+                      <VuiButton variant="outlined" color="error" size="small" @click.stop="cancelJob(job.id)">
+                        {{ cancelTaskLabel }}
+                      </VuiButton>
+                    </div>
+                    <div v-if="getJobProgressView(job).showPhase" class="flex items-center gap-2">
+                      <span class="text-[11px] text-white/26 shrink-0">{{ t('jobs.progress.phase') }}</span>
+                      <VuiProgress :value="getJobProgressView(job).phaseValue" color="info" class="flex-1 opacity-80" />
+                      <span class="text-[11px] text-white/28 min-w-[2.5rem]">{{ getJobProgressView(job).phaseText }}</span>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div
+          v-if="currentTabJobs.length === 0"
+          class="empty-state-card ui-card flex flex-col items-center justify-center text-center"
+        >
+          <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 empty-state-icon">
+            <BaseIcon name="jobs" class="w-7 h-7 text-white/20" />
+          </div>
+          <h3 class="text-base font-medium mb-1 text-white font-display">{{ currentTabTitle }}</h3>
+          <p class="text-sm text-white/30">{{ currentEmptyLabel }}</p>
+        </div>
+      </div>
+
+      <!-- Log Viewer -->
+      <div class="lg:col-span-1">
+        <div class="log-card ui-card sticky top-24">
+          <div class="px-4 py-3 flex items-center justify-between log-card__header">
+            <h3 class="text-sm font-medium log-card__title">{{ logsTitleLabel }}</h3>
+            <span v-if="selectedJobId" class="text-xs font-mono text-white/30">
+              {{ getJobStatus(selectedJobId) || t('jobs.status.connecting') }}
+            </span>
+          </div>
+          <div v-if="selectedJobChain.length > 1" class="job-chain-panel">

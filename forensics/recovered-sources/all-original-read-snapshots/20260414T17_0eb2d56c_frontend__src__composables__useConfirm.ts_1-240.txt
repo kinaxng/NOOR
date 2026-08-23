@@ -1,0 +1,321 @@
+import { reactive } from 'vue'
+
+type ConfirmOptions = {
+  title?: string
+  message: string
+  confirmText?: string
+  cancelText?: string
+  danger?: boolean
+  size?: 'sm' | 'md' | 'lg' | 'xl'
+  details?: Array<{
+    label: string
+    items: string[]
+  }>
+}
+
+type ConfirmState = {
+  open: boolean
+  title: string
+  message: string
+  confirmText: string
+  cancelText: string
+  danger: boolean
+  size: 'sm' | 'md' | 'lg' | 'xl'
+  details: Array<{
+    label: string
+    items: string[]
+  }>
+  resolver: ((value: boolean) => void) | null
+}
+
+const state = reactive<ConfirmState>({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: '',
+  cancelText: '',
+  danger: false,
+  size: 'sm',
+  details: [],
+  resolver: null,
+})
+
+export function useConfirm() {
+  function ask(options: ConfirmOptions) {
+    if (state.open && state.resolver) {
+      state.resolver(false)
+    }
+
+    state.open = true
+    state.title = options.title || ''
+    state.message = options.message
+    state.confirmText = options.confirmText || ''
+    state.cancelText = options.cancelText || ''
+    state.danger = !!options.danger
+    state.size = options.size || 'sm'
+    state.details = options.details || []
+
+    return new Promise<boolean>((resolve) => {
+      state.resolver = resolve
+    })
+  }
+
+  function resolve(value: boolean) {
+    if (state.resolver) {
+      state.resolver(value)
+    }
+    state.open = false
+    state.resolver = null
+  }
+
+  return {
+    confirmState: state,
+    confirm: ask,
+    resolveConfirm: resolve,
+  }
+}
+
+---
+<script setup lang="ts">
+import BaseModal from '../ui/BaseModal.vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import { useI18n } from '../../composables/useI18n'
+import { useConfirm } from '../../composables/useConfirm'
+
+const { t } = useI18n()
+const { confirmState, resolveConfirm } = useConfirm()
+</script>
+
+<template>
+  <BaseModal
+    v-if="confirmState.open"
+    :title="confirmState.title || t('common.confirm')"
+    :size="confirmState.size"
+    @close="resolveConfirm(false)"
+  >
+    <p class="confirm-dialog__message">{{ confirmState.message }}</p>
+
+    <div v-if="confirmState.details.length" class="confirm-dialog__details">
+      <section
+        v-for="section in confirmState.details"
+        :key="section.label"
+        class="confirm-dialog__section"
+      >
+        <div class="confirm-dialog__section-label">{{ section.label }}</div>
+        <div class="confirm-dialog__section-list">
+          <div
+            v-for="item in section.items"
+            :key="item"
+            class="confirm-dialog__path"
+            :title="item"
+          >
+            {{ item }}
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <template #footer>
+      <div class="confirm-dialog__actions">
+        <VuiButton variant="outlined" color="secondary" size="small" @click="resolveConfirm(false)">
+          {{ confirmState.cancelText || t('common.cancel') }}
+        </VuiButton>
+        <VuiButton
+          variant="gradient"
+          :color="confirmState.danger ? 'error' : 'info'"
+          size="small"
+          @click="resolveConfirm(true)"
+        >
+          {{ confirmState.confirmText || t('common.confirm') }}
+        </VuiButton>
+      </div>
+    </template>
+  </BaseModal>
+</template>
+
+<style scoped>
+.confirm-dialog__message {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.confirm-dialog__details {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.875rem;
+}
+
+.confirm-dialog__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.confirm-dialog__section-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.confirm-dialog__section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: min(48vh, 30rem);
+  overflow: auto;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.confirm-dialog__path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+@media (min-width: 960px) {
+  .confirm-dialog__details:has(.confirm-dialog__section + .confirm-dialog__section) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .confirm-dialog__details {
+    gap: 0.75rem;
+  }
+
+  .confirm-dialog__section-list {
+    max-height: min(36vh, 20rem);
+    padding: 0.625rem;
+  }
+
+  .confirm-dialog__actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .confirm-dialog__actions :deep(button) {
+    flex: 1 1 0;
+  }
+}
+</style>
+
+--- ZH ---
+  'hardlinks.status.issue': '异常',
+  'hardlinks.status.orphan': '孤儿源',
+  'hardlinks.status.unparsed': '未识别作品',
+  'hardlinks.missingSource': '未找到对应主文件',
+  'hardlinks.orphanSkipped': '仅硬链接，暂不处理',
+  'hardlinks.deleteHardlink': '删硬链接',
+  'hardlinks.deleteSourceChain': '删主文件链路',
+  'hardlinks.previewDelete': '预览删除',
+  'hardlinks.deleteGroup': '删除整个作品组',
+  'hardlinks.processing': '处理中…',
+  'hardlinks.deleteHardlinkConfirm': '确认删除硬链接文件并删除同名 nfo？\n{path}',
+  'hardlinks.deleteSourceChainConfirm': '确认删除主文件链路？\n主文件: {source}\n将删除主文件目录及 {count} 个硬链接目录',
+  'hardlinks.deleteGroupConfirm': '确认删除整个作品组 {code}？\n将处理 {entryCount} 条记录',
+  'hardlinks.deleteHardlinkSuccess': '硬链接删除成功',
+  'hardlinks.deleteHardlinkFailed': '硬链接删除失败',
+  'hardlinks.deleteSourceChainSuccess': '主文件链路删除成功',
+  'hardlinks.deleteSourceChainFailed': '主文件链路删除失败',
+  'hardlinks.deleteGroupSuccess': '作品组删除成功',
+  'hardlinks.deleteGroupFailed': '作品组删除失败',
+  'hardlinks.previewTitle': '删除预览：{code}',
+  'hardlinks.previewSummary': '预计删除目录 {dirs} 个，文件 {files} 个',
+  'hardlinks.previewDirs': '将删除的目录',
+  'hardlinks.previewFiles': '将删除的文件',
+  'hardlinks.previewFailed': '预览删除失败',
+  'hardlinks.previewUnsupported': '如果浏览器不支持当前编码格式，可关闭弹窗后再做文件级处理。',
+
+  // Common extra
+  'common.copied': '已复制',
+
+  // Home/Library
+  'library.title': '媒体库',
+  'library.search.placeholder': '搜索标题...',
+  'library.filter.all': '全部',
+  'library.filter.uncensored': '无码',
+  'library.filter.chinese': '中文',
+  'library.filter.leaked': '流出',
+  'library.filter.anal': '肛交',
+  'library.filter.cracked': '破解',
+  'library.noResults': '未找到结果',
+  'library.itemsPerPage': '每页',
+  'library.loadMore': '加载更多',
+  'library.emptyTitle': '暂无内容',
+  'library.emptyDesc': '当前媒体库为空或没有匹配的项目',
+  'library.adapterUnavailable': '媒体库适配器未启动，请前往设置页配置 Emby / Jellyfin',
+  'library.fetchFailed': '获取媒体库失败',
+  'library.itemDetailFailed': '获取媒体详情失败',
+  'library.noLibraryTitle': '没有任何媒体库激活',
+  'library.goToSettings': '前往设置页',
+
+  // Whisper dropdown options
+  'whisper.passMode.single': '单遍',
+
+--- EN ---
+  'hardlinks.status.issue': 'Issues',
+  'hardlinks.status.orphan': 'Orphan Source',
+  'hardlinks.status.unparsed': 'Unparsed Work',
+  'hardlinks.missingSource': 'No matching source file found',
+  'hardlinks.orphanSkipped': 'Orphan-only, skipped for now',
+  'hardlinks.deleteHardlink': 'Delete Hardlink',
+  'hardlinks.deleteSourceChain': 'Delete Source Chain',
+  'hardlinks.previewDelete': 'Preview Delete',
+  'hardlinks.deleteGroup': 'Delete Entire Work Group',
+  'hardlinks.processing': 'Processing…',
+  'hardlinks.deleteHardlinkConfirm': 'Delete this hardlink file and its sibling nfo?\n{path}',
+  'hardlinks.deleteSourceChainConfirm': 'Delete this source chain?\nSource: {source}\nWill remove source directory and {count} hardlink directories',
+  'hardlinks.deleteGroupConfirm': 'Delete entire work group {code}?\nWill process {entryCount} entries',
+  'hardlinks.deleteHardlinkSuccess': 'Hardlink deleted',
+  'hardlinks.deleteHardlinkFailed': 'Failed to delete hardlink',
+  'hardlinks.deleteSourceChainSuccess': 'Source chain deleted',
+  'hardlinks.deleteSourceChainFailed': 'Failed to delete source chain',
+  'hardlinks.deleteGroupSuccess': 'Work group deleted',
+  'hardlinks.deleteGroupFailed': 'Failed to delete work group',
+  'hardlinks.previewTitle': 'Delete Preview: {code}',
+  'hardlinks.previewSummary': 'Planned delete: {dirs} dirs, {files} files',
+  'hardlinks.previewDirs': 'Directories to delete',
+  'hardlinks.previewFiles': 'Files to delete',
+  'hardlinks.previewFailed': 'Failed to preview delete',
+  'hardlinks.previewUnsupported': 'If the browser cannot decode this format, close the dialog and handle the file directly.',
+
+  // Common extra
+  'common.copied': 'Copied',
+
+  // Home/Library
+  'library.title': 'Media Library',
+  'library.search.placeholder': 'Search title...',
+  'library.filter.all': 'All',
+  'library.filter.uncensored': 'Uncensored',
+  'library.filter.chinese': 'Chinese',
+  'library.filter.leaked': 'Leaked',
+  'library.filter.anal': 'Anal',
+  'library.filter.cracked': 'Cracked',
+  'library.noResults': 'No results found',
+  'library.itemsPerPage': 'Per page',
+  'library.loadMore': 'Load more',
+  'library.emptyTitle': 'No content yet',
+  'library.emptyDesc': 'The current library is empty or no items match the filter',
+  'library.adapterUnavailable': 'Media library adapter is not running. Configure Emby / Jellyfin in Settings.',
+  'library.fetchFailed': 'Failed to fetch libraries',
+  'library.itemDetailFailed': 'Failed to fetch item detail',
+  'library.noLibraryTitle': 'No media library is enabled',
+  'library.goToSettings': 'Go to Settings',
+
+  // Whisper dropdown options
+  'whisper.passMode.single': 'Single Pass',

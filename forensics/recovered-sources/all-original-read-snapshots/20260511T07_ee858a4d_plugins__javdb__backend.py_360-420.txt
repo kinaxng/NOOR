@@ -1,0 +1,61 @@
+            unique_additions += 1
+
+            if _matches_latest_filter(item, requested_filter):
+                filtered_items.append(item)
+                if len(filtered_items) >= target_count:
+                    exhausted = False
+                    break
+
+        if not unique_additions or not exhausted:
+            break
+
+    total = len(filtered_items) if exhausted else max(len(filtered_items) + 1, target_count + 1)
+    result = {
+        "ok": True,
+        "items": filtered_items[start:start + limit],
+        "total": total,
+        "raw": {
+            "client_filtered": requested_filter,
+            "partial_total": not exhausted,
+            "scan_pages": len(seen_page_signatures),
+        },
+    }
+    _cache_set(FILTER_PAGE_CACHE, cache_key, result)
+    return dict(result)
+
+
+def _normalize_actor(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(item.get("id") or item.get("external_id") or item.get("name") or ""),
+        "name": str(item.get("name") or ""),
+        "name_zht": str(item.get("name_zht") or ""),
+        "other_name": str(item.get("other_name") or ""),
+        "avatar_url": _abs(config, item.get("avatar_url")),
+        "uncensored": bool(item.get("uncensored")),
+        "raw": item,
+    }
+
+
+def _normalize_magnet(magnet: dict[str, Any], code: str) -> dict[str, Any]:
+    tags = magnet.get("tags") if isinstance(magnet.get("tags"), list) else []
+    size_mb = float(magnet.get("size_mb") or 0)
+    return {
+        "name": magnet.get("name") or code,
+        "magnet": magnet.get("magnet") or "",
+        "size_mb": size_mb,
+        "size_bytes": int(size_mb * 1024 * 1024),
+        "file_count": magnet.get("file_count") or 0,
+        "date": magnet.get("date") or "",
+        "tags": tags,
+        "site": magnet.get("site") or "JavDB",
+        "source_key": magnet.get("source_key") or PLUGIN_ID,
+        "chinese": any("字幕" in str(x) or "中字" in str(x) for x in tags),
+        "hd": any("高清" in str(x).upper() or "HD" in str(x).upper() for x in tags),
+    }
+
+
+async def test(config: dict[str, Any]) -> PluginTestResult:
+    try:
+        payload = await _request(config, "GET", "/stats")
+        data = _data(payload) or {}
+        return PluginTestResult(ok=True, message="JavDB connected", details=data if isinstance(data, dict) else {})

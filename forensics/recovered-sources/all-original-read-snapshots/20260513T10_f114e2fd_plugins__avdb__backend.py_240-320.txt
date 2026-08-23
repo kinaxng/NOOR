@@ -1,0 +1,112 @@
+            try:
+                meta = await _emby_meta(config, tid)
+            except Exception:
+                meta = {}
+            contribution = _knowledge_from_item(item, meta)
+            if contribution:
+                out.append(contribution)
+            if len(out) >= limit:
+                return {"items": out}
+    return {"items": out}
+
+
+async def handle_action(action: str, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if action == "stats":
+        return await _request(config, "GET", "/api/v1/stats")
+    if action == "search":
+        keyword = str(payload.get("keyword") or "").strip()
+        limit = max(1, min(int(payload.get("limit") or 60), 200))
+        items = await _search(config, keyword, limit=limit)
+        return {"ok": True, "items": items, "total": len(items)}
+    if action == "emby_meta":
+        return {"ok": True, "data": await _emby_meta(config, str(payload.get("id") or payload.get("tid") or ""))}
+    if action == "stream_link":
+        return {"ok": True, "data": await _stream_link(config, str(payload.get("id") or payload.get("tid") or ""), str(payload.get("title") or ""))}
+    if action == "download_options":
+        return {"ok": True, "downloader_binding": str(config.get("downloader_binding") or "none")}
+    if action == "knowledge_contributions":
+        return await build_knowledge_contributions(config, int(payload.get("limit") or 100), context=payload.get("context") or {})
+    raise ValueError(f"unsupported action: {action}")
+        raise ValueError("片单不存在")
+    entries[idx]["alias"] = alias
+    _write_album_entries(entries)
+    album = await _load_album(config, album_id, str(entries[idx].get("rss_url") or ""), alias)
+    return {"ok": True, "album": album, "albums": entries}
+
+
+async def _remove_album(payload: dict[str, Any]) -> dict[str, Any]:
+    album_id = _parse_album_id(str(payload.get("album_id") or payload.get("id") or ""))
+    if not album_id:
+        raise ValueError("缺少 albumId")
+    entries = [x for x in _read_album_entries() if int(x["album_id"]) != album_id]
+    _write_album_entries(entries)
+    return {"ok": True, "album_id": str(album_id), "albums": entries}
+
+
+async def handle_action(action: str, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if action == "albums":
+        return await _list_albums(config)
+    if action == "add_album":
+        return await _add_album(config, payload)
+    if action == "rename_album":
+        return await _rename_album(config, payload)
+    if action == "remove_album":
+        return await _remove_album(payload)
+    if action == "knowledge_contributions":
+        context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+        return await build_knowledge_contributions(config, int(payload.get("limit") or 100), context=context)
+    if action == "torrent_download_link":
+        return await generate_torrent_download_link(config, payload.get("torrent_id") or payload.get("id"))
+    raise ValueError(f"unsupported action: {action}")
+async def handle_action(action: str, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if action in {"rankings", "latest", "videos", "top250", "recommend"}:
+        return await _list_action(config, action, payload)
+    if action == "search":
+        return {"ok": True, **await _search(config, str(payload.get("q") or payload.get("keyword") or ""), int(payload.get("page") or 1), int(payload.get("limit") or 24))}
+    if action == "video":
+        code = str(payload.get("code") or "")
+        expected_magnets_count = int(payload.get("expected_magnets_count") or 0)
+        refresh = bool(payload.get("refresh"))
+        data = await _video(config, code, refresh=refresh)
+        if expected_magnets_count > 0 and not (data.get("magnets") or []):
+            data = await _video(config, code, refresh=True)
+        return {"ok": True, "data": data}
+    if action == "related_movies":
+        return await _related_movies(config, payload)
+    if action == "actors":
+        data = _data(await _request(config, "GET", "/actors", params={"type": int(payload.get("type") or 0)}))
+        actors = [_normalize_actor(config, x) for x in (data.get("actors") if isinstance(data, dict) else data or []) if isinstance(x, dict)]
+        return {"ok": True, "items": actors, "total": len(actors)}
+    if action == "actor_options":
+        data = _data(await _request(config, "GET", "/options/actors"))
+        items = [x for x in (data or []) if isinstance(x, dict)]
+        return {"ok": True, "items": items, "total": len(items)}
+    if action == "actor_movies":
+        actor_id = str(payload.get("actor_id") or payload.get("id") or "")
+        page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))
+        data = _data(await _request(config, "GET", f"/actors/{actor_id}/movies", params={"page": page, "limit": limit, "sort_by": payload.get("sort_by") or "release"}))
+        return {"ok": True, "items": [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)], "raw": data}
+    if action == "stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/stats"))}
+    if action == "categories":
+        return {"ok": True, "items": _data(await _request(config, "GET", "/options/categories")) or []}
+    if action == "magnet_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/external-magnets/stats"))}
+    if action == "subtitle_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/subtitle/stats"))}
+    if action == "downloaders":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/downloaders"))}
+    if action == "download_records":
+        page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))
+        return {"ok": True, "data": _data(await _request(config, "GET", "/download-records", params={"page": page, "limit": limit}))}
+    if action == "image_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/image/stats"))}
+    if action == "library_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/library/cache/stats"))}
+    if action == "download_options":
+        bindings = config.get("downloader_binding") or []
+        if isinstance(bindings, str): bindings = [bindings] if bindings != "none" else []
+        return {"ok": True, "downloader_binding": bindings, "default_downloader": str(config.get("default_downloader") or "none")}
+    if action == "knowledge_contributions":
+        return await build_knowledge_contributions(config, int(payload.get("limit") or 100), context=payload.get("context") or {})
+    raise ValueError(f"unsupported action: {action}")

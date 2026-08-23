@@ -1,0 +1,21 @@
+  'nav.settings': 'Settings',
+
+  // Toolbar
+  'toolbar.blurOn': 'Enable cover blur',
+  'toolbar.blurOff': 'Disable cover blur',
+  'toolbar.switchLang': 'Switch language',
+  'toolbar.langShortZh': '中',
+  'toolbar.langShortEn': 'EN',
+  'toolbar.collapse': 'Collapse',
+  'toolbar.logs': 'Show logs',
+  'toolbar.logsOff': 'Hide logs',
+
+  // Hardlinks
+  'hardlinks.title': 'Hardlink Management',
+  'hardlinks.mainFile': 'Main File',
+  'hardlinks.hardlinks': 'Hardlinks',
+  'hardlinks.scan': 'Rescan',
+  'hardlinks.scanSuccess': 'Scan complete, found {count} code groups',
+  'hardlinks.scanFailed': 'Scan failed',
+  'hardlinks.empty': 'No hardlink data',
+  'hardlinks.emptyDesc': 'Click "Rescan" above to scan the media library and build the hardlink group list',

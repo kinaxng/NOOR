@@ -1,0 +1,437 @@
+---
+.noor-control-panel {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,.05);
+  background: rgba(17, 25, 54, 0.42);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 0 rgba(255,255,255,.015) inset, 0 6px 16px rgba(0,0,0,.12);
+}
+.noor-control-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.noor-control-panel__header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__title {
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.noor-control-panel__summary {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+.noor-control-panel__header-actions,
+.noor-control-panel__left,
+.noor-control-panel__right,
+.noor-control-panel__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem 1rem;
+  flex-wrap: wrap;
+}
+.noor-control-panel__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+}
+.noor-control-panel__left {
+  flex: 1 1 16rem;
+}
+.noor-control-panel__right {
+  flex: 999 1 34rem;
+  justify-content: flex-end;
+}
+.noor-control-panel__group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem 0.6rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__section {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__section-label {
+  color: rgba(113, 128, 150, 0.72);
+  font-size: 0.6875rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  padding-top: 0.45rem;
+}
+.noor-control-panel__section-body {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.noor-control-panel .noor-plugin-chip {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel .noor-plugin-chip:hover:not(:disabled),
+.noor-control-panel .noor-control-panel__picker-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.8);
+  border-color: transparent;
+}
+.noor-control-panel .noor-plugin-chip.is-active,
+.noor-control-panel .noor-plugin-chip--soft.is-active,
+.noor-control-panel .noor-control-panel__picker-btn:not(.is-empty) {
+  background: rgba(0,117,255,.15);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+.noor-control-panel .noor-plugin-chip--accent.is-active {
+  background: rgba(0,117,255,.15);
+  border-color: transparent;
+  color: #fff;
+}
+.noor-control-panel__picker-btn {
+  min-width: 9rem;
+  justify-content: flex-start;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-btn.is-empty {
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: min(60vh, 36rem);
+}
+.noor-control-panel__picker-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgb(26,31,55);
+  padding-bottom: 0.35rem;
+}
+.noor-control-panel__picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-content: flex-start;
+}
+.noor-control-panel__group-label {
+  color: rgba(113, 128, 150, 0.72);
+  font-size: 0.6875rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.noor-control-panel__group-items {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__divider {
+  width: 1px;
+  min-height: 28px;
+  background: rgba(255,255,255,.08);
+  align-self: stretch;
+}
+.noor-control-panel__search-wrap {
+  position: relative;
+  min-width: min(18rem, 100%);
+  flex: 1 1 15rem;
+}
+.noor-control-panel__search-icon {
+  pointer-events: none;
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.25);
+}
+.noor-control-panel__search-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: 0.56rem 0.8rem 0.56rem 2.2rem;
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+.noor-control-panel__search-input:focus {
+  outline: none;
+  border-color: rgba(0,117,255,0.42);
+  background: rgba(255,255,255,0.055);
+}
+@media (max-width: 900px) {
+  .noor-control-panel__body {
+    flex-direction: column;
+
+---
+export async function mount(root, sdk) {
+  const state = {
+    tab: 'latest',
+    latestSelectedFilters: [],
+    latestType: 'all',
+    videosFilter: '',
+    videosActorId: '',
+    videosCategoryIds: [],
+    videosMinScore: '',
+    videosSort: 'created',
+    videosOrder: 'desc',
+    videoCategories: [],
+    videoActors: [],
+    videoActorsLoaded: false,
+    videoActorsLoading: false,
+    videoCategoriesLoaded: false,
+    videoCategoriesLoading: false,
+    rankingMode: 'top250',
+    rankingType: 0,
+    rankingPeriod: 'daily',
+    top250Year: '',
+    relation: null,
+    relationActorSelectedFilters: [],
+    relationActorSingleFilter: false,
+    relationActorYear: '',
+    relationActorSort: 'release_desc',
+    page: 1,
+    limit: 48,
+    total: 0,
+    items: [],
+    loading: false,
+    activePanel: null,
+  }
+  const chooserState = {
+    modal: null,
+    search: '',
+  }
+
+  let tabControl = null
+  let resizeTimer = null
+  let loadSeq = 0
+  const initialCode = new URLSearchParams(window.location.search).get('code')?.trim() || ''
+  let initialCodeOpened = false
+
+  root.innerHTML = ''
+  const page = el('div', 'javdb-page')
+  const header = el('div', 'javdb-header-wrap')
+  const tabsWrap = el('div', 'javdb-tabs-wrap')
+  const panelWrap = el('div', 'javdb-panel-wrap')
+  const filtersWrap = el('div', 'javdb-filters-wrap')
+  const grid = el('div', 'javdb-grid')
+  const pager = el('div', 'javdb-pager')
+  header.append(tabsWrap, panelWrap, filtersWrap)
+  page.append(header, grid, pager)
+  root.appendChild(page)
+
+  const tabDefs = [
+    { value: 'latest', label: '最近更新' },
+    { value: 'rankings', label: '榜单' },
+    { value: 'videos', label: '查看记录' },
+  ]
+
+  const latestFilters = [
+    ['magnets', '有磁链'],
+    ['cnsub', '中字'],
+    ['cracked', '破解'],
+  ]
+  const latestTypes = [
+    ['all', '全部'],
+    ['censored', '有码'],
+    ['uncensored', '无码'],
+    ['western', '欧美'],
+    ['fc2', 'FC2'],
+    ['anime', '动漫'],
+  ]
+  const rankingModes = [
+    ['top250', 'TOP250'],
+    ['daily', '日榜'],
+    ['weekly', '周榜'],
+    ['monthly', '月榜'],
+    ['actors', '演员榜'],
+  ]
+  const rankingTypes = [
+    [0, '有码'],
+    [1, '无码'],
+    [2, '欧美'],
+    [3, 'FC2'],
+  ]
+  const rankingPeriods = [
+    ['daily', '日榜'],
+    ['weekly', '周榜'],
+    ['monthly', '月榜'],
+  ]
+  const relationActorBadgeFilters = [
+    ['magnets', '有磁链'],
+    ['cnsub', '字幕'],
+    ['cracked', '破解'],
+  ]
+  const relationActorSortOptions = [
+    { label: '最新优先', value: 'release_desc' },
+    { label: '最早优先', value: 'release_asc' },
+
+---
+
+  function openMultiPickerModal(title, items, currentValues, onApply, emptyLabel = '全部') {
+    if (!sdk.ui?.modal) return
+    chooserState.search = ''
+    const body = el('div', 'noor-control-panel__picker-list')
+    const searchWrap = el('div', 'noor-control-panel__picker-search')
+    const searchInput = sdk.ui.input
+      ? sdk.ui.input({
+          value: '',
+          placeholder: `搜索${title}`,
+          className: 'noor-control-panel__search-input',
+          onInput: value => {
+            chooserState.search = String(value || '').trim().toLowerCase()
+            renderOptions()
+          },
+        })
+      : null
+    if (searchInput) searchWrap.appendChild(searchInput)
+    const optionsWrap = el('div', 'noor-control-panel__picker-options')
+    body.append(searchWrap, optionsWrap)
+    let draft = uniqueValues(currentValues)
+
+    const modal = sdk.ui.modal({
+      title,
+      width: 'lg',
+      content: body,
+      footer: [
+        sdk.ui.button({
+          label: emptyLabel,
+          onClick: () => {
+            draft = []
+            renderOptions()
+          },
+        }),
+        sdk.ui.button({
+          label: '应用',
+          tone: 'primary',
+          onClick: () => {
+            onApply([...draft])
+            modal.close()
+          },
+        }),
+        sdk.ui.button({ label: '关闭', onClick: () => modal.close() }),
+      ],
+      onClose: () => { chooserState.modal = null },
+    })
+    chooserState.modal = modal
+
+    function renderOptions() {
+      optionsWrap.innerHTML = ''
+      const keyword = chooserState.search
+      const fullList = [{ label: emptyLabel, value: '' }, ...(Array.isArray(items) ? items : [])]
+      fullList
+        .filter(item => !keyword || String(item.label || '').toLowerCase().includes(keyword))
+        .forEach(item => {
+          optionsWrap.appendChild(sdk.ui.chip({
+            label: item.label,
+            active: draft.includes(String(item.value || '')),
+            className: 'noor-plugin-chip--soft',
+            onClick: () => {
+              const value = String(item.value || '')
+              draft = draft.includes(value)
+                ? draft.filter(entry => entry !== value)
+                : [...draft, value]
+              renderOptions()
+            },
+          }))
+        })
+    }
+
+    renderOptions()
+  }
+
+  function openSinglePickerModal(title, items, currentValue, onApply, emptyLabel = '全部') {
+    if (!sdk.ui?.modal) return
+    chooserState.search = ''
+    const body = el('div', 'noor-control-panel__picker-list')
+    const searchWrap = el('div', 'noor-control-panel__picker-search')
+    const searchInput = sdk.ui.input
+      ? sdk.ui.input({
+          value: '',
+          placeholder: `搜索${title}`,
+          className: 'noor-control-panel__search-input',
+          onInput: value => {
+            chooserState.search = String(value || '').trim().toLowerCase()
+            renderOptions()
+          },
+        })
+      : null
+    if (searchInput) searchWrap.appendChild(searchInput)
+    const optionsWrap = el('div', 'noor-control-panel__picker-options')
+    body.append(searchWrap, optionsWrap)
+    let draft = String(currentValue || '').trim()
+
+    const modal = sdk.ui.modal({
+      title,
+      width: 'lg',
+      content: body,
+      footer: [
+        sdk.ui.button({
+          label: emptyLabel,
+          onClick: () => {
+            draft = ''
+            renderOptions()
+          },
+        }),
+        sdk.ui.button({
+          label: '应用',
+          tone: 'primary',
+          onClick: () => {
+            onApply(draft)
+            modal.close()
+          },
+        }),
+        sdk.ui.button({ label: '关闭', onClick: () => modal.close() }),
+      ],
+      onClose: () => { chooserState.modal = null },
+    })
+    chooserState.modal = modal
+
+    function renderOptions() {
+      optionsWrap.innerHTML = ''
+      const keyword = chooserState.search
+      const fullList = [{ label: emptyLabel, value: '' }, ...(Array.isArray(items) ? items : [])]
+      fullList
+        .filter(item => !keyword || String(item.label || '').toLowerCase().includes(keyword))
+        .forEach(item => {
+          const value = String(item.value || '')
+          optionsWrap.appendChild(sdk.ui.chip({
+            label: item.label,
+            active: draft === value,

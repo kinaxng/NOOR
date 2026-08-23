@@ -1,0 +1,180 @@
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+import { api } from '../api/client'
+import type { Job, MediaItem, MediaItemDetail, MediaItemsResponse, MediaLibrary, SettingsPayload } from '../api/types'
+
+export const useMediaStore = defineStore('media', () => {
+  const libraries = ref<MediaLibrary[]>([])
+  const items = ref<MediaItem[]>([])
+  const total = ref(0)
+  const page = ref(1)
+  const pageSize = ref(18)
+  const query = ref('')
+  const loading = ref(false)
+  const detailLoading = ref(false)
+  const error = ref<string | null>(null)
+  const selectedItem = ref<MediaItemDetail | null>(null)
+  const selectedVersionPath = ref('')
+  const selectedLibraryId = ref('')
+  const taskSubmitting = ref<'whisper' | 'lada' | null>(null)
+  const taskMessage = ref<string | null>(null)
+  const taskError = ref<string | null>(null)
+  const whisperTranslate = ref(false)
+  const whisperPreprocess = ref(false)
+
+  const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+  async function fetchLibraries() {
+    const data = await api.get<{ libraries: MediaLibrary[] }>('/media-library/libraries')
+    libraries.value = data.libraries
+  }
+
+  async function fetchItems(nextPage = page.value) {
+    loading.value = true
+    error.value = null
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', String(pageSize.value))
+      params.set('offset', String((nextPage - 1) * pageSize.value))
+      if (selectedLibraryId.value) params.set('library_id', selectedLibraryId.value)
+      if (query.value.trim()) params.set('q', query.value.trim())
+      const data = await api.get<MediaItemsResponse>(`/media-library/items?${params.toString()}`)
+      items.value = data.items
+      total.value = data.total
+      page.value = nextPage
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '媒体库加载失败'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function initialize() {
+    loading.value = true
+    error.value = null
+    try {
+      await fetchLibraries()
+      await fetchItems(1)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '媒体库加载失败'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function search(value: string) {
+    query.value = value
+    await fetchItems(1)
+  }
+
+  async function selectLibrary(libraryId: string) {
+    selectedLibraryId.value = libraryId
+    await fetchItems(1)
+  }
+
+  async function fetchItemDetail(itemId: string) {
+    detailLoading.value = true
+    try {
+      selectedItem.value = await api.get<MediaItemDetail>(`/media-library/item/${encodeURIComponent(itemId)}`)
+      selectedVersionPath.value = selectedItem.value.file_path || selectedItem.value.path || ''
+      taskMessage.value = null
+      taskError.value = null
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  function closeDetail() {
+    selectedItem.value = null
+    selectedVersionPath.value = ''
+    taskMessage.value = null
+    taskError.value = null
+  }
+
+  function selectVersion(path?: string | null) {
+    if (path) selectedVersionPath.value = path
+  }
+
+  function selectedVideoPath() {
+    return selectedVersionPath.value || selectedItem.value?.file_path || selectedItem.value?.path || ''
+  }
+
+  async function submitWhisperTask() {
+    const path = selectedVideoPath()
+    if (!path) {
+      taskError.value = '当前作品没有可提交的视频路径'
+      return
+    }
+    taskSubmitting.value = 'whisper'
+    taskMessage.value = null
+    taskError.value = null
+    try {
+      const settings = await api.get<SettingsPayload>('/settings')
+      const whisper = { ...(settings.whisper || {}) }
+      const payload = {
+        ...whisper,
+        video_path: path,
+        translate_to: whisperTranslate.value ? (whisper.translate_to || 'zh') : '',
+        audio_preprocess_mode: whisperPreprocess.value ? (whisper.audio_preprocess_mode || 'vocal') : 'none',
+      }
+      const result = await api.post<{ task_id: string; message?: string }>('/whisper/tasks', payload)
+      taskMessage.value = `字幕任务已提交：${result.task_id}`
+    } catch (err) {
+      taskError.value = err instanceof Error ? err.message : '字幕任务提交失败'
+    } finally {
+      taskSubmitting.value = null
+    }
+  }
+
+  async function submitLadaTask() {
+    const path = selectedVideoPath()
+    if (!path || !selectedItem.value) {
+      taskError.value = '当前作品没有可提交的视频路径'
+      return
+    }
+    taskSubmitting.value = 'lada'
+    taskMessage.value = null
+    taskError.value = null
+    try {
+      const settings = await api.get<SettingsPayload>('/settings')
+      const ladaDefaults = settings.lada_defaults || {}
+      const payload = {
+        emby_item_id: selectedItem.value.id,
+        emby_item_name: `[LADA] ${selectedItem.value.name}`,
+        input_path: path,
+        settings: {
+          ...ladaDefaults,
+          lada_cli_path: settings.lada?.cli_path,
+          lada_model_dir: settings.storage?.lada_model_weights_dir || settings.storage?.lada_model_dir,
+        },
+      }
+      const result = await api.post<Job>('/jobs', payload)
+      taskMessage.value = `LADA 任务已提交：${result.id}`
+    } catch (err) {
+      taskError.value = err instanceof Error ? err.message : 'LADA 任务提交失败'
+    } finally {
+      taskSubmitting.value = null
+    }
+  }
+
+  return {
+    libraries,
+    items,
+    total,
+    page,
+    pageSize,
+    pageCount,
+    query,
+    loading,
+    detailLoading,
+    error,
+    selectedItem,
+    selectedVersionPath,
+    selectedLibraryId,
+    taskSubmitting,
+    taskMessage,
+    taskError,
+    whisperTranslate,
+    whisperPreprocess,
+    initialize,
+    fetchItems,

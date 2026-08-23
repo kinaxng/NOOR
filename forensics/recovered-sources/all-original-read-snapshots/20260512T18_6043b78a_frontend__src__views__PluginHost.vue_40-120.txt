@@ -1,0 +1,80 @@
+function makeInput(options: any = {}) {
+  const input = document.createElement('input')
+  input.className = ['noor-plugin-input', options.className || ''].filter(Boolean).join(' ')
+  input.value = options.value ?? ''
+  input.placeholder = options.placeholder || ''
+  input.readOnly = !!options.readonly
+  input.oninput = () => options.onInput?.(input.value)
+  return input
+}
+
+function makeSelect(options: any = {}) {
+  const select = document.createElement('select')
+  select.className = ['noor-plugin-input', 'noor-plugin-select', options.className || ''].filter(Boolean).join(' ')
+  for (const item of options.options || []) {
+    const opt = document.createElement('option')
+    opt.value = String(item.value ?? '')
+    opt.textContent = String(item.label ?? item.value ?? '')
+    select.appendChild(opt)
+  }
+  select.value = options.value ?? ''
+  select.onchange = () => options.onChange?.(select.value)
+  return select
+}
+
+function makeField(options: any = {}) {
+  const field = document.createElement('label')
+  field.className = ['noor-plugin-field', options.className || ''].filter(Boolean).join(' ')
+  const label = document.createElement('span')
+  label.className = 'noor-plugin-field__label'
+  label.textContent = options.label || ''
+  field.appendChild(label)
+  if (options.control) field.appendChild(options.control)
+  if (options.hint) {
+    const hint = document.createElement('small')
+    hint.className = 'noor-plugin-field__hint'
+    hint.textContent = options.hint
+    field.appendChild(hint)
+  }
+  return field
+}
+
+function makeModal(options: any = {}) {
+  const mask = document.createElement('div')
+  mask.className = 'noor-plugin-modal-mask'
+  const panel = document.createElement('div')
+  panel.className = `noor-plugin-modal noor-plugin-modal--${options.width || 'md'}`
+  const head = document.createElement('div')
+  head.className = 'noor-plugin-modal__head'
+  const title = document.createElement('div')
+  title.className = 'noor-plugin-modal__title'
+  title.textContent = options.title || ''
+  const closeBtn = makeButton({ label: '×', title: '关闭', className: 'noor-plugin-modal__close' })
+  head.append(title, closeBtn)
+  const body = document.createElement('div')
+  body.className = 'noor-plugin-modal__body'
+  if (Array.isArray(options.content)) options.content.forEach((x: Node) => body.appendChild(x))
+  else if (options.content) body.appendChild(options.content)
+  panel.append(head, body)
+  const footer = document.createElement('div')
+  footer.className = 'noor-plugin-modal__actions'
+  if (Array.isArray(options.footer)) options.footer.forEach((x: Node) => footer.appendChild(x))
+  else if (options.footer) footer.appendChild(options.footer)
+  if (footer.childNodes.length) panel.appendChild(footer)
+  mask.appendChild(panel)
+  const close = () => { mask.remove(); options.onClose?.() }
+  closeBtn.onclick = close
+  mask.onclick = event => { if (event.target === mask && options.closeOnMask !== false) close() }
+  document.body.appendChild(mask)
+  return { el: mask, body, close }
+}
+
+function makePanel(options: any = {}) {
+  const mask = document.createElement('div')
+  mask.className = 'noor-plugin-panel-mask'
+  const panel = document.createElement('div')
+  panel.className = ['noor-plugin-panel', options.className || ''].filter(Boolean).join(' ')
+  const scroll = document.createElement('div')
+  scroll.className = 'noor-plugin-panel__scroll'
+  const head = document.createElement('div')
+  head.className = 'detail-panel-topbar noor-plugin-panel__head'

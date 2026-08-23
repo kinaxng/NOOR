@@ -1,0 +1,141 @@
+    model: str = "anime-whisper"
+    pipeline_mode: str = "ensemble"
+    merge_strategy: str = "smart_merge"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    vad_method: str = "semantic"
+    translate_to: str = ""
+    translate_model: str = "gpt-4o-mini"
+    translate_style: str = "adult_explicit"  # adult_explicit | standard
+    translate_base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    translate_api_key: str = ""
+    pass1_pipeline: str = "anime"  # anime | faster | balanced | transformers | qwen | custom
+    pass2_pipeline: str = ""  # "" = not selected, or one of the above
+    custom_config: CustomPipelineConfig = CustomPipelineConfig()
+
+
+def _assert_custom_pipeline_supported(*pipeline_values: Optional[str]) -> None:
+    if any(value == "custom" for value in pipeline_values if value):
+        feature = _get_whisper_feature_flags()["custom_pipeline"]
+        if not feature["available"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Custom Whisper pipeline 当前不可用：{feature['reason']}",
+            )
+
+
+class NetworkConfig(BaseModel):
+    acceleration_mode: str = "mirror"  # "none" / "proxy" / "mirror"
+    http_proxy: str = ""
+    github_mirror: str = "https://ghproxy.com"
+    hf_mirror: str = "https://hf-mirror.com"
+    pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
+    hf_token: str = ""  # HuggingFace token for gated repos (e.g. Kotoba v2)
+
+
+@router.get("")
+async def get_settings_all():
+    """Get all settings."""
+    version_info = _get_lada_version_info()
+
+    env_data = read_env_file()
+    lada_model_weights_dir = _get_lada_model_weights_dir_from_env(env_data)
+    whisper_features = _get_whisper_feature_flags()
+
+    return build_settings_payload(
+        env_data=env_data,
+        version_info=version_info,
+        lada_model_weights_dir=lada_model_weights_dir,
+        whisper_features=whisper_features,
+        custom_whisper_config=_parse_custom_config(env_data),
+    )
+
+
+@router.put("/emby")
+async def update_emby_config(config: EmbyConfig):
+    """Update Emby configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Emby 配置...")
+    try:
+        apply_emby_config_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Emby 配置已保存")
+        return {"success": True, "message": "Emby settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Emby 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/emby/test")
+async def test_emby_connection():
+    """Test Emby server connection."""
+    settings = get_settings()
+    if not settings.emby_api_key or not settings.emby_server:
+        raise HTTPException(status_code=400, detail="Emby server and API key are required")
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Emby] 正在测试 Emby 连接...")
+
+    headers = {"X-Emby-Token": settings.emby_api_key}
+    try:
+        async with _get_httpx().AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.emby_server}/emby/System/Info",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            server_name = data.get("ServerName", "Unknown")
+            version = data.get("Version", "Unknown")
+            log_mgr.add_log("success", f"[Emby] 连接成功 — {server_name} v{version}")
+            return {
+                "success": True,
+                "server_name": server_name,
+                "version": version,
+            }
+    except _get_httpx().HTTPError as e:
+        log_mgr.add_log("error", f"[Emby] 连接失败 — {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Emby connection failed: {str(e)}")
+
+
+@router.put("/storage")
+async def update_storage_config(config: StorageConfig):
+    """Update storage directories configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存存储路径配置...")
+    try:
+        set_env_values(build_storage_env_updates(config, LADA_MODEL_WEIGHTS_ENV))
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] 存储路径配置已保存")
+        return {"success": True, "message": "Storage settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 存储路径配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+class DirectoryEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+
+
+class DirectoryBrowseResponse(BaseModel):
+    path: str
+    parent: str | None
+    entries: list[DirectoryEntry]
+
+
+@router.get("/directories", response_model=DirectoryBrowseResponse)
+async def browse_directory(path: str = ""):
+    """Browse directory contents for path picker.
+    If path is empty, starts from source_dir or home.
+    Only returns directories within allowed paths."""
+    settings = get_settings()
+    browse_path = resolve_browse_path(settings, path)
+
+    if not os.path.isdir(browse_path):
+        raise HTTPException(status_code=400, detail=f"Not a directory: {browse_path}")
+
+    if not is_allowed_directory_path(browse_path, settings):
+        raise HTTPException(status_code=403, detail="Access denied: path not within allowed directories")
+

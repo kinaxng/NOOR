@@ -1,0 +1,286 @@
+21:const { connectingLabel, queuedLabel: queuedStatusLabel, blockedLabel: blockedStatusLabel, completedLabel: completedStatusLabel, failedLabel: failedStatusLabel, cancelledLabel: cancelledStatusLabel, fallbackStatusLabel, phaseGroupLabel, getChainMembers, getChainStepLabel, getChainRoleLabel, getChainWaitingLabel, getChainPositionLabel, getChainStatusSummary, getJobChainHint, shouldShowPhaseProgress: shouldShowPhaseProgressForJob, getRunningBadgeLabel } = useJobPresentation(() => jobsStore.jobs)
+261:const chainTitleLabel = computed(() => t('jobs.chain.title'))
+330:const selectedJobChain = computed(() => selectedJob.value ? getChainMembers.value(selectedJob.value) : [])
+332:function getChainMemberStatus(member: any) {
+336:function getChainMemberColor(member: any) {
+343:function getChainMemberPhaseLine(member: any) {
+350:function getChainMemberProgress(member: any) {
+354:function getChainMemberProgressText(member: any) {
+358:  if (member.status === 'running' && phaseProgress > 0) return `${getChainMemberProgress(member)}% · ${phaseProgress}%`
+359:  const progress = getChainMemberProgress(member)
+535:          <div v-if="selectedJobChain.length > 1" class="job-chain-panel">
+536:            <div class="job-chain-panel__head">
+537:              <span class="job-chain-panel__title">{{ chainTitleLabel }}</span>
+538:              <span class="job-chain-panel__summary">{{ getChainStatusSummary(selectedJob || {}) }}</span>
+540:            <div class="job-chain-panel__list">
+542:                v-for="member in selectedJobChain"
+545:                class="job-chain-panel__item"
+546:                :class="{ 'job-chain-panel__item--active': selectedJobId === member.id }"
+549:                <div class="job-chain-panel__step">
+550:                  <span class="job-chain-panel__index">{{ getChainPositionLabel(member) }}</span>
+551:                  <span class="job-chain-panel__step-name">{{ getChainStepLabel(member) }}</span>
+552:                  <span v-if="getChainRoleLabel(member)" class="job-chain-panel__role">{{ getChainRoleLabel(member) }}</span>
+554:                <div class="job-chain-panel__content">
+555:                  <p class="job-chain-panel__name">{{ member.emby_item_name || member.input_path?.split('/')?.pop() }}</p>
+556:                  <p v-if="getChainWaitingLabel(member)" class="job-chain-panel__phase">{{ getChainWaitingLabel(member) }}</p>
+557:                  <p v-else-if="getChainMemberPhaseLine(member)" class="job-chain-panel__phase">{{ getChainMemberPhaseLine(member) }}</p>
+558:                  <p class="job-chain-panel__progress">{{ getChainMemberProgressText(member) }}</p>
+560:                <VuiBadge :color="getChainMemberColor(member)" variant="gradient" size="xs">
+561:                  {{ getChainMemberStatus(member) }}
+713:.job-chain-panel {
+720:.job-chain-panel__head {
+728:.job-chain-panel__title {
+735:.job-chain-panel__summary {
+740:.job-chain-panel__list {
+746:.job-chain-panel__item {
+760:.job-chain-panel__item:hover {
+765:.job-chain-panel__item--active {
+770:.job-chain-panel__step {
+778:.job-chain-panel__index,
+779:.job-chain-panel__step-name {
+784:.job-chain-panel__content {
+788:.job-chain-panel__name {
+796:.job-chain-panel__phase {
+805:.job-chain-panel__progress {
+812:.job-chain-panel__role {
+          </div>
+          <h3 class="text-base font-medium mb-1 text-white font-display">{{ currentTabTitle }}</h3>
+          <p class="text-sm text-white/30">{{ currentEmptyLabel }}</p>
+        </div>
+      </div>
+
+      <!-- Log Viewer -->
+      <div class="lg:col-span-1">
+        <div class="log-card ui-card sticky top-24">
+          <div class="px-4 py-3 flex items-center justify-between log-card__header">
+            <h3 class="text-sm font-medium log-card__title">{{ logsTitleLabel }}</h3>
+            <span v-if="selectedJobId" class="text-xs font-mono text-white/30">
+              {{ getJobStatus(selectedJobId) || t('jobs.status.connecting') }}
+            </span>
+          </div>
+          <div v-if="selectedJobChain.length > 1" class="job-chain-panel">
+            <div class="job-chain-panel__head">
+              <span class="job-chain-panel__title">{{ chainTitleLabel }}</span>
+              <span class="job-chain-panel__summary">{{ getChainStatusSummary(selectedJob || {}) }}</span>
+            </div>
+            <div class="job-chain-panel__list">
+              <button
+                v-for="member in selectedJobChain"
+                :key="member.id"
+                type="button"
+                class="job-chain-panel__item"
+                :class="{ 'job-chain-panel__item--active': selectedJobId === member.id }"
+                @click="selectJob(member)"
+              >
+                <div class="job-chain-panel__step">
+                  <span class="job-chain-panel__index">{{ getChainPositionLabel(member) }}</span>
+                  <span class="job-chain-panel__step-name">{{ getChainStepLabel(member) }}</span>
+                  <span v-if="getChainRoleLabel(member)" class="job-chain-panel__role">{{ getChainRoleLabel(member) }}</span>
+                </div>
+                <div class="job-chain-panel__content">
+                  <p class="job-chain-panel__name">{{ member.emby_item_name || member.input_path?.split('/')?.pop() }}</p>
+                  <p v-if="getChainWaitingLabel(member)" class="job-chain-panel__phase">{{ getChainWaitingLabel(member) }}</p>
+                  <p v-else-if="getChainMemberPhaseLine(member)" class="job-chain-panel__phase">{{ getChainMemberPhaseLine(member) }}</p>
+                  <p class="job-chain-panel__progress">{{ getChainMemberProgressText(member) }}</p>
+                </div>
+                <VuiBadge :color="getChainMemberColor(member)" variant="gradient" size="xs">
+                  {{ getChainMemberStatus(member) }}
+                </VuiBadge>
+              </button>
+            </div>
+          </div>
+          <div v-if="!selectedJobId" class="jobs-log-empty">
+            <div class="jobs-log-empty__icon">
+              <BaseIcon name="terminal" class="w-5 h-5" />
+            </div>
+            <p class="jobs-log-empty__title">{{ t('jobs.logsTitle') }}</p>
+            <p class="jobs-log-empty__hint">{{ t('jobs.clickForLogs') }}</p>
+          </div>
+          <LogViewer v-else :logs="logs" :auto-scroll="true" />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.job-card {
+  transition: all var(--transition-normal);
+}
+
+.job-card:hover {
+  border-color: rgba(0, 117, 255, 0.3);
+  box-shadow: 0 8px 26px -4px rgba(0, 117, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.job-card--selected {
+  border-color: rgba(0, 117, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(0, 117, 255, 0.2), 0 8px 26px -4px rgba(0, 117, 255, 0.25);
+}
+
+.job-card--flash {
+  animation: job-card-flash 2s ease-out 1;
+}
+
+@keyframes job-card-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0,117,255,0.45), 0 10px 30px -6px rgba(0,117,255,0.35);
+    border-color: rgba(0,117,255,0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 1px rgba(0,117,255,0.12), 0 8px 26px -4px rgba(0,117,255,0.08);
+    border-color: rgba(255,255,255,0.08);
+  }
+}
+
+.job-card__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.job-card__icon--running {
+  background: rgba(0, 117, 255, 0.15);
+  color: #0075FF;
+}
+
+.job-card__icon--queued {
+  background: rgba(255, 181, 71, 0.15);
+  color: #FFB547;
+}
+
+.job-card__icon--completed {
+  background: rgba(1, 181, 116, 0.15);
+  color: #01B574;
+}
+
+.job-card__icon--failed {
+  background: rgba(227, 26, 26, 0.15);
+  color: #E31A1A;
+}
+
+
+.jobs-toolbar {
+  align-items: center;
+}
+
+.jobs-toolbar__action {
+  flex-shrink: 0;
+}
+
+.empty-state-card {
+  min-height: 15rem;
+}
+
+.empty-state-icon {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.log-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.jobs-log-empty {
+  display: flex;
+  min-height: 22rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  color: var(--color-text-secondary);
+}
+
+.jobs-log-empty__icon {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-subtle);
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.42);
+}
+
+.jobs-log-empty__title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.jobs-log-empty__hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 900px) {
+  .jobs-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .jobs-toolbar__action {
+    align-self: flex-end;
+  }
+
+  .jobs-log-empty {
+    min-height: 14rem;
+  }
+}
+
+.job-chain-panel {
+  padding: 0.85rem 1rem 0.95rem;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.02);
+}
+
+.job-chain-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.job-chain-panel__title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.42);
+}
+
+.job-chain-panel__summary {
+  font-size: 11px;
+  color: rgba(255,255,255,0.34);
+}
+
+.job-chain-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.job-chain-panel__item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.02);
+  text-align: left;
+  transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.job-chain-panel__item:hover {

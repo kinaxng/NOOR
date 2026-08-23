@@ -1,0 +1,173 @@
+def _remove_file_and_sibling_nfo(path: Path, *, remove_nfo: bool) -> list[str]:
+    deleted: list[str] = []
+    if path.is_file():
+        path.unlink()
+        deleted.append(str(path))
+    if remove_nfo:
+        sibling_nfo = path.with_suffix(".nfo")
+        if sibling_nfo.is_file():
+            sibling_nfo.unlink()
+            deleted.append(str(sibling_nfo))
+    return deleted
+
+
+def _normalize_code_token(value: str | None) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[^A-Z0-9]", "", value.upper())
+
+
+
+
+def _directory_is_single_code_bucket(dir_path: Path, code: str | None) -> bool:
+    if not code or not dir_path.is_dir():
+        return False
+    code_token = _normalize_code_token(code)
+    if not code_token:
+        return False
+
+    has_video = False
+    try:
+        for child in dir_path.iterdir():
+            if child.is_dir():
+                return False
+            if child.suffix.lower() not in VIDEO_EXTS:
+                continue
+            has_video = True
+            child_token = _normalize_code_token(child.stem)
+            if code_token not in child_token:
+                return False
+    except OSError:
+        return False
+
+    return has_video
+
+def _parent_is_code_bucket(file_path: Path, code: str | None) -> bool:
+    if not code:
+        return False
+    code_token = _normalize_code_token(code)
+    if not code_token:
+        return False
+    parent_token = _normalize_code_token(file_path.parent.name)
+    return bool(parent_token) and code_token in parent_token
+
+
+def _collect_chain_delete_targets(
+    source_path: Path | None,
+    hardlink_paths: list[Path],
+    *,
+    code: str | None,
+    source_roots: list[Path],
+    hardlink_roots: list[Path],
+) -> tuple[set[Path], set[Path]]:
+    delete_dirs: set[Path] = set()
+    delete_files: set[Path] = set()
+    protected_roots = set(source_roots + hardlink_roots)
+
+    if source_path:
+        if _parent_is_code_bucket(source_path, code) and _directory_is_single_code_bucket(source_path.parent, code):
+            if source_path.parent in protected_roots:
+                raise HTTPException(status_code=400, detail=f"禁止删除扫描根目录: {source_path.parent}")
+            delete_dirs.add(source_path.parent)
+        else:
+            delete_files.add(source_path)
+
+    for hardlink_path in hardlink_paths:
+        if _parent_is_code_bucket(hardlink_path, code) and _directory_is_single_code_bucket(hardlink_path.parent, code):
+            if hardlink_path.parent in protected_roots:
+                raise HTTPException(status_code=400, detail=f"禁止删除扫描根目录: {hardlink_path.parent}")
+            delete_dirs.add(hardlink_path.parent)
+        else:
+            delete_files.add(hardlink_path)
+
+    for d in list(delete_dirs):
+        delete_files = {f for f in delete_files if d not in f.parents}
+
+    return delete_dirs, delete_files
+
+
+def _execute_delete_targets(
+    delete_dirs: set[Path],
+    delete_files: set[Path],
+) -> dict:
+    deleted_dirs: list[str] = []
+    missing_dirs: list[str] = []
+    deleted_files: list[str] = []
+    missing_files: list[str] = []
+    errors: list[str] = []
+
+    for target_dir in sorted(delete_dirs, key=lambda p: len(p.parts), reverse=True):
+        if not target_dir.exists():
+            missing_dirs.append(str(target_dir))
+            continue
+        try:
+            shutil.rmtree(target_dir)
+            deleted_dirs.append(str(target_dir))
+        except Exception as e:
+            errors.append(f"{target_dir}: {e}")
+
+    for target_file in sorted(delete_files):
+        if not target_file.exists():
+            missing_files.append(str(target_file))
+            continue
+        try:
+            deleted_files.extend(_remove_file_and_sibling_nfo(target_file, remove_nfo=True))
+        except Exception as e:
+            errors.append(f"{target_file}: {e}")
+
+    if errors:
+        raise HTTPException(status_code=500, detail=f"部分删除失败: {'; '.join(errors)}")
+
+    if not deleted_dirs and not deleted_files and (missing_dirs or missing_files):
+        raise HTTPException(status_code=404, detail="目标不存在")
+
+    return {
+        "deleted_dirs": deleted_dirs,
+        "missing_dirs": missing_dirs,
+        "deleted_files": deleted_files,
+        "missing_files": missing_files,
+    }
+
+
+def _preview_delete_targets(
+    delete_dirs: set[Path],
+    delete_files: set[Path],
+) -> dict:
+    planned_dirs = sorted(str(p) for p in delete_dirs)
+    planned_files: list[str] = []
+    for file_path in sorted(delete_files):
+        planned_files.append(str(file_path))
+        nfo_path = file_path.with_suffix(".nfo")
+        if nfo_path.exists():
+            planned_files.append(str(nfo_path))
+    return {
+        "planned_dirs": planned_dirs,
+        "planned_files": planned_files,
+    }
+
+
+
+# ─── Emby connection test ──────────────────────────────────────────────────────
+
+async def _test_connection(config: dict) -> tuple[bool, str]:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{_server_url(config)}/emby/System/Info",
+                headers=_headers(config.get("api_key", "")),
+            )
+            if resp.status_code == 401:
+                return False, "API Key 无效或已过期"
+            resp.raise_for_status()
+            data = resp.json()
+            return True, f"已连接至 {data.get('ServerName', 'Emby/Jellyfin')}"
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return False, "API Key 无效或已过期"
+        return False, f"连接失败: HTTP {e.response.status_code}"
+    except Exception as e:
+        return False, f"连接失败: {e}"
+
+
+---
+/bin/bash: line 1: rg: command not found

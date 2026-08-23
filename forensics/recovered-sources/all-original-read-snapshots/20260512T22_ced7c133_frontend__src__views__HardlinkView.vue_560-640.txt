@@ -1,0 +1,81 @@
+      >
+        <span class="summary-card__label">{{ entryCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_entries }}</span>
+      </button>
+      <button
+        type="button"
+        class="summary-card summary-card--button ui-card"
+        :class="{ 'summary-card--active': filterKey === 'withHardlink', 'summary-card--disabled': filterCounts.withHardlink === 0 }"
+        :disabled="filterCounts.withHardlink === 0"
+        @click="applySummaryFilter('withHardlink')"
+      >
+        <span class="summary-card__label">{{ hardlinkCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_hardlinks }}</span>
+      </button>
+      <button
+        type="button"
+        class="summary-card summary-card--button ui-card"
+        :class="{ 'summary-card--warn': summary.issue_groups > 0, 'summary-card--active': filterKey === 'issueOnly', 'summary-card--disabled': filterCounts.issueOnly === 0 }"
+        :disabled="filterCounts.issueOnly === 0"
+        @click="applySummaryFilter('issueOnly')"
+      >
+        <span class="summary-card__label">{{ issueCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.issue_groups }}</span>
+      </button>
+    </div>
+
+    <ControlPanel v-if="hasGroups" title="硬链接控制面板" summary="搜索、排序与分组筛选">
+      <template #actions>
+        <div class="hardlinks-search-wrap hardlinks-search--header">
+          <BaseIcon name="search" class="hardlinks-search__icon" />
+          <input
+            v-model="searchQuery"
+            type="search"
+            :placeholder="searchPlaceholder"
+            class="hardlinks-search"
+          />
+        </div>
+      </template>
+      <template #left>
+        <div class="toolbar-main">
+          <div class="toolbar-block toolbar-block--controls">
+            <div class="sort-controls">
+              <span class="sort-label">{{ t('hardlinks.sortBy') }}:</span>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'code' }" @click="setSort('code')">
+                {{ codeLabel }} {{ sortArrow('code') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'entryCount' }" @click="setSort('entryCount')">
+                {{ entryCountLabel }} {{ sortArrow('entryCount') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'hardlinkCount' }" @click="setSort('hardlinkCount')">
+                {{ hardlinkCountLabel }} {{ sortArrow('hardlinkCount') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'sourceSize' }" @click="setSort('sourceSize')">
+                {{ sourceSizeLabel }} {{ sortArrow('sourceSize') }}
+              </button>
+            </div>
+            <div class="filter-controls">
+              <span class="sort-label">{{ t('hardlinks.filterBy') }}:</span>
+              <button
+                v-for="tab in filterTabs"
+                :key="tab.key"
+                type="button"
+                class="filter-btn"
+                :class="{ 'filter-btn--active': filterKey === tab.key, 'filter-btn--disabled': isFilterDisabled(tab.key) }"
+                :disabled="isFilterDisabled(tab.key)"
+                @click="applySummaryFilter(tab.key)"
+              >
+                {{ tab.label }} ({{ filterCounts[tab.key] }})
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </ControlPanel>
+
+    <div v-if="!hasGroups" class="empty-state">
+        <BaseIcon name="hardlink" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ noGroupsLabel }}</p>
+        <p class="empty-state__desc">{{ emptyDescLabel }}</p>
+        <VuiButton variant="text" color="secondary" size="small" @click="openSettings">
+          {{ goSettingsLabel }}

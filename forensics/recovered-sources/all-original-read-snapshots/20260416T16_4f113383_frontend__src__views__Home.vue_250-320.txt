@@ -1,0 +1,198 @@
+    </div>
+
+    <!-- Media library not configured / disabled -->
+    <div
+      v-else-if="mediaLibraryStore.error"
+      class="ui-card flex flex-col items-center justify-center py-24 text-center"
+    >
+      <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 empty-state-icon">
+        <BaseIcon name="folder" class="w-8 h-8 text-white/20" />
+      </div>
+      <h2 class="text-lg font-semibold mb-2 text-white font-display">{{ t('library.noLibraryTitle') }}</h2>
+      <p class="text-sm text-white/30 mb-5">{{ mediaLibraryStore.error }}</p>
+      <VuiButton variant="gradient" color="info" size="small" @click="router.push('/settings')">
+        {{ t('library.goToSettings') }} →
+      </VuiButton>
+    </div>
+
+    <!-- Grid -->
+    <div
+      v-else
+      class="grid gap-4"
+      style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));"
+    >
+      <MediaCard
+        v-for="(item, i) in visibleItems"
+        :key="item.id"
+        :item="item"
+        :selected="selectedVideo?.id === item.id"
+        class="stagger-item"
+        :style="{ animationDelay: `${(i % 12) * 50}ms` }"
+        @click="handleSelectVideo"
+        @quick-action="handleQuickAction"
+        @subtitle-action="handleSubtitleAction"
+      />
+    </div>
+
+    <!-- Pagination -->
+    <div v-if="mediaLibraryStore.totalPages > 1" class="flex items-center justify-center gap-4">
+      <button
+        @click="goPrevPage"
+        :disabled="mediaLibraryStore.currentPage <= 1"
+        class="pagination-btn"
+        :class="{ 'pagination-btn--disabled': mediaLibraryStore.currentPage <= 1 }"
+      >
+        ← {{ t('common.prevPage') }}
+      </button>
+      <span class="text-sm text-white/40">
+        {{ t('common.pageCounter', { current: mediaLibraryStore.currentPage, total: mediaLibraryStore.totalPages }) }}
+      </span>
+      <button
+        @click="goNextPage"
+        :disabled="mediaLibraryStore.currentPage >= mediaLibraryStore.totalPages"
+        class="pagination-btn"
+        :class="{ 'pagination-btn--disabled': mediaLibraryStore.currentPage >= mediaLibraryStore.totalPages }"
+      >
+        {{ t('common.nextPage') }} →
+      </button>
+    </div>
+
+    <AsyncMediaDetailPanel
+      v-if="showDetailPanel"
+      :open="showDetailPanel"
+      :item="selectedVideo"
+      :detail="videoDetail"
+      :loading="loadingDetail"
+      :error="detailError"
+      @close="handleCloseDetail"
+      @open-subtitle="handleOpenSubtitleFromDetail"
+      @open-lada="handleOpenLadaFromDetail"
+    />
+
+
+---
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { MediaItem } from '../../api/types'
+import { useBlurCover } from '../../composables/useBlurCover'
+import { useI18n } from '../../composables/useI18n'
+
+const { t, i18nVersion } = useI18n()
+
+const props = defineProps<{
+  item: MediaItem
+  selected?: boolean
+}>()
+
+defineEmits<{
+  click: [item: MediaItem]
+  quickAction: [item: MediaItem]
+  subtitleAction: [item: MediaItem]
+}>()
+
+const { blurEnabled } = useBlurCover()
+
+const displayName = computed(() => {
+  return props.item.nfo?.title || props.item.nfo?.originaltitle || props.item.name
+})
+
+const hasChinese = computed(() => {
+  return props.item.tags?.has_chinese || (props.item.subtitle_count ?? 0) > 0
+})
+
+const isCracked = computed(() => {
+  return props.item.tags?.is_cracked
+})
+
+const chineseLabel = computed(() => {
+  void i18nVersion.value
+  return t('mediacard.chinese')
+})
+const crackedLabel = computed(() => {
+  void i18nVersion.value
+  return isCracked.value ? t('mediacard.cracked') : t('mediacard.crack')
+})
+const releaseTypeLabel = computed(() => {
+  void i18nVersion.value
+  if (props.item.tags?.release_type_key === 'leaked') return t('library.filter.leaked')
+  if (props.item.tags?.release_type_key === 'uncensored') return t('library.filter.uncensored')
+  return props.item.tags?.release_type || ''
+})
+
+const variantCountLabel = computed(() => {
+  const count = props.item.variant_count || 0
+  return count > 1 ? `${count} 个版本` : ''
+})
+</script>
+
+<template>
+  <div
+    class="media-card bg-surface overflow-hidden transition-all duration-300"
+  >
+    <!-- Poster -->
+    <div
+      class="aspect-[2/3] bg-bg-elevated relative overflow-hidden cursor-pointer"
+      @click="$emit('click', item)"
+    >
+      <img
+        v-if="item.poster_path"
+        :src="item.poster_path"
+        :alt="item.name"
+        class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+        :class="{ 'blur-xl': blurEnabled }"
+        loading="lazy"
+      />
+      <div v-else class="w-full h-full flex items-center justify-center text-text-muted text-xs">
+        {{ t('mediacard.noCover') }}
+      </div>
+
+    </div>
+
+    <!-- Info -->
+    <div class="p-3">
+      <p
+        class="text-xs line-clamp-2 h-8 text-text-body mb-1.5 cursor-pointer hover:text-white transition-colors"
+        @click="$emit('click', item)"
+      >
+        {{ displayName }}
+      </p>
+
+      <div v-if="variantCountLabel" class="mb-2">
+        <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/55">
+          {{ variantCountLabel }}
+        </span>
+      </div>
+
+      <!-- Tags -->
+      <div class="flex flex-wrap gap-1">
+        <!-- Chinese/Subtitle tag -->
+        <button
+          class="text-xs px-1.5 py-0.5 rounded transition-colors cursor-pointer border"
+          :class="hasChinese ? 'tag-subtitle' : 'tag-subtitle--none'"
+          @click.stop="$emit('subtitleAction', item)"
+        >
+          {{ chineseLabel }}
+        </button>
+
+        <!-- Cracked tag -->
+        <button
+          v-if="!item.tags?.release_type"
+          class="text-xs px-1.5 py-0.5 rounded transition-colors border"
+          :class="isCracked ? 'tag-cracked' : 'tag-cracked--none'"
+          @click.stop="!isCracked && $emit('quickAction', item)"
+        >
+          {{ crackedLabel }}
+        </button>
+
+        <!-- Release type badge -->
+        <span
+          v-if="item.tags?.release_type"
+          class="text-xs px-1.5 py-0.5 rounded border"
+          :class="item.tags.release_type_key === 'leaked' ? 'tag-leaked' : 'tag-uncensored'"
+        >
+          {{ releaseTypeLabel }}
+        </span>
+      </div>
+    </div>
+  </div>
+</template>

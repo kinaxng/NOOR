@@ -1,0 +1,81 @@
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Merge Strategy (only when two pipelines selected) -->
+                <div v-if="whisperUseAdvanced && whisperSelectedPipelines.length === 2" class="ui-card">
+                  <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-2">{{ whisperMergeLabel }}</label>
+                  <select
+                    v-model="whisperMergeStrategy"
+                    :disabled="whisperRunning"
+                    class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent-cyan focus:border-transparent"
+                  >
+                    <option v-for="opt in whisperMergeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+
+                <!-- Status -->
+                <div v-if="whisperStatus" class="text-center py-2 rounded" :class="{
+                  'text-accent-cyan': whisperStatus.toLowerCase().includes('submit') || whisperStatus.toLowerCase().includes('create'),
+                  'text-status-success': whisperStatus.toLowerCase().includes('complete') || whisperStatus.toLowerCase().includes('done'),
+                  'text-status-error': whisperStatus.toLowerCase().includes('fail') || whisperStatus.toLowerCase().includes('error')
+                }">
+                  {{ whisperStatus }}
+                </div>
+
+                <!-- Progress -->
+                <VuiProgress
+                  v-if="whisperRunning || whisperProgress > 0"
+                  :value="whisperProgress"
+                  color="cyan"
+                />
+              </div>
+            </div>
+          </div>
+
+            <!-- Fixed Close Button -->
+            <button
+              @click="handleClose"
+              class="absolute top-4 right-4 w-10 h-10 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-default transition-colors shadow-lg"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- Subtitle Preview -->
+  <SubtitlePreview
+    :filename="subtitlePreviewFilename"
+    :content="subtitlePreviewContent"
+    :loading="loadingSubtitlePreview"
+    @close="closeSubtitlePreview"
+  />
+</template>
+
+<style scoped>
+.panel-enter-active {
+  transition: opacity 0.25s ease;
+}
+.panel-enter-active .bg-bg-surface {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.panel-enter-from {
+  opacity: 0;
+}
+.panel-enter-from .bg-bg-surface {
+  transform: translateX(100%);
+}
+.panel-leave-active {
+  transition: opacity 0.2s ease;
+}
+.panel-leave-to {
+  opacity: 0;
+}
+.panel-leave-from .bg-bg-surface {

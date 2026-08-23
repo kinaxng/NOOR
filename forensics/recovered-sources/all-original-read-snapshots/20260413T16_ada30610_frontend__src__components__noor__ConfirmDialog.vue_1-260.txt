@@ -1,0 +1,52 @@
+<script setup lang="ts">
+import BaseModal from '../ui/BaseModal.vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import { useI18n } from '../../composables/useI18n'
+import { useConfirm } from '../../composables/useConfirm'
+
+const { t } = useI18n()
+const { confirmState, resolveConfirm } = useConfirm()
+</script>
+
+<template>
+  <BaseModal
+    v-if="confirmState.open"
+    :title="confirmState.title || t('common.confirm')"
+    size="sm"
+    @close="resolveConfirm(false)"
+  >
+    <p class="confirm-dialog__message">{{ confirmState.message }}</p>
+
+    <template #footer>
+      <div class="confirm-dialog__actions">
+        <VuiButton variant="outlined" color="secondary" size="small" @click="resolveConfirm(false)">
+          {{ confirmState.cancelText || t('common.cancel') }}
+        </VuiButton>
+        <VuiButton
+          variant="gradient"
+          :color="confirmState.danger ? 'error' : 'info'"
+          size="small"
+          @click="resolveConfirm(true)"
+        >
+          {{ confirmState.confirmText || t('common.confirm') }}
+        </VuiButton>
+      </div>
+    </template>
+  </BaseModal>
+</template>
+
+<style scoped>
+.confirm-dialog__message {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+</style>

@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
+
+from app.api import jobs as jobs_api
+from app.core.models import JobResponse
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_returns_jobs_and_total(monkeypatch: pytest.MonkeyPatch):
+    expected_jobs = [
+        JobResponse(
+            id="job-1",
+            job_type="lada",
+            emby_item_id="item-1",
+            emby_item_name="Job 1",
+            input_path="/tmp/job-1.mp4",
+            status="queued",
+            progress=0,
+            error_message=None,
+            settings={},
+            logs=[],
+            created_at="2026-04-13T00:00:00Z",
+            completed_at=None,
+        ),
+        JobResponse(
+            id="job-2",
+            job_type="whisper",
+            emby_item_id="item-2",
+            emby_item_name="Job 2",
+            input_path="/tmp/job-2.mp4",
+            status="queued",
+            progress=0,
+            error_message=None,
+            settings={},
+            logs=[],
+            created_at="2026-04-13T00:00:01Z",
+            completed_at=None,
+        ),
+    ]
+
+    async def fake_get_all_jobs(status=None):
+        assert status == "queued"
+        return expected_jobs
+
+    monkeypatch.setattr(jobs_api.job_manager, "get_all_jobs", fake_get_all_jobs)
+
+    result = await jobs_api.list_jobs(status="queued")
+
+    assert result.jobs == expected_jobs
+    assert result.total == 2
+
+
+@pytest.mark.asyncio
+async def test_cleanup_jobs_returns_cleaned_job_ids(monkeypatch: pytest.MonkeyPatch):
+    async def fake_cleanup_orphaned_jobs():
+        return {
+            "cleaned": 2,
+            "cleaned_job_ids": ["job-1", "job-2"],
+        }
+
+    monkeypatch.setattr(jobs_api.job_manager, "cleanup_orphaned_jobs", fake_cleanup_orphaned_jobs)
+
+    result = await jobs_api.cleanup_jobs()
+
+    assert result == {
+        "cleaned": 2,
+        "cleaned_job_ids": ["job-1", "job-2"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_cancel_job_raises_400_when_job_manager_rejects(monkeypatch: pytest.MonkeyPatch):
+    async def fake_cancel_job(job_id: str):
+        assert job_id == "done-job"
+        return False
+
+    monkeypatch.setattr(jobs_api.job_manager, "cancel_job", fake_cancel_job)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await jobs_api.cancel_job("done-job")
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Job cannot be cancelled"
+
+
+@pytest.mark.asyncio
+async def test_get_job_returns_job_response(monkeypatch: pytest.MonkeyPatch):
+    job = JobResponse(
+        id="job-1",
+        job_type="lada",
+        emby_item_id="item-1",
+        emby_item_name="Job 1",
+        input_path="/tmp/job-1.mp4",
+        status="completed",
+        progress=100,
+        error_message=None,
+        settings={},
+        logs=[],
+        created_at="2026-04-13T00:00:00Z",
+        completed_at=None,
+    )
+
+    async def fake_get_job(job_id: str):
+        assert job_id == "job-1"
+        return job
+
+    monkeypatch.setattr(jobs_api.job_manager, "get_job", fake_get_job)
+
+    result = await jobs_api.get_job("job-1")
+
+    assert result == job
+
+
+@pytest.mark.asyncio
+async def test_get_job_raises_404_when_missing(monkeypatch: pytest.MonkeyPatch):
+    async def fake_get_job(job_id: str):
+        assert job_id == "missing-job"
+        return None
+
+    monkeypatch.setattr(jobs_api.job_manager, "get_job", fake_get_job)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await jobs_api.get_job("missing-job")
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Job not found"
+
+
+@pytest.mark.asyncio
+async def test_delete_job_raises_404_when_missing(monkeypatch: pytest.MonkeyPatch):
+    async def fake_delete_job(job_id: str):
+        assert job_id == "missing-job"
+        return False
+
+    monkeypatch.setattr(jobs_api.job_manager, "delete_job", fake_delete_job)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await jobs_api.delete_job("missing-job")
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Job not found"
+
+
+@pytest.mark.asyncio
+async def test_get_job_logs_returns_job_id_and_logs(monkeypatch: pytest.MonkeyPatch):
+    job = JobResponse(
+        id="job-logs",
+        job_type="lada",
+        emby_item_id="item-logs",
+        emby_item_name="Job Logs",
+        input_path="/tmp/job-logs.mp4",
+        status="running",
+        progress=50,
+        error_message=None,
+        settings={},
+        logs=[],
+        created_at="2026-04-13T00:00:00Z",
+        completed_at=None,
+    )
+
+    async def fake_get_job(job_id: str):
+        assert job_id == "job-logs"
+        return job
+
+    async def fake_get_logs(job_id: str):
+        assert job_id == "job-logs"
+        return ["line-1", "line-2"]
+
+    monkeypatch.setattr(jobs_api.job_manager, "get_job", fake_get_job)
+    monkeypatch.setattr(jobs_api.job_manager, "get_logs", fake_get_logs)
+
+    result = await jobs_api.get_job_logs("job-logs")
+
+    assert result == {"job_id": "job-logs", "logs": ["line-1", "line-2"]}
+
+
+@pytest.mark.asyncio
+async def test_get_job_logs_raises_404_when_job_missing(monkeypatch: pytest.MonkeyPatch):
+    async def fake_get_job(job_id: str):
+        assert job_id == "missing-job"
+        return None
+
+    monkeypatch.setattr(jobs_api.job_manager, "get_job", fake_get_job)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await jobs_api.get_job_logs("missing-job")
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Job not found"
+
+
+@pytest.mark.asyncio
+async def test_download_output_raises_400_when_output_not_ready(monkeypatch: pytest.MonkeyPatch):
+    job = JobResponse(
+        id="job-pending",
+        job_type="lada",
+        emby_item_id="item-pending",
+        emby_item_name="Job Pending",
+        input_path="/tmp/job-pending.mp4",
+        output_path=None,
+        status="running",
+        progress=80,
+        error_message=None,
+        settings={},
+        logs=[],
+        created_at="2026-04-13T00:00:00Z",
+        completed_at=None,
+    )
+
+    async def fake_get_job(job_id: str):
+        assert job_id == "job-pending"
+        return job
+
+    monkeypatch.setattr(jobs_api.job_manager, "get_job", fake_get_job)
+
+    with pytest.raises(HTTPException) as exc_info:

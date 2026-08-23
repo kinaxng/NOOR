@@ -1,0 +1,141 @@
+            config.aligner_backend = cfg_aligner_backend
+            config.framer_backend = cfg_framer_backend
+            # custom pipeline 时，使用 custom_config 中的模型
+            if config.pass1_pipeline == PipelineMode.CUSTOM:
+                try:
+                    config.pass1_model = WhisperModel(cfg_model_str)
+                except ValueError:
+                    config.pass1_model = WhisperModel.LARGE_V3
+            if config.pass2_pipeline == PipelineMode.CUSTOM:
+                try:
+                    config.pass2_model = WhisperModel(cfg_model_str)
+                except ValueError:
+                    config.pass2_model = WhisperModel.LARGE_V3
+
+        p1 = config.pass1_pipeline.value
+        p2 = config.pass2_pipeline.value if config.pass2_pipeline else "none"
+
+        # 日志记录 pipeline 架构和配置
+        old_arch_model_map = {
+            PipelineMode.FASTER: "tiny",
+            PipelineMode.BALANCED: "large-v3",
+            PipelineMode.TRANSFORMERS: "kotoba-whisper-v2.2",
+            PipelineMode.ANIME: "anime-whisper",
+            PipelineMode.QWEN: "large-v3",
+            PipelineMode.SINGLE: config.model.value,
+        }
+        actual_model = old_arch_model_map.get(config.pipeline_mode, config.model.value)
+        await self.add_log(job_id, f"Whisper 架构: lada-webui Whisper Pipeline")
+        if strategy_name:
+            await self.add_log(job_id, f"  策略: {strategy_name}")
+        await self.add_log(job_id, f"  模式: {execution_plan.summary}")
+        for detail_line in execution_plan.detail_lines:
+            await self.add_log(job_id, f"  {detail_line}")
+        await self.add_log(job_id, f"  Pipeline: {p1} | 模型: {actual_model} | Merge: {config.merge_strategy.value}")
+        if config.translate_to:
+            await self.add_log(job_id, f"  翻译: {config.translate_model} → {config.translate_to} | 风格: {config.translate_style}")
+        await self.add_log(job_id, "开始 Whisper 字幕生成...")
+
+        # 日志文件
+        log_file = self._log_file_path(job_id)
+
+        launcher = launch_recommended_whisper_process if execution_plan.executor_key == "recommended" else launch_advanced_whisper_process
+        process_handle = launcher(
+            config,
+            input_path,
+            os.path.splitext(os.path.basename(input_path))[0],
+        )
+        worker_process = process_handle.process
+        worker_message_queue = process_handle.message_queue
+        worker_cancel_event = process_handle.cancel_event
+
+        control_queue: queue.Queue = queue.Queue()
+        running = [True]  # 用列表便于在线程中修改
+        progress_update_futures = []
+
+        # 独立线程：从队列读取 + 发 SSE + 更新数据库
+        main_loop = asyncio.get_running_loop()  # 在 async 函数中获取
+
+        # 进度报告器（替代硬编码模式匹配）
+        reporter = AsyncProgressReporter(job_id, event_queue)
+
+        def reader_thread_fn():
+            while running[0] or worker_process.is_alive():
+                try:
+                    item = worker_message_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+
+                if item.get("type") != "log":
+                    control_queue.put(item)
+                    continue
+
+                msg = item.get("line", "")
+                p = item.get("progress")
+
+                try:
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(msg + "\n")
+                        f.flush()
+                except Exception as e:
+                    logger.warning("Failed to write whisper log for job %s: %s", job_id, e)
+
+                line = msg
+                # 优先使用 pipeline 直接传入的进度值（来自 FasterWhisperProcessor 的音频覆盖率）
+                estimated = p
+
+                # 如果 pipeline 未提供进度，用 reporter 解析
+                if estimated is None:
+                    update = reporter.parse_line(line)
+                    if update:
+                        estimated = update.overall_progress
+
+                # 更新内存
+                if job_id not in self._logs:
+                    self._logs[job_id] = []
+                self._logs[job_id].append(line)
+
+                # 发 SSE（通过 run_coroutine_threadsafe 发送到主事件循环）
+                if estimated is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        event_queue.put({"type": "progress", "progress": estimated}),
+                        main_loop
+                    )
+                    progress_update_futures.append(
+                        asyncio.run_coroutine_threadsafe(
+                            self._set_job_progress(job_id, estimated),
+                            main_loop,
+                        )
+                    )
+                asyncio.run_coroutine_threadsafe(
+                    event_queue.put({"type": "log", "line": line, "progress": estimated}),
+                    main_loop
+                )
+
+        reader = threading.Thread(target=reader_thread_fn, daemon=True)
+        reader.start()
+
+        error_msg = None
+        child_result_srt_path = None
+        child_reported_cancelled = False
+        force_terminate_logged = False
+        terminate_deadline = None
+
+        def consume_control_messages():
+            nonlocal child_result_srt_path, error_msg, child_reported_cancelled
+            while True:
+                try:
+                    item = control_queue.get_nowait()
+                except queue.Empty:
+                    break
+
+                item_type = item.get("type")
+                if item_type == "result":
+                    child_result_srt_path = item.get("srt_path")
+                elif item_type == "error":
+                    error_msg = item.get("error") or "Unknown error"
+                elif item_type == "cancelled":
+                    child_reported_cancelled = True
+                    error_msg = item.get("error") or "Whisper pipeline cancelled"
+
+        cancel_logged = False

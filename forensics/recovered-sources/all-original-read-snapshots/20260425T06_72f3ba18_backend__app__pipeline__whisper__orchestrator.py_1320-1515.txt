@@ -1,0 +1,196 @@
+        seg_idx: int
+    ) -> TranscriptionResult:
+        """Faster 模式: Faster-Whisper turbo，适合清洁音频"""
+        import tempfile
+        import soundfile as sf
+        import librosa
+        self._raise_if_cancelled()
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode="wb") as tmp:
+            tmp_path = tmp.name
+
+        seg_duration = seg_end - seg_start
+
+        try:
+            y, sr = librosa.load(audio_file, sr=16000, mono=True,
+                                 offset=seg_start, duration=seg_duration)
+            sf.write(tmp_path, y, sr)
+        except Exception as e:
+            self.log(f"段落 {seg_idx + 1} 音频提取失败: {e}")
+            return TranscriptionResult(
+                segments=[],
+                language="ja",
+                duration=seg_duration,
+                source="faster-segment-failed",
+                metadata={"error": str(e)}
+            )
+
+        try:
+            # Faster 模式使用 turbo 模型（使用缓存的 processor）
+            if self._faster_processor is None:
+                faster_config = WhisperConfig(
+                    model=WhisperModel.TINY,  # 使用小模型快速处理
+                    device=self.config.device,
+                    language=self.config.language,
+                    vad_filter=False,  # 清洁音频不需要 VAD
+                )
+                self._faster_processor = FasterWhisperProcessor(faster_config, self.progress_callback, self.cancel_callback)
+            result = await asyncio.to_thread(self._faster_processor.process, tmp_path, "")
+            self.log(f"Faster 段落 {seg_idx + 1} 完成: {len(result.segments)} 片段")
+            return result
+        finally:
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+
+    async def _process_balanced_segment(
+        self,
+        audio_file: str,
+        seg_start: float,
+        seg_end: float,
+        seg_idx: int
+    ) -> TranscriptionResult:
+        """Balanced 模式: Faster-Whisper + Silero VAD，适合嘈杂对话"""
+        import tempfile
+        import soundfile as sf
+        import librosa
+        self._raise_if_cancelled()
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode="wb") as tmp:
+            tmp_path = tmp.name
+
+        seg_duration = seg_end - seg_start
+
+        try:
+            y, sr = librosa.load(audio_file, sr=16000, mono=True,
+                                 offset=seg_start, duration=seg_duration)
+            sf.write(tmp_path, y, sr)
+        except Exception as e:
+            self.log(f"段落 {seg_idx + 1} 音频提取失败: {e}")
+            return TranscriptionResult(
+                segments=[],
+                language="ja",
+                duration=seg_duration,
+                source="balanced-segment-failed",
+                metadata={"error": str(e)}
+            )
+
+        try:
+            # Balanced 使用 large-v3 + Silero VAD（使用缓存的 processor）
+            if self._balanced_processor is None:
+                balanced_config = WhisperConfig(
+                    model=WhisperModel.LARGE_V3,
+                    device=self.config.device,
+                    language=self.config.language,
+                    vad_filter=True,
+                    vad_min_silence_ms=1500,
+                )
+                self._balanced_processor = FasterWhisperProcessor(balanced_config, self.progress_callback, self.cancel_callback)
+            result = await asyncio.to_thread(self._balanced_processor.process, tmp_path, "")
+            self.log(f"Balanced 段落 {seg_idx + 1} 完成: {len(result.segments)} 片段")
+            return result
+        finally:
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+
+    async def _process_qwen_segment(
+        self,
+        audio_file: str,
+        seg_start: float,
+        seg_end: float,
+        seg_idx: int
+    ) -> TranscriptionResult:
+        """Large-v3 baseline 模式: Faster-Whisper large-v3 + Silero VAD（历史 qwen 键）"""
+        import tempfile
+        import soundfile as sf
+        import librosa
+        self._raise_if_cancelled()
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode="wb") as tmp:
+            tmp_path = tmp.name
+
+        seg_duration = seg_end - seg_start
+
+        try:
+            y, sr = librosa.load(audio_file, sr=16000, mono=True,
+                                  offset=seg_start, duration=seg_duration)
+            sf.write(tmp_path, y, sr)
+        except Exception as e:
+            self.log(f"段落 {seg_idx + 1} 音频提取失败: {e}")
+            return TranscriptionResult(
+                segments=[],
+                language="ja",
+                duration=seg_duration,
+                source="large-v3-baseline-segment-failed",
+                metadata={"error": str(e)}
+            )
+
+        try:
+            if self._qwen_processor is None:
+                qwen_config = WhisperConfig(
+                    model=WhisperModel.LARGE_V3,
+                    device=self.config.device,
+                    language=self.config.language,
+                    vad_filter=True,
+                    vad_min_silence_ms=1500,
+                )
+                self._qwen_processor = FasterWhisperProcessor(qwen_config, self.progress_callback, self.cancel_callback)
+            result = await asyncio.to_thread(self._qwen_processor.process, tmp_path, "")
+            self.log(f"Large-v3 baseline 段落 {seg_idx + 1} 完成: {len(result.segments)} 片段")
+            return result
+        finally:
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+
+    async def _process_anime_segment(
+        self,
+        audio_file: str,
+        seg_start: float,
+        seg_end: float,
+        seg_idx: int
+    ) -> TranscriptionResult:
+        """Anime 模式: anime-whisper + TEN VAD，JAV 优化"""
+        import tempfile
+        import soundfile as sf
+        import librosa
+        self._raise_if_cancelled()
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode="wb") as tmp:
+            tmp_path = tmp.name
+
+        seg_duration = seg_end - seg_start
+
+        try:
+            y, sr = librosa.load(audio_file, sr=16000, mono=True,
+                                 offset=seg_start, duration=seg_duration)
+            sf.write(tmp_path, y, sr)
+        except Exception as e:
+            self.log(f"段落 {seg_idx + 1} 音频提取失败: {e}")
+            return TranscriptionResult(
+                segments=[],
+                language="ja",
+                duration=seg_duration,
+                source="anime-segment-failed",
+                metadata={"error": str(e)}
+            )
+
+        try:
+            # Anime 模式使用 anime-whisper（Transformers ASR pipeline）
+            if self._anime_processor is None:
+                anime_config = WhisperConfig(
+                    model=WhisperModel.ANIME,
+                    device=self.config.device,
+                    language=self.config.language,
+                    vad_filter=True,
+                )
+                self._anime_processor = AnimeWhisperProcessor(anime_config, self.progress_callback, self.cancel_callback)
+            result = await asyncio.to_thread(self._anime_processor.process, tmp_path, "")
+            self.log(f"Anime 段落 {seg_idx + 1} 完成: {len(result.segments)} 片段")
+            return result
+        finally:
+            try:

@@ -1,0 +1,80 @@
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useI18n } from '../composables/useI18n'
+import MediaCard from '../components/noor/MediaCard.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import NoorPagination from '../components/ui/Pagination.vue'
+
+// Lazy-load panels that are only shown on demand
+const AsyncMediaDetailPanel = defineAsyncComponent(() => import('../components/noor/MediaDetailPanel.vue'))
+const AsyncLadaPanel = defineAsyncComponent(() => import('../components/noor/LadaPanel.vue'))
+const AsyncSubtitlePanel = defineAsyncComponent(() => import('../components/noor/SubtitlePanel.vue'))
+import type { MediaItem } from '../api/types'
+
+const { t, i18nVersion } = useI18n()
+const mediaLibraryStore = useMediaLibraryStore()
+const route = useRoute()
+const router = useRouter()
+
+const activeFilter = ref((route.query.filter as string) || '')
+const filters = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: '', label: t('library.filter.all') },
+    { key: 'cracked', label: t('library.filter.cracked') },
+    { key: 'chinese', label: t('library.filter.chinese') },
+    { key: 'leaked', label: t('library.filter.leaked') },
+    { key: 'uncensored', label: t('library.filter.uncensored') },
+  ]
+})
+
+const activeFilterStr = computed({
+  get: () => activeFilter.value,
+  set: (v: string) => { activeFilter.value = v },
+})
+
+const searchQuery = ref(mediaLibraryStore.searchQuery)
+const searchPlaceholder = computed(() => {
+  void i18nVersion.value
+  return t('library.search.placeholder')
+})
+
+const visibleItems = computed(() => mediaLibraryStore.filteredItems)
+
+type LibraryImageMode = 'cover' | 'backdrop'
+const IMAGE_MODE_KEY = 'noor-library-image-mode'
+const imageMode = ref<LibraryImageMode>((localStorage.getItem(IMAGE_MODE_KEY) as LibraryImageMode) || 'cover')
+const gridEl = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | null = null
+let resizeTimer: ReturnType<typeof setTimeout> | null = null
+
+const gridMinWidth = computed(() => imageMode.value === 'backdrop' ? 320 : 160)
+const gridTemplateColumns = computed(() => `repeat(auto-fill, minmax(${gridMinWidth.value}px, 1fr))`)
+const imageModeTitle = computed(() => imageMode.value === 'backdrop' ? '切换为封面图' : '切换为背景图')
+
+function toggleImageMode() {
+  imageMode.value = imageMode.value === 'cover' ? 'backdrop' : 'cover'
+  localStorage.setItem(IMAGE_MODE_KEY, imageMode.value)
+  schedulePageSizeUpdate(true)
+}
+
+function estimatePageSize() {
+  const el = gridEl.value
+  if (!el) return 18
+  const width = el.clientWidth || window.innerWidth
+  const top = el.getBoundingClientRect().top
+  const availableHeight = Math.max(360, window.innerHeight - top - 88)
+  const gap = 16
+  const minWidth = gridMinWidth.value
+  const columns = Math.max(1, Math.floor((width + gap) / (minWidth + gap)))
+  const cardWidth = Math.max(minWidth, (width - gap * Math.max(0, columns - 1)) / columns)
+  const imageHeight = imageMode.value === 'backdrop' ? cardWidth * 1468 / 2184 : cardWidth * 3 / 2
+  const cardHeight = imageHeight + (imageMode.value === 'backdrop' ? 64 : 74)
+  const measuredRows = Math.max(1, Math.floor((availableHeight + gap) / (cardHeight + gap)))
+  const rows = imageMode.value === 'cover' ? Math.max(3, measuredRows) : measuredRows
+  const maxItems = imageMode.value === 'backdrop' ? 96 : 144
+  return Math.max(imageMode.value === 'cover' ? columns * 3 : columns, Math.min(maxItems, columns * rows))

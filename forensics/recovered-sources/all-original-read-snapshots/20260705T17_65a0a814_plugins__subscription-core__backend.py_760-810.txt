@@ -1,0 +1,51 @@
+    sub = {
+        "id": uuid.uuid4().hex,
+        "code": code,
+        "search_code": raw_code or code,
+        "title": str(payload.get("title") or code),
+        "cover_url": str(payload.get("cover_url") or payload.get("image") or (media_item or {}).get("poster_path") or ""),
+        "fanart_url": str(payload.get("fanart_url") or payload.get("backdrop_url") or (media_item or {}).get("fanart_path") or payload.get("cover_url") or payload.get("image") or ""),
+        "image_candidates": _image_candidates(payload, media_item),
+        "type": sub_type,
+        "mode": str(payload.get("mode") or config.get("default_mode") or "loose"),
+        "require_cracked": bool(payload.get("require_cracked", config.get("default_require_cracked", False))),
+        "require_subtitle": bool(payload.get("require_subtitle", config.get("default_require_subtitle", False))),
+        "status": "active",
+        "push_status": "idle",
+        "submit_attempts": 0,
+        "last_submit_at": "",
+        "last_submit_local_date": "",
+        "last_submit_resource_key": "",
+        "last_submit_error": "",
+        "last_submit_error_kind": "",
+        "retry_after_at": "",
+        "submitted_downloader_id": "",
+        "submitted_result": None,
+        "current_media_item_id": str((media_item or {}).get("id") or ""),
+        "current_file_path": str((media_item or {}).get("path") or ""),
+        "current_score": int(payload.get("current_score") or _score_media_item(media_item)),
+        "current_is_cracked": bool(current_profile.get("is_cracked")),
+        "current_has_subtitle": bool(current_profile.get("has_subtitle")),
+        "current_is_new_model_uncensored_crack": bool(current_profile.get("is_new_model_uncensored_crack")),
+        "current_resolution_rank": int(current_profile.get("resolution_rank") or 0),
+        "current_size_bytes": int(current_profile.get("size_bytes") or 0),
+        "best_resource": None,
+        "last_checked_at": "",
+        "last_source": source,
+        "source_history": [{**source, "at": now}] if any(source.values()) else [],
+        "created_at": now,
+        "updated_at": now,
+    }
+    data["subscriptions"].insert(0, sub)
+    _event(data, sub["id"], "info", f"创建{'洗版' if sub_type == 'upgrade' else '订阅'}：{code}", {"media_found": bool(media_item), **{k: v for k, v in source.items() if v}})
+    _save(data)
+    _schedule_immediate_check(config, sub["id"])
+    return {"ok": True, "subscription": _public_subscription(sub), "created": True}
+
+
+
+async def _submit_best_download(config: dict[str, Any], sub: dict[str, Any], resource: dict[str, Any], *, automatic: bool = True, force: bool = False) -> dict[str, Any]:
+    from app.plugins.runtime import runtime
+
+    if not resource:
+        raise ValueError("没有可推送的匹配资源")

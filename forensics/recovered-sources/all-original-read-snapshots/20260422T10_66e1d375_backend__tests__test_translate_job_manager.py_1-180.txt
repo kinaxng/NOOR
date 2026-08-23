@@ -1,0 +1,253 @@
+from __future__ import annotations
+
+import asyncio
+import queue
+
+import pytest
+from sqlalchemy import select
+
+from app.core.models import Job, JobCreate, JobSettings
+from app.tasks.manager import JobManager
+
+from conftest import wait_until
+
+
+def make_translate_job(path: str) -> JobCreate:
+    return JobCreate(
+        emby_item_id='translate-job',
+        emby_item_name='Translate Job',
+        input_path=path,
+        settings=JobSettings(
+            srt_path=path,
+            target_lang='zh',
+            translate_model='gpt-4o-mini',
+            translate_base_url='https://api.openai.com/v1',
+            translate_api_key='',
+            translate_style='adult_explicit',
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_blocked_translate_job_has_waiting_translate_phase(temp_db):
+    manager = JobManager()
+    job = make_translate_job('/tmp/waiting.ja.srt')
+    job.depends_on_task_id = 'parent-job'
+    job.parent_task_id = 'parent-job'
+
+    result = await manager.create_job(
+        job,
+        job_type='translate-srt',
+        status='blocked',
+        enqueue_now=False,
+    )
+
+    assert result.status == 'blocked'
+    assert result.phase_key == 'translate'
+    assert result.phase_label == '字幕翻译'
+    assert result.phase_progress == 0
+    assert result.detail == '等待主任务完成后自动开始'
+
+    async with temp_db() as session:
+        db_job = (await session.execute(select(Job).where(Job.id == result.id))).scalar_one()
+        assert db_job is not None
+        assert db_job.phase_key == 'translate'
+        assert db_job.phase_label == '字幕翻译'
+        assert db_job.phase_progress == 0
+        assert db_job.detail == '等待主任务完成后自动开始'
+
+
+@pytest.mark.asyncio
+async def test_activate_blocked_translate_job_sets_queued_followup_detail(temp_db):
+    manager = JobManager()
+    job = make_translate_job('/tmp/queued-followup.ja.srt')
+    job.depends_on_task_id = 'parent-job'
+    job.parent_task_id = 'parent-job'
+
+    created = await manager.create_job(
+        job,
+        job_type='translate-srt',
+        status='blocked',
+        enqueue_now=False,
+    )
+
+    activated = await manager._activate_blocked_dependents('parent-job')
+
+    assert activated == [created.id]
+
+    async with temp_db() as session:
+        db_job = (await session.execute(select(Job).where(Job.id == created.id))).scalar_one()
+        assert db_job is not None
+        assert db_job.status == 'queued'
+        assert db_job.phase_key == 'translate'
+        assert db_job.phase_label == '字幕翻译'
+        assert db_job.phase_progress == 0
+        assert db_job.detail == '主任务已完成，准备开始后续任务'
+
+
+@pytest.mark.asyncio
+async def test_finalize_translate_job_without_phase_label_uses_phase_protocol_label(temp_db):
+    manager = JobManager()
+    job = make_translate_job('/tmp/finalize-followup.ja.srt')
+
+    created = await manager.create_job(
+        job,
+        job_type='translate-srt',
+        status='queued',
+        enqueue_now=False,
+    )
+
+    async with temp_db() as session:
+        db_job = (await session.execute(select(Job).where(Job.id == created.id))).scalar_one()
+        db_job.status = 'running'
+        db_job.phase_key = 'translate'
+        db_job.phase_label = None
+        await session.commit()
+
+    await manager._finalize_job(created.id, status='completed', progress=100)
+
+    async with temp_db() as session:
+        db_job = (await session.execute(select(Job).where(Job.id == created.id))).scalar_one()
+        assert db_job.status == 'completed'
+        assert db_job.phase_key == 'translate'
+        assert db_job.phase_label == '字幕翻译'
+        assert db_job.phase_progress == 100
+
+
+@pytest.mark.asyncio
+async def test_skip_blocked_translate_job_emits_skipped_terminal_and_preserves_translate_phase(temp_db):
+    manager = JobManager()
+    job = make_translate_job('/tmp/skipped-followup.ja.srt')
+    job.depends_on_task_id = 'parent-job'
+    job.parent_task_id = 'parent-job'
+
+    created = await manager.create_job(
+        job,
+        job_type='translate-srt',
+        status='blocked',
+        enqueue_now=False,
+    )
+
+    skipped = await manager._skip_blocked_dependents('parent-job', '上游转写任务失败，翻译任务跳过')
+
+    assert skipped == [created.id]
+
+    blocked_event = await manager.get_event_queue(created.id).get()
+    assert blocked_event["type"] == "blocked"
+
+    event = await manager.get_event_queue(created.id).get()
+    assert event == {
+        'type': 'skipped',
+        'success': False,
+        'error': '上游转写任务失败，翻译任务跳过',
+    }
+
+    async with temp_db() as session:
+        db_job = (await session.execute(select(Job).where(Job.id == created.id))).scalar_one()
+        assert db_job.status == 'skipped'
+        assert db_job.phase_key == 'translate'
+        assert db_job.phase_label == '字幕翻译'
+        assert db_job.phase_progress == 0
+        assert db_job.detail == '上游转写任务失败，翻译任务跳过'
+
+
+@pytest.mark.asyncio
+async def test_cancel_running_translate_job_does_not_start_next_until_current_exits(temp_db, tmp_path):
+    manager = JobManager()
+    first_can_exit = asyncio.Event()
+    second_started = asyncio.Event()
+    second_can_exit = asyncio.Event()
+    started: list[str] = []
+
+    first_path = tmp_path / 'first.ja.srt'
+    first_path.write_text('1\n00:00:00,000 --> 00:00:01,000\nhello\n', encoding='utf-8')
+    second_path = tmp_path / 'second.ja.srt'
+    second_path.write_text('1\n00:00:00,000 --> 00:00:01,000\nworld\n', encoding='utf-8')
+
+    async def fake_run_translate(job_id: str, job_data: JobCreate):
+        started.append(job_id)
+        if len(started) == 1:
+            await manager._cancel_event_for(job_id).wait()
+            await first_can_exit.wait()
+            await manager._finish_cancelled_job(
+                job_id,
+                event_queue=manager.get_event_queue(job_id),
+                log_message="翻译任务已取消",
+            )
+        else:
+            second_started.set()
+            await second_can_exit.wait()
+            await manager._finalize_job(job_id, status='completed', progress=100)
+
+---job manager tests---
+    [
+        (httpx.HTTPStatusError("too many", request=httpx.Request("GET", "https://example.com"), response=httpx.Response(429)), True),
+        (RuntimeError("翻译失败: 429 Too Many Requests"), True),
+        (RuntimeError("翻译失败: rate limit exceeded"), True),
+        (RuntimeError("翻译失败: unauthorized"), False),
+    ],
+)
+def test_is_rate_limit_error_detects_http_status_and_wrapped_messages(error, expected):
+    assert JobManager._is_rate_limit_error(error) is expected
+
+
+@pytest.mark.asyncio
+async def test_create_blocked_job_emits_blocked_event(temp_db):
+    manager = JobManager()
+    response = await manager.create_job(
+        make_job("blocked-child"),
+        job_type="translate-srt",
+        status="blocked",
+        enqueue_now=False,
+    )
+
+    event = await asyncio.wait_for(manager.get_event_queue(response.id).get(), timeout=2)
+    assert event == {
+        "type": "blocked",
+        "job_id": response.id,
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+        "phase_progress": 0,
+        "detail": "等待主任务完成后自动开始",
+    }
+
+
+def test_job_phase_helpers_normalize_labels():
+    from app.tasks.job_phases import (
+        get_job_type_phase_defaults,
+        get_phase_label,
+        get_terminal_phase_label,
+        normalize_phase_key,
+    )
+
+    assert normalize_phase_key("detect") == "analyze"
+    assert normalize_phase_key("restore") == "process"
+    assert normalize_phase_key("write_output") == "output"
+    assert get_phase_label("detect") == "分析内容"
+    assert get_phase_label("translate") == "字幕翻译"
+    assert get_phase_label("unknown", "fallback") == "fallback"
+    assert get_job_type_phase_defaults("translate-srt") == {
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+    }
+    assert get_terminal_phase_label("completed", phase_key="translate") == "字幕翻译"
+    assert get_terminal_phase_label("cancelled") == "已取消"
+
+
+def test_whisper_progress_reporter_uses_shared_phase_protocol():
+    from app.pipeline.whisper.progress import AsyncProgressReporter
+
+    reporter = AsyncProgressReporter(job_id="job-1", event_queue=None)
+
+    update = reporter.parse_line("场景检测 3 / 10")
+    assert update is not None
+    assert update.phase_key == "analyze"
+    assert update.phase_label == "分析内容"
+
+    update = reporter.parse_line("Anime-Whisper 4 / 10")
+    assert update is not None
+    assert update.phase_key == "transcribe"
+    assert update.phase_label == "生成字幕"
+
+    update = reporter.parse_line("后处理完成")
+    assert update is not None

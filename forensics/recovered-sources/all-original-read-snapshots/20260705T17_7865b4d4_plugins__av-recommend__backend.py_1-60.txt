@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import datetime as dt
+import hashlib
+import json
+import math
+import re
+import time
+from collections import Counter, defaultdict
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.database import async_session_maker
+from app.core.runtime_paths import plugin_data_path
+from app.knowledge.models import KnowledgeActionState, KnowledgeEdge, KnowledgeEntity
+from app.plugins.contracts import PluginManifest, PluginTestResult
+
+PLUGIN_ID = "av-recommend"
+
+
+def _data_file() -> Path:
+    return plugin_data_path("av_recommend", "feedback.json")
+
+
+def _candidate_pool_file() -> Path:
+    return plugin_data_path("av_recommend", "candidate_pool.json")
+
+
+def _title_profile_file() -> Path:
+    return plugin_data_path("av_recommend", "title_profile.json")
+
+
+def _image_candidates(*items: Any) -> list[str]:
+    out: list[str] = []
+    keys = ("fanart_url", "cover_url", "thumb_url", "image", "poster_url", "jacket_url", "preview_url")
+
+    def push(value: Any) -> None:
+        if not value:
+            return
+        if isinstance(value, dict):
+            for key in keys:
+                push(value.get(key))
+            return
+        if isinstance(value, (list, tuple)):
+            for entry in value:
+                push(entry)
+            return
+        text = str(value or "").strip()
+        if text and text not in out:
+            out.append(text)
+
+    for item in items:
+        push(item)
+    return out
+

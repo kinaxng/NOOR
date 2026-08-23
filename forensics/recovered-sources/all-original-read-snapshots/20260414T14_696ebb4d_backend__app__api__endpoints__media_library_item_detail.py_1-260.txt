@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+import os
+import re
+from typing import Any, Callable
+
+
+def get_main_nfo_impl(file_path: str | None) -> str | None:
+    if not file_path:
+        return None
+    folder = os.path.dirname(file_path)
+    base, _ = os.path.splitext(os.path.basename(file_path))
+    base_code = re.sub(r'[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?|restored-u|u\d*|c\d*)[-_.]*', '', base, flags=re.IGNORECASE)
+    base_code = base_code.rstrip('_-')
+    if not base_code:
+        return None
+    candidate = os.path.join(folder, f'{base_code}.nfo')
+    return candidate if os.path.isfile(candidate) else None
+
+
+async def get_siblings_impl(
+    config: dict,
+    parent_id: str,
+    current_id: str,
+    *,
+    httpx_module: Any,
+    server_url_fn: Callable[[dict], str],
+    headers_fn: Callable[[str], dict],
+    map_path_fn: Callable[[str, dict], str],
+) -> list[dict]:
+    if not parent_id or not current_id:
+        return []
+    try:
+        async with httpx_module.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{server_url_fn(config)}/emby/Items",
+                headers=headers_fn(config.get('api_key', '')),
+                params={
+                    'ParentId': parent_id,
+                    'Fields': 'MediaSources,Path',
+                    'Limit': 100,
+                    'Recursive': 'false',
+                },
+            )
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+            siblings = []
+            for item in data.get('Items', []):
+                if item.get('Id') == current_id:
+                    continue
+                if item.get('Type') not in ('Movie', 'Video') and item.get('MediaType') != 'Video':
+                    continue
+                mp = None
+                for src in item.get('MediaSources', []):
+                    if src.get('Type') == 'Default':
+                        mp = src.get('Path')
+                        break
+                if not mp and item.get('MediaSources'):
+                    mp = item.get('MediaSources', [])[0].get('Path')
+                if not mp:
+                    mp = item.get('Path')
+                if mp and config.get('source_dir'):
+                    mp = map_path_fn(mp, config)
+                siblings.append({
+                    'id': item.get('Id'),
+                    'label': item.get('Name', os.path.basename(mp or '')),
+                    'file_path': mp,
+                    'name': item.get('Name', os.path.basename(mp or '')),
+                })
+            return siblings
+    except Exception:
+        return []
+
+
+async def get_item_impl(
+    config: dict,
+    item_id: str,
+    *,
+    httpx_module: Any,
+    server_url_fn: Callable[[dict], str],
+    headers_fn: Callable[[str], dict],
+    map_path_fn: Callable[[str, dict], str],
+    parse_tags_fn: Callable[[str, list, str | None], dict],
+    get_siblings_fn: Callable[..., Any],
+    get_main_nfo_fn: Callable[[str | None], str | None],
+) -> dict | None:
+    user_id = config.get('user_id', '')
+    api_key = config.get('api_key', '')
+    fields = 'MediaSources,Path,DateCreated,PremiereDate,Studios,Genres,ParentId,ImageTags,BackdropImageTags'
+
+    async def _fetch(url: str):
+        async with httpx_module.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, headers=headers_fn(api_key), params={'Fields': fields})
+            return resp
+
+    if user_id:
+        resp = await _fetch(f"{server_url_fn(config)}/emby/Users/{user_id}/Items/{item_id}")
+        if resp.status_code == 200:
+            data = resp.json()
+        elif resp.status_code == 404:
+            resp = await _fetch(f"{server_url_fn(config)}/emby/Items/{item_id}")
+            if resp.status_code == 404:
+                return None
+            elif resp.status_code != 200:
+                return None
+            data = resp.json()
+        else:
+            resp.raise_for_status()
+            data = resp.json()
+    else:
+        resp = await _fetch(f"{server_url_fn(config)}/emby/Items/{item_id}")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+
+    file_path = None
+    media_sources = data.get('MediaSources', [])
+    if media_sources:
+        for source in media_sources:
+            if source.get('Type') == 'Default':
+                file_path = source.get('Path')
+                break
+        if not file_path and media_sources:
+            file_path = media_sources[0].get('Path')
+
+    if file_path and config.get('source_dir'):
+        file_path = map_path_fn(file_path, config)
+
+    siblings = await get_siblings_fn(config, data.get('ParentId'), item_id)
+    main_nfo = get_main_nfo_fn(file_path) if file_path else None
+
+    poster_url = None
+    current_img_tags = data.get('ImageTags', {})
+    if current_img_tags.get('Primary'):
+        tag = current_img_tags['Primary']
+        poster_url = f"{server_url_fn(config)}/emby/Items/{item_id}/Images/Primary?tag={tag}"
+    else:
+        main_poster_url = None
+        for sib in siblings:
+            sib_path = (sib.get('file_path') or '').lower()
+            if re.search(r'[-_](u\d*|c\d*|破解|流出|中文|字幕|restored-u)', sib_path):
+                continue
+            sib_id = sib.get('id')
+            if not sib_id:
+                continue
+            try:
+                async with httpx_module.AsyncClient(timeout=10.0) as img_client:
+                    if user_id:
+                        sib_resp = await img_client.get(
+                            f"{server_url_fn(config)}/emby/Users/{user_id}/Items",
+                            headers=headers_fn(config.get('api_key', '')),
+                            params={'ids': sib_id, 'Fields': 'ImageTags'},
+                        )
+                    else:
+                        sib_resp = await img_client.get(
+                            f"{server_url_fn(config)}/emby/Items",
+                            headers=headers_fn(config.get('api_key', '')),
+                            params={'ids': sib_id, 'Fields': 'ImageTags'},
+                        )
+                    if sib_resp.status_code == 200:
+                        sib_items = sib_resp.json().get('Items', [])
+                        if sib_items:
+                            sib_img_tags = sib_items[0].get('ImageTags', {})
+                            main_tag = sib_img_tags.get('Primary')
+                            if main_tag:
+                                main_poster_url = f"{server_url_fn(config)}/emby/Items/{sib_items[0]['Id']}/Images/Primary?tag={main_tag}"
+                                break
+            except Exception:
+                pass
+
+        if main_poster_url:
+            poster_url = main_poster_url
+        elif current_img_tags.get('Thumb'):
+            poster_url = f"{server_url_fn(config)}/emby/Items/{item_id}/Images/Thumb?tag={current_img_tags['Thumb']}"
+
+    backdrop_url = None
+    tags = data.get('BackdropImageTags', [])
+    if tags:
+        backdrop_url = f"{server_url_fn(config)}/emby/Items/{item_id}/Images/Backdrop?tag={tags[0]}"
+    elif data.get('ImageTags', {}).get('Thumb'):
+        backdrop_url = f"{server_url_fn(config)}/emby/Items/{item_id}/Images/Thumb?tag={data['ImageTags']['Thumb']}"
+
+    studios = [s.get('Name') for s in data.get('Studios', []) if s.get('Name')]
+    return {
+        'id': data['Id'],
+        'name': data.get('Name', 'Unknown'),
+        'media_type': data.get('MediaType', 'Video'),
+        'file_path': file_path,
+        'stream_url': f"{server_url_fn(config)}/emby/Items/{item_id}/Download" if not file_path else None,
+        'date_created': data.get('DateCreated'),
+        'premiered': data.get('PremiereDate'),
+        'studios': studios,
+        'genres': data.get('Genres', []),
+        'poster_path': poster_url,
+        'backdrop_path': backdrop_url,
+        'tags': parse_tags_fn(data.get('Name', ''), studios, file_path),
+        'siblings': siblings,
+        'main_nfo': main_nfo,
+    }

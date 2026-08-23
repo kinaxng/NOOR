@@ -1,0 +1,66 @@
+  mask.appendChild(panel)
+  const close = () => { mask.remove(); options.onClose?.() }
+  closeBtn.onclick = close
+  mask.onclick = event => { if (event.target === mask && options.closeOnMask !== false) close() }
+  document.body.appendChild(mask)
+  return { el: mask, body, close, panel }
+}
+
+function makeTabs(options: any = {}) {
+  const wrap = document.createElement('div') as HTMLDivElement & { dispose?: () => void; __noorDispose?: () => void }
+  wrap.className = 'noor-plugin-tabs'
+  const marker = document.createElement('span')
+  marker.className = 'noor-plugin-tabs__marker'
+  wrap.appendChild(marker)
+
+  const buttons: HTMLButtonElement[] = []
+  const getTabValue = (tab: any) => String(tab?.value ?? tab?.key ?? '')
+  const routeConfig = options.route && typeof options.route === 'object' ? options.route : null
+  const routeBasePath = routeConfig?.basePath ? String(routeConfig.basePath).replace(/^\/+|\/+$/g, '') : ''
+  const routeMode = routeConfig?.mode || 'path'
+  const routeReplace = routeConfig?.replace === true
+  const pathToValue = new Map<string, string>()
+  const tabPath = (value: string) => {
+    const tab = (Array.isArray(options.tabs) ? options.tabs : []).find((item: any) => getTabValue(item) === value)
+    return String(tab?.path ?? tab?.route ?? value).replace(/^\/+|\/+$/g, '')
+  }
+  const valueFromRoute = () => {
+    if (!routeConfig || routeMode !== 'path') return ''
+    const raw = String(routeConfig.subPath?.() ?? routeConfig.subPath ?? '')
+      .replace(/^\/+|\/+$/g, '')
+    const relative = routeBasePath && raw.startsWith(`${routeBasePath}/`) ? raw.slice(routeBasePath.length + 1) : raw
+    const first = relative.split('/').filter(Boolean)[0]
+    return first ? (pathToValue.get(first) || '') : ''
+  }
+  const syncRoute = (value: string) => {
+    if (!routeConfig || routeMode !== 'path') return
+    const next = [routeBasePath, tabPath(value)].filter(Boolean).join('/')
+    const currentRaw = String(routeConfig.subPath?.() ?? routeConfig.subPath ?? '').replace(/^\/+|\/+$/g, '')
+    if (currentRaw === next) return
+    const nav = routeReplace ? routeConfig.replace : routeConfig.push
+    nav?.(next)
+  }
+  const initialTabs = Array.isArray(options.tabs) ? options.tabs : []
+  initialTabs.forEach(tab => {
+    const value = getTabValue(tab)
+    pathToValue.set(tabPath(value) || value, value)
+  })
+  const routeValue = valueFromRoute()
+  const initialValue = routeValue || String(options.value ?? '') || getTabValue(initialTabs[0])
+  options.value = initialValue
+  let raf = 0
+
+  const refresh = () => {
+    if (!wrap.isConnected) return
+    const activeValue = String(options.value ?? '')
+    buttons.forEach(button => button.classList.toggle('is-active', button.dataset.value === activeValue))
+    const active = buttons.find(b => b.dataset.value === activeValue) || buttons[0]
+    if (!active) return
+    marker.style.width = `${active.offsetWidth}px`
+    marker.style.transform = `translateX(${active.offsetLeft}px)`
+  }
+
+  const scheduleRefresh = () => {
+    if (raf) cancelAnimationFrame(raf)
+    raf = requestAnimationFrame(() => { raf = 0; refresh() })
+  }

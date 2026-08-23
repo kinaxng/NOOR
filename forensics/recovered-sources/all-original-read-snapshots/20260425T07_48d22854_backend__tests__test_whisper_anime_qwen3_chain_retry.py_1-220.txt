@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+from app.pipeline.whisper.decoupled.anime_qwen3_chain import AnimeQwen3ChainProcessor
+from app.pipeline.whisper.types import SubtitleSegment, TranscriptionResult, WhisperConfig
+
+
+class _FakeAligner:
+    def __init__(self) -> None:
+        self.loaded = True
+        self.unloaded = False
+
+    def unload(self) -> None:
+        self.unloaded = True
+        self.loaded = False
+
+    def align_batch(self, *, audio_paths, texts, language="ja", audio_durations=None):
+        raise AssertionError("align_batch should not be called in retry unit tests")
+
+
+class _FakeTextGenerator:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.load_called = False
+        self.unload_called = False
+        self.calls: list[tuple[str, str]] = []
+
+    def load(self) -> None:
+        self.load_called = True
+
+    def unload(self) -> None:
+        self.unload_called = True
+
+    def transcribe_one(self, audio_path, *, language="ja", context="") -> str:
+        self.calls.append((str(audio_path), language))
+        return self.text
+
+
+def _result(text: str, *, duration: float = 8.0, metadata: dict | None = None) -> TranscriptionResult:
+    return TranscriptionResult(
+        segments=[SubtitleSegment(index=1, start_time=0.0, end_time=duration, text=text)],
+        language="ja",
+        duration=duration,
+        source="anime-whisper",
+        metadata=metadata or {},
+    )
+
+
+def test_should_retry_with_qwen_flags_noise_heavy_text() -> None:
+    assert AnimeQwen3ChainProcessor._should_retry_with_qwen("んむんむんむんぐんぐんぐじゅるじゅるじゅる", 6.0) is True
+    assert AnimeQwen3ChainProcessor._evaluate_retry_with_qwen("んむんむんむんぐんぐんぐじゅるじゅるじゅる", 6.0)[1] == "long-repeat"
+
+
+def test_should_retry_with_qwen_skips_normal_dialogue() -> None:
+    assert AnimeQwen3ChainProcessor._should_retry_with_qwen("今日は本当にありがとう。助かったよ。", 6.0) is False
+
+
+def test_should_retry_with_qwen_flags_kana_heavy_low_information_text() -> None:
+    assert AnimeQwen3ChainProcessor._should_retry_with_qwen("あはあはあはうふうふんんんあぁぁ", 8.0) is True
+
+
+def test_should_retry_with_qwen_flags_ellipsis_restart_hallucination() -> None:
+    text = "あ、今日、新刊デレデはない…あ、今は読んでた…まだ読みかけで…"
+    assert AnimeQwen3ChainProcessor._should_retry_with_qwen(text, 9.0) is True
+    assert AnimeQwen3ChainProcessor._evaluate_retry_with_qwen(text, 9.0)[1] == "ellipsis-restart-short"
+
+
+def test_should_retry_with_qwen_flags_short_elongated_katakana_phrase() -> None:
+    text = "今日はケチャックオムライスー、ふわふわ卵のオムライスー"
+    assert AnimeQwen3ChainProcessor._should_retry_with_qwen(text, 7.0) is True
+    assert AnimeQwen3ChainProcessor._evaluate_retry_with_qwen(text, 7.0)[1] == "elongated-short"
+
+
+def test_should_retry_with_qwen_flags_short_leading_ellipsis_narration() -> None:
+    text = "…明かしあわれながら、明るい子供だったと思う。それが変わったのは、すべて10年前。"
+    assert AnimeQwen3ChainProcessor._should_retry_with_qwen(text, 10.0) is True
+    assert AnimeQwen3ChainProcessor._evaluate_retry_with_qwen(text, 10.0)[1] == "leading-ellipsis-short"
+
+
+def test_should_retry_with_qwen_skips_long_voice_like_segment_to_avoid_cost_spike() -> None:
+    assert AnimeQwen3ChainProcessor._should_retry_with_qwen("あはあはあはうふうふんんんあぁぁ", 18.0) is False
+
+
+def test_maybe_retry_with_qwen_replaces_suspicious_text(monkeypatch) -> None:
+    processor = AnimeQwen3ChainProcessor(WhisperConfig())
+    processor._aligner = _FakeAligner()
+    fake_generator = _FakeTextGenerator("ちゃんとした台詞に置き換える")
+    monkeypatch.setattr(processor, "_ensure_text_generator", lambda: fake_generator)
+
+    retried = processor._maybe_retry_with_qwen(
+        "/tmp/noise.wav",
+        _result("んむんむんむんぐんぐんぐじゅるじゅるじゅる", duration=7.0, metadata={"scene": 1}),
+    )
+
+    assert retried.source == "qwen3-asr-fallback"
+    assert retried.segments[0].text == "ちゃんとした台詞に置き換える"
+    assert retried.metadata["recommended_qwen_retry"] is True
+    assert retried.metadata["recommended_qwen_retry_original_text"].startswith("んむ")
+    assert fake_generator.calls == [("/tmp/noise.wav", "ja")]
+    assert fake_generator.unload_called is True
+    assert processor._aligner is None
+    assert processor._text_generator is None
+
+
+def test_maybe_retry_with_qwen_stabilizes_short_prefix_noise(monkeypatch) -> None:
+    processor = AnimeQwen3ChainProcessor(WhisperConfig())
+    fake_generator = _FakeTextGenerator("サウナ静かにしてろ。ね大人しくしてろ。")
+    monkeypatch.setattr(processor, "_ensure_text_generator", lambda: fake_generator)
+
+    retried = processor._maybe_retry_with_qwen(
+        "/tmp/noise.wav",
+        _result("…っ、っ、…っ、静かにしてろ…っ、大人しくしてろ…", duration=6.0),
+    )
+
+    assert retried.source == "qwen3-asr-fallback"
+    assert retried.segments[0].text == "静かにしてろ。大人しくしてろ。"
+
+
+def test_maybe_retry_with_qwen_keeps_original_when_retry_empty(monkeypatch) -> None:
+    processor = AnimeQwen3ChainProcessor(WhisperConfig())
+    fake_generator = _FakeTextGenerator("  ")
+    monkeypatch.setattr(processor, "_ensure_text_generator", lambda: fake_generator)
+
+    original = _result("んむんむんむんぐんぐんぐじゅるじゅるじゅる", duration=7.0)
+    kept = processor._maybe_retry_with_qwen("/tmp/noise.wav", original)
+
+    assert kept is original
+    assert fake_generator.unload_called is True
+    assert processor._text_generator is None
+
+
+def test_maybe_retry_with_qwen_keeps_original_for_clean_text() -> None:
+    processor = AnimeQwen3ChainProcessor(WhisperConfig())
+
+    original = _result("今日は本当にありがとう。助かったよ。", duration=7.0)
+    kept = processor._maybe_retry_with_qwen("/tmp/clean.wav", original)
+
+    assert kept.metadata["recommended_qwen_retry_reason"] == "pass1-accepted"

@@ -1,0 +1,71 @@
+  color: #fff;
+  box-shadow: none;
+}
+.noor-control-panel .noor-plugin-chip--accent.is-active {
+  background: rgba(0,117,255,.15);
+  border-color: transparent;
+  color: #fff;
+}
+.noor-control-panel__picker-btn {
+  min-width: 8.5rem;
+  justify-content: flex-start;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-btn.is-empty {
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: min(60vh, 36rem);
+}
+.noor-control-panel__picker-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgb(26,31,55);
+  padding-bottom: 0.28rem;
+}
+.noor-control-panel__picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  align-content: flex-start;
+}
+.noor-control-panel__picker-options .noor-plugin-chip {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,255,255,.5);
+}
+.noor-control-panel__picker-options .noor-plugin-chip:hover:not(:disabled) {
+  background: rgba(255,255,255,.04);
+  border-color: transparent;
+  color: rgba(255,255,255,.8);
+}
+.noor-control-panel__picker-options .noor-plugin-chip.is-active,
+.noor-control-panel__picker-options .noor-plugin-chip--soft.is-active {
+  background: rgba(0,117,255,.15);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+.noor-control-panel__group-label {
+  color: rgba(113, 128, 150, 0.58);
+  font-size: 0.66rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.noor-control-panel__group-items {
+  display: flex;
+  align-items: center;
+  gap: 0.34rem 0.42rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.noor-control-panel__divider {
+  width: 1px;
+  min-height: 28px;
+  background: rgba(255,255,255,.08);

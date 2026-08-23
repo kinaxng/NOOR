@@ -1,0 +1,28 @@
+            "hardened_segments": hardened_segments,
+            "stepdown_window_total": stepdown_window_total,
+            "segments": segment_rows,
+        }
+
+    def _validate_required_models(self):
+        """Pre-flight check: verify all required models are downloaded.
+
+        Raises RuntimeError with a clear message if any model is missing.
+        """
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+
+        missing = []
+
+--- log line ---
+
+                all_results.append(seg_result)
+
+        # 合并所有段落结果
+        self._raise_if_cancelled()
+        recommended_segment_diagnostics = None
+        if getattr(self.config, "executor_key", "advanced") == "recommended":
+            recommended_segment_diagnostics = self._collect_recommended_segment_diagnostics(all_results)
+            self.log(
+                "[Recommended] 诊断: "
+                f"对齐 {recommended_segment_diagnostics['aligned_segments']}/{recommended_segment_diagnostics['segment_count']} · "

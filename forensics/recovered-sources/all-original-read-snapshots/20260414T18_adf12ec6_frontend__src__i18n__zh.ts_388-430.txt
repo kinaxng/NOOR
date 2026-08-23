@@ -1,0 +1,210 @@
+  'settings.network.proxyHint': '用于 Git 克隆和所有下载',
+  'settings.network.noneHint': '无加速，直连访问',
+  'settings.network.proxyHint2': '使用 HTTP 代理进行所有下载',
+  'settings.network.mirrorHint': '使用 ghproxy.com (GitHub)、hf-mirror.com (HuggingFace)、清华 pip 镜像',
+  'settings.network.githubMirror': 'GitHub 镜像',
+  'settings.network.hfMirror': 'HuggingFace 镜像',
+  'settings.network.pipMirror': 'pip 镜像',
+  'settings.storage.title': '存储路径',
+  'settings.storage.source': '源目录',
+  'settings.storage.sourceHint': 'Emby 媒体目录（硬链接文件存储位置）',
+  'settings.storage.mediaRoot': '媒体库根目录',
+  'settings.storage.mediaRootHint': '挂载根目录，同时作为 Emby 路径前缀的映射目标',
+  'settings.storage.embyPrefix': 'Emby 路径前缀',
+  'settings.storage.embyPrefixHint': 'Emby / Jellyfin 返回的媒体路径前缀，例如 /data/media',
+  'settings.storage.localPathPrefix': '本地路径前缀',
+  'settings.storage.localPathPrefixHint': '当前机器上实际可访问的对应路径前缀，例如 /home/kinax/Videos/media',
+  'settings.storage.embyMappingPairHint': '这两项是一一对应的映射关系：左侧是 Emby 返回的路径前缀，右侧是当前机器上实际可访问的路径前缀。',
+  'settings.storage.output': '输出目录',
+  'settings.storage.outputHint': 'LADA 输出保存位置（.restored-u.mp4）— 默认跟随源目录',
+  'settings.storage.whisperModelDir': 'Whisper 模型目录',
+  'settings.storage.whisperModelDirHint': 'Whisper 模型自定义目录（留空使用默认）',
+  'settings.storage.ladaModelDir': 'LADA 模型目录',
+  'settings.storage.ladaModelDirHint': 'LADA AI 模型自定义目录（留空使用默认）',
+  'settings.storage.whisperPlaceholder': '~/.cache/whisper (默认)',
+  'settings.storage.ladaModelPlaceholder': '/path/to/lada/models (可选)',
+  'settings.storage.browse': '浏览',
+  'settings.storage.save': '保存',
+  'settings.storage.loadFailed': '加载设置失败',
+  'settings.storage.saveFailed': '保存失败',
+  'settings.storage.loading': '加载中...',
+  'settings.storage.addScanGroup': '添加分组',
+  'settings.storage.scanGroupsHint': '设置要扫描的 source 目录和 hardlink 目录对，每组独立扫描',
+  'settings.storage.section.mediaPaths': '媒体库路径',
+  'settings.storage.section.modelPaths': '模型路径',
+  'settings.storage.section.embyPathMapping': 'Emby 路径映射',
+  'settings.storage.section.scanGroups': '扫描分组',
+  'settings.storage.groupName': '分组名称',
+  'settings.storage.groupNamePlaceholder': '例如：AV',
+  'settings.storage.sourceDir': '源目录',
+  'settings.storage.sourceDirPlaceholder': '/home/kinax/Videos/downloads/av',
+  'settings.storage.hardlinkDir': '硬链接目录',
+  'settings.storage.hardlinkDirPlaceholder': '/home/kinax/Videos/media/av',
+  'settings.storage.noScanGroups': '暂无扫描分组，点击上方「添加分组」创建',
+
+---
+  'settings.network.noneHint': 'No acceleration, direct access',
+  'settings.network.proxyHint2': 'Use HTTP proxy for all downloads',
+  'settings.network.mirrorHint': 'Use ghproxy.com (GitHub), hf-mirror.com (HuggingFace), Tsinghua pip mirror',
+  'settings.network.githubMirror': 'GitHub Mirror',
+  'settings.network.hfMirror': 'HuggingFace Mirror',
+  'settings.network.pipMirror': 'pip Mirror',
+  'settings.storage.title': 'Storage Paths',
+  'settings.storage.source': 'Source Directory',
+  'settings.storage.sourceHint': 'Emby media directory (hardlink file storage location)',
+  'settings.storage.mediaRoot': 'Media Root',
+  'settings.storage.mediaRootHint': 'Mount root, also used as the target when mapping Emby path prefixes to local paths',
+  'settings.storage.embyPrefix': 'Emby Path Prefix',
+  'settings.storage.embyPrefixHint': 'Media path prefix returned by Emby / Jellyfin, for example /data/media',
+  'settings.storage.localPathPrefix': 'Local Path Prefix',
+  'settings.storage.localPathPrefixHint': 'Matching path prefix that is actually accessible on this machine, for example /home/kinax/Videos/media',
+  'settings.storage.embyMappingPairHint': 'These two fields form one explicit mapping pair: left is the path prefix returned by Emby, right is the locally accessible path prefix.',
+  'settings.storage.output': 'Output Directory',
+  'settings.storage.outputHint': 'LADA output location (.restored-u.mp4) - defaults to source directory',
+  'settings.storage.whisperModelDir': 'Whisper Model Directory',
+  'settings.storage.whisperModelDirHint': 'Custom Whisper model directory (leave empty for default)',
+  'settings.storage.ladaModelDir': 'LADA Model Directory',
+  'settings.storage.ladaModelDirHint': 'Custom LADA AI model directory (leave empty for default)',
+  'settings.storage.whisperPlaceholder': '~/.cache/whisper (default)',
+  'settings.storage.ladaModelPlaceholder': '/path/to/lada/models (optional)',
+  'settings.storage.browse': 'Browse',
+  'settings.storage.save': 'Save',
+  'settings.storage.loadFailed': 'Failed to load settings',
+  'settings.storage.saveFailed': 'Save failed',
+  'settings.storage.loading': 'Loading...',
+  'settings.storage.addScanGroup': 'Add Group',
+  'settings.storage.scanGroupsHint': 'Configure source and hardlink directory pairs to scan independently',
+  'settings.storage.section.mediaPaths': 'Media Paths',
+  'settings.storage.section.modelPaths': 'Model Paths',
+  'settings.storage.section.embyPathMapping': 'Emby Path Mapping',
+  'settings.storage.section.scanGroups': 'Scan Groups',
+  'settings.storage.groupName': 'Group Name',
+  'settings.storage.groupNamePlaceholder': 'e.g. AV',
+  'settings.storage.sourceDir': 'Source Directory',
+  'settings.storage.sourceDirPlaceholder': '/home/kinax/Videos/downloads/av',
+  'settings.storage.hardlinkDir': 'Hardlink Directory',
+  'settings.storage.hardlinkDirPlaceholder': '/home/kinax/Videos/media/av',
+  'settings.storage.noScanGroups': 'No scan groups yet. Click "Add Group" above to create one.',
+  'settings.storage.removeGroup': 'Remove group',
+
+--- storage top ---
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useI18n } from '../../composables/useI18n'
+import BaseIcon from '../../components/noor/BaseIcon.vue'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+
+const toast = useToast()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+
+const sourceDir = ref('')
+const outputDir = ref('')
+const outputDirManuallyEdited = ref(false)
+const whisperModelDir = ref('')
+const ladaModelDir = ref('')
+
+// Emby path mapping
+const embyPathPrefix = ref('')
+const localPathPrefix = ref('')
+
+// Scan groups
+interface ScanGroup {
+  name: string
+  source_dir: string
+  hardlink_dir: string
+}
+const scanGroups = ref<ScanGroup[]>([])
+
+// Directory picker
+const showDirPicker = ref(false)
+const dirPickerTarget = ref<'sourceDir' | 'outputDir' | 'whisperModelDir' | 'ladaModelDir' | 'scanGroupSource' | 'scanGroupHardlink'>('sourceDir')
+const dirPickerGroupIndex = ref<number | null>(null)
+const dirPickerPath = ref('')
+const dirPickerParent = ref<string | null>(null)
+const dirPickerEntries = ref<{ name: string; path: string; is_dir: boolean }[]>([])
+const dirPickerLoading = ref(false)
+const dirPickerError = ref('')
+
+onMounted(async () => {
+  await loadSettings()
+})
+
+watch(sourceDir, (newVal) => {
+  if (!outputDirManuallyEdited.value) {
+    outputDir.value = newVal
+  }
+})
+
+function onSourceDirInput() {
+  if (!outputDirManuallyEdited.value) {
+    outputDir.value = sourceDir.value
+  }
+}
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    const data = resp.data
+
+    sourceDir.value = data.storage?.source_dir || ''
+    outputDir.value = data.storage?.output_dir || data.storage?.source_dir || ''
+    whisperModelDir.value = data.storage?.whisper_model_dir || ''
+    ladaModelDir.value = data.storage?.lada_model_weights_dir || data.storage?.lada_model_dir || ''
+
+    // Also load Emby path prefix config
+    try {
+      const mlResp = await api.get('/media-library/config')
+      const mlCfg = mlResp.data.config || {}
+      embyPathPrefix.value = mlCfg.path_prefix || '/data/media'
+      localPathPrefix.value = mlCfg.local_path_prefix || sourceDir.value || ''
+      scanGroups.value = mlCfg.scan_groups || []
+    } catch {
+      // ignore
+    }
+  } catch (e: any) {
+    toast.error(t('settings.storage.loadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveStorage() {
+  saving.value = true
+  try {
+    await api.put('/settings/storage', {
+      source_dir: sourceDir.value,
+      output_dir: outputDir.value,
+      whisper_model_dir: whisperModelDir.value,
+      lada_model_weights_dir: ladaModelDir.value,
+    })
+    // Also save Emby path prefix and scan_groups to media-library config
+    await api.post('/media-library/config', {
+      path_prefix: embyPathPrefix.value,
+      local_path_prefix: localPathPrefix.value,
+      scan_groups: scanGroups.value,
+    })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+// Scan group management
+function addScanGroup() {
+  scanGroups.value.push({ name: '', source_dir: '', hardlink_dir: '' })
+}
+
+function removeScanGroup(index: number) {
+  scanGroups.value.splice(index, 1)
+}
+
+// Directory picker

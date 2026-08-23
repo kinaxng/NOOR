@@ -1,0 +1,40 @@
+<script setup lang="ts">
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+
+const props = defineProps<{
+  tabs: { key: string; label: string }[]
+  modelValue: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+}>()
+
+const tabRefs = ref<HTMLElement[]>([])
+const containerRef = ref<HTMLElement | null>(null)
+const indicator = ref({ left: 0, width: 0 })
+
+function updateIndicator() {
+  nextTick(() => {
+    const activeIdx = props.tabs.findIndex(t => t.key === props.modelValue)
+    if (activeIdx < 0 || !containerRef.value) return
+    const tabEl = tabRefs.value[activeIdx]
+    if (!tabEl) return
+    const containerRect = containerRef.value.getBoundingClientRect()
+    const tabRect = tabEl.getBoundingClientRect()
+    indicator.value = {
+      left: tabRect.left - containerRect.left,
+      width: tabRect.width,
+    }
+  })
+}
+
+watch(() => props.modelValue, updateIndicator)
+watch(() => props.tabs, () => nextTick(updateIndicator), { deep: true })
+
+onMounted(() => {
+  updateIndicator()
+  const ro = new ResizeObserver(() => updateIndicator())
+  if (containerRef.value) ro.observe(containerRef.value)
+  onUnmounted(() => ro.disconnect())
+})

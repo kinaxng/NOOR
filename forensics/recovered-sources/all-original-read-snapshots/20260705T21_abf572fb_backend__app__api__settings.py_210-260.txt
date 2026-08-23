@@ -1,0 +1,131 @@
+class CustomPipelineConfig(BaseModel):
+    model: str = "large-v3"  # large-v3 | large-v2 | turbo
+    vad_method: str = "semantic"
+    scene_detector: str = "semantic"
+    enhancers: list[str] = []  # 多选：ffmpeg-dsp, clearvoice, silero-vad, demucs
+    segmenter: str = "silero-v6.2"
+    timestamp_mode: str = "aligner_interpolation"  # aligner_interpolation / vad_only
+    aligner_backend: str = "qwen3"  # qwen3 / none
+    framer_backend: str = "vad-grouped"  # vad-grouped / full-scene
+
+
+class WhisperConfig(BaseModel):
+    strategy: str = "recommended"
+    model: str = "anime-whisper"
+    pipeline_mode: str = "ensemble"
+    merge_strategy: str = "smart_merge"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    vad_method: str = "semantic"
+    audio_preprocess_mode: str = "none"
+    audio_preprocess_model: str = "vocal_balanced"
+    translate_to: str = ""
+    translate_model: str = "gpt-4o-mini"
+    translate_style: str = "adult_explicit"  # adult_explicit | standard
+    translate_base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    translate_api_key: str = ""
+    pass1_pipeline: str = "anime"  # anime | faster | balanced | transformers | qwen(legacy large-v3 baseline key) | custom
+    pass2_pipeline: str = ""  # "" = not selected, or one of the above
+    custom_config: CustomPipelineConfig = CustomPipelineConfig()
+
+
+def _assert_custom_pipeline_supported(*pipeline_values: Optional[str]) -> None:
+    if any(value == "custom" for value in pipeline_values if value):
+        feature = _get_whisper_feature_flags()["custom_pipeline"]
+        if not feature["available"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Custom Whisper pipeline 当前不可用：{feature['reason']}",
+            )
+
+
+class NetworkConfig(BaseModel):
+    # Kept for compatibility. The effective order is now mirror -> HTTP proxy -> direct.
+    acceleration_mode: str = "auto"
+    http_proxy: str = ""
+    github_mirror: str = "https://ghproxy.com"
+    github_token: str = ""
+    hf_mirror: str = "https://hf-mirror.com"
+    pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
+    configured = env_data.get("RUNTIME_ROOT_DIR", "").strip()
+    if configured:
+        return configured
+    whisper_cache = Path(settings.whisper_cache_dir)
+    if whisper_cache.name == "cache" and whisper_cache.parent.name == "whisper":
+        return str(whisper_cache.parent.parent)
+    return str(Path(settings.noor_data_dir) / "runtime")
+
+
+def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str, Any], lada_model_weights_dir: str, whisper_features: dict[str, Any], custom_whisper_config: dict[str, Any]) -> dict[str, Any]:
+    media_library_config = load_media_library_config()
+    settings = get_settings()
+    whisper_strategy = normalize_whisper_strategy(env_data.get("WHISPER_STRATEGY", "recommended"))
+    whisper_payload = {
+        "strategy": whisper_strategy,
+        "model": env_data.get("WHISPER_MODEL", "anime-whisper"),
+        "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "ensemble"),
+        "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
+        "language": env_data.get("WHISPER_LANGUAGE", "ja"),
+        "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
+        "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
+        "audio_preprocess_mode": env_data.get("WHISPER_AUDIO_PREPROCESS_MODE", "none"),
+        "audio_preprocess_model": env_data.get("WHISPER_AUDIO_PREPROCESS_MODEL", "vocal_balanced"),
+        "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
+        "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+        "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),
+        "translate_base_url": env_data.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1"),
+        "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
+        "pass1_pipeline": env_data.get("WHISPER_PASS1_PIPELINE", "anime"),
+        "pass2_pipeline": env_data.get("WHISPER_PASS2_PIPELINE", ""),
+        "timestamp_mode": custom_whisper_config.get("timestamp_mode", "aligner_interpolation"),
+        "aligner_backend": custom_whisper_config.get("aligner_backend", "qwen3"),
+        "framer_backend": custom_whisper_config.get("framer_backend", "vad-grouped"),
+        "custom_config": custom_whisper_config,
+    }
+    if whisper_strategy in {"recommended", "baseline", "reazon_nemo"}:
+        whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
+        whisper_payload["custom_config"] = {
+            **custom_whisper_config,
+            "timestamp_mode": whisper_payload.get("timestamp_mode", "aligner_interpolation"),
+            "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
+            "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
+        }
+    configured_facefusion_dir = env_data.get("FACEFUSION_DIR", settings.facefusion_dir)
+    facefusion_source = resolve_facefusion_source(configured_facefusion_dir)
+    facefusion_native_model_dir, facefusion_model_dir_mode = inspect_facefusion_model_dir(
+# Cache for expensive subprocess calls (version info)
+_version_cache: dict = {}
+_version_cache_lock = threading.Lock()
+_VERSION_CACHE_TTL = 3600  # 1 hour
+LADA_MODEL_WEIGHTS_ENV = "LADA_MODEL_WEIGHTS_DIR"
+ENV_FILE = Path(os.environ.get("NOOR_ENV_FILE", str(PROJECT_ROOT / ".env")))
+
+WHISPER_MODELS = {
+    "anime-whisper": {
+        "name": "Anime-Whisper",
+        "size": "~3GB",
+        "type": "transformers",
+        "repo": "litagin/anime-whisper",
+        "description": "Optimized for anime vocals, Japanese"
+    },
+    "kotoba-whisper-v2.2": {
+        "name": "Kotoba Whisper v2.2",
+        "size": "~3GB",
+        "type": "transformers",
+        "repo": "kotoba-tech/kotoba-whisper-v2.2",
+        "description": "Japanese-specific, high accuracy, word-level timestamps, public (no gated)",
+    },
+    "reazonspeech-nemo-v2": {
+        "name": "ReazonSpeech NeMo v2",
+        "size": "~2.4GB",
+        "type": "reazon-nemo",
+        "description": "Reazon / NeMo archive, reserved for upcoming runtime integration",
+    },
+    "tiny": {"name": "Tiny", "size": "~75MB", "type": "faster-whisper"},
+    "base": {"name": "Base", "size": "~140MB", "type": "faster-whisper"},
+    "small": {"name": "Small", "size": "~465MB", "type": "faster-whisper"},
+    "medium": {"name": "Medium", "size": "~1.5GB", "type": "faster-whisper"},
+    "large-v3": {"name": "Large V3", "size": "~3GB", "type": "faster-whisper"},
+    "large-v3-turbo": {"name": "Large V3 Turbo", "size": "~1.8GB", "type": "faster-whisper"},
+}
+

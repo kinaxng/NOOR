@@ -1,0 +1,19 @@
+        try:
+            # Faster 模式使用 turbo 模型（使用缓存的 processor）
+            if self._faster_processor is None:
+                faster_config = WhisperConfig(
+                    model=WhisperModel.TINY,  # 使用小模型快速处理
+                    device=self.config.device,
+                    language=self.config.language,
+                    vad_filter=False,  # 清洁音频不需要 VAD
+                )
+                self._faster_processor = FasterWhisperProcessor(faster_config, self.progress_callback, self.cancel_callback)
+            result = await asyncio.to_thread(self._faster_processor.process, tmp_path, "")
+            self.log(f"Faster 段落 {seg_idx + 1} 完成: {len(result.segments)} 片段")
+            return result
+        finally:
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+

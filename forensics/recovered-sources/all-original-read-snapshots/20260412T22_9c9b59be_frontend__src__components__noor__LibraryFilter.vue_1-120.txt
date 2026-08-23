@@ -1,0 +1,42 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useMediaLibraryStore } from '../../stores/mediaLibrary'
+import { useI18n } from '../../composables/useI18n'
+
+const { t, i18nVersion } = useI18n()
+const mediaLibraryStore = useMediaLibraryStore()
+
+// Establishing dependency on i18nVersion forces re-render when language changes
+const filterButtons = computed(() => {
+  void i18nVersion.value // establish dependency
+  return [
+    { key: 'all', label: t('library.filter.all') },
+    { key: 'cracked', label: t('library.filter.破解') },
+    { key: 'chinese', label: t('library.filter.chinese') },
+    { key: 'leaked', label: t('library.filter.leaked') },
+    { key: 'uncensored', label: t('library.filter.无码') },
+  ]
+})
+
+function setFilter(key: string) {
+  mediaLibraryStore.setFilter(key === 'all' ? null : key)
+}
+</script>
+
+<template>
+  <div class="flex flex-wrap gap-2">
+    <button
+      v-for="btn in filterButtons"
+      :key="btn.key"
+      @click="setFilter(btn.key)"
+      :class="[
+        'px-3 py-1.5 rounded-lg text-sm transition-all duration-200',
+        (btn.key === 'all' ? null : btn.key) === mediaLibraryStore.filterTag
+          ? 'bg-accent-cyan text-bg-void font-medium'
+          : 'bg-bg-elevated text-text-secondary hover:bg-bg-hover'
+      ]"
+    >
+      {{ btn.label }}
+    </button>
+  </div>
+</template>

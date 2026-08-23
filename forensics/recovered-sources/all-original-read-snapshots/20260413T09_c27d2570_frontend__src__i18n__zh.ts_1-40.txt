@@ -1,0 +1,40 @@
+export const zh: Record<string, string> = {
+  // 通用
+  'common.save': '保存',
+  'common.cancel': '取消',
+  'common.delete': '删除',
+  'common.close': '关闭',
+  'common.loading': '加载中...',
+  'common.confirm': '确认',
+  'common.search': '搜索',
+  'common.refresh': '刷新',
+  'common.download': '下载',
+  'common.test': '测试',
+  'common.success': '成功',
+  'common.error': '错误',
+  'common.warning': '警告',
+  'common.notAvailable': 'N/A',
+  'common.prevPage': '上一页',
+  'common.nextPage': '下一页',
+  'common.pageCounter': '第 {current} / {total} 页',
+  'common.errorWithDetail': '错误：{detail}',
+  'common.recentActivity': '最近活动',
+  'common.loadFailed': '加载失败',
+
+  // 导航
+  'nav.overview': '概览',
+  'nav.library': '媒体库',
+  'nav.jobs': '任务',
+  'nav.history': '历史',
+  'nav.hardlinks': '硬链接',
+  'nav.settings': '设置',
+
+  // Toolbar
+  'toolbar.blurOn': '开启封面模糊',
+  'toolbar.blurOff': '关闭封面模糊',
+  'toolbar.switchLang': '切换语言',
+  'toolbar.collapse': '收起',
+  'toolbar.logs': '显示日志',
+  'toolbar.logsOff': '关闭日志',
+
+  // Hardlinks

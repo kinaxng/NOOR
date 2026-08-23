@@ -1,0 +1,271 @@
+  if (sub.source_key === 'local_library') return t('settings.system.localSubtitleLibraryTitle')
+  if (sub.source_key === 'xunlei') return t('subtitle.sourceName.xunlei')
+  return sub.source || ''
+}
+const whisperPipelineLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.pipeline')
+})
+const whisperMergeLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.mergeStrategy')
+})
+const whisperLangLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.language')
+})
+const whisperStartLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.start')
+})
+const whisperBestTitle = computed(() => t('whisper.best.title'))
+const whisperBestDesc = computed(() => t('whisper.best.desc'))
+const whisperBestStack = computed(() => t('whisper.best.stack'))
+const whisperAdvancedToggleLabel = computed(() => t('whisper.advanced.toggle'))
+const whisperAdvancedHint = computed(() => t('whisper.advanced.hint'))
+const whisperModelLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.model')
+})
+const whisperVadLabel = computed(() => {
+  void i18nVersion.value
+  return t('settings.whisper.vadMethod')
+})
+const whisperVadOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'semantic', label: t('whisper.vad.semantic') },
+    { value: 'silero', label: t('whisper.vad.silero') },
+    { value: 'auditok', label: t('whisper.vad.auditok') },
+    { value: 'ten', label: t('whisper.vad.ten') },
+    { value: 'none', label: t('whisper.vad.none') },
+  ]
+})
+const whisperGeneratorOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'anime-whisper', label: t('subtitle.whisperOption.animeWhisper') },
+    { value: 'qwen3', label: t('subtitle.whisperOption.qwen3') },
+  ]
+})
+
+const whisperAlignerOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'qwen3', label: t('subtitle.whisperOption.qwen3') },
+    { value: 'none', label: t('subtitle.whisperOption.none') },
+  ]
+})
+
+const whisperFramerOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'vad-grouped', label: t('subtitle.whisperOption.vadGrouped') },
+    { value: 'full-scene', label: t('subtitle.whisperOption.fullScene') },
+  ]
+})
+
+const whisperTimestampModeOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'aligner_interpolation', label: t('subtitle.whisperOption.alignerInterpolation') },
+    { value: 'vad_only', label: t('subtitle.whisperOption.vadOnly') },
+  ]
+})
+
+const whisperTranslateRunningLabel = computed(() => t('subtitle.translateRunning'))
+const whisperTranslateActionLabel = computed(() => t('subtitle.aiTranslate'))
+const whisperPipelineHint = computed(() => t('settings.whisper.pipelineHint'))
+const whisperSpeechEnhancerLabel = computed(() => t('settings.whisper.speechEnhancer'))
+const whisperCustomPipelineTitle = computed(() => t('settings.whisper.customPipelineTitle'))
+const whisperGeneratorLabel = computed(() => t('subtitle.whisperGenerator'))
+const whisperAlignerLabel = computed(() => t('subtitle.whisperAligner'))
+const whisperFramerLabel = computed(() => t('subtitle.whisperFramer'))
+const whisperTimestampLabel = computed(() => t('subtitle.whisperTimestamp'))
+
+const whisperMergeOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'smart_merge', label: t('whisper.merge.smartMerge') },
+    { value: 'full_merge', label: t('whisper.merge.fullMerge') },
+    { value: 'pass1_primary', label: t('whisper.merge.pass1Primary') },
+    { value: 'pass2_primary', label: t('whisper.merge.pass2Primary') },
+    { value: 'longest', label: t('whisper.merge.longest') },
+    { value: 'pass1_overlap', label: t('whisper.merge.pass1Overlap') },
+    { value: 'pass2_overlap', label: t('whisper.merge.pass2Overlap') },
+  ]
+})
+// whisperTranslateProviderOptions removed — unified OpenAI-compatible API, no provider concept (translate fields kept for local SRT translation feature)
+
+// Selected file path (for multi-file work: current + siblings)
+const selectedPath = ref('')
+
+// When selected path changes, re-fetch subtitles
+watch(selectedPath, async (newPath) => {
+  if (newPath && props.open) {
+    await fetchSubtitles(newPath)
+  }
+})
+
+// Sibling paths from detail
+const siblingPaths = computed(() => {
+  return props.detail?.siblings?.filter(s => s.file_path) || undefined
+})
+
+// Load whisper defaults
+async function loadWhisperDefaults() {
+  if (whisperDefaultsLoaded.value) return
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      whisperMergeStrategy.value = resp.data.whisper.merge_strategy || 'smart_merge'
+      whisperLanguage.value = resp.data.whisper.language || 'ja'
+      whisperSensitivity.value = resp.data.whisper.sensitivity || 'balanced'
+      whisperUseAdvanced.value = (resp.data.whisper.strategy || 'best') !== 'best'
+      whisperTranslateTo.value = resp.data.whisper.translate_to || 'zh'
+      whisperTranslateModel.value = resp.data.whisper.translate_model || 'gpt-4o-mini'
+      whisperTranslateStyle.value = resp.data.whisper.translate_style || 'adult_explicit'
+      whisperTranslateBaseUrl.value = resp.data.whisper.translate_base_url || 'https://api.openai.com/v1'
+      whisperTranslateApiKey.value = resp.data.whisper.translate_api_key || ''
+      // Load pipeline selection
+      whisperSelectedPipelines.value = []
+      if (resp.data.whisper.pass1_pipeline) whisperSelectedPipelines.value.push(resp.data.whisper.pass1_pipeline)
+      if (resp.data.whisper.pass2_pipeline) whisperSelectedPipelines.value.push(resp.data.whisper.pass2_pipeline)
+      // Load custom config
+      if (resp.data.whisper.custom_config) {
+        whisperCustomConfig.value = {
+          model: resp.data.whisper.custom_config.model || 'large-v3',
+          vad_method: resp.data.whisper.custom_config.vad_method || 'semantic',
+          enhancers: resp.data.whisper.custom_config.enhancers || [],
+          segmenter: resp.data.whisper.custom_config.segmenter || 'silero-v6.2',
+          timestamp_mode: resp.data.whisper.custom_config.timestamp_mode || 'aligner_interpolation',
+          aligner_backend: resp.data.whisper.custom_config.aligner_backend || 'qwen3',
+          framer_backend: resp.data.whisper.custom_config.framer_backend || 'vad-grouped',
+          generator_backend: resp.data.whisper.custom_config.generator_backend || 'anime-whisper',
+        }
+      }
+      whisperDefaultsLoaded.value = true
+    }
+  } catch (e) {
+    console.error('Failed to load Whisper defaults:', e)
+  }
+}
+
+// Watch for panel open AND detail arriving
+watch([() => props.open, () => props.detail, () => props.initialSelectedPath], async ([isOpen, detail, initialSelectedPath]) => {
+  if (isOpen && detail?.file_path) {
+    const targetPath = initialSelectedPath || detail.file_path
+    selectedPath.value = targetPath
+    await Promise.all([
+      loadWhisperDefaults(),
+      fetchSubtitles(targetPath),
+    ])
+    subtitleTab.value = 'local'
+  } else if (!isOpen) {
+    clearSubtitles()
+  }
+}, { immediate: true })
+
+// Trigger search when switching to search tab
+watch(subtitleTab, (tab) => {
+  if (tab === 'search') {
+    handleSearchOnline()
+  }
+})
+
+function handleClose() {
+  clearSubtitles()
+  emit('close')
+}
+
+async function handleSearchOnline() {
+  if (!selectedPath.value) return
+  await searchOnlineSubtitles(selectedPath.value)
+}
+
+async function handleDownloadSubtitle(url: string, _filename: string, source?: string) {
+  const matchedSubtitle = onlineSubtitles.value.find(sub => sub.url === url && sub.name === _filename)
+  const sourceType = matchedSubtitle?.source_type
+  const sourceKey = matchedSubtitle?.source_key
+  const success = await downloadOnlineSubtitle(url, selectedPath.value, source, sourceType, sourceKey)
+  if (success) {
+    subtitleTab.value = 'local'
+    emit('refreshLocal')
+  }
+}
+
+async function handlePreviewOnline(url: string, filename: string) {
+  await previewOnlineSubtitle(url, filename)
+}
+
+async function handlePreviewLocal(path: string, filename: string) {
+  await previewLocalSubtitle(path, filename)
+}
+
+function isLocalLibrarySubtitle(sub: { source?: string; source_type?: string }) {
+  return sub.source_type === 'local_library'
+}
+
+async function handleTranslateLocal(path: string, filename: string) {
+  translatingSubtitle.value = filename
+  try {
+    await api.post('/whisper/translate/srt', {
+      srt_path: path,
+      target_lang: whisperTranslateTo.value || 'zh',
+      model: whisperTranslateModel.value || 'gpt-4o-mini',
+      style: whisperTranslateStyle.value || 'adult_explicit',
+      base_url: whisperTranslateBaseUrl.value || 'https://api.openai.com/v1',
+      api_key: whisperTranslateApiKey.value || '',
+    })
+    toast.success(t('subtitle.translateTaskCreated'))
+    emit('refreshLocal')
+  } catch (e: any) {
+    console.error('Translation failed', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message || t('common.error') }))
+  } finally {
+    translatingSubtitle.value = ''
+  }
+}
+
+function toggleWhisperPipeline(pipe: string) {
+  const idx = whisperSelectedPipelines.value.indexOf(pipe)
+  if (idx >= 0) {
+    whisperSelectedPipelines.value.splice(idx, 1)
+  } else {
+    if (whisperSelectedPipelines.value.length < 2) {
+      whisperSelectedPipelines.value.push(pipe)
+    } else {
+      whisperSelectedPipelines.value.splice(1, 1, pipe)
+    }
+  }
+}
+
+async function handleDeleteSubtitle(path: string, filename: string) {
+  await deleteSubtitle(path, filename)
+}
+
+async function handleStartWhisper() {
+  if (!whisperUseAdvanced.value) {
+    await startWhisperTask({
+      video_path: selectedPath.value,
+      strategy: 'best',
+      model: 'anime-whisper',
+      pipeline_mode: 'anime',
+      merge_strategy: 'smart_merge',
+      language: 'ja',
+      sensitivity: 'balanced',
+      vad_method: 'semantic',
+      pass1_pipeline: 'anime',
+      pass2_pipeline: '',
+      translate_to: whisperTranslateTo.value,
+      translate_base_url: whisperTranslateBaseUrl.value,
+      translate_api_key: whisperTranslateApiKey.value,
+      translate_model: whisperTranslateModel.value,
+      translate_style: whisperTranslateStyle.value,
+    })
+    emit('refreshLocal')
+    return
+  }
+
+  const isCustom = whisperSelectedPipelines.value.includes('custom')
+  const pipeline_mode = whisperSelectedPipelines.value.length >= 2

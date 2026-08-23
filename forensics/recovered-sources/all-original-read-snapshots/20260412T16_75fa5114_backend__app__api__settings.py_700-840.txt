@@ -1,0 +1,141 @@
+        raise HTTPException(status_code=500, detail="Upgrade timeout")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[LADA] 升级异常 — {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== LADA Settings ====================
+
+@router.put("/lada/defaults")
+async def update_lada_defaults(config: LadaDefaultsConfig):
+    """Update Lada default configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA 默认参数...")
+    try:
+        update_env_value("LADA_DEVICE", config.device)
+        update_env_value("LADA_FP16", "true" if config.fp16 else "false")
+        update_env_value("LADA_DETECTION_MODEL", config.detection_model)
+        update_env_value("LADA_RESTORATION_MODEL", config.restoration_model)
+        update_env_value("LADA_ENCODING_PRESET", config.encoding_preset)
+        update_env_value("LADA_MAX_CLIP_LENGTH", str(config.max_clip_length))
+        update_env_value("LADA_DETECT_FACE_MOSAICS", "true" if config.detect_face_mosaics else "false")
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA 默认参数已保存")
+        return {"success": True, "message": "Lada defaults saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA 默认参数保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+LADA_ENCODING_PRESETS = [
+    {"id": "hevc-nvidia-gpu-hq", "name": "HEVC (H.265) - High Quality", "desc": "Nvidia GPU, High Quality, Medium File Size"},
+    {"id": "hevc-nvidia-gpu-balanced", "name": "HEVC (H.265) - Balanced", "desc": "Nvidia GPU, Excellent Quality, Smaller File Size"},
+    {"id": "hevc-nvidia-gpu-uhq", "name": "HEVC (H.265) - Ultra HQ", "desc": "Nvidia GPU, Indistinguishable Quality, Large File Size"},
+    {"id": "h264-nvidia-gpu-fast", "name": "H.264 - Fast", "desc": "Nvidia GPU, Fast, Medium File Size"},
+    {"id": "h264-cpu-fast", "name": "H.264 - CPU Fast", "desc": "x264 software encoder, Fast, Medium File Size"},
+    {"id": "h264-cpu-uhq", "name": "H.264 - CPU Ultra HQ", "desc": "x264 software encoder, Indistinguishable Quality, Slow, Very Large File Size"},
+    {"id": "av1-cpu-uhq", "name": "AV1 - CPU Ultra HQ", "desc": "SVT-AV1 software encoder, Indistinguishable Quality, Smaller File Size"},
+]
+
+
+def _get_lada_version_info() -> dict:
+    """Get LADA version info with caching to avoid repeated subprocess calls."""
+    now = time.time()
+    cache_key = "lada_version"
+    with _version_cache_lock:
+        entry = _version_cache.get(cache_key)
+        if entry and (now - entry["ts"]) < _VERSION_CACHE_TTL:
+            return entry["data"]
+
+    install_info = _get_lada_installation_info()
+    version = None
+
+    # Detect version - prefer configured CLI invocation
+    try:
+        result = subprocess.run(
+            _lada_cli_base_cmd() + ["--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            version = output.replace("Lada:", "").strip() if output else None
+    except Exception:
+        pass
+
+    # Fallback: ask the current interpreter for installed lada package version
+    if not version:
+        try:
+            result = subprocess.run(
+                [_python_executable(), "-c", "import lada; print(getattr(lada, 'VERSION', ''))"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                version = result.stdout.strip()
+        except Exception:
+            pass
+
+    # Final fallback: git describe from embedded checkout
+    if not version and install_info["repo_path"]:
+        try:
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--always", "HEAD"],
+                cwd=install_info["repo_path"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+        except Exception:
+            pass
+
+    data = {
+        "version": version,
+        "is_docker": install_info["is_docker"],
+        "is_submodule": install_info["is_submodule"],
+        "install_mode": install_info["install_mode"],
+        "can_self_upgrade": install_info["can_self_upgrade"],
+        "upgrade_strategy": install_info["upgrade_strategy"],
+        "upgrade_hint": install_info["upgrade_hint"],
+        "repo_path": install_info["repo_path"],
+    }
+    with _version_cache_lock:
+        _version_cache[cache_key] = {"data": data, "ts": now}
+    return data
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format file size in bytes to human-readable string."""
+    if size_bytes <= 0:
+        return "Unknown"
+    if size_bytes >= 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f}GB"
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.0f}MB"
+    return f"{size_bytes / 1024:.0f}KB"
+
+
+@router.get("/lada/info")
+async def get_lada_info():
+    """Get LADA system info: available devices, encoding presets, and model status.
+    Model lists come from lada's ModelFiles (lada/__init__.py), with download status
+    checked against LADA_MODEL_WEIGHTS_DIR."""
+    settings = get_settings()
+    install_info = _get_lada_installation_info()
+
+    # Get available devices
+    devices = []
+    try:
+        result = subprocess.run(
+            _lada_cli_base_cmd() + ["--list-devices"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:

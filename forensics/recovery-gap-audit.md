@@ -368,3 +368,14 @@
   另有大量文件已按源 map/缓存/会话 diff 核对为等价恢复，但不是磁盘原文件。
 - 本轮验证：后端 `pytest` 228 项通过、前端 `vue-tsc && vite build` 通过、
   插件校验仅剩余已知警告。
+
+## 全会话读取快照与跨格式回放（2026-08-23 深夜）
+
+- 新增 `forensics/extract_read_snapshots.py`，同时识别旧版 `function_call` 与
+  新版 `custom_tool_call` 中的 `sed -n` 读取。覆盖 4 月/5 月/6 月/7 月删除前
+  会话后，归档 1164 份原版读取快照、203 个路径到
+  `forensics/recovered-sources/all-original-read-snapshots/`。
+- 升级 `forensics/replay_rollout_file.py`，支持多 rollout、旧/新事件格式、
+  直接 `apply_patch` 与 exec 内嵌 `const patch = "..."`，并记录成功状态。
+- 当前原始读取快照受会话输出截断和 `git status && sed` 混用影响，不是所有
+  路径都能直接拼成完整 seed；后续会按路径选择可用 seed，再结合补丁回放。

@@ -1,0 +1,541 @@
+const translateModel = ref('gpt-4o-mini')
+const translateStyle = ref('adult_explicit')
+const translateBaseUrl = ref('https://api.openai.com/v1')
+const translateApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ available: boolean; message: string; models?: string[] } | null>(null)
+
+const checkingDepsResult = ref<Record<string, any>>({})
+const whisperCudaAvailable = ref(false)
+const torchVariant = ref<'gpu' | 'cpu'>('gpu')
+const whisperModels = ref<any[]>([])
+const whisperFeatures = ref<any>({})
+const depsExpanded = ref(false)
+const modelsExpanded = ref(false)
+
+// 只显示不便 Docker build 的运行时依赖（installable: true）
+const runtimeInstallableDeps = computed(() =>
+  Object.fromEntries(
+    Object.entries(checkingDepsResult.value).filter(([, v]) => (v as any).installable)
+  )
+)
+
+// 是否有缺失的运行时依赖（控制安装按钮显示）
+const hasMissingRuntimeDeps = computed(() => {
+  return Object.values(runtimeInstallableDeps.value).some((v: any) => !v.installed)
+})
+const installStatus = ref<{ status: string; progress: number; message: string; current_package?: string }>({
+  status: 'idle',
+  progress: 0,
+  message: '',
+})
+
+onMounted(async () => {
+  await loadSettings()
+  await Promise.all([checkWhisperDeps(), loadWhisperModels()])
+})
+
+function customPipelineAvailable() {
+  return !!whisperFeatures.value?.custom_pipeline?.available
+}
+
+function customPipelineReason() {
+  return whisperFeatures.value?.custom_pipeline?.reason || ''
+}
+
+function sanitizeSelectedPipelines() {
+  if (!customPipelineAvailable()) {
+    selectedPipelines.value = selectedPipelines.value.filter(p => p !== 'custom')
+  }
+  selectedPipelines.value = selectedPipelines.value.slice(0, 2)
+}
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      const w = resp.data.whisper
+      whisperFeatures.value = w.features || {}
+
+      // Reconstruct selected pipelines from pass1/pass2
+      selectedPipelines.value = []
+      if (w.pass1_pipeline) selectedPipelines.value.push(w.pass1_pipeline)
+      if (w.pass2_pipeline) selectedPipelines.value.push(w.pass2_pipeline)
+      sanitizeSelectedPipelines()
+
+      // Custom config
+      if (w.custom_config) {
+        customConfig.value = { ...customConfig.value, ...w.custom_config }
+      }
+
+      mergeStrategy.value = w.merge_strategy || 'smart_merge'
+      language.value = w.language || 'ja'
+      sensitivity.value = w.sensitivity || 'balanced'
+      vadMethod.value = w.vad_method || 'semantic'
+      translateTo.value = w.translate_to || 'zh'
+      translateModel.value = w.translate_model || 'gpt-4o-mini'
+      translateStyle.value = w.translate_style || 'adult_explicit'
+      translateBaseUrl.value = w.translate_base_url || 'https://api.openai.com/v1'
+      translateApiKey.value = w.translate_api_key || ''
+    }
+  } catch (e) {
+    console.error('Failed to load whisper settings:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function checkWhisperDeps() {
+  checkingDeps.value = true
+  try {
+    const resp = await api.post('/settings/whisper/check')
+    checkingDepsResult.value = resp.data.dependencies
+    whisperFeatures.value = resp.data.features || whisperFeatures.value
+    sanitizeSelectedPipelines()
+    whisperCudaAvailable.value = resp.data.cuda_available
+    torchVariant.value = resp.data.cuda_available ? 'gpu' : 'cpu'
+    const statusResp = await api.get('/settings/whisper/install-status')
+    installStatus.value = statusResp.data
+  } catch (e: any) {
+    toast.error(t('settings.whisper.checkFailed'))
+  } finally {
+    checkingDeps.value = false
+  }
+}
+
+async function loadWhisperModels() {
+  checkingModels.value = true
+  try {
+    const resp = await api.get('/settings/whisper/models')
+    whisperModels.value = resp.data.models
+    // 更新下载状态（如果有正在进行的下载）
+    if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'running') {
+      modelDownloadStatus.value = resp.data.downloadStatus
+      // 恢复 downloadingModel 状态
+      if (resp.data.downloadStatus.model) {
+        downloadingModel.value = resp.data.downloadStatus.model
+      }
+    } else if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'idle') {
+      // 下载完成或空闲时，清除状态
+      downloadingModel.value = null
+    }
+  } catch (e: any) {
+    console.error('Failed to load models:', e)
+  } finally {
+    checkingModels.value = false
+  }
+}
+
+async function saveWhisper() {
+  saving.value = true
+  try {
+    if (selectedPipelines.value.includes('custom') && !customPipelineAvailable()) {
+      toast.error(customPipelineReason() || 'Custom pipeline 当前不可用')
+      return
+    }
+    const p1 = pass1Pipeline.value
+    const p2 = pass2Pipeline.value
+
+    await api.put('/settings/whisper', {
+      pipeline_mode: p2 ? 'ensemble' : p1,
+      merge_strategy: mergeStrategy.value,
+      language: language.value,
+      sensitivity: sensitivity.value,
+      vad_method: vadMethod.value,
+      pass1_pipeline: p1,
+      pass2_pipeline: p2 || '',
+      custom_config: customConfig.value,
+      translate_to: translateTo.value,
+      translate_model: translateModel.value,
+      translate_style: translateStyle.value,
+      translate_base_url: translateBaseUrl.value,
+      translate_api_key: translateApiKey.value,
+    })
+    toast.success(t('settings.whisper.whisperSettingsSaved'))
+  } catch (e: any) {
+    toast.error(t('settings.whisper.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function testTranslateConnection() {
+  testingConnection.value = true
+  connectionResult.value = null
+  try {
+    const resp = await api.post('/whisper/translate/test', null, {
+      params: {
+        base_url: translateBaseUrl.value,
+        api_key: translateApiKey.value || undefined,
+        model: translateModel.value,
+      },
+    })
+    connectionResult.value = resp.data
+    if (resp.data.available) {
+      toast.success(resp.data.message)
+    } else {
+      toast.error(resp.data.message)
+    }
+  } catch (e: any) {
+    connectionResult.value = { available: false, message: '连接失败' }
+    toast.error(t('settings.whisper.testFailed'))
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+async function installDeps() {
+  const torchIsInstalled = !!checkingDepsResult.value.torch?.installed
+  const librosaIsInstalled = !!checkingDepsResult.value.librosa?.installed
+  const variantChanged = torchIsInstalled && (torchVariant.value === 'gpu') !== !!checkingDepsResult.value.torch?.cuda
+  const parts: string[] = []
+  if (!librosaIsInstalled) parts.push('librosa')
+  if (!torchIsInstalled || variantChanged) parts.push(`torch ${torchVariant.value.toUpperCase()}`)
+  const msg = parts.length === 0
+    ? '所有依赖已就绪，无需安装'
+    : `将安装: ${parts.join(' + ')}`
+  if (!confirm(msg)) return
+
+  installStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.installing') }
+  try {
+    await api.post('/settings/whisper/install-deps', {
+      torch_variant: torchVariant.value,
+      torch_current_cuda: !!checkingDepsResult.value.torch?.cuda,
+    })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/install-status')
+      const status = statusResp.data
+      installStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(t('settings.whisper.installSuccess'))
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.installFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.installFailed'))
+  }
+}
+
+async function downloadModel(modelId: string) {
+  if (!confirm(t('settings.whisper.downloadModelConfirm', { modelId }))) return
+
+  downloadingModel.value = modelId
+  modelDownloadStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.downloading') }
+  try {
+    await api.post('/settings/whisper/models/download', { model: modelId })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/models/download-status')
+      const status = statusResp.data
+      modelDownloadStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(status.message || t('settings.whisper.downloadSuccess'))
+        await loadWhisperModels()
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.downloadFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.downloadFailed'))
+  } finally {
+    downloadingModel.value = null
+  }
+}
+
+async function deleteModel(modelId: string) {
+  if (!confirm(t('settings.whisper.deleteModelConfirm', { modelId }))) return
+  try {
+    await api.delete(`/settings/whisper/models/${modelId}`)
+    toast.success(t('settings.whisper.deleted'))
+    await loadWhisperModels()
+    await checkWhisperDeps()
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.deleteFailed'))
+  }
+}
+
+// ===== Option lists =====
+
+// Pipeline usage recommendations (derived from backend specs)
+const PIPELINE_SPECS: Record<string, {
+  // 速度
+  speed: '极快' | '快' | '中' | '慢' | '可调';
+  speedScore: number; // 1-4
+  // 精度
+  accuracy: '低' | '中' | '高' | '最高' | '可调';
+  accuracyScore: number; // 1-4
+  // 显存
+  vram: string;
+  // 语音增强（预设pipeline固定组合，custom多选）
+  enhancers: string[];
+  // 建议标签
+  tips: string[];
+  // 适用
+  bestFor: string;
+  // 配色 (tag背景)
+  tagColor: string;
+}> = {
+  anime: {
+    speed: '中', speedScore: 2,
+    accuracy: '高', accuracyScore: 3,
+    vram: '~4GB',
+    enhancers: ['ffmpeg-dsp', 'clearvoice'],
+    tips: ['JAV内容推荐', '日语词表优化', 'TEN紧凑时间戳', 'Transformers后端'],
+    bestFor: 'JAV / 动漫 / 音乐',
+    tagColor: 'rgba(255,77,128,0.15)',
+  },
+  faster: {
+    speed: '极快', speedScore: 4,
+    accuracy: '低', accuracyScore: 1,
+    vram: '~1GB',
+    enhancers: ['ffmpeg-dsp'],
+    tips: ['速度优先', '仅响度标准化', '低显存首选'],
+    bestFor: '清洁音频 / 快速预览',
+    tagColor: 'rgba(0,229,133,0.12)',
+  },
+  balanced: {
+    speed: '慢', speedScore: 1,
+    accuracy: '最高', accuracyScore: 4,
+    vram: '~5GB',
+    enhancers: ['ffmpeg-dsp', 'clearvoice', 'bs-roformer'],
+    tips: ['最高精度', '嘈杂场景推荐', 'Silero VAD过滤', '多角色对话'],
+    bestFor: '嘈杂 / 多角色 / 高质量',
+    tagColor: 'rgba(0,117,255,0.15)',
+  },
+  transformers: {
+    speed: '中', speedScore: 2,
+    accuracy: '高', accuracyScore: 3,
+    vram: '~4GB',
+    enhancers: ['ffmpeg-dsp', 'demucs'],
+    tips: ['Kotoba v2.2', 'Transformers后端', '日语高精度', '词级时间戳'],
+    bestFor: '日语高精度 / 词级时间戳',
+    tagColor: 'rgba(156,39,176,0.15)',
+  },
+  qwen: {
+    speed: '慢', speedScore: 1,
+    accuracy: '最高', accuracyScore: 4,
+    vram: '~5GB',
+    enhancers: ['bs-roformer'],
+    tips: ['对齐优化', '时间戳精确', '大模型高精', 'Silero VAD'],
+    bestFor: '精准时间 / 最高质量',
+    tagColor: 'rgba(255,152,0,0.15)',
+  },
+  custom: {
+    speed: '可调', speedScore: 2,
+    accuracy: '可调', accuracyScore: 2,
+    vram: '可配',
+    enhancers: [],
+    tips: ['完全自定义', '多选增强器可配', '支持所有模型', '高级用户'],
+    bestFor: '高级自定义',
+    tagColor: 'rgba(255,255,255,0.06)',
+  },
+}
+
+// Enhancer label 映射
+const ENHANCER_LABELS: Record<string, string> = {
+  'ffmpeg-dsp': 'FFmpeg响度',
+  'clearvoice': 'ClearVoice降噪',
+  'bs-roformer': 'BS-RoFormer人声',
+}
+
+function getEnhancerLabel(enhancers: string[]): string {
+  if (enhancers.length === 0) return '—'
+  if (enhancers.length === 1) return ENHANCER_LABELS[enhancers[0]] || enhancers[0]
+  return enhancers.map(e => ENHANCER_LABELS[e] || e).join(' + ')
+}
+
+// Pipeline options (multi-select cards) - enriched with full specs
+const pipelineOptions = computed(() => {
+  const options = [
+    {
+      value: 'anime', label: t('whisper.pipeline.anime'),
+      desc: 'Anime-Whisper + TEN VAD, JAV优化, Transformers后端',
+      specs: PIPELINE_SPECS['anime'],
+    },
+    {
+      value: 'faster', label: t('whisper.pipeline.faster'),
+      desc: 'Turbo (Tiny) + 无VAD, 清洁音频极速',
+      specs: PIPELINE_SPECS['faster'],
+    },
+    {
+      value: 'balanced', label: t('whisper.pipeline.balanced'),
+      desc: 'Large v3 + Silero VAD, 嘈杂对话均衡',
+      specs: PIPELINE_SPECS['balanced'],
+    },
+    {
+      value: 'transformers', label: t('whisper.pipeline.transformers'),
+      desc: 'Kotoba v2.2 + Silero VAD, 日语高精度词级时间戳',
+      specs: PIPELINE_SPECS['transformers'],
+    },
+    {
+      value: 'qwen', label: t('whisper.pipeline.qwen'),
+      desc: 'Large v3 + Silero VAD, 对齐优化',
+      specs: PIPELINE_SPECS['qwen'],
+    },
+  ]
+  if (customPipelineAvailable()) {
+    options.unshift({
+      value: 'custom', label: 'Custom',
+      desc: '完全自定义 ASR 引擎参数',
+      specs: PIPELINE_SPECS['custom'],
+    })
+  }
+  return options
+})
+
+// Toggle pipeline selection (max 2)
+function togglePipeline(value: string) {
+  if (value === 'custom' && !customPipelineAvailable()) {
+    toast.error(customPipelineReason() || 'Custom pipeline 当前不可用')
+    return
+  }
+  const idx = selectedPipelines.value.indexOf(value)
+  if (idx >= 0) {
+    selectedPipelines.value.splice(idx, 1)
+  } else {
+    if (selectedPipelines.value.length < 2) {
+      selectedPipelines.value.push(value)
+    } else {
+      // Replace the lower-priority one
+      const newPriority = PIPELINE_PRIORITY.indexOf(value)
+      const replaceIdx = selectedPipelines.value.findIndex(p => PIPELINE_PRIORITY.indexOf(p) < newPriority)
+      if (replaceIdx >= 0) {
+        selectedPipelines.value.splice(replaceIdx, 1, value)
+      }
+    }
+  }
+}
+
+// Merge strategy options
+const mergeOptions = computed(() => [
+  { value: 'smart_merge', label: t('whisper.merge.smartMerge') },
+  { value: 'full_merge', label: t('whisper.merge.fullMerge') },
+  { value: 'pass1_primary', label: t('whisper.merge.pass1Primary') },
+  { value: 'pass2_primary', label: t('whisper.merge.pass2Primary') },
+  { value: 'longest', label: t('whisper.merge.longest') },
+  { value: 'pass1_overlap', label: t('whisper.merge.pass1Overlap') },
+  { value: 'pass2_overlap', label: t('whisper.merge.pass2Overlap') },
+])
+
+// VAD options (only for single-pass mode)
+const vadOptions = computed(() => [
+  { value: 'semantic', label: t('whisper.vad.semantic') },
+  { value: 'silero', label: t('whisper.vad.silero') },
+  { value: 'auditok', label: t('whisper.vad.auditok') },
+  { value: 'ten', label: t('whisper.vad.ten') },
+  { value: 'none', label: t('whisper.vad.none') },
+])
+
+// Translation target language options — derived from available i18n dictionaries
+const LANG_DISPLAY: Record<string, string> = { zh: '中文', en: 'English' }
+const translateLangOptions = computed(() => {
+  return Object.keys(dictionaries).map(lang => ({
+    value: lang,
+    label: LANG_DISPLAY[lang] ?? lang.toUpperCase(),
+  }))
+})
+
+// Translation style options
+const translateStyleOptions = [
+  { value: 'adult_explicit', label: 'Adult-Explicit（默认）' },
+  { value: 'standard', label: 'Standard（标准）' },
+]
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">
+      <!-- 1. Default Settings -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.whisper.defaultSettings') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.defaultSettingsHint') }}</p>
+
+        <div class="settings-form mt-4">
+
+          <!-- Pipeline Selector -->
+          <div class="settings-form__field">
+            <label class="settings-form__label">Pipeline</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                v-for="opt in pipelineOptions"
+                :key="opt.value"
+                @click="togglePipeline(opt.value)"
+                class="pipeline-card"
+                :class="{ 'pipeline-card--active': selectedPipelines.includes(opt.value) }"
+              >
+                <span class="pipeline-card__name">
+                  {{ opt.label }}
+                  <span v-if="selectedPipelines.includes(opt.value)" class="pipeline-card__check">✓</span>
+                </span>
+                <span class="pipeline-card__desc">{{ opt.desc }}</span>
+              </button>
+            </div>
+            <p class="settings-field-hint">最多选2个，自动按优先级排序（前一个为主引擎）</p>
+            <p v-if="!customPipelineAvailable() && customPipelineReason()" class="settings-field-hint">
+              Custom pipeline 已隐藏：{{ customPipelineReason() }}
+            </p>
+          </div>
+
+          <!-- Pipeline Detail Specs -->
+          <div v-if="selectedPipelines.length > 0" class="pipeline-specs-panel" :class="{ 'pipeline-specs-panel--dual': selectedPipelines.length === 2 }">
+            <div
+              v-for="pipeValue in selectedPipelines"
+              :key="pipeValue"
+              class="pipeline-specs-card"
+              :class="{ 'pipeline-specs-card--primary': pipeValue === pass1Pipeline }"
+            >
+              <div class="pipeline-specs-card__header">
+                <div class="flex items-center gap-2">
+                  <span class="pipeline-specs-card__name">{{ pipelineOptions.find(p => p.value === pipeValue)?.label }}</span>
+                  <VuiBadge v-if="pipeValue === pass1Pipeline" color="info" variant="gradient" size="xs">Pass1 主引擎</VuiBadge>
+                  <VuiBadge v-else color="secondary" variant="gradient" size="xs">Pass2 辅助</VuiBadge>
+                </div>
+                <span class="pipeline-specs-card__best-for">{{ PIPELINE_SPECS[pipeValue]?.bestFor }}</span>
+              </div>
+              <div class="pipeline-specs-card__body">
+                <div class="pipeline-specs-bar-row">
+                  <span class="pipeline-specs-bar-row__label">速度</span>
+                  <div class="pipeline-specs-bar-row__track">
+                    <div class="pipeline-specs-bar-row__fill pipeline-specs-bar-row__fill--speed" :style="{ width: (PIPELINE_SPECS[pipeValue]?.speedScore / 4 * 100) + '%' }"></div>
+                  </div>
+                  <span class="pipeline-specs-bar-row__val">{{ PIPELINE_SPECS[pipeValue]?.speed }}</span>
+                </div>
+                <div class="pipeline-specs-bar-row">
+                  <span class="pipeline-specs-bar-row__label">精度</span>
+                  <div class="pipeline-specs-bar-row__track">
+                    <div class="pipeline-specs-bar-row__fill pipeline-specs-bar-row__fill--accuracy" :style="{ width: (PIPELINE_SPECS[pipeValue]?.accuracyScore / 4 * 100) + '%' }"></div>
+                  </div>
+                  <span class="pipeline-specs-bar-row__val">{{ PIPELINE_SPECS[pipeValue]?.accuracy }}</span>
+                </div>
+                <div class="pipeline-specs-info-row">
+                  <span class="pipeline-specs-info-row__label">显存</span>
+                  <span class="pipeline-specs-info-row__val">{{ PIPELINE_SPECS[pipeValue]?.vram }}</span>
+                </div>
+                <div class="pipeline-specs-info-row">
+                  <span class="pipeline-specs-info-row__label">增强</span>
+                  <span class="pipeline-specs-info-row__val">{{ pipeValue === 'custom' ? '—' : getEnhancerLabel(PIPELINE_SPECS[pipeValue]?.enhancers || []) }}</span>
+                </div>
+                <div class="pipeline-specs-tips">
+                  <span
+                    v-for="tip in PIPELINE_SPECS[pipeValue]?.tips"
+                    :key="tip"
+                    class="pipeline-specs-tip-tag"
+                    :style="{ background: PIPELINE_SPECS[pipeValue]?.tagColor }"
+                  >{{ tip }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+

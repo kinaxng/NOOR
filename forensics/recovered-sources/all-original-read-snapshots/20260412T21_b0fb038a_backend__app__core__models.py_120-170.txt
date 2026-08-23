@@ -1,0 +1,51 @@
+    outline: Optional[str] = None
+    genres: list[str] = []
+    actors: list[dict] = []
+    director: Optional[str] = None
+    rating: Optional[str] = None
+    set: Optional[str] = None
+    id: Optional[str] = None
+    # Additional fields from AV刮削 NFO
+    tag: Optional[str] = None        # <tag> — usually studio slug
+    maker: Optional[str] = None      # <maker> — 片商
+    publisher: Optional[str] = None  # <publisher> — 发行商
+    label: Optional[str] = None      # <label> — 标签/系列
+    num: Optional[str] = None        # <num> — 番号 (e.g. CAWD-030)
+
+
+class FileTags(BaseModel):
+    """File tag information parsed from filename."""
+    is_uncensored: bool = False  # -u 流出
+    has_chinese: bool = False    # -c 中文
+    is_cracked: bool = False     # 破解 (same as uncensored)
+    is_leaked: bool = False      # 流出
+    release_type: Optional[str] = None  # 流出 / 无码
+
+
+class EmbyLibrary(BaseModel):
+    id: str
+    name: str
+    type: str
+    poster_path: Optional[str] = None
+
+
+class EmbyItem(BaseModel):
+    id: str
+    name: str
+    type: str
+    media_type: Optional[str] = None
+    poster_path: Optional[str] = None
+    date_created: Optional[str] = None
+    path: Optional[str] = None
+    nfo: Optional[EmbyNFO] = None
+    tags: FileTags = Field(default_factory=FileTags)
+    subtitle_count: int = 0  # Number of subtitle files found locally
+
+
+class SiblingItem(BaseModel):
+    """A sibling video file in the same folder (CD1/CD2, etc.)."""
+    label: str = ""          # e.g. "CD1", "CD2", "碟1"
+    file_path: Optional[str] = None
+    # Optional Emby data (present for Emby-indexed siblings)
+    id: Optional[str] = None
+    name: Optional[str] = None

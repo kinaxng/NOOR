@@ -1,0 +1,161 @@
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (httpx.HTTPStatusError("too many", request=httpx.Request("GET", "https://example.com"), response=httpx.Response(429)), True),
+        (RuntimeError("翻译失败: 429 Too Many Requests"), True),
+        (RuntimeError("翻译失败: rate limit exceeded"), True),
+        (RuntimeError("翻译失败: unauthorized"), False),
+    ],
+)
+def test_is_rate_limit_error_detects_http_status_and_wrapped_messages(error, expected):
+    assert JobManager._is_rate_limit_error(error) is expected
+
+
+@pytest.mark.asyncio
+async def test_create_blocked_job_emits_blocked_event(temp_db):
+    manager = JobManager()
+    response = await manager.create_job(
+        make_job("blocked-child"),
+        job_type="translate-srt",
+        status="blocked",
+        enqueue_now=False,
+    )
+
+    event = await asyncio.wait_for(manager.get_event_queue(response.id).get(), timeout=2)
+    assert event == {
+        "type": "blocked",
+        "job_id": response.id,
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+        "phase_progress": 0,
+        "detail": "等待主任务完成后自动开始",
+    }
+
+
+@pytest.mark.asyncio
+async def test_emit_terminal_event_includes_phase_snapshot(temp_db):
+    manager = JobManager()
+    response = await manager.create_job(
+        make_job("terminal-snapshot"),
+        job_type="translate-srt",
+        status="queued",
+        enqueue_now=False,
+    )
+
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == response.id))
+        db_job = result.scalar_one()
+        db_job.status = "completed"
+        db_job.progress = 100
+        db_job.phase_key = "translate"
+        db_job.phase_label = "字幕翻译"
+        db_job.phase_progress = 100
+        db_job.detail = "翻译字幕已保存"
+        await session.commit()
+
+    await manager._emit_terminal_event(
+        manager.get_event_queue(response.id),
+        status="completed",
+        success=True,
+        job_id=response.id,
+    )
+
+    queued_event = await asyncio.wait_for(manager.get_event_queue(response.id).get(), timeout=2)
+    assert queued_event == {
+        "type": "completed",
+        "success": True,
+        "progress": 100,
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+        "phase_progress": 100,
+        "detail": "翻译字幕已保存",
+    }
+
+
+def test_job_phase_helpers_normalize_labels():
+    from app.tasks.job_phases import (
+        get_followup_phase_state,
+        get_job_type_phase_defaults,
+        get_phase_label,
+        get_queued_phase_state,
+        get_running_phase_state,
+        get_terminal_phase_label,
+        normalize_phase_key,
+    )
+
+    assert normalize_phase_key("detect") == "analyze"
+    assert normalize_phase_key("restore") == "process"
+    assert normalize_phase_key("write_output") == "output"
+    assert get_phase_label("detect") == "分析内容"
+    assert get_phase_label("translate") == "字幕翻译"
+    assert get_phase_label("unknown", "fallback") == "fallback"
+    assert get_job_type_phase_defaults("translate-srt") == {
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+    }
+    assert get_job_type_phase_defaults("lada") == {
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+    }
+    assert get_job_type_phase_defaults("whisper") == {
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+    }
+    assert get_queued_phase_state("translate-srt") == {
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+        "phase_progress": 0,
+    }
+    assert get_queued_phase_state("lada") == {
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+        "phase_progress": 0,
+    }
+    assert get_running_phase_state("translate-srt") == {
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+    }
+    assert get_running_phase_state("whisper") == {
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+    }
+    assert get_followup_phase_state("translate-srt", status="blocked") == {
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+        "phase_progress": 0,
+        "detail": "等待主任务完成后自动开始",
+    }
+    assert get_followup_phase_state("translate-srt", status="queued") == {
+        "phase_key": "translate",
+        "phase_label": "字幕翻译",
+        "phase_progress": 0,
+        "detail": "主任务已完成，准备开始后续任务",
+    }
+    assert get_terminal_phase_label("completed", phase_key="translate") == "字幕翻译"
+    assert get_terminal_phase_label("cancelled") == "已取消"
+
+
+def test_whisper_progress_reporter_uses_shared_phase_protocol():
+    from app.pipeline.whisper.progress import AsyncProgressReporter
+
+    reporter = AsyncProgressReporter(job_id="job-1", event_queue=None)
+
+    update = reporter.parse_line("场景检测 3 / 10")
+    assert update is not None
+    assert update.phase_key == "analyze"
+    assert update.phase_label == "分析内容"
+
+    update = reporter.parse_line("Anime-Whisper 4 / 10")
+    assert update is not None
+    assert update.phase_key == "transcribe"
+    assert update.phase_label == "生成字幕"
+
+    update = reporter.parse_line("后处理完成")
+    assert update is not None
+    assert update.phase_key == "process"
+    assert update.phase_label == "处理中"
+
+    update = reporter.parse_line("SRT 已保存")
+    assert update is not None
+    assert update.phase_key == "output"
+    assert update.phase_label == "整理输出"

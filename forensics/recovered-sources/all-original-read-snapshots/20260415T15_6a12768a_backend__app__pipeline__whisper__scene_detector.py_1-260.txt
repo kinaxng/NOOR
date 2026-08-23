@@ -1,0 +1,260 @@
+"""音频场景检测 - 将长音频切分为自然段落用于更精确的 Whisper 转写"""
+import numpy as np
+import librosa
+from typing import Optional
+from dataclasses import dataclass
+
+
+@dataclass
+class AudioSegment:
+    """音频片段"""
+    start: float  # 秒
+    end: float    # 秒
+    duration: float
+
+
+class AudioSceneDetector:
+    """
+    音频场景检测器
+
+    检测音频中的自然断点，将长音频切分为适合单独转写的段落。
+    避免在句子中间切断，提升转写质量。
+
+    支持两种检测模式：
+    - energy: 能量/静音检测，适合一般音频
+    - semantic: MFCC 语义聚类，适合内容多变的动漫/影视
+    """
+
+    def __init__(
+        self,
+        mode: str = "energy",
+        min_silence_duration: float = 1.0,
+        min_segment_duration: float = 10.0,
+        energy_threshold: float = 0.01,
+        hop_length: int = 512,
+        frame_length: int = 2048,
+        max_segment_duration: float | None = 18.0,
+    ):
+        """
+        Args:
+            mode: 检测模式 "energy" | "semantic"
+            min_silence_duration: 最小静音时长（秒），小于此值不分割
+            min_segment_duration: 最小片段时长（秒），短于此值的片段与相邻片段合并
+            energy_threshold: 能量阈值，低于此值认为是静音
+            hop_length: hop 长度（采样点）
+            frame_length: 帧长度（采样点）
+            max_segment_duration: 目标最大片段时长（秒），超出后会尽量按低能量点继续切分
+        """
+        self.mode = mode
+        self.min_silence_duration = min_silence_duration
+        self.min_segment_duration = min_segment_duration
+        self.energy_threshold = energy_threshold
+        self.hop_length = hop_length
+        self.frame_length = frame_length
+        self.max_segment_duration = max_segment_duration
+
+    def detect(self, audio_path: str) -> list[AudioSegment]:
+        """
+        检测音频场景边界
+
+        Args:
+            audio_path: 音频文件路径
+
+        Returns:
+            AudioSegment 列表，按时间排序
+        """
+        if self.mode == "semantic":
+            return self._detect_semantic(audio_path)
+        else:
+            return self._detect_energy(audio_path)
+
+    def _detect_energy(self, audio_path: str) -> list[AudioSegment]:
+        """能量/静音检测 - 基于能量阈值检测静音段落作为断点"""
+        y, sr = librosa.load(audio_path, sr=None, mono=True)
+        duration = len(y) / sr
+
+        # 计算 RMS 能量
+        rms = librosa.feature.rms(
+            y=y,
+            frame_length=self.frame_length,
+            hop_length=self.hop_length,
+            center=True,
+        )[0]
+
+        times = librosa.times_like(rms, sr=sr, hop_length=self.hop_length)
+
+        # 标记静音帧
+        is_silence = rms < self.energy_threshold
+
+        # 寻找连续的静音区间
+        boundaries = []
+        in_silence = False
+        silence_start = 0.0
+
+        for i, (t, silent) in enumerate(zip(times, is_silence)):
+            if silent and not in_silence:
+                # 静音开始
+                in_silence = True
+                silence_start = t
+            elif not silent and in_silence:
+                # 静音结束
+                in_silence = False
+                silence_duration = t - silence_start
+                if silence_duration >= self.min_silence_duration:
+                    boundaries.append((silence_start, t))
+
+        # 如果没有检测到任何断点，返回整个音频
+        if not boundaries:
+            return [AudioSegment(start=0.0, end=duration, duration=duration)]
+
+        # 构建片段
+        segments = []
+        seg_start = 0.0
+        for b_start, b_end in boundaries:
+            if b_start - seg_start >= 1.0:  # 至少1秒的音频
+                segments.append(AudioSegment(
+                    start=seg_start,
+                    end=b_start,
+                    duration=b_start - seg_start
+                ))
+            seg_start = b_end
+
+        # 最后一个片段
+        if duration - seg_start >= 1.0:
+            segments.append(AudioSegment(
+                start=seg_start,
+                end=duration,
+                duration=duration - seg_start
+            ))
+
+        # 合并过短片段
+        segments = self._merge_short_segments(segments)
+        segments = self._split_long_segments(y, sr, segments)
+
+        return segments
+
+    def _detect_semantic(self, audio_path: str) -> list[AudioSegment]:
+        """
+        语义检测 - 基于 MFCC 特征聚类检测内容变化点
+
+        适用于内容多变的动漫/影视，分割为 acoustic coherent 段落
+        """
+        y, sr = librosa.load(audio_path, sr=16000, mono=True)
+        duration = len(y) / sr
+
+        # 提取 MFCC 特征（每 0.5 秒一帧）
+        hop = int(0.5 * sr)
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=20, hop_length=hop)
+        mfcc_delta = librosa.feature.delta(mfcc)
+
+        # 合并 MFCC 和 delta
+        features = np.vstack([mfcc, mfcc_delta])
+        features = features.T  # (n_frames, n_features)
+
+        # L2 归一化
+        norms = np.linalg.norm(features, axis=1, keepdims=True)
+        norms[norms == 0] = 1
+        features = features / norms
+
+        # 计算相邻帧的余弦距离
+        n_frames = len(features)
+        distances = []
+        for i in range(1, n_frames):
+            dist = np.arccos(np.clip(np.dot(features[i], features[i-1]), -1, 1))
+            distances.append(dist)
+
+        distances = np.array(distances)
+
+        # 平滑距离
+        window = max(3, int(2.0 / 0.5))  # 2秒窗口
+        if len(distances) > window:
+            kernel = np.ones(window) / window
+            distances_smooth = np.convolve(distances, kernel, mode='same')
+        else:
+            distances_smooth = distances
+
+        # 找峰值（距离突变点 = 内容变化点）
+        threshold = np.mean(distances_smooth) + 0.8 * np.std(distances_smooth)
+
+        # 找所有峰值位置
+        peaks = []
+        for i in range(1, len(distances_smooth) - 1):
+            if distances_smooth[i] > threshold:
+                # 局部最大值
+                if (distances_smooth[i] >= distances_smooth[i-1] and
+                    distances_smooth[i] >= distances_smooth[i+1]):
+                    time_pos = (i + 1) * 0.5  # 中间帧对应的时间
+                    peaks.append(time_pos)
+
+        # 如果没有检测到断点
+        if not peaks:
+            return [AudioSegment(start=0.0, end=duration, duration=duration)]
+
+        # 构建片段（每个断点前后取最大距离点）
+        boundaries = []
+        for peak in peaks:
+            boundaries.append(peak)
+
+        # 过滤：去除间隔太近的断点
+        min_gap = self.min_segment_duration * 0.5
+        filtered = []
+        last = 0.0
+        for b in boundaries:
+            if b - last >= min_gap:
+                filtered.append(b)
+                last = b
+
+        if not filtered:
+            return [AudioSegment(start=0.0, end=duration, duration=duration)]
+
+        # 构建片段
+        segments = []
+        seg_start = 0.0
+        for b in filtered:
+            if b - seg_start >= 1.0:
+                segments.append(AudioSegment(
+                    start=seg_start,
+                    end=b,
+                    duration=b - seg_start
+                ))
+            seg_start = b
+
+        if duration - seg_start >= 1.0:
+            segments.append(AudioSegment(
+                start=seg_start,
+                end=duration,
+                duration=duration - seg_start
+            ))
+
+        # 合并过短片段
+        segments = self._merge_short_segments(segments)
+        segments = self._split_long_segments(y, sr, segments)
+
+        return segments
+
+    def _merge_short_segments(self, segments: list[AudioSegment]) -> list[AudioSegment]:
+        """合并时长过短的片段"""
+        if len(segments) < 2:
+            return segments
+
+        merged = [segments[0]]
+
+        for seg in segments[1:]:
+            if seg.duration < self.min_segment_duration and len(merged) > 0:
+                # 合并到前一个片段
+                prev = merged[-1]
+                prev.end = seg.end
+                prev.duration = prev.end - prev.start
+            else:
+                merged.append(seg)
+
+        return merged
+
+
+    def _split_long_segments(self, y: np.ndarray, sr: int, segments: list[AudioSegment]) -> list[AudioSegment]:
+        """将过长片段继续切分到更适合 Whisper 的长度。
+
+        优先在目标分割点附近寻找低能量位置；如果找不到，再退回固定时长切分。
+        """
+        if not self.max_segment_duration or self.max_segment_duration <= 0:
+            return segments

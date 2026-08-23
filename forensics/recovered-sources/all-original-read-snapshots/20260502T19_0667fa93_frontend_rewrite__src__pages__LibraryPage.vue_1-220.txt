@@ -1,0 +1,458 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useMediaStore } from '../stores/media'
+import NoorButton from '../noor-kit/NoorButton.vue'
+import NoorPagination from '../noor-kit/NoorPagination.vue'
+import NoorState from '../noor-kit/NoorState.vue'
+
+const media = useMediaStore()
+const searchText = ref('')
+
+onMounted(() => media.initialize())
+</script>
+
+<template>
+  <section class="page stack">
+    <div class="page-heading">
+      <div>
+        <h1>媒体库</h1>
+        <p>来自 Emby API 的作品列表。</p>
+      </div>
+      <div class="actions">
+        <select v-model="media.selectedLibraryId" class="input" @change="media.selectLibrary(media.selectedLibraryId)">
+          <option value="">全部媒体库</option>
+          <option v-for="library in media.libraries" :key="library.id" :value="library.id">{{ library.name }}</option>
+        </select>
+        <input v-model="searchText" class="input" placeholder="搜索作品" @keyup.enter="media.search(searchText)" />
+        <NoorButton tone="primary" @click="media.search(searchText)">搜索</NoorButton>
+      </div>
+    </div>
+
+    <NoorState v-if="media.loading" type="loading" title="加载媒体库" />
+    <NoorState v-else-if="media.error" type="error" :title="media.error" />
+    <NoorState v-else-if="!media.items.length" type="empty" title="暂无作品" />
+
+    <template v-else>
+      <div class="media-grid">
+        <article v-for="item in media.items" :key="item.id" class="media-card" role="button" tabindex="0" @click="media.fetchItemDetail(item.id)" @keydown.enter="media.fetchItemDetail(item.id)">
+          <div class="media-cover">
+            <img v-if="item.poster_path || item.fanart_path" :src="item.poster_path || item.fanart_path" :alt="item.name" loading="lazy" />
+            <span v-else>NO IMAGE</span>
+          </div>
+          <div class="media-card__body">
+            <h2>{{ item.name }}</h2>
+            <p>{{ item.path || item.date_created || '-' }}</p>
+          </div>
+        </article>
+      </div>
+      <NoorPagination v-model:page="media.page" :total="media.total" :page-size="media.pageSize" @update:page="media.fetchItems" />
+    </template>
+
+    <div v-if="media.selectedItem || media.detailLoading" class="detail-mask" @click.self="media.closeDetail()">
+      <aside class="detail-panel">
+        <NoorState v-if="media.detailLoading" type="loading" title="加载作品详情" />
+        <template v-else-if="media.selectedItem">
+          <div class="detail-hero">
+            <img v-if="media.selectedItem.backdrop_path || media.selectedItem.poster_path" :src="media.selectedItem.backdrop_path || media.selectedItem.poster_path" :alt="media.selectedItem.name" />
+            <NoorButton class="detail-close" @click="media.closeDetail()">关闭</NoorButton>
+          </div>
+          <div class="detail-body">
+            <h2>{{ media.selectedItem.name }}</h2>
+            <p>{{ media.selectedItem.file_path || media.selectedItem.path }}</p>
+
+            <div class="detail-meta">
+              <span>演员：{{ media.selectedItem.actors?.map(actor => actor.name).join('、') || '-' }}</span>
+              <span>片商：{{ media.selectedItem.studios?.join('、') || '-' }}</span>
+              <span>发行：{{ media.selectedItem.premiered || '-' }}</span>
+            </div>
+
+            <div class="chip-row">
+              <NoorBadge v-for="genre in media.selectedItem.genres?.slice(0, 20)" :key="genre">{{ genre }}</NoorBadge>
+            </div>
+
+            <section class="versions">
+              <h3>文件版本</h3>
+              <button type="button" class="version-row is-active">
+                <strong>{{ media.selectedItem.file_path || media.selectedItem.name }}</strong>
+              </button>
+              <button v-for="sibling in media.selectedItem.siblings || []" :key="sibling.id || sibling.file_path" type="button" class="version-row">
+                <strong>{{ sibling.file_path || sibling.name || sibling.label }}</strong>
+              </button>
+            </section>
+          </div>
+        </template>
+      </aside>
+    </div>
+  </section>
+</template>
+
+---CSS---
+* { box-sizing: border-box; }
+:root { color-scheme: dark; }
+body { margin: 0; background: #0b1220; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+a { color: inherit; }
+.app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.sidebar { border-right: 1px solid rgba(255,255,255,.08); padding: 16px; display:flex; flex-direction:column; gap:16px; }
+.brand { font-weight: 800; letter-spacing: .04em; }
+.nav { display:flex; flex-direction:column; gap:8px; }
+.nav-link { display:block; padding:8px 10px; border-radius:10px; color:#9ca3af; text-decoration:none; }
+.nav-link.is-active { background:#2563eb; color:#fff; }
+.nav-separator { height:1px; margin:6px 0; background:rgba(255,255,255,.08); }
+.content { padding: 16px; min-width: 0; }
+.topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.title { margin:0; font-size:18px; }
+.actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.btn, .noor-button { height:30px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05); color:#e5e7eb; border-radius:10px; padding:0 12px; font-weight:700; cursor:pointer; }
+.noor-button:disabled { opacity:.55; cursor:not-allowed; }
+.noor-button--primary { background:#2563eb; border-color:#2563eb; color:#fff; }
+.noor-button--danger { background:rgba(239,68,68,.14); border-color:rgba(239,68,68,.35); color:#fecaca; }
+.noor-button--ghost { background:transparent; }
+.link-button { height:30px; display:inline-flex; align-items:center; border:1px solid rgba(37,99,235,.6); background:#2563eb; color:#fff; border-radius:10px; padding:0 12px; text-decoration:none; font-size:13px; font-weight:700; }
+.page-wrap { min-height: calc(100vh - 90px); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:16px; background:rgba(255,255,255,.02); }
+.page h1 { margin:0; font-size:18px; }
+.page-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.page-heading p { margin:6px 0 0; color:#94a3b8; font-size:13px; }
+.stack { display:flex; flex-direction:column; gap:16px; }
+.metric-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.metric-card, .panel, .job-card, .table-panel { border:1px solid rgba(255,255,255,.08); background:rgba(15,23,42,.72); border-radius:8px; }
+.settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.settings-section { border:1px solid rgba(255,255,255,.08); background:rgba(15,23,42,.72); border-radius:8px; overflow:hidden; }
+.settings-section dl { display:grid; grid-template-columns:120px 1fr; gap:10px 14px; margin:0; padding:14px 16px; }
+.settings-section dt { color:#94a3b8; font-size:12px; }
+.settings-section dd { margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis; color:#e5e7eb; font-size:13px; }
+.input { height:34px; min-width:180px; border:1px solid rgba(255,255,255,.12); border-radius:10px; background:rgba(255,255,255,.05); color:#e5e7eb; padding:0 10px; outline:none; }
+.input:focus { border-color:#2563eb; }
+.metric-card { min-height:88px; padding:14px; display:flex; flex-direction:column; justify-content:space-between; }
+.metric-card--button { color:inherit; text-align:left; cursor:pointer; }
+.metric-card--button:hover { border-color:rgba(37,99,235,.45); }
+.metric-card span { color:#94a3b8; font-size:12px; }
+.metric-card strong { font-size:24px; }
+.panel, .table-panel { overflow:hidden; }
+.panel-title { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.panel-title h2 { margin:0; font-size:15px; }
+.list { display:flex; flex-direction:column; }
+.list-row { min-height:56px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px; border-bottom:1px solid rgba(255,255,255,.06); text-decoration:none; }
+.list-row:last-child { border-bottom:0; }
+.list-row strong, td strong { display:block; font-size:13px; }
+.list-row span, td span, .muted { color:#94a3b8; font-size:12px; }
+.job-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:12px; }
+.job-card { padding:14px; display:flex; flex-direction:column; gap:12px; }
+.job-card__head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.job-card h2 { margin:0; font-size:14px; line-height:1.35; }
+.job-card p { margin:5px 0 0; color:#94a3b8; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.progress { height:8px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden; }
+.progress i { display:block; height:100%; background:#2563eb; }
+.job-meta { display:grid; grid-template-columns:auto 1fr auto; gap:10px; color:#94a3b8; font-size:12px; }
+.media-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+.media-card { border:1px solid rgba(255,255,255,.08); background:rgba(15,23,42,.72); border-radius:8px; overflow:hidden; min-width:0; }
+.media-cover { aspect-ratio:2/3; background:rgba(255,255,255,.04); display:flex; align-items:center; justify-content:center; color:#64748b; font-size:12px; }
+.media-cover img { width:100%; height:100%; object-fit:cover; display:block; }
+.media-card__body { padding:10px; }
+.media-card__body h2 { margin:0; min-height:38px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; line-height:1.45; }
+.media-card__body p { margin:6px 0 0; color:#94a3b8; font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.hardlink-list { display:flex; flex-direction:column; gap:10px; }
+.hardlink-card { border:1px solid rgba(255,255,255,.08); background:rgba(15,23,42,.72); border-radius:8px; overflow:hidden; }
+.hardlink-card__head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.08); }
+.hardlink-card__head h2 { margin:0; font-size:15px; }
+.hardlink-entry { padding:10px 14px; display:flex; flex-direction:column; gap:6px; border-bottom:1px solid rgba(255,255,255,.05); }
+.hardlink-entry:last-child { border-bottom:0; }
+.path-line { display:grid; grid-template-columns:64px 1fr auto; gap:10px; align-items:center; min-width:0; color:#cbd5e1; font-size:12px; }
+.path-line span { color:#94a3b8; }
+.path-line strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.path-line em { color:#94a3b8; font-style:normal; }
+.plugin-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+.plugin-card { border:1px solid rgba(255,255,255,.08); background:rgba(15,23,42,.72); border-radius:8px; padding:14px; display:flex; flex-direction:column; gap:12px; }
+.plugin-card.is-disabled { opacity:.64; }
+.plugin-card__head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.plugin-card h2 { margin:0; font-size:15px; }
+.plugin-card p { margin:4px 0 0; color:#94a3b8; font-size:12px; }
+.plugin-desc { min-height:36px; }
+.chip-row { display:flex; gap:6px; flex-wrap:wrap; }
+.plugin-detail { display:flex; flex-direction:column; gap:12px; }
+.noor-badge { min-height:24px; display:inline-flex; align-items:center; border-radius:8px; padding:0 9px; font-size:12px; font-weight:700; background:rgba(148,163,184,.12); color:#cbd5e1; white-space:nowrap; }
+.noor-badge--info { background:rgba(59,130,246,.16); color:#bfdbfe; }
+.noor-badge--success { background:rgba(34,197,94,.14); color:#bbf7d0; }
+.noor-badge--warning { background:rgba(245,158,11,.14); color:#fde68a; }
+.noor-badge--danger { background:rgba(239,68,68,.14); color:#fecaca; }
+.noor-tabs { display:inline-flex; align-self:flex-start; gap:4px; padding:4px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.04); border-radius:12px; }
+.noor-tab { height:30px; border:0; border-radius:9px; padding:0 14px; background:transparent; color:#94a3b8; font-weight:700; cursor:pointer; }
+.noor-tab.is-active { background:#2563eb; color:#fff; }
+.noor-state { min-height:56px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background:rgba(15,23,42,.72); display:flex; align-items:center; justify-content:center; gap:10px; color:#cbd5e1; }
+.noor-state span { color:#94a3b8; }
+.spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,.18); border-top-color:#60a5fa; border-radius:999px; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+table { width:100%; border-collapse:collapse; }
+th, td { padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.06); text-align:left; font-size:13px; vertical-align:middle; }
+th { color:#94a3b8; font-size:12px; font-weight:700; }
+.noor-pagination { display:flex; justify-content:center; gap:6px; padding:14px; }
+.noor-pagination button { height:30px; min-width:30px; border:1px solid rgba(255,255,255,.12); border-radius:9px; background:rgba(255,255,255,.05); color:#cbd5e1; cursor:pointer; }
+.noor-pagination button.is-active { background:#2563eb; border-color:#2563eb; color:#fff; }
+.noor-pagination button:disabled { opacity:.5; cursor:not-allowed; }
+.pagination-ellipsis { min-width:24px; display:inline-flex; align-items:center; justify-content:center; color:#64748b; font-size:12px; }
+@media (max-width: 960px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { border-right:0; border-bottom:1px solid rgba(255,255,255,.08); }
+  .nav { flex-direction:row; flex-wrap:wrap; }
+  .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .settings-grid { grid-template-columns:1fr; }
+  .job-grid { grid-template-columns:1fr; }
+  .page-heading { flex-direction:column; }
+}
+
+---types---
+export type JobStatus = 'pending' | 'blocked' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped'
+
+export interface JobSettings {
+  model?: string
+  strategy?: string
+  pipeline_mode?: string
+  language?: string
+  translate_to?: string | null
+}
+
+export interface Job {
+  id: string
+  job_type?: string
+  emby_item_id?: string
+  emby_item_name: string
+  input_path: string
+  output_path?: string
+  status: JobStatus
+  progress: number
+  phase_label?: string
+  detail?: string
+  error_message?: string
+  settings?: JobSettings
+  result_metadata?: Record<string, unknown> | null
+  created_at: string
+  completed_at?: string
+}
+
+export interface JobListResponse {
+  jobs: Job[]
+  total: number
+}
+
+export interface SystemMetrics {
+  gpu?: {
+    gpu_util: number
+    mem_used: number
+    mem_total: number
+    temp?: number
+    power?: number
+  } | null
+  cpu_mem?: {
+    cpu_util: number
+    mem_used: number
+    mem_total: number
+    cpu_temp?: number
+  } | null
+}
+
+export interface SettingsPayload {
+  emby?: {
+    server?: string
+    user_id?: string
+    enabled_library_ids?: string[]
+  }
+  storage?: {
+    source_dir?: string
+    output_dir?: string
+    whisper_model_dir?: string
+    lada_model_dir?: string
+  }
+  lada?: {
+    cli_path?: string
+    version?: string
+    install_mode?: string
+  }
+  whisper?: {
+    strategy?: string
+    model?: string
+    pass1_pipeline?: string
+    pass2_pipeline?: string
+    translate_to?: string
+    audio_preprocess_mode?: string
+  }
+  network?: {
+    acceleration_mode?: string
+    hf_mirror?: string
+    github_mirror?: string
+    pip_mirror?: string
+  }
+}
+
+export interface MediaLibrary {
+  id: string
+  name: string
+  type?: string
+}
+
+export interface MediaItem {
+  id: string
+  name: string
+  poster_path?: string
+  fanart_path?: string
+  date_created?: string
+  path?: string
+  variant_count?: number
+  subtitle_count?: number
+}
+
+export interface MediaItemDetail extends MediaItem {
+  media_type?: string
+  file_path?: string
+  stream_url?: string | null
+  backdrop_path?: string
+  premiered?: string
+  studios?: string[]
+  genres?: string[]
+  actors?: Array<{ name: string; role?: string | null }>
+  siblings?: Array<{
+    id?: string
+    name?: string
+    label?: string
+    file_path?: string
+    poster_path?: string
+  }>
+}
+
+export interface MediaItemsResponse {
+  items: MediaItem[]
+  total: number
+}
+
+export interface HardlinkEntry {
+  source_path: string | null
+  hardlink_paths: string[]
+  hardlink_count?: number
+  source_size?: number | null
+  status?: 'healthy' | 'issue'
+  issues?: string[]
+}
+
+export interface HardlinkGroup {
+  code: string
+  entries: HardlinkEntry[]
+  entry_count?: number
+  hardlink_count?: number
+  orphan_count?: number
+  issue_count?: number
+  status?: 'healthy' | 'issue'
+}
+
+export interface PluginManifest {
+  id: string
+  name: string
+  version?: string
+  type?: string
+  description?: string
+  tags?: string[]
+  capabilities?: string[]
+  contributions?: Record<string, unknown>
+  enabled?: boolean
+}
+
+---store---
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+import { api } from '../api/client'
+import type { MediaItem, MediaItemDetail, MediaItemsResponse, MediaLibrary } from '../api/types'
+
+export const useMediaStore = defineStore('media', () => {
+  const libraries = ref<MediaLibrary[]>([])
+  const items = ref<MediaItem[]>([])
+  const total = ref(0)
+  const page = ref(1)
+  const pageSize = ref(18)
+  const query = ref('')
+  const loading = ref(false)
+  const detailLoading = ref(false)
+  const error = ref<string | null>(null)
+  const selectedItem = ref<MediaItemDetail | null>(null)
+  const selectedLibraryId = ref('')
+
+  const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+  async function fetchLibraries() {
+    const data = await api.get<{ libraries: MediaLibrary[] }>('/media-library/libraries')
+    libraries.value = data.libraries
+  }
+
+  async function fetchItems(nextPage = page.value) {
+    loading.value = true
+    error.value = null
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', String(pageSize.value))
+      params.set('offset', String((nextPage - 1) * pageSize.value))
+      if (selectedLibraryId.value) params.set('library_id', selectedLibraryId.value)
+      if (query.value.trim()) params.set('q', query.value.trim())
+      const data = await api.get<MediaItemsResponse>(`/media-library/items?${params.toString()}`)
+      items.value = data.items
+      total.value = data.total
+      page.value = nextPage
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '媒体库加载失败'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function initialize() {
+    loading.value = true
+    error.value = null
+    try {
+      await fetchLibraries()
+      await fetchItems(1)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '媒体库加载失败'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function search(value: string) {
+    query.value = value
+    await fetchItems(1)
+  }
+
+  async function selectLibrary(libraryId: string) {
+    selectedLibraryId.value = libraryId
+    await fetchItems(1)
+  }
+
+  async function fetchItemDetail(itemId: string) {
+    detailLoading.value = true
+    try {
+      selectedItem.value = await api.get<MediaItemDetail>(`/media-library/item/${encodeURIComponent(itemId)}`)
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  function closeDetail() {
+    selectedItem.value = null
+  }
+
+  return {
+    libraries,
+    items,
+    total,
+    page,
+    pageSize,
+    pageCount,
+    query,
+    loading,
+    detailLoading,
+    error,
+    selectedItem,
+    selectedLibraryId,
+    initialize,
+    fetchItems,
+    search,
+    selectLibrary,
+    fetchItemDetail,
+    closeDetail,
+  }
+})

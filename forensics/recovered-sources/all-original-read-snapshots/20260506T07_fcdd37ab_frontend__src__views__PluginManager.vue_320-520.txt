@@ -1,0 +1,201 @@
+  return meta.type === 'number'
+}
+
+function isSelectField(meta: PluginConfigField) {
+  return Array.isArray(meta.options) && meta.options.length > 0
+}
+
+onMounted(() => {
+  void loadData(true)
+})
+</script>
+
+<template>
+  <section class="plugin-page">
+    <header class="plugin-page__header">
+      <div class="plugin-page__title-wrap">
+        <h2>插件管理</h2>
+        <p>{{ stats }}</p>
+      </div>
+      <button class="plugin-action plugin-action--primary" type="button" @click="loadData(true)">
+        <BaseIcon name="refresh" class="w-4 h-4" />
+        <span>刷新</span>
+      </button>
+    </header>
+
+    <div v-if="loading" class="plugin-state">插件加载中</div>
+    <div v-else-if="error" class="plugin-state plugin-state--error">{{ error }}</div>
+
+    <div v-else class="plugin-grid">
+      <article
+        v-for="plugin in pluginCards"
+        :key="plugin.id"
+        class="plugin-card"
+        :class="[
+          `plugin-card--${plugin.status}`,
+          { 'plugin-card--page': !!routeOf(plugin) }
+        ]"
+      >
+        <div class="plugin-card__icon">
+          <BaseIcon name="plugin" class="w-5 h-5" />
+        </div>
+
+        <div class="plugin-card__main">
+          <div class="plugin-card__topline">
+            <div class="plugin-card__name-wrap">
+              <h4>{{ plugin.name }}</h4>
+              <span>{{ pluginCapabilitySummary(plugin) }}</span>
+            </div>
+            <span class="plugin-status" :class="`plugin-status--${plugin.status}`">{{ statusLabel(plugin.status) }}</span>
+          </div>
+
+          <p class="plugin-card__desc">{{ plugin.description }}</p>
+
+          <div class="plugin-card__footer">
+            <div class="plugin-card__tags">
+              <span v-for="tag in plugin.tags.slice(0, 3)" :key="tag">{{ tag }}</span>
+            </div>
+
+            <div class="plugin-card__actions">
+              <button
+                v-if="plugin.status !== 'uninstalled'"
+                class="plugin-action"
+                type="button"
+                @click="openConfig(plugin)"
+              >
+                设置
+              </button>
+
+              <RouterLink
+                v-if="routeOf(plugin) && plugin.status === 'enabled'"
+                class="plugin-action"
+                :to="routeOf(plugin)"
+              >
+                打开
+              </RouterLink>
+
+              <button
+                v-if="plugin.status === 'enabled'"
+                class="plugin-action plugin-action--primary"
+                type="button"
+                @click="setEnabled(plugin, false)"
+              >
+                停用
+              </button>
+
+              <button
+                v-else-if="plugin.status === 'inactive'"
+                class="plugin-action plugin-action--primary"
+                type="button"
+                @click="setEnabled(plugin, true)"
+              >
+                启用
+              </button>
+
+              <button
+                v-else
+                class="plugin-action plugin-action--primary"
+                type="button"
+                @click="installPlugin(plugin)"
+              >
+                安装
+              </button>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <div v-if="pluginCards.length === 0" class="plugin-empty">当前没有可展示的插件</div>
+    </div>
+
+    <BaseModal
+      v-if="configModalOpen && configPlugin"
+      :title="`${configPlugin.name} 设置`"
+      size="lg"
+      @close="closeConfig"
+    >
+      <div v-if="configLoading" class="plugin-state">读取配置中</div>
+      <div v-else-if="Object.keys(configSchema).length === 0" class="plugin-empty">这个插件没有可编辑配置。</div>
+      <div v-else class="plugin-config">
+        <label
+          v-for="(meta, key) in configSchema"
+          :key="key"
+          class="plugin-field"
+        >
+          <span class="plugin-field__label">{{ meta.label || key }}</span>
+
+          <select
+            v-if="isSelectField(meta)"
+            v-model="configDraft[key]"
+            class="plugin-field__control"
+          >
+            <option v-for="option in meta.options" :key="option.value" :value="option.value">
+              {{ option.label || option.value }}
+            </option>
+          </select>
+
+          <textarea
+            v-else-if="isTextareaField(meta)"
+            v-model="configDraft[key]"
+            class="plugin-field__control plugin-field__control--textarea"
+            :placeholder="meta.placeholder || ''"
+          />
+
+          <input
+            v-else-if="isBooleanField(meta)"
+            v-model="configDraft[key]"
+            class="plugin-field__checkbox"
+            type="checkbox"
+          />
+
+          <input
+            v-else
+            v-model="configDraft[key]"
+            class="plugin-field__control"
+            :type="isPasswordField(meta) ? 'password' : isNumberField(meta) ? 'number' : 'text'"
+            :placeholder="meta.placeholder || ''"
+            :min="meta.min"
+            :max="meta.max"
+            :step="meta.step"
+          />
+
+          <small v-if="meta.description" class="plugin-field__hint">{{ meta.description }}</small>
+        </label>
+      </div>
+
+      <template #footer>
+        <div class="plugin-modal-actions">
+          <button class="plugin-action" type="button" @click="closeConfig">关闭</button>
+          <button
+            class="plugin-action"
+            type="button"
+            :disabled="configTesting || configSaving"
+            @click="testConfig"
+          >
+            {{ configTesting ? '测试中' : '测试连接' }}
+          </button>
+          <button
+            class="plugin-action plugin-action--primary"
+            type="button"
+            :disabled="configSaving || configTesting"
+            @click="saveConfig"
+          >
+            {{ configSaving ? '保存中' : '保存' }}
+          </button>
+        </div>
+      </template>
+    </BaseModal>
+  </section>
+</template>
+
+<style scoped>
+.plugin-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.plugin-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;

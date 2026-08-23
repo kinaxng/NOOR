@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, onMounted, computed, watch, shallowRef } from 'vue'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useToast } from '../composables/useToast'
+import { useI18n } from '../composables/useI18n'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import type { HardlinkGroup } from '../api/types'
+
+const mediaStore = useMediaLibraryStore()
+const toast = useToast()
+const { t, i18nVersion } = useI18n()
+
+const pageTitle = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.title')
+})
+const scanBtnLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.scan')
+})
+const noGroupsLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.empty')
+})
+const emptyDescLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.emptyDesc')
+})
+const totalLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.total')
+})
+const codeLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.code')
+})
+const entryCountLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.entryCount')
+})
+const hardlinkCountLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.hardlinkCount')
+})
+
+// Sort state
+type SortKey = 'code' | 'entryCount' | 'hardlinkCount'
+type SortDir = 'asc' | 'desc'
+const sortKey = ref<SortKey>('code')
+const sortDir = ref<SortDir>('desc')
+
+// shallowRef: only tracks .value replacement, not deep nested changes
+const sortedGroups = shallowRef<HardlinkGroup[]>([])
+
+function applySort() {
+  const groups = [...mediaStore.hardlinkGroups]
+  if (!groups.length) {
+    sortedGroups.value = []
+    return
+  }
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  if (sortKey.value === 'code') {
+    groups.sort((a, b) => dir * a.code.localeCompare(b.code))
+  } else if (sortKey.value === 'entryCount') {
+    groups.sort((a, b) => dir * (a.entries.length - b.entries.length))
+  } else {
+    groups.sort((a, b) => {
+      const aHls = a.entries.reduce((s, e) => s + e.hardlink_paths.length, 0)
+      const bHls = b.entries.reduce((s, e) => s + e.hardlink_paths.length, 0)
+      return dir * (aHls - bHls)
+    })
+  }
+  sortedGroups.value = groups
+}
+
+// Only re-sort when data or sort criteria actually changes
+watch(sortKey, applySort)
+watch(sortDir, applySort)
+
+// Initial sort after data loads
+watch(() => mediaStore.hardlinkGroups, (newGroups) => {
+  if (newGroups.length) applySort()
+}, { once: true })
+
+function setSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'desc'
+    applySort()
+  }
+}
+
+function sortArrow(key: SortKey) {
+  if (sortKey.value !== key) return ''
+  return sortDir.value === 'asc' ? '↑' : '↓'
+}
+
+onMounted(async () => {
+  await mediaStore.loadHardlinkGroups()
+})
+
+async function handleScan() {
+  const result = await mediaStore.scanHardlinks()
+  if (result.ok) {
+    toast.success(t('hardlinks.scanSuccess', { count: result.count }))
+  } else {
+    toast.error(result.error || t('hardlinks.scanFailed'))
+  }
+}
+
+function copyPath(path: string) {
+  navigator.clipboard.writeText(path).then(() => {
+    toast.success(t('common.copied'))
+  })
+}
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <!-- Page header -->
+    <div class="page-header">
+      <div class="page-header__left">
+        <h1 class="page-title">{{ pageTitle }}</h1>
+        <span v-if="sortedGroups.length" class="page-subtitle">
+          {{ totalLabel }}: {{ sortedGroups.length }}
+        </span>
+      </div>
+      <div class="page-header__right">
+        <!-- Sort controls -->
+        <div class="sort-controls" v-if="sortedGroups.length">
+          <span class="sort-label">{{ t('hardlinks.sortBy') }}:</span>
+          <button
+            class="sort-btn"
+            :class="{ 'sort-btn--active': sortKey === 'code' }"
+            @click="setSort('code')"
+          >
+            {{ codeLabel }} {{ sortArrow('code') }}
+          </button>
+          <button
+            class="sort-btn"
+            :class="{ 'sort-btn--active': sortKey === 'entryCount' }"
+            @click="setSort('entryCount')"
+          >
+            {{ entryCountLabel }} {{ sortArrow('entryCount') }}
+          </button>
+          <button
+            class="sort-btn"
+            :class="{ 'sort-btn--active': sortKey === 'hardlinkCount' }"
+            @click="setSort('hardlinkCount')"
+          >
+            {{ hardlinkCountLabel }} {{ sortArrow('hardlinkCount') }}
+          </button>
+        </div>
+        <VuiButton
+          variant="gradient"
+          color="info"
+          size="small"
+          :loading="mediaStore.hardlinkScanning"
+          @click="handleScan"
+        >
+          <BaseIcon name="refresh" class="w-4 h-4" />
+          {{ scanBtnLabel }}
+        </VuiButton>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="mediaStore.hardlinkScanning" class="flex items-center justify-center py-24">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="sortedGroups.length === 0" class="flex flex-col items-center justify-center py-24 text-center">
+      <BaseIcon name="hardlink" class="w-16 h-16 text-white/10 mb-4" />
+      <p class="text-white/40 text-sm mb-1">{{ noGroupsLabel }}</p>
+      <p class="text-white/20 text-xs max-w-sm">{{ emptyDescLabel }}</p>
+    </div>
+
+    <!-- Groups list: single-column minimal rows -->
+    <div v-else class="groups-list">
+      <div
+        v-for="(group, idx) in sortedGroups"
+        :key="group.code"
+        class="hl-group"
+        :class="{ 'hl-group--alt': idx % 2 === 1 }"
+      >
+        <div class="hl-group__header">
+          <span class="hl-group__code font-mono text-accent-cyan">{{ group.code }}</span>
+          <span class="hl-group__meta text-white/20 text-xs">
+            {{ group.entries.length }} src · {{ group.entries.reduce((s, e) => s + e.hardlink_paths.length, 0) }} hl
+          </span>
+        </div>
+        <div class="hl-group__entries">
+          <div
+            v-for="(entry, idx) in group.entries"
+            :key="entry.hardlink_paths[0] + idx"
+            class="hl-entry"
+          >
+            <div v-if="idx > 0" class="hl-entry__sep"></div>
+            <!-- Source on left, hardlinks on right -->
+            <div class="hl-entry__cols">
+              <div class="hl-col hl-col--source">
+                <div class="hl-row">
+                  <span
+                    v-if="entry.source_path"
+                    class="hl-row__path font-mono text-xs"
+                    :title="t('hardlinks.copyPath')"
+                    @click="copyPath(entry.source_path)"
+                  >{{ entry.source_path }}</span>
+                  <span v-else class="hl-row__empty font-mono text-xs text-white/20">—</span>
+                </div>
+              </div>
+              <div class="hl-col hl-col--hardlinks">
+                <div
+                  v-for="hl in entry.hardlink_paths"
+                  :key="hl"
+                  class="hl-row hl-row--hardlink"
+                  :title="t('hardlinks.copyPath')"
+                  @click="copyPath(hl)"
+                >
+                  <span class="hl-row__hl-arrow">→</span>
+                  <span class="hl-row__path font-mono text-xs">{{ hl }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.page-header__left {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.page-subtitle {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;

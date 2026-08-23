@@ -1,0 +1,330 @@
+  }
+  if (Array.isArray(value)) return value.some(entry => textHasKeywords(entry, keywords))
+  if (typeof value === 'object') return Object.values(value).some(entry => textHasKeywords(entry, keywords))
+  return textHasKeywords(String(value), keywords)
+}
+
+function detectCnsub(detail) {
+  const keywords = ['中字', '字幕', '中文', '中文字幕', 'chs', 'cht']
+  return textHasKeywords(detail?.categories, keywords)
+    || textHasKeywords(detail?.magnets, keywords)
+    || textHasKeywords(detail?.title, keywords)
+}
+
+function detectCracked(detail) {
+  const keywords = ['破解', '破解版', '无码破解', 'uncensored leak']
+  return textHasKeywords(detail?.categories, keywords)
+    || textHasKeywords(detail?.magnets, keywords)
+    || textHasKeywords(detail?.title, keywords)
+}
+
+export async function mount(root, sdk) {
+  const state = {
+    tab: 'latest',
+    latestSelectedFilters: [],
+    latestType: 'all',
+    videosFilter: '',
+    videosActorIds: [],
+    videosCategoryIds: [],
+    videosMinScore: '',
+    videosSort: 'created',
+    videosOrder: 'desc',
+    videoCategories: [],
+    videoActors: [],
+    videoActorsLoaded: false,
+    videoActorsLoading: false,
+    videoCategoriesLoaded: false,
+    videoCategoriesLoading: false,
+    rankingMode: 'top250',
+    rankingType: 0,
+    rankingPeriod: 'daily',
+    top250Year: '',
+    relation: null,
+    relationActorSelectedFilters: [],
+    relationActorSingleFilter: false,
+    relationActorYear: '',
+    relationActorSort: 'release_desc',
+    page: 1,
+    limit: 48,
+    total: 0,
+    items: [],
+    loading: false,
+    activePanel: null,
+  }
+  const chooserState = {
+    modal: null,
+    search: '',
+  }
+
+  let tabControl = null
+  let resizeTimer = null
+  let loadSeq = 0
+
+---
+    if (state.latestSelectedFilters.includes('magnets')) return 'magnets'
+    return 'all'
+  }
+
+  function isLatestRemoteBuffered() {
+    return state.tab === 'latest' && state.latestSelectedFilters.length > 0
+  }
+
+  function estimatePageSize() {
+    if (isActorRankingFrame()) {
+      const width = grid.clientWidth || root.clientWidth || window.innerWidth
+      const top = grid.getBoundingClientRect?.().top || 240
+      const height = Math.max(360, window.innerHeight - top - 84)
+      const cardWidth = 236
+      const cardHeight = 280
+      const cols = Math.max(1, Math.floor((width + 16) / cardWidth))
+      const rows = Math.max(1, Math.floor((height + 16) / cardHeight))
+      state.limit = Math.max(cols, cols * rows)
+      return
+    }
+    state.limit = 48
+  }
+
+  function setTab(next) {
+    if (state.tab === next) return
+    state.tab = next
+    state.page = 1
+    state.latestSelectedFilters = []
+    state.latestType = 'all'
+    state.videosFilter = ''
+    state.videosActorIds = []
+    state.videosCategoryIds = []
+    state.videosMinScore = ''
+    state.videosSort = 'created'
+    state.videosOrder = 'desc'
+    state.rankingMode = 'top250'
+    state.rankingType = 0
+    state.rankingPeriod = 'daily'
+    state.top250Year = ''
+    state.relation = null
+    if (next === 'videos') void ensureVideoCategories()
+    if (next === 'videos') void ensureVideoActors()
+    loadData()
+  }
+
+  function setRelation(relType, relId, label) {
+    state.relation = { relType, relId, label }
+    state.relationActorSelectedFilters = []
+    state.relationActorSingleFilter = false
+    state.relationActorYear = ''
+    state.relationActorSort = 'release_desc'
+    state.page = 1
+    loadData()
+  }
+
+  function actorRelationYears() {
+    const years = new Set()
+    for (const item of state.items) {
+      const year = String(item?.release_date || '').slice(0, 4)
+      if (year) years.add(year)
+    }
+    return [...years].sort((a, b) => Number(b) - Number(a))
+  }
+
+  function normalizeCategoryOptions(items) {
+    return (Array.isArray(items) ? items : [])
+      .map(item => {
+        const value = String(item?.id ?? item?.value ?? item?.category_id ?? item?.external_id ?? '').trim()
+        const label = String(item?.name ?? item?.label ?? item?.title ?? item?.value ?? '').trim()
+        return value && label ? { value, label } : null
+      })
+
+---
+      className: `noor-control-panel__picker-btn ${uniqueValues(values).length ? '' : 'is-empty'}`.trim(),
+      onClick: () => openMultiPickerModal(title, options, values, onApply, emptyLabel),
+    })
+    return btn
+  }
+
+  function sortChipLabel(option) {
+    if (state.videosSort !== option.value) return option.label
+    return `${option.label} ${state.videosOrder === 'asc' ? '↑' : '↓'}`
+  }
+
+  function renderControlPanel() {
+    panelWrap.innerHTML = ''
+    if (!sdk.ui?.controlPanel || state.tab !== 'videos') return
+    const rows = [
+      {
+        sections: [
+          buildPanelSection('筛选方式', videosFilterOptions.map(([value, label]) => sdk.ui.chip({
+            label,
+            active: (state.videosFilter || 'all') === value,
+            className: 'noor-plugin-chip--soft',
+            onClick: () => {
+              state.videosFilter = value === 'all' ? '' : value
+              state.page = 1
+              loadData()
+            },
+          }))),
+        ],
+      },
+      {
+        sections: [
+          buildPanelSection('演员', [
+            buildPickerButton('演员', state.videosActorIds, state.videoActors, values => {
+              state.videosActorIds = uniqueValues(values)
+              state.page = 1
+              loadData()
+            }, '全部演员', '位演员'),
+          ]),
+          buildPanelSection('类型', [
+            buildPickerButton('类型', state.videosCategoryIds, state.videoCategories, values => {
+              state.videosCategoryIds = uniqueValues(values)
+              state.page = 1
+              loadData()
+            }, '全部类型', '项'),
+          ]),
+          buildPanelSection('最低评分', videosMinScoreOptions.map(option => sdk.ui.chip({
+            label: option.label,
+            active: String(state.videosMinScore || '') === String(option.value || ''),
+            className: 'noor-plugin-chip--soft',
+            onClick: () => {
+              state.videosMinScore = String(option.value || '')
+              state.page = 1
+              loadData()
+            },
+          }))),
+        ],
+      },
+      {
+        sections: [
+          buildPanelSection('排序字段', videosSortOptions.map(option => sdk.ui.chip({
+            label: sortChipLabel(option),
+
+---
+        ? sdk.ui.select({
+            value: state.videosCategoryIds.length === 1 ? state.videosCategoryIds[0] : '',
+            options: [{ label: state.videosCategoryIds.length > 1 ? `已多选 ${state.videosCategoryIds.length} 项` : '全部类型', value: '' }, ...state.videoCategories],
+            className: 'javdb-year-select',
+            onChange: value => {
+              state.videosCategoryIds = value ? [String(value)] : []
+              state.page = 1
+              loadData()
+            },
+          })
+        : null
+      if (categorySelect) categoryGroup.appendChild(categorySelect)
+
+      const actorGroup = el('div', 'javdb-filter-group')
+      const actorSelect = sdk.ui.select
+        ? sdk.ui.select({
+            value: state.videosActorIds.length === 1 ? state.videosActorIds[0] : '',
+            options: [{ label: state.videosActorIds.length > 1 ? `已多选 ${state.videosActorIds.length} 位演员` : '全部演员', value: '' }, ...state.videoActors],
+            className: 'javdb-year-select',
+            onChange: value => {
+              state.videosActorIds = value ? [String(value)] : []
+              state.page = 1
+              loadData()
+            },
+          })
+        : null
+      if (actorSelect) actorGroup.appendChild(actorSelect)
+
+      const scoreGroup = el('div', 'javdb-filter-group')
+      const scoreSelect = sdk.ui.select
+        ? sdk.ui.select({
+            value: state.videosMinScore,
+            options: videosMinScoreOptions,
+            className: 'javdb-year-select',
+            onChange: value => {
+              state.videosMinScore = String(value || '')
+              state.page = 1
+              loadData()
+            },
+          })
+        : null
+      if (scoreSelect) scoreGroup.appendChild(scoreSelect)
+
+      const sortGroup = el('div', 'javdb-filter-group')
+      const sortSelect = sdk.ui.select
+        ? sdk.ui.select({
+            value: state.videosSort,
+            options: videosSortOptions,
+            className: 'javdb-year-select',
+            onChange: value => {
+              state.videosSort = String(value || 'created')
+              state.page = 1
+              loadData()
+            },
+          })
+        : null
+      if (sortSelect) sortGroup.appendChild(sortSelect)
+
+      const orderGroup = el('div', 'javdb-filter-group')
+      const orderSelect = sdk.ui.select
+        ? sdk.ui.select({
+            value: state.videosOrder,
+            options: videosOrderOptions,
+            className: 'javdb-year-select',
+            onChange: value => {
+              state.videosOrder = String(value || 'desc')
+              state.page = 1
+              loadData()
+            },
+          })
+        : null
+      if (orderSelect) orderGroup.appendChild(orderSelect)
+      filtersWrap.append(
+        filterGroup,
+        el('div', 'javdb-filter-divider'),
+        actorGroup,
+        el('div', 'javdb-filter-divider'),
+        categoryGroup,
+        el('div', 'javdb-filter-divider'),
+        scoreGroup,
+        el('div', 'javdb-filter-divider'),
+        sortGroup,
+        el('div', 'javdb-filter-divider'),
+        orderGroup,
+      )
+    }
+  }
+
+  async function loadData() {
+    const seq = ++loadSeq
+    estimatePageSize()
+    state.loading = true
+    renderFilters()
+    renderGrid()
+    try {
+      const remoteLatestFilter = latestRemoteFilter()
+      const action = state.relation
+        ? 'related_movies'
+        : (
+          state.tab === 'rankings'
+            ? (state.rankingMode === 'actors' ? 'actors' : state.rankingMode === 'top250' ? 'top250' : 'rankings')
+            : state.tab
+        )
+      const payload = {
+        page: state.page,
+        limit: state.limit,
+        ...(state.relation ? { rel_type: state.relation.relType, rel_id: state.relation.relId } : {}),
+        ...(state.tab === 'latest' ? { type: state.latestType, filter_by: remoteLatestFilter, filters: [...state.latestSelectedFilters], sort_by: 'update' } : {}),
+        ...(state.tab === 'videos'
+        ? {
+              ...(state.videosFilter ? { filter: state.videosFilter } : {}),
+              sort: state.videosSort,
+              order: state.videosOrder,
+              ...(state.videosActorIds.length ? { actor_ids: [...state.videosActorIds] } : {}),
+              ...(state.videosMinScore ? { min_score: state.videosMinScore } : {}),
+              ...(state.videosCategoryIds.length ? { category_ids: [...state.videosCategoryIds] } : {}),
+            }
+          : {}),
+        ...(state.tab === 'rankings' && ['daily', 'weekly', 'monthly'].includes(state.rankingMode)
+          ? { type: state.rankingType, period: state.rankingMode }
+          : {}),
+        ...(state.tab === 'rankings' && state.rankingMode === 'top250'
+          ? { type_value: state.top250Year || String(state.rankingType) }
+          : {}),
+        ...(isActorRankingFrame() ? { type: state.rankingType } : {}),
+      }
+      if (state.relation?.relType === 'actor') {
+        payload.page = 1
+        payload.limit = 200
+        payload.sort_by = 'release'
+        payload.order_by = 'desc'

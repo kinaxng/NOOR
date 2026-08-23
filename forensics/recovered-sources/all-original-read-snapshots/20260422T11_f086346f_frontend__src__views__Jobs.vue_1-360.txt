@@ -1,0 +1,360 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useJobsStore } from '../stores/jobs'
+import { useRoute, useRouter } from 'vue-router'
+import type { SSEEvent } from '../api/types'
+import api from '../api'
+import LogViewer from '../components/noor/LogViewer.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import VuiProgress from '../components/ui/Progress/VuiProgress.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import { useI18n } from '../composables/useI18n'
+import { useToast } from '../composables/useToast'
+import { useJobPresentation } from '../composables/useJobPresentation'
+const { t, currentLang } = useI18n()
+const jobsStore = useJobsStore()
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+const { connectingLabel, queuedLabel: queuedStatusLabel, blockedLabel: blockedStatusLabel, completedLabel: completedStatusLabel, failedLabel: failedStatusLabel, cancelledLabel: cancelledStatusLabel, fallbackStatusLabel, getChainMembers, getChainStepLabel, getChainRoleLabel, getChainWaitingLabel, getChainPositionLabel, getChainStatusSummary, getChainFlowLabel, getJobChainHint, getRunningBadgeLabel, getStatusTone, getEffectiveViewState, getDisplayPhaseLine, getCardView, getProgressView, getDescriptionView } = useJobPresentation(() => jobsStore.jobs)
+
+const MAX_VISIBLE_LOG_LINES = 400
+
+const logs = ref<{ time: string; line: string }[]>([])
+const jobStatuses = ref<Record<string, { status: string; progress: number; phaseKey?: string; phaseLabel?: string; detail?: string; phaseProgress?: number }>>({})
+const selectedJobId = ref<string | null>(null)
+const flashJobId = ref<string | null>(null)
+let flashTimer: ReturnType<typeof setTimeout> | null = null
+const sseConnected = ref<Set<string>>(new Set())
+const watchedJobIds = ref<Set<string>>(new Set())
+
+function clampJobProgress(jobId: string, incoming: number | null | undefined) {
+  const next = Math.max(0, Math.min(100, Number(incoming ?? 0)))
+  const current = jobStatuses.value[jobId]?.progress ?? jobsStore.jobs.find(j => j.id === jobId)?.progress ?? 0
+  return Math.max(current, next)
+}
+
+function appendVisibleLog(entry: { time: string; line: string }) {
+  logs.value.push(entry)
+  if (logs.value.length > MAX_VISIBLE_LOG_LINES) {
+    logs.value.splice(0, logs.value.length - MAX_VISIBLE_LOG_LINES)
+  }
+}
+
+function shouldWatchJob(job: { status: string }) {
+  return job.status === 'running' || job.status === 'queued' || job.status === 'blocked'
+}
+
+function tabForJobStatus(status: string): 'running' | 'completed' | 'failed' {
+  if (status === 'completed') return 'completed'
+  if (status === 'failed' || status === 'cancelled' || status === 'skipped') return 'failed'
+  return 'running'
+}
+
+function flashFocusedJob(jobId: string) {
+  flashJobId.value = jobId
+  if (flashTimer) clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => {
+    if (flashJobId.value === jobId) flashJobId.value = null
+  }, 2200)
+}
+
+async function applyRouteFocus() {
+  const focusJobId = typeof route.query.job === 'string' ? route.query.job : ''
+  const focusChainId = typeof route.query.chain === 'string' ? route.query.chain : ''
+  if (!focusJobId && !focusChainId) return
+
+  let target = focusJobId ? jobsStore.jobs.find(job => job.id === focusJobId) || null : null
+  if (!target && focusChainId) {
+    target = jobsStore.jobs.find(job => job.chain_id === focusChainId) || null
+  }
+  if (!target) return
+
+  activeTab.value = tabForJobStatus(target.status)
+  flashFocusedJob(target.id)
+  await selectJob(target)
+  const nextQuery = { ...route.query }
+  delete nextQuery.job
+  delete nextQuery.chain
+  await router.replace({ query: nextQuery })
+}
+
+function seedJobStatus(job: any) {
+  jobStatuses.value[job.id] = {
+    status: fallbackStatusLabel.value(job.status),
+    progress: job.progress || 0,
+    phaseKey: job.phase_key,
+    phaseLabel: job.phase_label,
+    detail: job.detail,
+    phaseProgress: job.phase_progress,
+  }
+}
+
+onMounted(async () => {
+  await jobsStore.fetchJobs()
+  for (const job of jobsStore.jobs) {
+    if (shouldWatchJob(job)) {
+      seedJobStatus(job)
+      watchJob(job.id)
+    }
+  }
+  await applyRouteFocus()
+})
+
+onUnmounted(() => {
+  jobsStore.disconnectFromEvents()
+  if (flashTimer) clearTimeout(flashTimer)
+})
+
+watch(() => [route.query.job, route.query.chain, jobsStore.jobs.length], async () => {
+  await applyRouteFocus()
+}, { flush: 'post' })
+
+async function watchJob(jobId: string) {
+  if (watchedJobIds.value.has(jobId)) return
+  watchedJobIds.value.add(jobId)
+
+  const job = jobsStore.jobs.find(j => j.id === jobId)
+  if (job) {
+    seedJobStatus(job)
+    if (job.status === 'running') {
+      jobStatuses.value[jobId].status = connectingLabel.value
+    }
+  }
+
+  jobsStore.connectToEvents(jobId, (event: SSEEvent) => {
+    const time = new Date().toLocaleTimeString()
+
+    if (!jobStatuses.value[jobId]) {
+      jobStatuses.value[jobId] = { status: '', progress: 0, phaseKey: '', phaseLabel: '', detail: '', phaseProgress: 0 }
+    }
+
+    if (event.type === 'progress') {
+      const progress = clampJobProgress(jobId, event.progress)
+      jobStatuses.value[jobId].progress = progress
+      jobStatuses.value[jobId].status = getRunningBadgeLabel.value({ status: 'running' }, '')
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, progress, undefined, { phase_label: event.phase_label, phase_key: event.phase_key, phase_progress: event.phase_progress, detail: event.detail })
+    } else if (event.type === 'log' && event.line) {
+      if (selectedJobId.value === jobId || selectedJobId.value === null) {
+        appendVisibleLog({ time, line: event.line })
+      }
+    } else if (event.type === 'completed') {
+      jobStatuses.value[jobId].status = completedStatusLabel.value
+      jobStatuses.value[jobId].progress = Math.max(jobStatuses.value[jobId]?.progress || 0, Number(event.progress ?? 100))
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress ?? 100
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? 100), 'completed', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || completedStatusLabel.value,
+        phase_progress: event.phase_progress ?? 100,
+        detail: event.detail,
+      })
+    } else if (event.type === 'cancelled') {
+      jobStatuses.value[jobId].status = cancelledStatusLabel.value
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? (jobStatuses.value[jobId]?.progress || 0)), 'cancelled', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || cancelledStatusLabel.value,
+        phase_progress: event.phase_progress,
+        detail: event.detail,
+      })
+    } else if (event.type === 'failed') {
+      jobStatuses.value[jobId].status = failedStatusLabel.value
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? (jobStatuses.value[jobId]?.progress || 0)), 'failed', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || failedStatusLabel.value,
+        phase_progress: event.phase_progress,
+        detail: event.detail,
+      })
+    } else if (event.type === 'skipped') {
+      jobStatuses.value[jobId].status = t('jobs.status.skipped')
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? (jobStatuses.value[jobId]?.progress || 0)), 'skipped', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || t('jobs.status.skipped'),
+        phase_progress: event.phase_progress,
+        detail: event.detail,
+      })
+    } else if (event.type === 'queued') {
+      jobStatuses.value[jobId].status = queuedStatusLabel.value
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey || ''
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel || ''
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail || ''
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress ?? 0
+      sseConnected.value.add(jobId)
+    } else if (event.type === 'blocked') {
+      jobStatuses.value[jobId].status = blockedStatusLabel.value
+      jobStatuses.value[jobId].phaseKey = event.phase_key || jobStatuses.value[jobId].phaseKey || ''
+      jobStatuses.value[jobId].phaseLabel = event.phase_label || jobStatuses.value[jobId].phaseLabel || ''
+      jobStatuses.value[jobId].detail = event.detail || jobStatuses.value[jobId].detail || ''
+      jobStatuses.value[jobId].phaseProgress = event.phase_progress ?? jobStatuses.value[jobId].phaseProgress ?? 0
+      sseConnected.value.add(jobId)
+    }
+  })
+
+  setTimeout(() => {
+    if (!sseConnected.value.has(jobId)) {
+      const dbJob = jobsStore.jobs.find(j => j.id === jobId)
+      if (dbJob && jobStatuses.value[jobId]) {
+        jobStatuses.value[jobId].status = dbJob.status === 'running'
+          ? getRunningBadgeLabel.value({ status: 'running' }, '')
+          : fallbackStatusLabel.value(dbJob.status)
+      }
+    }
+  }, 10000)
+}
+
+async function selectJob(job: any) {
+  selectedJobId.value = job.id
+  logs.value = []
+
+  try {
+    const resp = await api.get(`/jobs/${job.id}/logs`)
+    const historicalLogs = Array.isArray(resp.data) ? resp.data :
+                           Array.isArray(resp.data?.logs) ? resp.data.logs : []
+    for (const line of historicalLogs.slice(-MAX_VISIBLE_LOG_LINES)) {
+      appendVisibleLog({ time: '', line: line })
+    }
+  } catch (e) {
+    console.error('Failed to load job logs:', e)
+  }
+
+  if (shouldWatchJob(job) && !watchedJobIds.value.has(job.id)) {
+    void watchJob(job.id)
+  }
+}
+
+async function cancelJob(jobId: string) {
+  try {
+    await api.post(`/jobs/${jobId}/cancel`)
+    await jobsStore.fetchJobs()
+
+    const refreshedJob = jobsStore.jobs.find(j => j.id === jobId)
+    if (refreshedJob) {
+      const progress = refreshedJob.progress || jobStatuses.value[jobId]?.progress || 0
+      jobStatuses.value[jobId] = {
+        status: refreshedJob.status === 'running'
+          ? getRunningBadgeLabel.value({ status: 'running' }, '')
+          : fallbackStatusLabel.value(refreshedJob.status),
+        progress,
+        phaseKey: refreshedJob.phase_key,
+        phaseLabel: refreshedJob.phase_label,
+        detail: refreshedJob.detail,
+        phaseProgress: refreshedJob.phase_progress,
+      }
+    }
+
+    toast.success(t(refreshedJob?.status === 'cancelled' ? 'jobs.cancelSuccess' : 'jobs.cancelRequested'))
+  } catch (e: any) {
+    console.error('Cancel failed:', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message }))
+  }
+}
+
+async function cleanupOrphanedJobs() {
+  try {
+    const resp = await api.post('/jobs/cleanup')
+    const cleaned = resp.data.cleaned
+    const cleanedJobIds: string[] = Array.isArray(resp.data.cleaned_job_ids) ? resp.data.cleaned_job_ids : []
+    if (cleaned > 0) {
+      toast.success(t('jobs.cleanup.done', { n: cleaned }))
+      jobsStore.pruneJobs(cleanedJobIds)
+      for (const jobId of cleanedJobIds) {
+        delete jobStatuses.value[jobId]
+      }
+    } else {
+      toast.info(t('jobs.cleanup.none'))
+    }
+  } catch (e: any) {
+    console.error('Cleanup failed:', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message }))
+  }
+}
+
+const tabRunningLabel = computed(() => t('jobs.running'))
+const tabCompletedLabel = computed(() => t('history.filter.completed'))
+const tabFailedLabel = computed(() => t('history.filter.failed'))
+const emptyRunningLabel = computed(() => t('jobs.noRunning'))
+const emptyCompletedLabel = computed(() => t('history.noHistory'))
+const emptyFailedLabel = computed(() => t('history.noHistory'))
+const cleanupLabel = computed(() => t('jobs.cleanup'))
+const cancelTaskLabel = computed(() => t('jobs.cancelTask'))
+const logsTitleLabel = computed(() => t('jobs.logsTitle'))
+const chainTitleLabel = computed(() => t('jobs.chain.title'))
+
+// Tab: running / completed / failed (includes cancelled)
+const activeTab = ref<'running' | 'completed' | 'failed'>('running')
+const filterTabs = computed(() => [
+  { key: 'running', label: `${tabRunningLabel.value} ${runningTabJobs.value.length}` },
+  { key: 'completed', label: `${tabCompletedLabel.value} ${completedTabJobs.value.length}` },
+  { key: 'failed', label: `${tabFailedLabel.value} ${failedTabJobs.value.length}` },
+])
+
+function getCreatedAt(job: any) {
+  return new Date(job.created_at || 0).getTime()
+}
+
+function getChainSortOrder(job: any) {
+  if (job.depends_on_task_id) return 1
+  if (job.parent_task_id) return 1
+  return 0
+}
+
+function sortJobsForList(jobs: any[]) {
+  return [...jobs].sort((a, b) => {
+    if (a.chain_id && b.chain_id && a.chain_id === b.chain_id) {
+      const orderDiff = getChainSortOrder(a) - getChainSortOrder(b)
+      if (orderDiff !== 0) return orderDiff
+    }
+    return getCreatedAt(b) - getCreatedAt(a)
+  })
+}
+
+const runningTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'running' || j.status === 'queued' || j.status === 'blocked')))
+const completedTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'completed')))
+const failedTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'failed' || j.status === 'cancelled' || j.status === 'skipped')))
+
+const currentTabJobs = computed(() => {
+  if (activeTab.value === 'running') return runningTabJobs.value
+  if (activeTab.value === 'completed') return completedTabJobs.value
+  return failedTabJobs.value
+})
+
+const showRunning = computed(() => activeTab.value === 'running')
+const showCompleted = computed(() => activeTab.value === 'completed')
+const showFailed = computed(() => activeTab.value === 'failed')
+
+const currentTabTitle = computed(() => {
+  if (activeTab.value === 'running') return tabRunningLabel.value
+  if (activeTab.value === 'completed') return tabCompletedLabel.value
+  return tabFailedLabel.value
+})
+const currentEmptyLabel = computed(() => {
+  if (activeTab.value === 'running') return emptyRunningLabel.value
+  if (activeTab.value === 'completed') return emptyCompletedLabel.value
+  return emptyFailedLabel.value
+})
+
+function getJobProgress(jobId: string) {

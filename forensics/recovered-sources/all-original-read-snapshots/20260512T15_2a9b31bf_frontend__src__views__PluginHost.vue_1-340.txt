@@ -1,0 +1,712 @@
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import api from '../api'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
+
+const route = useRoute()
+const toast = useToast()
+const confirm = useConfirm()
+const host = ref<HTMLElement | null>(null)
+const loading = ref(false)
+const error = ref('')
+const pluginId = computed(() => String(route.params.pluginId || ''))
+let dispose: null | (() => void) = null
+let styleEl: HTMLLinkElement | null = null
+
+function clearMounted() {
+  if (dispose) {
+    try { dispose() } catch {}
+    dispose = null
+  }
+  if (styleEl) {
+    styleEl.remove()
+    styleEl = null
+  }
+  if (host.value) host.value.innerHTML = ''
+}
+
+function makeButton(options: any = {}) {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = ['noor-plugin-btn', options.tone === 'primary' ? 'noor-plugin-btn--primary' : '', options.tone === 'danger' ? 'noor-plugin-btn--danger' : '', options.className || ''].filter(Boolean).join(' ')
+  btn.textContent = options.label || ''
+  if (options.title) btn.title = options.title
+  if (options.disabled) btn.disabled = true
+  if (options.onClick) btn.onclick = options.onClick
+  return btn
+}
+
+function makeInput(options: any = {}) {
+  const input = document.createElement('input')
+  input.className = ['noor-plugin-input', options.className || ''].filter(Boolean).join(' ')
+  input.value = options.value ?? ''
+  input.placeholder = options.placeholder || ''
+  input.readOnly = !!options.readonly
+  input.oninput = () => options.onInput?.(input.value)
+  return input
+}
+
+function makeSelect(options: any = {}) {
+  const select = document.createElement('select')
+  select.className = ['noor-plugin-input', 'noor-plugin-select', options.className || ''].filter(Boolean).join(' ')
+  for (const item of options.options || []) {
+    const opt = document.createElement('option')
+    opt.value = String(item.value ?? '')
+    opt.textContent = String(item.label ?? item.value ?? '')
+    select.appendChild(opt)
+  }
+  select.value = options.value ?? ''
+  select.onchange = () => options.onChange?.(select.value)
+  return select
+}
+
+function makeField(options: any = {}) {
+  const field = document.createElement('label')
+  field.className = ['noor-plugin-field', options.className || ''].filter(Boolean).join(' ')
+  const label = document.createElement('span')
+  label.className = 'noor-plugin-field__label'
+  label.textContent = options.label || ''
+  field.appendChild(label)
+  if (options.control) field.appendChild(options.control)
+  if (options.hint) {
+    const hint = document.createElement('small')
+    hint.className = 'noor-plugin-field__hint'
+    hint.textContent = options.hint
+    field.appendChild(hint)
+  }
+  return field
+}
+
+function makeModal(options: any = {}) {
+  const mask = document.createElement('div')
+  mask.className = 'noor-plugin-modal-mask'
+  const panel = document.createElement('div')
+  panel.className = `noor-plugin-modal noor-plugin-modal--${options.width || 'md'}`
+  const head = document.createElement('div')
+  head.className = 'noor-plugin-modal__head'
+  const title = document.createElement('div')
+  title.className = 'noor-plugin-modal__title'
+  title.textContent = options.title || ''
+  const closeBtn = makeButton({ label: '×', title: '关闭', className: 'noor-plugin-modal__close' })
+  head.append(title, closeBtn)
+  const body = document.createElement('div')
+  body.className = 'noor-plugin-modal__body'
+  if (Array.isArray(options.content)) options.content.forEach((x: Node) => body.appendChild(x))
+  else if (options.content) body.appendChild(options.content)
+  panel.append(head, body)
+  const footer = document.createElement('div')
+  footer.className = 'noor-plugin-modal__actions'
+  if (Array.isArray(options.footer)) options.footer.forEach((x: Node) => footer.appendChild(x))
+  else if (options.footer) footer.appendChild(options.footer)
+  if (footer.childNodes.length) panel.appendChild(footer)
+  mask.appendChild(panel)
+  const close = () => { mask.remove(); options.onClose?.() }
+  closeBtn.onclick = close
+  mask.onclick = event => { if (event.target === mask && options.closeOnMask !== false) close() }
+  document.body.appendChild(mask)
+  return { el: mask, body, close }
+}
+
+function makePanel(options: any = {}) {
+  const mask = document.createElement('div')
+  mask.className = 'noor-plugin-panel-mask'
+  const panel = document.createElement('div')
+  panel.className = ['noor-plugin-panel', options.className || ''].filter(Boolean).join(' ')
+  const scroll = document.createElement('div')
+  scroll.className = 'noor-plugin-panel__scroll'
+  const head = document.createElement('div')
+  head.className = 'detail-panel-topbar noor-plugin-panel__head'
+  const meta = document.createElement('div')
+  meta.className = 'detail-panel-topbar__meta noor-plugin-panel__meta'
+  if (options.eyebrow) {
+    const eyebrow = document.createElement('span')
+    eyebrow.className = 'detail-panel-topbar__eyebrow noor-plugin-panel__eyebrow'
+    eyebrow.textContent = options.eyebrow
+    meta.appendChild(eyebrow)
+  }
+  const title = document.createElement('div')
+  title.className = 'noor-plugin-panel__title'
+  title.textContent = options.title || ''
+  meta.appendChild(title)
+  const closeBtn = document.createElement('button')
+  closeBtn.type = 'button'
+  closeBtn.className = 'detail-panel-topbar__close noor-plugin-panel__close'
+  closeBtn.title = '关闭'
+  closeBtn.setAttribute('aria-label', '关闭')
+  closeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`
+  head.append(meta, closeBtn)
+  const body = document.createElement('div')
+  body.className = 'noor-plugin-panel__body'
+  if (Array.isArray(options.content)) options.content.forEach((x: Node) => body.appendChild(x))
+  else if (options.content) body.appendChild(options.content)
+  scroll.append(head, body)
+  panel.appendChild(scroll)
+  mask.appendChild(panel)
+  const close = () => { mask.remove(); options.onClose?.() }
+  closeBtn.onclick = close
+  mask.onclick = event => { if (event.target === mask && options.closeOnMask !== false) close() }
+  document.body.appendChild(mask)
+  return { el: mask, body, close, panel }
+}
+
+function makeTabs(options: any = {}) {
+  const wrap = document.createElement('div') as HTMLDivElement & { dispose?: () => void; __noorDispose?: () => void }
+  wrap.className = 'noor-plugin-tabs'
+  const marker = document.createElement('span')
+  marker.className = 'noor-plugin-tabs__marker'
+  wrap.appendChild(marker)
+
+  const buttons: HTMLButtonElement[] = []
+  const getTabValue = (tab: any) => String(tab?.value ?? tab?.key ?? '')
+  const initialTabs = Array.isArray(options.tabs) ? options.tabs : []
+  const initialValue = String(options.value ?? '') || getTabValue(initialTabs[0])
+  options.value = initialValue
+  let raf = 0
+
+  const refresh = () => {
+    if (!wrap.isConnected) return
+    const activeValue = String(options.value ?? '')
+    buttons.forEach(button => button.classList.toggle('is-active', button.dataset.value === activeValue))
+    const active = buttons.find(b => b.dataset.value === activeValue) || buttons[0]
+    if (!active) return
+    marker.style.width = `${active.offsetWidth}px`
+    marker.style.transform = `translateX(${active.offsetLeft}px)`
+  }
+
+  const scheduleRefresh = () => {
+    if (raf) cancelAnimationFrame(raf)
+    raf = requestAnimationFrame(() => { raf = 0; refresh() })
+  }
+
+  for (const tab of initialTabs) {
+    const value = getTabValue(tab)
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.textContent = tab.label ?? value
+    btn.dataset.value = value
+    btn.className = 'noor-plugin-tabs__item'
+    btn.onclick = (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (String(options.value ?? '') === value) return
+      options.value = value
+      refresh()
+      options.onChange?.(value)
+      scheduleRefresh()
+    }
+    buttons.push(btn)
+    wrap.appendChild(btn)
+  }
+
+  scheduleRefresh()
+  requestAnimationFrame(() => {
+    refresh()
+    wrap.classList.add('noor-plugin-tabs--ready')
+  })
+  window.addEventListener('resize', scheduleRefresh)
+  const setValue = (value: string) => {
+    options.value = String(value)
+    refresh()
+  }
+  const dispose = () => {
+    if (raf) cancelAnimationFrame(raf)
+    window.removeEventListener('resize', scheduleRefresh)
+  }
+  wrap.dispose = dispose
+  wrap.__noorDispose = dispose
+  ;(wrap as any).__noorSetValue = setValue
+  return wrap
+}
+
+function makePagination(options: any = {}) {
+  const wrap = document.createElement('div')
+  wrap.className = 'noor-pagination noor-plugin-pagination'
+  const page = Number(options.page || 1)
+  const total = Math.max(1, Number(options.totalPages || 1))
+  const go = (target: number) => {
+    const next = Math.min(Math.max(1, target), total)
+    if (next !== page) options.onPage?.(next)
+  }
+  const mk = (label: string, target: number, disabled = false, active = false) => {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = `noor-pagination__btn${active ? ' noor-pagination__page is-active' : ''}`
+    btn.textContent = label
+    btn.disabled = disabled
+    btn.onclick = () => !disabled && go(target)
+    return btn
+  }
+  wrap.append(mk('上一页', page - 1, page <= 1))
+  const siblingCount = Math.max(1, Number(options.siblingCount ?? 2))
+  const start = Math.max(1, page - siblingCount)
+  const end = Math.min(total, page + siblingCount)
+  for (let p = start; p <= end; p++) wrap.append(mk(String(p), p, false, p === page))
+  wrap.append(mk('下一页', page + 1, page >= total))
+  const onKeydown = (event: KeyboardEvent) => {
+    if (options.keyboard === false) return
+    const target = event.target as HTMLElement | null
+    if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+    if (event.key === 'PageUp') { event.preventDefault(); go(page - 1) }
+    else if (event.key === 'PageDown') { event.preventDefault(); go(page + 1) }
+    else if (event.key === 'Home') { event.preventDefault(); go(1) }
+    else if (event.key === 'End') { event.preventDefault(); go(total) }
+  }
+  window.addEventListener('keydown', onKeydown)
+  ;(wrap as any).__noorDispose = () => window.removeEventListener('keydown', onKeydown)
+  return wrap
+}
+
+function makeSubmitButton(options: any = {}) {
+  const btn = makeButton({ label: '', tone: 'primary', className: ['noor-submit-btn', options.className || ''].filter(Boolean).join(' ') })
+  const bar = document.createElement('i')
+  bar.className = 'noor-submit-btn__bar'
+  const text = document.createElement('span')
+  text.className = 'noor-submit-btn__text'
+  btn.append(bar, text)
+  const normalize = (state: string) => state === 'submitting' ? 'running' : (state || 'idle')
+  const labelFor = (state: string, progress = 0, label = '') => {
+    if (label) return label
+    if (state === 'success') return options.successLabel || '已完成'
+    if (state === 'error') return options.errorLabel || '失败'
+    if (state === 'running') return options.submittingLabel || options.runningLabel || (progress > 0 ? `${Math.round(progress)}%` : '提交中')
+    return options.idleLabel || options.label || '提交'
+  }
+  const setState = (state: string, progress = 0, label = '') => {
+    const next = normalize(state)
+    const pct = Math.max(0, Math.min(100, Number(progress || 0)))
+    btn.dataset.state = next
+    btn.classList.toggle('is-running', next === 'running')
+    btn.classList.toggle('is-success', next === 'success')
+    btn.classList.toggle('is-error', next === 'error')
+    btn.style.setProperty('--submit-progress', `${pct}%`)
+    text.textContent = labelFor(next, pct, label)
+    if (options.disableWhileRunning !== false && next === 'running') btn.disabled = true
+    else if (next === 'success' && options.disableOnSuccess !== false) btn.disabled = true
+    else btn.disabled = !!options.disabled
+  }
+  btn.onclick = event => {
+    if (btn.disabled) return
+    options.onClick?.(event)
+  }
+  ;(btn as any).__setState = setState
+  setState(options.status || 'idle', Number(options.progress || 0), options.labelOverride || '')
+  return btn
+}
+
+function appendChildren(parent: HTMLElement, children?: any) {
+  if (!children) return parent
+  const list = Array.isArray(children) ? children : [children]
+  for (const child of list) {
+    if (!child) continue
+    if (child instanceof Node) parent.appendChild(child)
+    else parent.appendChild(document.createTextNode(String(child)))
+  }
+  return parent
+}
+
+function makeTopBar(options: any = {}) {
+  const bar = document.createElement('div')
+  bar.className = ['noor-plugin-topbar', options.className || ''].filter(Boolean).join(' ')
+  const tabs = document.createElement('div')
+  tabs.className = 'noor-plugin-topbar__tabs'
+  const actions = document.createElement('div')
+  actions.className = 'noor-plugin-topbar__actions'
+  appendChildren(tabs, options.tabs || options.left)
+  appendChildren(actions, options.actions || options.right)
+  bar.append(tabs, actions)
+  return { el: bar, tabs, actions }
+}
+
+function makeActionRow(options: any = {}) {
+  const row = document.createElement('div')
+  row.className = ['noor-plugin-action-row', options.className || ''].filter(Boolean).join(' ')
+  appendChildren(row, options.children || options.items)
+  return row
+}
+
+function makeStatCard(options: any = {}) {
+  const card = document.createElement(options.onClick ? 'button' : 'div') as HTMLElement
+  card.className = ['noor-plugin-stat-card', options.tone ? `noor-plugin-stat-card--${options.tone}` : '', options.className || ''].filter(Boolean).join(' ')
+  if (options.onClick) {
+    ;(card as HTMLButtonElement).type = 'button'
+    ;(card as HTMLButtonElement).onclick = options.onClick
+  }
+  const label = document.createElement('span')
+  label.className = 'noor-plugin-stat-card__label'
+  label.textContent = options.label || ''
+  const value = document.createElement('strong')
+  value.className = 'noor-plugin-stat-card__value'
+
+---PAGINATION---
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { useI18n } from '../../composables/useI18n'
+
+const props = withDefaults(defineProps<{
+  page: number
+  totalPages: number
+  siblingCount?: number
+  keyboard?: boolean
+}>(), {
+  siblingCount: 2,
+  keyboard: true,
+})
+
+const emit = defineEmits<{
+  'update:page': [value: number]
+  page: [value: number]
+}>()
+
+const { t, i18nVersion } = useI18n()
+const total = computed(() => Math.max(1, props.totalPages || 1))
+const current = computed(() => Math.min(Math.max(1, props.page || 1), total.value))
+
+const pages = computed(() => {
+  const out: number[] = []
+  const start = Math.max(1, current.value - props.siblingCount)
+  const end = Math.min(total.value, current.value + props.siblingCount)
+  for (let i = start; i <= end; i += 1) out.push(i)
+  return out
+})
+
+const prevLabel = computed(() => { void i18nVersion.value; return t('common.prevPage') })
+const nextLabel = computed(() => { void i18nVersion.value; return t('common.nextPage') })
+
+function go(page: number) {
+  const next = Math.min(Math.max(1, page), total.value)
+  if (next === current.value) return
+  emit('update:page', next)
+  emit('page', next)
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (!props.keyboard) return
+  const target = event.target as HTMLElement | null
+  if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+  if (event.key === 'PageUp') { event.preventDefault(); go(current.value - 1) }
+  else if (event.key === 'PageDown') { event.preventDefault(); go(current.value + 1) }
+  else if (event.key === 'Home') { event.preventDefault(); go(1) }
+  else if (event.key === 'End') { event.preventDefault(); go(total.value) }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+</script>
+
+<template>
+  <nav v-if="total > 1" class="noor-pagination" aria-label="Pagination">
+    <button class="noor-pagination__btn" :disabled="current <= 1" @click="go(current - 1)">{{ prevLabel }}</button>
+    <button
+      v-for="p in pages"
+      :key="p"
+      class="noor-pagination__btn noor-pagination__page"
+      :class="{ 'is-active': p === current }"
+      :aria-current="p === current ? 'page' : undefined"
+      @click="go(p)"
+    >{{ p }}</button>
+    <button class="noor-pagination__btn" :disabled="current >= total" @click="go(current + 1)">{{ nextLabel }}</button>
+  </nav>
+</template>
+
+<style scoped>
+.noor-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.noor-pagination__btn {
+  min-height: 30px;
+  min-width: 30px;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all var(--transition-fast);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.78);
+}
+.noor-pagination__btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.noor-pagination__btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.noor-pagination__page.is-active {
+  background: var(--color-brand);
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(0, 117, 255, 0.25);
+}
+</style>
+
+---APP SIDEBAR/COMMON?---
+<script setup lang="ts">
+import { computed, defineAsyncComponent, onMounted } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import BaseIcon from './BaseIcon.vue'
+import { useI18n } from '../../composables/useI18n'
+import { usePlugins } from '../../composables/usePlugins'
+
+// Built-in sidebar widgets
+const SidebarMetrics = defineAsyncComponent(() => import('./SidebarMetrics.vue'))
+
+const { t, currentLang, i18nVersion, _currentLang, _initialized } = useI18n()
+
+defineProps<{
+  collapsed?: boolean
+  mobileOpen?: boolean
+  i18nVersion: number
+}>()
+
+const emit = defineEmits<{
+  toggle: []
+  close: []
+}>()
+
+const route = useRoute()
+const { enabledPagePlugins, loadPlugins } = usePlugins()
+onMounted(() => loadPlugins())
+
+const navItems = computed(() => {
+  void _currentLang.value
+  void _initialized.value
+  void currentLang.value
+  void i18nVersion.value
+  return [
+    { path: '/', name: t('nav.overview'), icon: 'dashboard' },
+    { path: '/library', name: t('nav.library'), icon: 'library' },
+    { path: '/jobs', name: t('nav.jobs'), icon: 'jobs' },
+    { path: '/history', name: t('nav.history'), icon: 'history' },
+    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },
+    { path: '/settings', name: t('nav.settings'), icon: 'settings' },
+  ]
+})
+
+const collapseLabel = computed(() => {
+  void _currentLang.value
+  void _initialized.value
+  void currentLang.value
+  void i18nVersion.value
+  return t('toolbar.collapse')
+})
+</script>
+
+<template>
+  <!-- Desktop sidebar (visible on lg+, always hidden below lg) -->
+  <aside
+    v-if="_initialized"
+    class="app-sidebar--desktop hidden lg:flex lg:flex-col"
+    :class="{ 'app-sidebar--collapsed': collapsed }"
+    style="background: var(--color-bg-elevated);"
+  >
+    <!-- Logo -->
+    <div class="app-sidebar__logo">
+      <RouterLink to="/" class="app-sidebar__logo-link">
+        <div class="app-sidebar__logo-icon">
+          <span class="app-sidebar__logo-letter">N</span>
+        </div>
+        <span v-if="!collapsed" class="app-sidebar__logo-text">NOOR</span>
+      </RouterLink>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="app-sidebar__nav">
+      <RouterLink
+        v-for="item in navItems"
+        :key="item.path"
+        :to="item.path"
+        class="app-sidebar__nav-item"
+        :class="{ 'app-sidebar__nav-item--active': route.path === item.path }"
+        @click="emit('close')"
+      >
+        <span v-if="route.path === item.path" class="app-sidebar__active-bar" />
+        <span class="app-sidebar__nav-icon">
+          <BaseIcon :name="item.icon" class="w-5 h-5" />
+        </span>
+        <span v-if="!collapsed" class="app-sidebar__nav-label">{{ item.name }}</span>
+      </RouterLink>
+      <template v-if="enabledPagePlugins.length && !collapsed">
+        <div class="app-sidebar__divider" />
+        <RouterLink
+          v-for="plugin in enabledPagePlugins"
+          :key="plugin.id"
+          :to="plugin.route"
+          class="app-sidebar__nav-item app-sidebar__nav-item--plugin"
+          :class="{ 'app-sidebar__nav-item--active': route.path === plugin.route }"
+          @click="emit('close')"
+        >
+          <span v-if="route.path === plugin.route" class="app-sidebar__active-bar" />
+          <span class="app-sidebar__nav-icon">
+            <BaseIcon name="plugin" class="w-5 h-5" />
+          </span>
+          <span class="app-sidebar__nav-label">{{ plugin.contributions?.sidebar?.label || plugin.name }}</span>
+        </RouterLink>
+      </template>
+    </nav>
+
+    <!-- Bottom -->
+    <div class="app-sidebar__bottom">
+      <SidebarMetrics />
+      <button class="app-sidebar__collapse-btn" @click="emit('toggle')">
+        <BaseIcon :name="collapsed ? 'chevronRight' : 'chevronLeft'" class="w-4 h-4" />
+        <span v-if="!collapsed" class="text-xs">{{ collapseLabel }}</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Mobile sidebar (drawer, hidden by default) -->
+  <aside
+    v-if="_initialized"
+    class="app-sidebar--mobile flex flex-col"
+    :class="{ 'app-sidebar--mobile-open': mobileOpen }"
+    style="background: var(--color-bg-elevated);"
+  >
+    <!-- Logo -->
+    <div class="app-sidebar__logo">
+      <RouterLink to="/" class="app-sidebar__logo-link" @click="emit('close')">
+        <div class="app-sidebar__logo-icon">
+          <span class="app-sidebar__logo-letter">N</span>
+        </div>
+        <span class="app-sidebar__logo-text">NOOR</span>
+      </RouterLink>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="app-sidebar__nav">
+      <RouterLink
+        v-for="item in navItems"
+        :key="item.path"
+        :to="item.path"
+        class="app-sidebar__nav-item"
+        :class="{ 'app-sidebar__nav-item--active': route.path === item.path }"
+        @click="emit('close')"
+      >
+        <span v-if="route.path === item.path" class="app-sidebar__active-bar" />
+        <span class="app-sidebar__nav-icon">
+          <BaseIcon :name="item.icon" class="w-5 h-5" />
+        </span>
+        <span class="app-sidebar__nav-label">{{ item.name }}</span>
+      </RouterLink>
+      <template v-if="enabledPagePlugins.length">
+        <div class="app-sidebar__divider" />
+        <RouterLink
+          v-for="plugin in enabledPagePlugins"
+          :key="plugin.id"
+          :to="plugin.route"
+          class="app-sidebar__nav-item app-sidebar__nav-item--plugin"
+          :class="{ 'app-sidebar__nav-item--active': route.path === plugin.route }"
+          @click="emit('close')"
+        >
+          <span v-if="route.path === plugin.route" class="app-sidebar__active-bar" />
+          <span class="app-sidebar__nav-icon">
+            <BaseIcon name="plugin" class="w-5 h-5" />
+          </span>
+          <span class="app-sidebar__nav-label">{{ plugin.contributions?.sidebar?.label || plugin.name }}</span>
+        </RouterLink>
+      </template>
+    </nav>
+
+    <!-- Bottom -->
+    <div class="app-sidebar__bottom">
+      <SidebarMetrics />
+    </div>
+  </aside>
+</template>
+
+<style scoped>
+/* Desktop sidebar */
+.app-sidebar--desktop {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 274px;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  z-index: var(--z-sidebar);
+  transition: width var(--transition-slow);
+  overflow: hidden;
+}
+
+.app-sidebar--collapsed {
+  width: 120px;
+}
+
+/* Mobile sidebar drawer - always fixed, hidden by default */
+.app-sidebar--mobile {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 274px;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  z-index: var(--z-sidebar);
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.app-sidebar--mobile-open {
+  transform: translateX(0);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* Logo */
+.app-sidebar__logo {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.app-sidebar__logo-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+}
+
+.app-sidebar__logo-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-brand);
+  box-shadow: 0 4px 12px rgba(0, 117, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.app-sidebar__logo-letter {
+  color: #FFFFFF;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app-sidebar__logo-text {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #FFFFFF;
+  white-space: nowrap;
+}
+
+/* Navigation */
+.app-sidebar__nav {

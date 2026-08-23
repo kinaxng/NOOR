@@ -1,0 +1,120 @@
+"""
+Media Library API — direct Emby/Jellyfin adapter.
+
+Configuration is stored in data/media_library_config.json.
+"""
+import os
+import re
+import time
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Optional
+
+import httpx
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
+
+from app.api.endpoints.media_library_helpers import (
+    ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED,
+    VIDEO_EXTS,
+    env_source_dir as _env_source_dir,
+    config_path as _config_path,
+    get_config as _get_config,
+    headers as _headers,
+    load_config as _load_config,
+    map_path as _map_path,
+    parse_item as _parse_item,
+    parse_tags as _parse_tags,
+    save_config as _save_config,
+    server_url as _server_url,
+)
+
+from app.api.endpoints.media_library_item_detail import (
+    get_item_impl,
+    get_main_nfo_impl,
+    get_siblings_impl,
+)
+
+from app.api.endpoints.media_library_hardlinks import (
+    build_hardlink_groups_impl,
+    extract_code_from_path_impl,
+    fetch_emby_item_info_impl,
+    hardlink_groups_path_impl,
+    load_hardlink_groups_impl,
+    save_hardlink_groups_impl,
+    scan_inodes_impl,
+    scan_single_group_impl,
+)
+
+router = APIRouter(prefix="/api/media-library", tags=["media-library"])
+
+
+
+# ─── Emby connection test ──────────────────────────────────────────────────────
+
+async def _test_connection(config: dict) -> tuple[bool, str]:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{_server_url(config)}/emby/System/Info",
+                headers=_headers(config.get("api_key", "")),
+            )
+            if resp.status_code == 401:
+                return False, "API Key 无效或已过期"
+            resp.raise_for_status()
+            data = resp.json()
+            return True, f"已连接至 {data.get('ServerName', 'Emby/Jellyfin')}"
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return False, "API Key 无效或已过期"
+        return False, f"连接失败: HTTP {e.response.status_code}"
+    except Exception as e:
+        return False, f"连接失败: {e}"
+
+
+# ─── Libraries ─────────────────────────────────────────────────────────────────
+
+async def _list_libraries(config: dict) -> list[dict]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{_server_url(config)}/emby/Library/MediaFolders",
+            headers=_headers(config.get("api_key", "")),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    libraries = []
+    for item in data.get("Items", []):
+        item_type = item.get("Type")
+        collection_type = item.get("CollectionType")
+        if item_type in ("movies", "tvshows") or collection_type in ("movies", "tvshows"):
+            poster_url = None
+            if item.get("ImageTags"):
+                tag = item["ImageTags"].get("Primary")
+                if tag:
+                    poster_url = f"{_server_url(config)}/emby/Items/{item['Id']}/Images/Primary?tag={tag}"
+            libraries.append({
+                "id": item["Id"],
+                "name": item["Name"],
+                "type": collection_type or item_type or "unknown",
+                "poster_url": poster_url,
+            })
+    return libraries
+
+
+def _deduplicate_items(items: list[dict]) -> list[dict]:
+    """Merge items in the same folder (e.g. MIDA-368.mp4 and MIDA-368.restored-u.mp4).
+    Groups by parent folder and keeps the main version (most complete metadata) for list display.
+    All versions are still available as siblings in the detail endpoint.
+    """
+    groups: dict[str, list[dict]] = {}
+    for item in items:
+        path = item.get("path", "")
+        if not path:
+            continue
+        folder = os.path.dirname(path)
+        if folder not in groups:
+            groups[folder] = []
+        groups[folder].append(item)
+
+    result = []
+    for folder, group in groups.items():

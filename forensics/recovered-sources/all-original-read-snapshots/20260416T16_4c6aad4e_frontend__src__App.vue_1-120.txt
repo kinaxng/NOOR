@@ -1,0 +1,120 @@
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { RouterView } from 'vue-router'
+import BaseToast from './components/noor/BaseToast.vue'
+import ConfirmDialog from './components/noor/ConfirmDialog.vue'
+import BaseIcon from './components/noor/BaseIcon.vue'
+import AppSidebar from './components/noor/AppSidebar.vue'
+import SystemLogPanel from './components/noor/SystemLogPanel.vue'
+import { useBlurCover } from './composables/useBlurCover'
+import { useI18n } from './composables/useI18n'
+import { useJobsStore } from './stores/jobs'
+import { useSystemLog } from './composables/useSystemLog'
+
+const route = useRoute()
+const { blurEnabled, toggleBlur } = useBlurCover()
+const { currentLang, switchLang, t, i18nVersion, _currentLang, _initialized } = useI18n()
+const jobsStore = useJobsStore()
+const { show: showSystemLog, toggle: toggleSystemLog } = useSystemLog()
+
+const sidebarCollapsed = ref(false)
+const mobileSidebarOpen = ref(false)
+
+// Computed that always returns true but establishes reactive tracking of i18nVersion
+// This forces Vue to re-render App.vue template when language changes
+// App.vue is OUTSIDE RouterView, so it doesn't get re-rendered by RouterView's :key
+const i18nReady = computed(() => {
+  void _currentLang.value
+  void _initialized.value
+  void currentLang.value
+  void i18nVersion.value
+  return true
+})
+
+const navItems = computed(() => {
+  void _currentLang.value  // Track the raw ref - t() reads this directly
+  void _initialized.value  // Force re-eval after dictionaries load
+  void currentLang.value
+  void i18nVersion.value
+  return [
+    { path: '/', name: t('nav.overview'), icon: 'dashboard' },
+    { path: '/library', name: t('nav.library'), icon: 'library' },
+    { path: '/jobs', name: t('nav.jobs'), icon: 'jobs', badge: computed(() => {
+      const running = jobsStore.jobs.filter(j => j.status === 'running').length
+      const queued = jobsStore.jobs.filter(j => j.status === 'queued').length
+      return running + queued || null
+    })},
+    { path: '/history', name: t('nav.history'), icon: 'history' },
+    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },
+    { path: '/settings', name: t('nav.settings'), icon: 'settings' },
+  ]
+})
+
+const activeNavName = computed(() =>
+  navItems.value.find(n => route.path === n.path || route.path.startsWith(`${n.path}/`))?.name || t('nav.settings')
+)
+
+const blurTitle = computed(() => {
+  void _currentLang.value
+  void _initialized.value
+  void currentLang.value
+  void i18nVersion.value
+  return blurEnabled.value ? t('toolbar.blurOff') : t('toolbar.blurOn')
+})
+const langTitle = computed(() => {
+  void _currentLang.value
+  void _initialized.value
+  void currentLang.value
+  void i18nVersion.value
+  return t('toolbar.switchLang')
+})
+const langBadgeText = computed(() => {
+  void _currentLang.value
+  void _initialized.value
+  void currentLang.value
+  void i18nVersion.value
+  return currentLang.value === 'zh' ? t('toolbar.langShortZh') : t('toolbar.langShortEn')
+})
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+onMounted(() => {
+  // Don't auto-poll; only poll when user opens the log panel
+})
+</script>
+
+<template>
+  <div class="app-root min-h-screen" style="background-color: var(--color-bg-base);">
+    <!-- Mobile overlay backdrop -->
+    <div
+      v-if="mobileSidebarOpen"
+      class="fixed inset-0 bg-black/60 z-40 lg:hidden"
+      @click="mobileSidebarOpen = false"
+    />
+
+    <!-- Vision UI Sidebar -->
+    <AppSidebar
+      :collapsed="sidebarCollapsed"
+      :mobile-open="mobileSidebarOpen"
+      :i18n-version="i18nVersion"
+      @toggle="toggleSidebar"
+      @close="mobileSidebarOpen = false"
+    />
+
+    <!-- Main Content Area -->
+    <main
+      class="transition-all duration-300"
+      :class="sidebarCollapsed ? 'lg:ml-[120px]' : 'lg:ml-[274px]'"
+    >
+      <!-- Top Navbar -->
+      <header
+        v-if="i18nReady"
+        class="sticky top-0 z-30 h-16 flex items-center justify-between px-4 md:px-6"
+        style="background: linear-gradient(123.64deg, rgba(255,255,255,0) -22.38%, rgba(255,255,255,0.039) 70.38%); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.04);"
+      >
+        <!-- Left: Mobile menu + Page title -->
+        <div class="flex items-center gap-3">
+          <!-- Hamburger (mobile only) -->

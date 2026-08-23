@@ -1,0 +1,232 @@
+def _record_filter(diagnostics: list[dict[str, Any]] | None, item: dict[str, Any], code: str, reason: str, detail: str = "") -> None:
+    if diagnostics is None:
+        return
+    diagnostics.append({
+        "code": code or _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title")),
+        "title": _candidate_label(item, code),
+        "reason": reason,
+        "detail": detail,
+    })
+
+
+def _fmt_weighted_count(value: float) -> str:
+    number = float(value or 0)
+    if abs(number - round(number)) < 0.05:
+        return str(int(round(number)))
+    return f"{number:.1f}"
+
+
+async def _javdb_candidates(config: dict[str, Any], source_mode: str = "latest", refresh: bool = False) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
+    warnings: list[str] = []
+    try:
+        from app.plugins.runtime import runtime
+        if not runtime.is_enabled("javdb"):
+            return [], ["JavDB 插件未启用，暂时无法生成候选推荐。"], {}
+        candidate_limit = max(12, min(int(config.get("candidate_limit") or 48), 120))
+        detail_limit = max(0, min(int(config.get("detail_limit") or 36), 80))
+        if source_mode == "full":
+            detail_limit = 0
+            requests = []
+        else:
+            requests = [
+                ("latest", "最新更新", {"page": 1, "limit": candidate_limit, "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "update"}),
+                ("rankings", "日榜", {"page": 1, "limit": max(24, candidate_limit // 2), "period": "daily", "type": 0}),
+                ("rankings", "周榜", {"page": 1, "limit": max(24, candidate_limit // 2), "period": "weekly", "type": 0}),
+                ("rankings", "月榜", {"page": 1, "limit": max(24, candidate_limit // 2), "period": "monthly", "type": 0}),
+            ]
+        by_code: dict[str, dict[str, Any]] = {}
+        async with _pool_lock:
+            pool = _ensure_candidate_pool()
+            pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+            pool_changed = False
+        for action, source_label, payload in requests:
+            try:
+                data = await runtime.handle_action("javdb", action, payload)
+                for item in data.get("items") or []:
+                    code = _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
+                    if not code:
+                        continue
+                    run_source = {"id": f"{action}:{source_label}", "label": source_label, "date": _today_key()}
+                    existing = by_code.get(code)
+                    async with _pool_lock:
+                        current = existing or pool_items.get(code)
+                        merged_item = _merge_candidate(current, dict(item), run_source["id"], source_label)
+                        pool_items[code] = merged_item
+                        pool_changed = True
+                    current = by_code.get(code)
+                    if not current:
+                        next_item = dict(merged_item)
+                        next_item["display_source_tags"] = [run_source]
+                        # Match the JavDB plugin media card: the horizontal
+                        # cover is cover_url/thumb_url, not preview screenshots.
+                        next_item["fanart_url"] = next_item.get("cover_url") or next_item.get("thumb_url") or ""
+                        by_code[code] = next_item
+                    else:
+                        display_sources = current.get("display_source_tags") if isinstance(current.get("display_source_tags"), list) else []
+                        if not any(x.get("id") == run_source["id"] for x in display_sources if isinstance(x, dict)):
+                            display_sources.append(run_source)
+                        current["display_source_tags"] = display_sources[:12]
+                        current["source_tags"] = merged_item.get("source_tags") or current.get("source_tags") or []
+                        current["is_today_increment"] = bool(merged_item.get("is_today_increment"))
+                        current["first_seen_date"] = merged_item.get("first_seen_date") or current.get("first_seen_date") or ""
+                        current["last_seen_date"] = merged_item.get("last_seen_date") or current.get("last_seen_date") or ""
+                        current["magnets_count"] = max(int(current.get("magnets_count") or 0), int(item.get("magnets_count") or 0))
+                        current["has_cnsub"] = bool(current.get("has_cnsub") or item.get("has_cnsub") or item.get("play_subtitle"))
+                        current["is_cracked"] = bool(current.get("is_cracked") or item.get("is_cracked"))
+                        if not current.get("fanart_url"):
+                            current["fanart_url"] = current.get("cover_url") or current.get("thumb_url") or item.get("cover_url") or item.get("thumb_url") or ""
+            except Exception as exc:
+                warnings.append(f"JavDB {source_label} 拉取失败：{exc}")
+        async with _pool_lock:
+            latest_pool = _ensure_candidate_pool()
+            latest_items = latest_pool.get("items") if isinstance(latest_pool.get("items"), dict) else {}
+            latest_items.update(pool_items)
+            latest_pool["items"] = latest_items
+            if pool_changed:
+                _save_candidate_pool(latest_pool)
+                _CACHE["value"] = None
+            pool = latest_pool
+            pool_items = latest_items
+        if source_mode == "full":
+            async with _pool_lock:
+                pool = _ensure_candidate_pool()
+                title_backfilled = _backfill_candidate_pool_title_profiles(pool)
+                if title_backfilled:
+                    _save_candidate_pool(pool)
+                pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+                pool_stats = _candidate_pool_stats(pool)
+            for code, item in pool_items.items():
+                if code not in by_code and isinstance(item, dict):
+                    pooled = dict(item)
+                    pooled["display_source_tags"] = pooled.get("source_tags") or []
+                    by_code[code] = pooled
+            background = pool_stats.get("background") if isinstance(pool_stats.get("background"), dict) else {}
+            if (refresh or pool_stats.get("total", 0) <= 0) and not background.get("running"):
+                with contextlib.suppress(RuntimeError):
+                    asyncio.create_task(_scan_full_candidate_pool(config))
+        items = list(by_code.values())
+        semaphore = asyncio.Semaphore(6)
+
+        async def enrich(item: dict[str, Any]) -> dict[str, Any]:
+            code = _norm_code(item.get("code") or item.get("number") or item.get("display_title"))
+            if not code:
+                return item
+            async with semaphore:
+                try:
+                    detail = await runtime.handle_action("javdb", "video", {"code": code})
+                    data = detail.get("data") if isinstance(detail, dict) else {}
+                    if isinstance(data, dict):
+                        item["detail"] = data
+                        item["actors"] = _names(data.get("actors"))
+                        item["categories"] = _names(data.get("categories"))
+                        item["maker"] = data.get("maker") or data.get("publisher") or ""
+                        item["series"] = _name_one(data.get("series"))
+                        item["director"] = _name_one(data.get("director"))
+                        item["cover_url"] = data.get("cover_url") or item.get("cover_url")
+                        item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
+                        item["image_candidates"] = _image_candidates(data, item, data.get("preview_images"))
+                        item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
+                        item["is_cracked"] = bool(item.get("is_cracked") or _text_has_cracked(data))
+                        magnets = data.get("magnets") if isinstance(data.get("magnets"), list) else []
+                        if magnets:
+                            item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
+                            item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
+                        _ensure_title_profile(item)
+                except Exception:
+                    pass
+                    pass
+            return item
+
+        enriched = await asyncio.gather(*(enrich(item) for item in items[:detail_limit]))
+        by_code.update({_norm_code(item.get("code") or item.get("number")): item for item in enriched if _norm_code(item.get("code") or item.get("number"))})
+        meta = {"source_mode": source_mode, "pool": _candidate_pool_stats(pool), "requests": len(requests)}
+        return list(by_code.values()), warnings, meta
+    except Exception as exc:
+        return [], [f"候选拉取失败：{exc}"], {}
+
+
+async def _scan_full_candidate_pool(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    from app.plugins.runtime import runtime
+
+    if not runtime.is_enabled("javdb"):
+        return {"ok": False, "message": "JavDB 插件未启用"}
+    pages = max(1, min(int(config.get("full_scan_pages") or 5), 30))
+    candidate_limit = max(12, min(int(config.get("candidate_limit") or 48), 120))
+    requests = [
+        ("latest", "最新更新", {"page": 1, "limit": candidate_limit, "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "update"}),
+        ("rankings", "日榜", {"page": 1, "limit": max(24, candidate_limit // 2), "period": "daily", "type": 0}),
+        ("rankings", "周榜", {"page": 1, "limit": max(24, candidate_limit // 2), "period": "weekly", "type": 0}),
+        ("rankings", "月榜", {"page": 1, "limit": max(24, candidate_limit // 2), "period": "monthly", "type": 0}),
+        ("recommend", "JavDB推荐", {"page": 1, "limit": max(24, candidate_limit // 2)}),
+    ]
+    for page in range(1, pages + 1):
+        requests.append(("videos", f"完整库 P{page}", {"page": page, "limit": 80, "sort": "update", "order": "desc"}))
+
+    async with _pool_lock:
+        pool = _ensure_candidate_pool()
+        background = pool.get("background") if isinstance(pool.get("background"), dict) else {}
+        if background.get("running") and not force:
+            return {"ok": True, "skipped": True, "reason": "running", "pool": _candidate_pool_stats(pool)}
+        _mark_candidate_pool_background(pool, running=True, started_at=dt.datetime.now(dt.timezone.utc).isoformat(), last_error="")
+        _save_candidate_pool(pool)
+
+    scanned = 0
+    added = 0
+    updated = 0
+    detail_updated = 0
+    seen_codes: list[str] = []
+    warnings: list[str] = []
+    try:
+        for action, source_label, payload in requests:
+            try:
+                data = await runtime.handle_action("javdb", action, payload)
+            except Exception as exc:
+                warnings.append(f"JavDB {source_label} 拉取失败：{exc}")
+                continue
+            async with _pool_lock:
+                pool = _ensure_candidate_pool()
+                pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+                for item in data.get("items") or []:
+                    code = _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
+                    if not code:
+                        continue
+                    if code not in seen_codes:
+                        seen_codes.append(code)
+                    scanned += 1
+                    existed = code in pool_items
+                    merged = _merge_candidate(pool_items.get(code), dict(item), f"{action}:{source_label}", source_label)
+                    pool_items[code] = merged
+                    if existed:
+                        updated += 1
+                    else:
+                        added += 1
+                pool["items"] = pool_items
+                _save_candidate_pool(pool)
+        detail_limit = max(0, min(int(config.get("detail_limit") or 36), 80))
+        detail_targets = seen_codes[:detail_limit]
+        detail_semaphore = asyncio.Semaphore(4)
+
+        async def enrich_pool_detail(code: str) -> None:
+            nonlocal detail_updated
+            async with detail_semaphore:
+                try:
+                    detail = await runtime.handle_action("javdb", "video", {"code": code})
+                except Exception:
+                    return
+            data = detail.get("data") if isinstance(detail, dict) else {}
+            if not isinstance(data, dict):
+                return
+            async with _pool_lock:
+                pool = _ensure_candidate_pool()
+                pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+                item = pool_items.get(code)
+                if not isinstance(item, dict):
+                    return
+                item["detail"] = data
+                item["actors"] = _names(data.get("actors"))
+                item["categories"] = _names(data.get("categories"))
+                item["maker"] = data.get("maker") or data.get("publisher") or item.get("maker") or ""
+                item["series"] = _name_one(data.get("series")) or item.get("series") or ""
+                item["director"] = _name_one(data.get("director")) or item.get("director") or ""
+                item["cover_url"] = data.get("cover_url") or item.get("cover_url")
+                item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""

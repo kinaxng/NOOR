@@ -1,0 +1,101 @@
+            cmd = [lada_cli_path]
+
+    cmd.extend([
+        "--input", input_path,
+        "--output", output_path,
+        "--device", job_settings.get("device", settings.lada_device or "cuda:0"),
+        "--mosaic-detection-model", job_settings.get("detection_model", settings.lada_detection_model or "v4-fast"),
+        "--mosaic-restoration-model", job_settings.get("restoration_model", settings.lada_restoration_model or "basicvsrpp-v1.2"),
+        "--encoding-preset", job_settings.get("encoding_preset", settings.lada_encoding_preset or "hevc-nvidia-gpu-hq"),
+        "--max-clip-length", str(job_settings.get("max_clip_length", settings.lada_max_clip_length or 180)),
+    ])
+
+    # FP16 flag
+    lada_fp16 = job_settings.get("fp16", settings.lada_fp16)
+    if lada_fp16:
+        cmd.append("--fp16")
+    else:
+        cmd.append("--no-fp16")
+
+    # Face mosaics flag
+    detect_face = job_settings.get("detect_face_mosaics", settings.lada_detect_face_mosaics)
+    if detect_face:
+        cmd.append("--detect-face-mosaics")
+
+    await progress_queue.put(_lada_progress_event(
+        progress=1,
+        phase_key="prepare",
+        phase_progress=10,
+        detail="初始化 LADA 运行环境",
+    ))
+    await progress_queue.put({
+        "type": "log",
+        "line": f"Starting command: {' '.join(cmd)}"
+    })
+    await progress_queue.put(_lada_progress_event(
+        progress=5,
+        phase_key="detect",
+        phase_progress=0,
+        detail="启动 LADA CLI，准备检测视频中的马赛克区域",
+    ))
+
+    env = _build_lada_env(lada_model_dir)
+
+    # Thread-safe result container
+    result = {"returncode": None, "lines": [], "cancelled": False}
+    proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
+    proc_lock = threading.Lock()
+    terminate_requested = threading.Event()
+    progress_state = {
+        "overall": 5,
+        "phase_key": "detect",
+        "restore_progress": 0,
+        "encode_progress": 0,
+    }
+    state_lock = threading.Lock()
+
+    def push_progress(event: dict):
+        try:
+            progress_queue.put_nowait(event)
+        except Exception:
+            pass
+
+    def publish_progress(
+        *,
+        progress: int,
+        phase_key: str,
+        phase_progress: int,
+        detail: str | None = None,
+        allow_equal: bool = False,
+    ):
+        progress = max(0, min(100, int(progress)))
+        phase_progress = max(0, min(100, int(phase_progress)))
+        with state_lock:
+            current_overall = int(progress_state["overall"])
+            if progress < current_overall or (progress == current_overall and not allow_equal):
+                return
+            if progress == current_overall and phase_key == progress_state.get("phase_key"):
+                prev = int(progress_state.get(f"{phase_key}_progress", 0))
+                if phase_progress <= prev and not allow_equal:
+                    return
+            progress_state["overall"] = progress
+            progress_state["phase_key"] = phase_key
+            progress_state[f"{phase_key}_progress"] = phase_progress
+        push_progress(_lada_progress_event(
+            progress=progress,
+            phase_key=phase_key,
+            phase_progress=phase_progress,
+            detail=detail,
+        ))
+
+    def _terminate_process_tree(proc: subprocess.Popen | None):
+        if proc is None or proc.poll() is not None:
+            return
+        result["cancelled"] = True
+        terminate_requested.set()
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+        except ProcessLookupError:

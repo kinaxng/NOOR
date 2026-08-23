@@ -1,0 +1,260 @@
+import asyncio
+import concurrent.futures
+import os
+import re
+import signal
+import subprocess
+import threading
+from pathlib import Path
+from app.core.config import get_settings
+
+default_settings = get_settings()
+
+
+def _build_lada_env(lada_model_dir: str) -> dict:
+    """Build environment dict with LADA_MODEL_WEIGHTS_DIR set."""
+    env = os.environ.copy()
+    if lada_model_dir:
+        env["LADA_MODEL_WEIGHTS_DIR"] = lada_model_dir
+    return env
+
+
+async def run_lada_restoration(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    job_settings: dict,
+    progress_queue: asyncio.Queue,
+    cancel_event: asyncio.Event | None = None,
+) -> bool:
+    """Run lada-cli restoration using a dedicated thread pool executor."""
+    settings = get_settings()
+
+    # Resolve model weights directory
+    lada_model_dir = job_settings.get("lada_model_dir", settings.lada_model_dir) or ""
+
+    # Build lada-cli command
+    # Support two invocation styles:
+    #   1. File path: /home/kinax/.local/bin/lada-cli  → uses unbuffered wrapper
+    #   2. Module:     python3 -m lada.cli.main         → python3 -u -m lada.cli.main
+    lada_cli_path = job_settings.get("lada_cli_path", settings.lada_cli_path)
+    lada_cli_path = lada_cli_path.strip()
+
+    if " " in lada_cli_path:
+        # Module invocation style: "python3 -m lada.cli.main" or just "python3.13 -m lada.cli.main"
+        parts = lada_cli_path.split()
+        cmd = [parts[0], "-u"] + parts[1:]  # python3 -u -m lada.cli.main
+    else:
+        # File path style: use unbuffered wrapper if available
+        unbuffered_path = re.sub(r"/lada-cli$", "/lada-cli-unbuffered", lada_cli_path)
+        if os.path.exists(unbuffered_path):
+            cmd = [unbuffered_path]
+        else:
+            cmd = [lada_cli_path]
+
+    cmd.extend([
+        "--input", input_path,
+        "--output", output_path,
+        "--device", job_settings.get("device", settings.lada_device or "cuda:0"),
+        "--mosaic-detection-model", job_settings.get("detection_model", settings.lada_detection_model or "v4-fast"),
+        "--mosaic-restoration-model", job_settings.get("restoration_model", settings.lada_restoration_model or "basicvsrpp-v1.2"),
+        "--encoding-preset", job_settings.get("encoding_preset", settings.lada_encoding_preset or "hevc-nvidia-gpu-hq"),
+        "--max-clip-length", str(job_settings.get("max_clip_length", settings.lada_max_clip_length or 180)),
+    ])
+
+    # FP16 flag
+    lada_fp16 = job_settings.get("fp16", settings.lada_fp16)
+    if lada_fp16:
+        cmd.append("--fp16")
+    else:
+        cmd.append("--no-fp16")
+
+    # Face mosaics flag
+    detect_face = job_settings.get("detect_face_mosaics", settings.lada_detect_face_mosaics)
+    if detect_face:
+        cmd.append("--detect-face-mosaics")
+
+    await progress_queue.put({
+        "type": "log",
+        "line": f"Starting command: {' '.join(cmd)}"
+    })
+
+    env = _build_lada_env(lada_model_dir)
+
+    # Thread-safe result container
+    result = {"returncode": None, "lines": [], "cancelled": False}
+    proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
+    proc_lock = threading.Lock()
+    terminate_requested = threading.Event()
+
+    def _terminate_process_tree(proc: subprocess.Popen | None):
+        if proc is None or proc.poll() is not None:
+            return
+        result["cancelled"] = True
+        terminate_requested.set()
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+    def _kill_process_tree(proc: subprocess.Popen | None):
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    def run_in_thread():
+        creation_kwargs = {"start_new_session": True} if os.name == "posix" else {}
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            **creation_kwargs,
+        )
+        with proc_lock:
+            proc_holder["proc"] = proc
+        if terminate_requested.is_set():
+            _terminate_process_tree(proc)
+        for raw_line in iter(proc.stdout.readline, b""):
+            if terminate_requested.is_set():
+                _terminate_process_tree(proc)
+                break
+            line = raw_line.decode("utf-8", errors="replace")
+            result["lines"].append(line)
+            m = re.search(r"[Pp]rocessing video.*?(\d+)%", line)
+            if m:
+                try:
+                    progress_queue.put_nowait({"type": "progress", "progress": int(m.group(1))})
+                except Exception:
+                    pass
+            m2 = re.search(r"[Pp]rogress:\s*(\d+)%", line)
+            if m2:
+                try:
+                    progress_queue.put_nowait({"type": "progress", "progress": int(m2.group(1))})
+                except Exception:
+                    pass
+        if proc.stdout:
+            proc.stdout.close()
+        try:
+            proc.wait(timeout=10 if terminate_requested.is_set() else None)
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(proc)
+            proc.wait()
+        result["returncode"] = proc.returncode
+
+    # Get input file size for progress estimation
+    input_size = os.path.getsize(input_path) if os.path.exists(input_path) else 0
+    # lada-cli output is typically 1.0-1.5x input size depending on encoding preset
+    estimated_output_size = input_size * 1.3
+
+    # Compute expected temp file path (lada-cli writes to .tmp.mp4 alongside output)
+    temp_path = output_path + ".tmp.mp4"
+
+    # Monitor output or temp file size while subprocess runs
+    async def monitor_output_size():
+        last_progress = -1
+        while True:
+            await asyncio.sleep(2)
+            if cancel_event is not None and cancel_event.is_set():
+                return
+            # Prefer temp file; fall back to output path
+            target = temp_path if os.path.exists(temp_path) else output_path
+            if not os.path.exists(target):
+                continue
+            try:
+                current_size = os.path.getsize(target)
+                if estimated_output_size > 0:
+                    pct = min(int(current_size / estimated_output_size * 100), 99)
+                    if pct != last_progress:
+                        last_progress = pct
+                        try:
+                            progress_queue.put_nowait({"type": "progress", "progress": pct})
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+    # Use a dedicated thread pool executor (max 1 worker to avoid concurrent subprocesses)
+    loop = asyncio.get_running_loop()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="lada-")
+    future = loop.run_in_executor(executor, run_in_thread)
+
+    # Start output size monitor
+    monitor_task = asyncio.create_task(monitor_output_size())
+
+    # Wait for the thread to complete or for cancellation to be requested.
+    cancel_wait_task = None
+    try:
+        if cancel_event is None:
+            await future
+        else:
+            cancel_wait_task = asyncio.create_task(cancel_event.wait())
+            done, pending = await asyncio.wait(
+                {future, cancel_wait_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if cancel_wait_task in done and cancel_event.is_set() and not future.done():
+                await progress_queue.put({"type": "log", "line": "Cancellation requested; terminating lada-cli..."})
+                result["cancelled"] = True
+                terminate_requested.set()
+                with proc_lock:
+                    proc = proc_holder.get("proc")
+                _terminate_process_tree(proc)
+                try:
+                    await asyncio.wait_for(asyncio.shield(future), timeout=15)
+                except asyncio.TimeoutError:
+                    await progress_queue.put({"type": "log", "line": "lada-cli did not exit after SIGTERM; killing..."})
+                    with proc_lock:
+                        proc = proc_holder.get("proc")
+                    _kill_process_tree(proc)
+                    await future
+            else:
+                await future
+    except asyncio.CancelledError:
+        result["cancelled"] = True
+        terminate_requested.set()
+        with proc_lock:
+            proc = proc_holder.get("proc")
+        _terminate_process_tree(proc)
+        raise
+    finally:
+        if cancel_wait_task is not None:
+            cancel_wait_task.cancel()
+
+    monitor_task.cancel()
+    try:
+        await monitor_task
+    except asyncio.CancelledError:
+        pass
+
+    executor.shutdown(wait=False)
+
+    # Feed collected lines to queue
+    for line in result["lines"]:
+        await progress_queue.put({"type": "log", "line": line})
+
+    returncode = result["returncode"] if result["returncode"] is not None else -1
+    if result.get("cancelled") or (cancel_event is not None and cancel_event.is_set()):
+        await progress_queue.put({"type": "log", "line": f"Process cancelled with return code: {returncode}"})
+        # Best-effort cleanup of partial outputs produced by lada-cli.
+        for path in (output_path + ".tmp.mp4", output_path):
+            try:

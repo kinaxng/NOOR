@@ -1,0 +1,32 @@
+                  <VuiButton
+                    v-if="!whisperRunning"
+                    variant="gradient"
+                    color="info"
+                    class="w-full"
+                    @click="handleStartWhisper"
+                  >
+                    {{ whisperStartLabel }}
+                  </VuiButton>
+
+                  <div class="whisper-strategy-actions">
+                    <button
+                      type="button"
+                      class="whisper-advanced-toggle"
+                      @click="whisperUseAdvanced = !whisperUseAdvanced"
+                    >
+                      {{ whisperAdvancedToggleLabel }}
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="whisperUseAdvanced" class="whisper-advanced-hint">
+                  {{ whisperAdvancedHint }}
+                </div>
+
+                <!-- Pipeline Selection (6 pipelines, multi-select, max 2) -->
+                <div v-if="whisperUseAdvanced" class="ui-card">
+                  <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-2">{{ whisperPipelineLabel }}</label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button
+                      v-for="pipe in whisperPipelineOptions"
+                      :key="pipe.value"

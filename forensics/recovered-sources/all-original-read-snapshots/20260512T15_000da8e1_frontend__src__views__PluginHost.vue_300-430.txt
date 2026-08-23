@@ -1,0 +1,492 @@
+  const list = Array.isArray(children) ? children : [children]
+  for (const child of list) {
+    if (!child) continue
+    if (child instanceof Node) parent.appendChild(child)
+    else parent.appendChild(document.createTextNode(String(child)))
+  }
+  return parent
+}
+
+function makeTopBar(options: any = {}) {
+  const bar = document.createElement('div')
+  bar.className = ['noor-plugin-topbar', options.className || ''].filter(Boolean).join(' ')
+  const tabs = document.createElement('div')
+  tabs.className = 'noor-plugin-topbar__tabs'
+  const actions = document.createElement('div')
+  actions.className = 'noor-plugin-topbar__actions'
+  appendChildren(tabs, options.tabs || options.left)
+  appendChildren(actions, options.actions || options.right)
+  bar.append(tabs, actions)
+  return { el: bar, tabs, actions }
+}
+
+function makeChip(options: any = {}) {
+  const chip = document.createElement('button')
+  chip.type = 'button'
+  chip.className = ['noor-pagination__btn', 'noor-plugin-chip', options.active ? 'is-active' : '', options.className || ''].filter(Boolean).join(' ')
+  chip.textContent = options.label || ''
+  if (options.disabled) chip.disabled = true
+  if (options.onClick) chip.onclick = options.onClick
+  return chip
+}
+
+function makeControlPanelGroup(options: any = {}) {
+  const group = document.createElement('div')
+  group.className = ['noor-control-panel__group', options.className || ''].filter(Boolean).join(' ')
+  if (options.label) {
+    const label = document.createElement('span')
+    label.className = 'noor-control-panel__group-label'
+    label.textContent = options.label
+    group.appendChild(label)
+  }
+  const items = document.createElement('div')
+  items.className = 'noor-control-panel__group-items'
+  appendChildren(items, options.items || options.children)
+  group.appendChild(items)
+  return group
+}
+
+function makeControlPanel(options: any = {}) {
+  const panel = document.createElement('section')
+  panel.className = ['noor-control-panel', options.className || ''].filter(Boolean).join(' ')
+
+  if (options.title || options.summary || options.headerActions) {
+    const header = document.createElement('div')
+    header.className = 'noor-control-panel__header'
+    const main = document.createElement('div')
+    main.className = 'noor-control-panel__header-main'
+    if (options.title) {
+      const title = document.createElement('strong')
+      title.className = 'noor-control-panel__title'
+      title.textContent = options.title
+      main.appendChild(title)
+    }
+    if (options.summary) {
+      const summary = document.createElement('span')
+      summary.className = 'noor-control-panel__summary'
+      summary.textContent = options.summary
+      main.appendChild(summary)
+    }
+    header.appendChild(main)
+    if (options.headerActions) {
+      const actions = document.createElement('div')
+      actions.className = 'noor-control-panel__header-actions'
+      appendChildren(actions, options.headerActions)
+      header.appendChild(actions)
+    }
+    panel.appendChild(header)
+  }
+
+  const body = document.createElement('div')
+  body.className = 'noor-control-panel__body'
+  if (options.left) {
+    const left = document.createElement('div')
+    left.className = 'noor-control-panel__left'
+    appendChildren(left, options.left)
+    body.appendChild(left)
+  }
+  if (options.right) {
+    const right = document.createElement('div')
+    right.className = 'noor-control-panel__right'
+    appendChildren(right, options.right)
+    body.appendChild(right)
+  }
+  if (body.childNodes.length) panel.appendChild(body)
+
+  if (options.footer) {
+    const footer = document.createElement('div')
+    footer.className = 'noor-control-panel__footer'
+    appendChildren(footer, options.footer)
+    panel.appendChild(footer)
+  }
+
+  return panel
+}
+
+function makeActionRow(options: any = {}) {
+  const row = document.createElement('div')
+  row.className = ['noor-plugin-action-row', options.className || ''].filter(Boolean).join(' ')
+  appendChildren(row, options.children || options.items)
+  return row
+}
+
+function makeStatCard(options: any = {}) {
+  const card = document.createElement(options.onClick ? 'button' : 'div') as HTMLElement
+  card.className = ['noor-plugin-stat-card', options.tone ? `noor-plugin-stat-card--${options.tone}` : '', options.className || ''].filter(Boolean).join(' ')
+  if (options.onClick) {
+    ;(card as HTMLButtonElement).type = 'button'
+    ;(card as HTMLButtonElement).onclick = options.onClick
+  }
+  const label = document.createElement('span')
+  label.className = 'noor-plugin-stat-card__label'
+  label.textContent = options.label || ''
+  const value = document.createElement('strong')
+  value.className = 'noor-plugin-stat-card__value'
+  value.textContent = String(options.value ?? '-')
+  card.append(label, value)
+  if (options.hint) {
+    const hint = document.createElement('small')
+    hint.className = 'noor-plugin-stat-card__hint'
+    hint.textContent = String(options.hint)
+    card.appendChild(hint)
+        
+        if (Array.isArray(titleOptions) && titleOptions.length) {
+          const titleSelect = makeSelect({
+            value: '',
+            options: [{ label: '选择标题方案...', value: '' }, ...titleOptions.map(o => ({ label: o.label, value: o.value }))],
+            onChange: (val: string) => { if (val) { state.rename = val; nameInput.value = val } }
+          })
+          titleRow.appendChild(titleSelect)
+        }
+        modalContent.appendChild(makeField({ label: '下载名称', control: titleRow }))
+
+        // Preview Section
+        const preview = renderResourcePreview(state.resource)
+        modalContent.appendChild(preview)
+
+        // Save Path (handled by individual downloader plugins usually, but we can show a placeholder or basic select)
+        // For now, keep it simple to restore functionality
+      }
+
+      const refreshOptions = async () => {
+        state.loading = true; render()
+        try {
+          const res = await api.get(`/plugins/${state.id}/config`)
+          state.options = res.data?.plugin?.config_schema || {}
+          // Fetch resource preview if supported
+          if (state.id === 'xunlei-remote' || state.id === 'qbittorrent') {
+             state.resource.loading = true; render()
+             try {
+               const pRes = await api.post(`/plugins/${state.id}/actions/inspect_url`, { payload: { url: state.url } })
+              state.page = 1
+              loadData()
+            },
+          }),
+          sdk.ui.select({
+            value: state.videosOrder,
+            options: videosOrderOptions,
+            className: 'javdb-year-select',
+            onChange: value => {
+              state.videosOrder = String(value || 'desc')
+              state.page = 1
+              loadData()
+            },
+          }),
+        ]),
+      )
+    }
+
+    panelWrap.appendChild(sdk.ui.controlPanel({
+      title: state.tab === 'latest' ? '最近更新控制面板'
+        : state.tab === 'rankings' ? '榜单控制面板'
+        : state.tab === 'videos' ? '查看记录控制面板'
+        : '作品控制面板',
+      summary: state.tab === 'videos'
+        ? '先在这里验证通用面板，原筛选区暂时保留'
+        : '通用控制面板预演',
+      right,
+    }))
+  }
+
+  function renderFilters() {
+    filtersWrap.innerHTML = ''
+
+    if (state.relation) {
+      renderControlPanel()
+      const chip = sdk.ui.chip({
+        label: `${state.relation.label} · 清除`,
+        active: true,
+        onClick: () => {
+          state.relation = null
+          state.relationActorSelectedFilters = []
+          state.relationActorSingleFilter = false
+          state.relationActorYear = ''
+          state.relationActorSort = 'release_desc'
+          state.page = 1
+          loadData()
+        },
+      })
+      filtersWrap.appendChild(chip)
+      if (state.relation.relType === 'actor') {
+        const badgeGroup = el('div', 'javdb-filter-group')
+        badgeGroup.appendChild(sdk.ui.chip({
+          label: '全部',
+          active: state.relationActorSelectedFilters.length === 0,
+          onClick: () => {
+            state.relationActorSelectedFilters = []
+            state.page = 1
+            rerenderCurrentList()
+          },
+        }))
+        relationActorBadgeFilters.forEach(([value, label]) => {
+          badgeGroup.appendChild(sdk.ui.chip({
+            label,
+            active: state.relationActorSelectedFilters.includes(value),
+            onClick: () => {
+              state.relationActorSelectedFilters = state.relationActorSelectedFilters.includes(value)
+                ? state.relationActorSelectedFilters.filter(x => x !== value)
+                : [...state.relationActorSelectedFilters, value]
+              state.page = 1
+              rerenderCurrentList()
+            },
+          }))
+        })
+        const singleGroup = el('div', 'javdb-filter-group')
+        singleGroup.appendChild(sdk.ui.chip({
+          label: '单人',
+          active: state.relationActorSingleFilter,
+          onClick: () => {
+            state.relationActorSingleFilter = !state.relationActorSingleFilter
+            state.page = 1
+            rerenderCurrentList()
+          },
+        }))
+        const yearGroup = el('div', 'javdb-filter-group')
+        const yearOptions = [{ label: '全部年份', value: '' }, ...actorRelationYears().map(year => ({ label: year, value: year }))]
+        const yearSelect = sdk.ui.select
+          ? sdk.ui.select({
+              value: state.relationActorYear,
+              options: yearOptions,
+              className: 'javdb-year-select',
+              onChange: value => {
+                state.relationActorYear = String(value || '')
+                state.page = 1
+                rerenderCurrentList()
+              },
+            })
+          : null
+        if (yearSelect) yearGroup.appendChild(yearSelect)
+        const sortGroup = el('div', 'javdb-filter-group')
+        const sortSelect = sdk.ui.select
+          ? sdk.ui.select({
+              value: state.relationActorSort,
+              options: relationActorSortOptions,
+              className: 'javdb-year-select',
+              onChange: value => {
+                state.relationActorSort = String(value || 'release_desc')
+                state.page = 1
+                rerenderCurrentList()
+              },
+            })
+          : null
+        if (sortSelect) sortGroup.appendChild(sortSelect)
+        filtersWrap.append(
+          el('div', 'javdb-filter-divider'),
+          badgeGroup,
+          el('div', 'javdb-filter-divider'),
+          singleGroup,
+          el('div', 'javdb-filter-divider'),
+          yearGroup,
+          el('div', 'javdb-filter-divider'),
+          sortGroup,
+        )
+      }
+      return
+    }
+
+    if (state.tab === 'latest') {
+      renderControlPanel()
+      const categoryGroup = el('div', 'javdb-filter-group')
+      latestTypes.forEach(([value, label]) => {
+        categoryGroup.appendChild(sdk.ui.chip({
+          label,
+          active: state.latestType === value,
+          onClick: () => {
+            state.latestType = value
+            state.page = 1
+            loadData()
+          },
+        }))
+      })
+
+      const filterGroup = el('div', 'javdb-filter-group')
+      filterGroup.appendChild(sdk.ui.chip({
+        label: '全部',
+        active: state.latestSelectedFilters.length === 0,
+        onClick: () => {
+          state.latestSelectedFilters = []
+          state.page = 1
+          loadData()
+        },
+      }))
+      latestFilters.forEach(([value, label]) => {
+        filterGroup.appendChild(sdk.ui.chip({
+          label,
+          active: state.latestSelectedFilters.includes(value),
+          onClick: () => {
+            state.latestSelectedFilters = state.latestSelectedFilters.includes(value)
+              ? state.latestSelectedFilters.filter(x => x !== value)
+              : [...state.latestSelectedFilters, value]
+            state.page = 1
+            loadData()
+          },
+        }))
+      })
+      filtersWrap.append(categoryGroup, el('div', 'javdb-filter-divider'), filterGroup)
+      return
+    }
+
+    if (state.tab === 'rankings') {
+      renderControlPanel()
+      const modeGroup = el('div', 'javdb-filter-group')
+      rankingModes.forEach(([value, label]) => {
+        modeGroup.appendChild(sdk.ui.chip({
+          label,
+          active: state.rankingMode === value,
+          onClick: () => {
+            state.rankingMode = value
+            state.page = 1
+              loadData()
+            },
+          }))
+  <div class="w-full space-y-6 animate-fade-in">
+    <div class="page-header">
+      <div class="page-header__left">
+        <div>
+          <h1 class="page-title">{{ pageTitle }}</h1>
+          <div class="page-meta">
+            <span>{{ lastScannedLabel }}: {{ lastScannedText }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="page-header__right header-actions">
+        <VuiButton
+          variant="gradient"
+          color="info"
+          size="small"
+          :loading="mediaStore.hardlinkScanning"
+          @click="handleScan"
+        >
+          <BaseIcon name="refresh" class="w-4 h-4" />
+          {{ scanBtnLabel }}
+        </VuiButton>
+      </div>
+    </div>
+
+    <div class="summary-grid">
+      <button
+        type="button"
+        class="summary-card summary-card--button ui-card"
+        :class="{ 'summary-card--active': filterKey === 'all' }"
+        @click="applySummaryFilter('all')"
+      >
+        <span class="summary-card__label">{{ totalLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_groups }}</span>
+      </button>
+      <button
+        type="button"
+        class="summary-card summary-card--button ui-card"
+        :class="{ 'summary-card--active': filterKey === 'withSource', 'summary-card--disabled': filterCounts.withSource === 0 }"
+        :disabled="filterCounts.withSource === 0"
+        @click="applySummaryFilter('withSource')"
+      >
+        <span class="summary-card__label">{{ entryCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_entries }}</span>
+      </button>
+      <button
+        type="button"
+        class="summary-card summary-card--button ui-card"
+        :class="{ 'summary-card--active': filterKey === 'withHardlink', 'summary-card--disabled': filterCounts.withHardlink === 0 }"
+        :disabled="filterCounts.withHardlink === 0"
+        @click="applySummaryFilter('withHardlink')"
+      >
+        <span class="summary-card__label">{{ hardlinkCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_hardlinks }}</span>
+      </button>
+      <button
+        type="button"
+        class="summary-card summary-card--button ui-card"
+        :class="{ 'summary-card--warn': summary.issue_groups > 0, 'summary-card--active': filterKey === 'issueOnly', 'summary-card--disabled': filterCounts.issueOnly === 0 }"
+        :disabled="filterCounts.issueOnly === 0"
+        @click="applySummaryFilter('issueOnly')"
+      >
+        <span class="summary-card__label">{{ issueCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.issue_groups }}</span>
+      </button>
+    </div>
+
+    <ControlPanel v-if="hasGroups" title="硬链接控制面板" summary="搜索、排序与分组筛选">
+      <template #actions>
+        <div class="hardlinks-search-wrap hardlinks-search--header">
+          <BaseIcon name="search" class="hardlinks-search__icon" />
+          <input
+            v-model="searchQuery"
+            type="search"
+            :placeholder="searchPlaceholder"
+            class="hardlinks-search"
+          />
+        </div>
+      </template>
+      <template #left>
+        <div class="toolbar-main">
+          <div class="toolbar-block toolbar-block--controls">
+            <div class="sort-controls">
+              <span class="sort-label">{{ t('hardlinks.sortBy') }}:</span>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'code' }" @click="setSort('code')">
+                {{ codeLabel }} {{ sortArrow('code') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'entryCount' }" @click="setSort('entryCount')">
+                {{ entryCountLabel }} {{ sortArrow('entryCount') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'hardlinkCount' }" @click="setSort('hardlinkCount')">
+                {{ hardlinkCountLabel }} {{ sortArrow('hardlinkCount') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'sourceSize' }" @click="setSort('sourceSize')">
+                {{ sourceSizeLabel }} {{ sortArrow('sourceSize') }}
+              </button>
+            </div>
+            <div class="filter-controls">
+              <span class="sort-label">{{ t('hardlinks.filterBy') }}:</span>
+              <button
+                v-for="tab in filterTabs"
+                :key="tab.key"
+                type="button"
+                class="filter-btn"
+                :class="{ 'filter-btn--active': filterKey === tab.key, 'filter-btn--disabled': isFilterDisabled(tab.key) }"
+                :disabled="isFilterDisabled(tab.key)"
+                @click="applySummaryFilter(tab.key)"
+              >
+                {{ tab.label }} ({{ filterCounts[tab.key] }})
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </ControlPanel>
+
+    <div v-if="!hasGroups" class="empty-state">
+        <BaseIcon name="hardlink" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ noGroupsLabel }}</p>
+        <p class="empty-state__desc">{{ emptyDescLabel }}</p>
+        <VuiButton variant="text" color="secondary" size="small" @click="openSettings">
+          {{ goSettingsLabel }}
+        </VuiButton>
+    </div>
+
+    <div v-else-if="visibleGroups.length === 0" class="empty-state">
+        <BaseIcon name="search" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ emptyFilteredLabel }}</p>
+    </div>
+
+    <div v-else class="groups-list">
+        <div
+          v-for="group in pagedGroups"
+          :key="group.code"
+          class="hl-group ui-card"
+          :class="{ 'hl-group--issue': group.status === 'issue' }"
+        >
+          <div class="hl-group__header">
+            <div class="hl-group__summary">
+              <span class="hl-group__code font-mono">{{ group.code }}</span>
+              <span class="hl-group__meta">
+                {{ groupSourceCount(group) }} src · {{ groupHardlinkCount(group) }} hl
+              </span>
+            </div>
+            <div class="hl-group__header-right">
+              <div class="hl-group__actions">
+                <button
+                  type="button"
+                  class="group-action-btn"
+                  :disabled="isDeletingGroup(group.code)"
+                  @click.stop="previewGroupDelete(group)"
+                >

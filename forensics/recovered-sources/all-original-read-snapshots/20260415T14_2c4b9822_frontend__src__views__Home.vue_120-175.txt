@@ -1,0 +1,56 @@
+}
+
+function handleQuickAction(item: MediaItem) {
+  detailActionPath.value = ''
+  detailActionId.value = ''
+  selectedVideo.value = item
+  showLadaPanel.value = true
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  mediaLibraryStore.fetchItemDetail(item.id)
+    .then(() => { videoDetail.value = mediaLibraryStore.selectedItem })
+    .catch((e: any) => { detailError.value = e?.message || t('common.loadFailed') })
+    .finally(() => { loadingDetail.value = false })
+}
+
+function handleSubtitleAction(item: MediaItem) {
+  selectedVideo.value = item
+  subtitleVideoId.value = item.id
+  loadingDetail.value = true
+  videoDetail.value = null
+  // Always fetch detail to get siblings (folder paths)
+  mediaLibraryStore.fetchItemDetail(item.id).then(() => {
+    const detail = mediaLibraryStore.selectedItem
+    videoDetail.value = detail
+    subtitleVideoPath.value = detail?.file_path || item.path || ''
+    // Build all folder paths: current + siblings
+    const allPaths = [subtitleVideoPath.value]
+    if (detail?.siblings) {
+      for (const s of detail.siblings) {
+        if (s.file_path && !allPaths.includes(s.file_path)) {
+          allPaths.push(s.file_path)
+        }
+      }
+    }
+    subtitleFolderPaths.value = allPaths
+    showSubtitlePanel.value = true
+  }).finally(() => {
+    loadingDetail.value = false
+  })
+}
+
+function handleOpenSubtitleFromDetail(path: string) {
+  if (!selectedVideo.value) return
+  subtitleVideoPath.value = path || videoDetail.value?.file_path || selectedVideo.value.path || ''
+  showDetailPanel.value = false
+  showSubtitlePanel.value = true
+}
+
+function handleOpenLadaFromDetail(path: string) {
+  if (!selectedVideo.value) return
+  detailActionPath.value = path || videoDetail.value?.file_path || selectedVideo.value.path || ''
+  showDetailPanel.value = false
+  showLadaPanel.value = true
+}
+

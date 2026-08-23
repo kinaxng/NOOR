@@ -1,0 +1,82 @@
+376:const showRunning = computed(() => activeTab.value === 'running')
+377:const showCompleted = computed(() => activeTab.value === 'completed')
+378:const showFailed = computed(() => activeTab.value === 'failed')
+520:function getJobCompletedAt(job: Job) {
+575:                  <p v-if="showJobCompletedAt()" class="text-xs text-white/40">{{ getJobCompletedAt(job) }}</p>
+      if (orderDiff !== 0) return orderDiff
+    }
+    return getCreatedAt(b) - getCreatedAt(a)
+  })
+}
+
+const runningTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'running' || j.status === 'queued' || j.status === 'blocked')))
+const completedTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'completed')))
+const failedTabJobs = computed(() => sortJobsForList(jobsStore.jobs.filter(j => j.status === 'failed' || j.status === 'cancelled' || j.status === 'skipped')))
+
+const currentTabJobs = computed(() => {
+  if (activeTab.value === 'running') return runningTabJobs.value
+  if (activeTab.value === 'completed') return completedTabJobs.value
+  return failedTabJobs.value
+})
+
+const showRunning = computed(() => activeTab.value === 'running')
+const showCompleted = computed(() => activeTab.value === 'completed')
+const showFailed = computed(() => activeTab.value === 'failed')
+
+const currentTabTitle = computed(() => {
+  if (activeTab.value === 'running') return tabRunningLabel.value
+  if (activeTab.value === 'completed') return tabCompletedLabel.value
+  return tabFailedLabel.value
+})
+const currentEmptyLabel = computed(() => {
+  if (activeTab.value === 'running') return emptyRunningLabel.value
+  if (activeTab.value === 'completed') return emptyCompletedLabel.value
+  return emptyFailedLabel.value
+})
+
+function getJobProgress(jobId: string) {
+  return jobStatuses.value[jobId]?.progress ?? jobsStore.jobs.find(j => j.id === jobId)?.progress ?? 0
+}
+
+function getJobStatus(jobId: string) {
+  return jobStatuses.value[jobId]?.status ?? ''
+}
+
+
+function getJobPhaseLabel(job: any) {
+  return getEffectiveViewState.value(job, {
+    phaseKey: jobStatuses.value[job.id]?.phaseKey,
+    phaseLabel: jobStatuses.value[job.id]?.phaseLabel,
+    detail: jobStatuses.value[job.id]?.detail,
+  }).phaseLabel
+  const phaseProgress = getJobPhaseProgress(member)
+  if (member.status === 'running' && phaseProgress > 0) return `${getChainMemberProgress(member)}% · ${phaseProgress}%`
+  const progress = getChainMemberProgress(member)
+  return progress > 0 ? `${progress}%` : '—'
+}
+
+function isTranslateJob(job: any) {
+  return job.job_type === 'translate-srt' || job.job_type === 'subtitle_translate'
+}
+
+function isPrimaryChainJob(job: any) {
+  return getChainRoleLabel.value(job) === t('jobs.chain.rolePrimary')
+}
+
+function isFollowupChainJob(job: any) {
+  return getChainRoleLabel.value(job) === t('jobs.chain.roleFollowup')
+}
+
+function getJobCardClass(job: any) {
+  return {
+    'job-card--selected': selectedJobId.value === job.id,
+    'job-card--flash': flashJobId.value === job.id,
+    'job-card--chain-primary': isPrimaryChainJob(job),
+    'job-card--chain-followup': isFollowupChainJob(job),
+  }
+}
+
+function getJobChainLine(job: any) {
+  if (!job.chain_id) return ''
+  return getChainFlowLabel.value(job)
+}

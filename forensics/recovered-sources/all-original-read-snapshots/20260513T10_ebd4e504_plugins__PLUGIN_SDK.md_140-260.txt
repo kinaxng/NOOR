@@ -1,0 +1,244 @@
+const btn = sdk.ui.submitButton({
+  idleLabel: '推送下载',
+  successLabel: '推送成功',
+  errorLabel: '推送失败',
+  status: 'idle', // idle | running | success | error
+  progress: 0,
+  onClick: submit,
+})
+
+btn.__setState('running', 45, '45%')
+btn.__setState('success', 100, '推送成功')
+btn.__setState('error', 100, '推送失败')
+```
+
+规则：
+
+- 点击后按钮自身显示进度，不额外插入大进度条。
+- 成功/失败状态保留到页面刷新或业务显式重置。
+- 进行中不要反复重绘整张列表；只更新按钮自身状态，避免闪烁。
+- 提交字幕、LADA、下载推送、图谱重建都应优先使用这个组件。
+
+### 3.6 统一下载推送接口
+
+内容源插件（如 M-Team、JavDB）不应自行构建下载器弹窗。  
+统一规则：
+
+- 内容源插件只负责把“可推送资源”交给 SDK。
+- SDK 根据内容插件设置里的默认下载器绑定，打开统一模板弹窗。
+- 弹窗的字段与能力由**下载器插件**通过 `download_options` 声明。
+- SDK 负责统一样式、统一提交流程、统一提交进度按钮。
+
+内容插件调用方式：
+
+```js
+await sdk.downloads.open({
+  downloaderId: 'qbittorrent',
+  url: magnetUrl,
+  title: 'ABP-123 中文标题',
+  itemTitle: 'ABP-123 中文标题',
+  rename: 'ABP-123 中文标题',
+  name: 'ABP-123 中文标题',
+  titleOptions: [
+    { key: 'smart', label: '智能优选', value: 'ABP-123 中文标题', hint: '优先使用内容插件解析后的标题' },
+    { key: 'seed', label: '原始标题', value: 'ABP-123 1080p WEB-DL ...' }
+  ],
+  titleMode: 'smart',
+  onSuccess: (result) => {},
+  onError: (error) => {},
+})
+```
+
+约束：
+
+- 内容插件不要自己请求 `/api/plugins/<downloader>/downloads`。
+- 内容插件不要自己渲染下载路径 / 分类 / 文件选择表单。
+- 内容插件如果已经有标题算法，应通过 `titleOptions` 把“智能优选 / 主标题 / 原始标题”等候选交给 SDK。
+- 内容插件只维护自己列表里“推送按钮”的状态。
+- 下载器插件页面自己的“新建任务”也应优先复用 `sdk.downloads.openTask()`，不要各写一套表单。
+- **来自内容源的推送**必须走 `sdk.downloads.open()`。
+
+下载器插件通过 `handle_action("download_options")` 暴露能力：
+
+```json
+{
+  "ok": true,
+  "downloader": "xunlei-remote",
+  "default_savepath": "/downloads/av",
+  "default_category": "",
+  "categories": [{ "name": "av", "save_path": "/downloads/av" }],
+  "paths": [{ "name": "av", "path": "/downloads/av" }],
+  "supports_categories": true,
+  "supports_savepath": true,
+  "supports_rename": true,
+  "supports_resource_preview": true,
+  "supports_file_indices": true,
+  "supports_small_file_filter": true,
+  "file_indices": "auto",
+  "file_indices_options": [
+    { "value": "auto", "label": "智能选择：跳过广告小文件，保留字幕" },
+    { "value": "--1", "label": "下载全部文件" }
+  ],
+  "small_file_filter": {
+    "mode": "size_threshold_mb",
+    "default_mb": 50,
+    "min_mb": 0,
+    "max_mb": 4096,
+    "keep_subtitles": true
+  }
+}
+```
+
+统一模板只负责：
+
+- 下载器名称
+- 批量下载链接输入
+- 分类 / 路径建议
+- 历史路径选择 + 可编辑路径输入
+- 下载任务名称
+- 下载路径
+- 文件选择
+- 资源预览
+- 提交按钮状态
+
+下载器插件决定：
+
+- 哪些字段显示
+- 默认值是什么
+- 是否支持资源预览
+- 是否支持分类
+- 是否支持改名
+- 是否支持文件选择
+- 是否支持按文件大小自动过滤小文件
+
+因此：**内容库只负责到“点推送”这一步；弹窗内容由下载器能力驱动。**
+
+### 3.4 反向沉淀规则
+
+插件里出现稳定、复用价值高且符合 NOOR 视觉 token 的模式时，不应长期停留在插件私有 CSS 中。处理顺序：
+
+1. 先抽象为 `sdk.ui.*` 通用接口。
+2. 主程序页面和其他插件都通过同一接口复用。
+
+---DEV DOC---
+```json
+{
+  "url": "单个下载链接",
+  "urls": "一个或多个下载链接",
+  "title": "来源标题",
+  "name": "来源名称",
+  "rename": "下载器最终任务名",
+  "category": "可选分类",
+  "savepath": "可选保存路径",
+  "file_indices": "auto / --1 / 0 / 1,3",
+  "min_file_size_mb": 50,
+  "tag": "可选标签",
+  "tags": "可选标签"
+}
+```
+
+qBittorrent 这类下载器必须只在 `submit_download()` 中给 NOOR 推送任务追加 NOOR 标签；不能扫描或修改用户原本存在的任务。
+
+#### 下载器统一弹窗协议
+
+如果插件是 `type = "downloader"` 且声明了 `download_submit`，则必须同时支持：
+
+```python
+async def handle_action(action: str, config: dict, payload: dict) -> dict:
+    if action == "download_options":
+        return {...}
+```
+
+`download_options` 是**统一下载推送弹窗协议**，由下载器插件声明自己支持哪些字段，内容源插件不应自行拼装。
+
+推荐返回字段：
+
+```json
+{
+  "ok": true,
+  "downloader": "qbittorrent",
+  "default_savepath": "/downloads/av",
+  "default_category": "av",
+  "categories": [
+    { "name": "av", "save_path": "/downloads/av" }
+  ],
+  "paths": [
+    { "name": "av", "path": "/downloads/av" }
+  ],
+  "supports_categories": true,
+  "supports_savepath": true,
+  "supports_rename": true,
+  "supports_resource_preview": false,
+  "supports_file_indices": false,
+  "supports_small_file_filter": true,
+  "file_indices": "auto",
+  "file_indices_options": [
+    { "value": "auto", "label": "智能选择" },
+    { "value": "--1", "label": "下载全部文件" }
+  ],
+  "small_file_filter": {
+    "mode": "size_threshold_mb",
+    "default_mb": 50,
+    "min_mb": 0,
+    "max_mb": 4096,
+    "keep_subtitles": true
+  }
+}
+```
+
+字段说明：
+
+- `default_savepath`：默认下载路径
+- `default_category`：默认分类
+- `categories`：可选分类 / 路径建议
+- `paths`：可选历史路径，SDK 会渲染为“历史路径 + 可编辑输入框”
+- `supports_categories`：是否显示分类字段
+- `supports_savepath`：是否显示下载路径字段
+- `supports_rename`：是否允许改下载任务名
+- `supports_resource_preview`：是否支持资源预览
+- `supports_file_indices`：是否支持文件选择
+- `supports_small_file_filter`：是否支持按大小自动过滤小文件
+- `file_indices`：默认文件选择值，例如 `auto`
+- `file_indices_options`：如果提供，SDK 会优先渲染下拉而不是自由文本
+- `small_file_filter`：统一小文件过滤配置
+  - `mode`：当前统一使用 `size_threshold_mb`
+  - `default_mb`：默认阈值
+  - `min_mb` / `max_mb`：输入范围
+  - `keep_subtitles`：字幕文件是否始终保留
+
+内容源插件（如 M-Team / JavDB）必须通过：
+
+```js
+sdk.downloads.open(...)
+```
+
+下载器插件页面自己的“新建任务”也应通过：
+
+```js
+sdk.downloads.openTask(...)
+```
+
+触发统一推送流程，而不是自己：
+
+- 查询下载器列表
+- 直接请求 `/downloads`
+- 手写下载器弹窗
+
+也就是说：
+
+- 内容源插件负责“用户点推送”
+- 下载器插件负责“我支持哪些下载字段”
+- SDK 负责“统一模板、统一视觉、统一提交状态”
+
+### 插件 action
+
+```python
+async def handle_action(action: str, config: dict, payload: dict) -> dict:
+    ...
+```
+
+用于插件页面的私有操作，例如 qB 的 `overview`、`properties`、`apply_noor_filter`。
+
+### 字幕搜索
+
+字幕源插件应声明：

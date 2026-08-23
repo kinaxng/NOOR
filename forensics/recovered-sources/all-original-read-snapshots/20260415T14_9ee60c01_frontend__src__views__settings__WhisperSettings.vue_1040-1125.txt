@@ -1,0 +1,86 @@
+  border-color: rgba(0, 117, 255, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-input option {
+  background: #0a0e23;
+  color: #fff;
+}
+
+.whisper-strategy-card {
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.whisper-strategy-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.whisper-strategy-card__title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.whisper-strategy-card__desc {
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.whisper-strategy-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.whisper-strategy-card__chip {
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+}
+
+.whisper-strategy-card__stack {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.pipeline-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.pipeline-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(0, 117, 255, 0.3);
+}
+
+.pipeline-card--active {
+  background: rgba(0, 117, 255, 0.1);
+  border-color: rgba(0, 117, 255, 0.5);
+}
+
+.pipeline-card__name {
+  font-family: var(--font-display);

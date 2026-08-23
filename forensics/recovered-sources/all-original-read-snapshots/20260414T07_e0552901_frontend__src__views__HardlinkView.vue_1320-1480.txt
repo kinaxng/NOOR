@@ -1,0 +1,32 @@
+  }
+
+  .sort-controls {
+    align-items: flex-start;
+  }
+
+  .hl-group__header {
+    flex-direction: column;
+  }
+
+  .hl-group__header-right,
+  .hl-group__badges {
+    justify-content: flex-start;
+  }
+
+  .hl-group__actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

@@ -1,0 +1,116 @@
+"""Whisper 字幕生成引擎"""
+import os
+import asyncio
+import subprocess
+import warnings
+from pathlib import Path
+from typing import Optional, Callable
+import tempfile
+
+warnings.filterwarnings("ignore", message=".*chunk_length_s.*is very experimental.*")
+
+from .types import (
+    WhisperConfig, WhisperModel, PipelineMode, MergeStrategy,
+    WhisperCancellationRequested,
+    SubtitleSegment, TranscriptionResult, WhisperTask
+)
+from .runtime import raise_if_cancelled, run_cancellable_subprocess
+
+
+def _model_cache_candidates(base_dir: str, model_id: str) -> list[Path]:
+    from app.api.settings_whisper_models import resolve_model_cache_candidates
+
+    return resolve_model_cache_candidates(base_dir, model_id)
+
+
+def _resolve_whisper_storage() -> tuple[str, str, str]:
+    from app.core.config import get_settings
+    from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+
+    settings = get_settings()
+    model_dir = ensure_directory(settings.whisper_model_dir)
+    cache_dir = ensure_directory(settings.whisper_cache_dir)
+    temp_dir = ensure_directory(settings.whisper_temp_dir)
+    settings.apply_network_env()
+    apply_whisper_cache_env(model_dir, cache_dir)
+    return model_dir, cache_dir, temp_dir
+
+
+def _iter_hf_repo_paths(base_dir: str, model_id: str) -> list[Path]:
+    return _model_cache_candidates(base_dir, model_id)
+
+
+def _hf_model_cached(base_dir: str, model_id: str) -> bool:
+    return any(path.exists() and any(path.iterdir()) for path in _iter_hf_repo_paths(base_dir, model_id))
+
+
+def _resolve_hf_model_source(base_dir: str, model_id: str) -> tuple[str, dict]:
+    for repo_path in _iter_hf_repo_paths(base_dir, model_id):
+        if not repo_path.exists():
+            continue
+        ref_file = repo_path / "refs" / "main"
+        if ref_file.exists():
+            revision = ref_file.read_text().strip()
+            snapshot_path = repo_path / "snapshots" / revision
+            if snapshot_path.exists() and any(
+                (snapshot_path / filename).exists()
+                for filename in ("model.safetensors", "pytorch_model.bin", "model.safetensors.index.json")
+            ):
+                return str(snapshot_path), {"local_files_only": True}
+        if any(
+            (repo_path / filename).exists()
+            for filename in ("model.safetensors", "pytorch_model.bin", "model.safetensors.index.json")
+        ):
+            return str(repo_path), {"local_files_only": True}
+
+    return model_id, {"cache_dir": base_dir}
+
+
+_FASTER_WHISPER_REPO_IDS = {
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large-v3-turbo": "Systran/faster-whisper-large-v3-turbo",
+}
+
+
+def _resolve_faster_whisper_model_source(base_dir: str, model_size: str) -> tuple[str, dict]:
+    repo_id = _FASTER_WHISPER_REPO_IDS.get(model_size)
+    if not repo_id:
+        return model_size, {"download_root": base_dir}
+
+    for repo_path in _iter_hf_repo_paths(base_dir, repo_id):
+        if not repo_path.exists():
+            continue
+        ref_file = repo_path / "refs" / "main"
+        if ref_file.exists():
+            revision = ref_file.read_text().strip()
+            snapshot_path = repo_path / "snapshots" / revision
+            if snapshot_path.exists() and (snapshot_path / "model.bin").exists():
+                return str(snapshot_path), {}
+        if (repo_path / "model.bin").exists():
+            return str(repo_path), {}
+
+    return model_size, {"download_root": base_dir}
+
+
+class AudioExtractor:
+    """音频提取器"""
+
+    @staticmethod
+    def extract(
+        audio_path: str,
+        output_path: str,
+        sample_rate: int = 16000,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ) -> tuple[str, float]:
+        """使用 FFmpeg 提取音频"""
+        cmd = [
+            "ffmpeg", "-i", audio_path,
+            "-vn", "-acodec", "pcm_s16le",
+            "-ar", str(sample_rate), "-ac", "1",
+            "-threads", "8",
+            "-y", output_path
+        ]
+        result = run_cancellable_subprocess(cmd, cancel_callback=cancel_callback)
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+357:class FasterWhisperProcessor:

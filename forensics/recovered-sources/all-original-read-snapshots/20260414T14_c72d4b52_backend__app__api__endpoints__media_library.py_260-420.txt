@@ -1,0 +1,161 @@
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{_server_url(config)}/emby/Library/MediaFolders",
+            headers=_headers(config.get("api_key", "")),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    libraries = []
+    for item in data.get("Items", []):
+        item_type = item.get("Type")
+        collection_type = item.get("CollectionType")
+        if item_type in ("movies", "tvshows") or collection_type in ("movies", "tvshows"):
+            poster_url = None
+            if item.get("ImageTags"):
+                tag = item["ImageTags"].get("Primary")
+                if tag:
+                    poster_url = f"{_server_url(config)}/emby/Items/{item['Id']}/Images/Primary?tag={tag}"
+            libraries.append({
+                "id": item["Id"],
+                "name": item["Name"],
+                "type": collection_type or item_type or "unknown",
+                "poster_url": poster_url,
+            })
+    return libraries
+
+
+_VARIANT_MARKER_RE = re.compile(r'(^|[-_.\s])(restored-u|u\d*|c\d*|chs|cht|cn|tw|zh|字幕|中文|破解|流出|uncensored|leaked)(?=$|[-_.\s])', re.IGNORECASE)
+
+
+def _item_variant_penalty(item: dict) -> int:
+    path = (item.get("path") or "").lower()
+    name = (item.get("name") or "").lower()
+    tags = item.get("tags", {}) or {}
+    penalty = 0
+
+    basename = os.path.splitext(os.path.basename(path))[0] if path else name
+    if _VARIANT_MARKER_RE.search(basename):
+        penalty += 60
+    if '.restored-u' in path:
+        penalty += 120
+    if tags.get('is_cracked'):
+        penalty += 40
+    if tags.get('is_leaked'):
+        penalty += 20
+    if tags.get('has_chinese'):
+        penalty += 5
+    return penalty
+
+
+def _pick_group_representative(group: list[dict]) -> dict:
+    def sort_key(item: dict) -> tuple:
+        path = item.get('path') or ''
+        name = item.get('name') or ''
+        return (
+            bool(path),
+            -_item_variant_penalty(item),
+            bool(item.get('poster_path')),
+            -(len(os.path.basename(path)) if path else len(name)),
+            name,
+        )
+
+    representative = dict(max(group, key=sort_key))
+    if not representative.get('poster_path'):
+        fallback = next((item.get('poster_path') for item in group if item.get('poster_path')), None)
+        if fallback:
+            representative['poster_path'] = fallback
+    return representative
+
+
+def _deduplicate_items(items: list[dict]) -> list[dict]:
+    """Merge items in the same folder (e.g. MIDA-368.mp4 and MIDA-368.restored-u.mp4).
+    Groups by parent folder and keeps the main version (most complete metadata) for list display.
+    All versions are still available as siblings in the detail endpoint.
+    """
+    groups: dict[str, list[dict]] = {}
+    result: list[dict] = []
+
+    for item in items:
+        path = item.get("path", "")
+        if not path:
+            result.append(item)
+            continue
+        folder = os.path.dirname(path)
+        if folder not in groups:
+            groups[folder] = []
+        groups[folder].append(item)
+
+    for group in groups.values():
+        if len(group) == 1:
+            result.append(group[0])
+        else:
+            result.append(_pick_group_representative(group))
+    return result
+
+
+async def _list_items(config: dict, library_id: str, limit: int = 50, offset: int = 0, filter: str | None = None) -> tuple[list[dict], int]:
+    now = time.time()
+    cache_key = library_id
+
+    if cache_key in _items_cache:
+        cached_items, cached_at = _items_cache[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return _apply_filter_and_paginate(cached_items, filter, offset, limit)
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.get(
+            f"{_server_url(config)}/emby/Items",
+            headers=_headers(config.get("api_key", "")),
+            params={
+                "ParentId": library_id,
+                "Fields": "PrimaryImageAspectRatio,MediaSources,DateCreated,Path,Studios",
+                "Limit": 2000,
+                "StartIndex": 0,
+                "Recursive": "true",
+                "SortBy": "DateCreated",
+                "SortOrder": "Descending",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    all_items = []
+    for item in data.get("Items", []):
+        if item.get("Type") != "Movie" and item.get("MediaType") != "Video":
+            continue
+        all_items.append(_parse_item(item, config))
+
+    all_items = _deduplicate_items(all_items)
+
+    _items_cache[cache_key] = (all_items, now)
+    return _apply_filter_and_paginate(all_items, filter, offset, limit)
+
+
+def _apply_filter_and_paginate(items: list[dict], filter: str | None, offset: int, limit: int) -> tuple[list[dict], int]:
+    if not filter:
+        return items[offset:offset + limit], len(items)
+    filtered = []
+    for item in items:
+        tags = item.get("tags", {})
+        if not tags:
+            continue
+        if filter == "cracked" and tags.get("is_cracked"):
+            filtered.append(item)
+        elif filter == "chinese" and tags.get("has_chinese"):
+            filtered.append(item)
+        elif filter == "leaked" and tags.get("release_type_key") == "leaked":
+            filtered.append(item)
+        elif filter == "uncensored" and tags.get("release_type_key") == "uncensored":
+            filtered.append(item)
+    return filtered[offset:offset + limit], len(filtered)
+
+
+
+async def _get_siblings(config: dict, parent_id: str, current_id: str) -> list[dict]:
+    return await get_siblings_impl(
+        config,
+        parent_id,
+        current_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,

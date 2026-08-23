@@ -1,0 +1,37 @@
+                session.commit()
+
+        if recovered > 0:
+            self._ensure_worker()
+
+        logger.info("[JobManager] 恢复 %s 个排队任务，已清理 %s 个孤立任务", recovered, orphaned_count)
+        return recovered
+
+    async def cleanup_orphaned_jobs(self) -> dict[str, object]:
+        """将数据库中残留的 running 任务标记为 failed，并返回受影响任务。"""
+        from app.core.database import SessionLocal
+
+        cleaned_job_ids: list[str] = []
+
+        with SessionLocal() as session:
+            from sqlalchemy import select
+
+            result = session.execute(select(Job).where(Job.status == "running"))
+            orphaned = result.scalars().all()
+
+            for job in orphaned:
+                job.status = "failed"
+                job.error_message = "任务被系统清理（后端异常退出）"
+                job.completed_at = utcnow_naive()
+                cleaned_job_ids.append(job.id)
+
+            if orphaned:
+                session.commit()
+
+        logger.info("[JobManager] 手动清理 %s 个孤立任务", len(cleaned_job_ids))
+        return {
+            "cleaned": len(cleaned_job_ids),
+            "cleaned_job_ids": cleaned_job_ids,
+        }
+
+
+job_manager = JobManager()

@@ -1,0 +1,191 @@
+# NOOR 当前阶段状态（2026-04-13）
+
+## 当前建议
+
+项目现在适合结束 Phase 1，进入 Phase 2。
+
+Phase 1 已经把仓库从“接口契约松散、前后端靠展示文案耦合、主路径几乎无回归保护”推进到了“关键接口已有稳定契约、前端共享层一致性显著改善、主路径已有最小测试护栏”的状态。
+
+下一阶段不建议继续做零散 UI 或小接口修补；建议只聚焦一个主轴：
+
+1. 任务系统可信化
+2. 真正实现可证明的取消语义
+3. 收紧状态落库路径
+4. 为以上链路补稳定回归测试
+
+## 当前结论
+
+项目已从“功能堆叠但缺少验证”推进到“关键主路径已有回归测试保护、单库模式落地、文档与实际行为基本一致”的状态。
+
+当前仓库可作为下一阶段开发的稳定基线继续推进。
+
+## 本阶段已完成
+
+### 1. Whisper custom pipeline gating
+- `custom` Whisper pipeline 不再默认暴露
+- 通过 feature flag + 依赖探测控制可用性
+- 后端 settings 保存与任务创建都统一做了 gating
+- 前端会：
+  - 读取 features
+  - 自动清理不可用的 `custom`
+  - 隐藏不可用选项
+  - 保存前阻止提交
+  - 展示不可用原因
+
+相关提交：
+- `3870088` `fix(whisper): gate custom pipeline behind feature flags`
+- `2608132` `test(backend): cover whisper custom pipeline gating`
+- `2a2c1e2` `fix(settings): preserve whisper gating http errors`
+
+### 2. 单库模式收口
+- 不再按多库/全部库模式设计首页加载
+- 设置页只允许选择 1 个媒体库
+- 首页自动优先使用启用库，否则回退到第一个可用库
+- 文案已同步到单库模式
+
+相关提交：
+- `34f958a` `fix(frontend): enforce single media library selection`
+
+### 3. 插件残留清理
+- 删除后端空插件占位模块
+- 清理前端旧插件注释残留
+- 当前不再把插件能力作为产品目标
+
+相关提交：
+- `940ed12` `chore(app): remove stale plugin leftovers`
+
+### 4. Emby / Jellyfin 对外表述统一
+- 前端设置文案改为兼容 `Emby / Jellyfin`
+- README 已同步到 `Emby / Jellyfin` + 单库模式
+- `.env` 示例已补充 `EMBY_USER_ID` / `EMBY_ENABLED_LIBRARY_IDS`
+
+相关提交：
+- `8845497` `chore(app): clean warnings and media server copy`
+- `3bf92a6` `docs(test): align media server docs and cover whisper task API`
+
+### 5. warnings 清理
+- 清理 `datetime.utcnow()` 废弃用法
+- 将 Pydantic `Config` 改为 `SettingsConfigDict`
+
+相关提交：
+- `8845497` `chore(app): clean warnings and media server copy`
+
+## 当前已补的后端回归测试
+
+### 任务系统 / 取消 / 串行语义
+- `backend/tests/test_job_manager.py`
+- `backend/tests/test_lada_runner_cancel.py`
+- `backend/tests/test_whisper_job_manager.py`
+
+覆盖重点：
+- 单 worker 串行
+- 取消运行中的任务时，后续任务不会抢跑
+- LADA 底层进程取消与临时文件清理
+- Whisper 队列取消行为
+
+相关新增提交：
+- `5cad3b6` `test(backend): cover whisper cancel queue behavior`
+
+### Whisper API / gating
+- `backend/tests/test_whisper_feature_gating.py`
+- `backend/tests/test_whisper_api.py`
+
+覆盖重点：
+- custom pipeline 不可用时返回 400
+- `/api/whisper/tasks/{task_id}` 返回日志最后 50 行
+- 缺失任务返回 404
+
+### Media library 详情回退
+- `backend/tests/test_media_library_api.py`
+
+覆盖重点：
+- siblings 在无 `Default` 媒体源时回退到 `MediaSources[0].Path`
+- item 详情在当前条目无 `Primary` 海报时回退到主版本 sibling 的 `Primary`
+
+相关新增提交：
+- `0c43b71` `test(backend): cover media library item fallbacks`
+
+### Jobs / Subtitles / Media detail 路由契约
+- `backend/tests/test_jobs_api.py`
+- `backend/tests/test_subtitles_api.py`
+- `backend/tests/test_media_library_api.py`
+
+覆盖重点：
+- `/api/jobs/cleanup` 返回 `cleaned` + `cleaned_job_ids`
+- `/api/jobs/{id}`、`/logs`、`/download`、`DELETE` 的关键成功/失败分支
+- 本地字幕库下载逻辑优先使用稳定 `source_key`
+- `media-library/item/{id}` 的 `503 / 404 / 502` 错误契约
+
+相关新增提交：
+- `19c049c` `test(subtitles): cover stable local library source key`
+- `e561b33` `test(jobs): cover cleanup response contract`
+- `bf7038a` `test(jobs): cover api error branches`
+- `c2a264f` `test(media): cover item detail route errors`
+
+## 当前验证状态
+
+已实际执行：
+- 前端：`npm run build`
+- 后端：`python -m pytest backend/tests -q`
+
+当前结果：
+- 前端构建：通过
+- 已针对新增回归测试多次执行 `pytest`
+- Jobs / Whisper / Media detail / Subtitles 新增测试均可独立通过
+
+备注：
+- `backend/tests/test_job_manager.py` 中现有 worker 级异步用例在当前环境里有挂起现象
+- 这不影响本阶段新增的 API 契约测试结论
+- 但意味着进入 Phase 2 前，需要先处理任务系统测试基座的稳定性
+
+## 当前产品约束（已按此收口）
+- 不做多库模式
+- 每次只接 1 个媒体库
+- 插件能力不作为当前目标
+- Emby / Jellyfin 作为通用媒体服务器接入面
+
+## 仍值得做，但不急的少量事项
+
+### 高优先级但可下一阶段处理
+1. 任务系统可信化：
+   - `backend/app/tasks/manager.py`
+   - `backend/app/pipeline/lada/runner.py`
+   - `backend/app/pipeline/whisper/*`
+2. 稳定任务系统测试基座：
+   - 处理 `test_job_manager.py` 现有挂起问题
+   - 为取消 / 状态机 / worker 生命周期补可稳定执行的测试
+3. 将大文件继续结构化拆分：
+   - `backend/app/api/settings.py`
+   - `backend/app/tasks/manager.py`
+   - `backend/app/api/endpoints/media_library.py`
+4. 如果后续继续增强媒体库功能，可补更细的 detail / poster / subtitle 组合路径测试
+
+### 中优先级
+3. 逐步将内部命名中的 `emby_*` 演进为更中性的 `media_server_*`
+   - 这不是当前必须项
+   - 涉及 DB 字段 / env 变量 / 前后端类型，建议单独一批做兼容迁移
+
+### 低优先级
+4. 补一份更面向部署的“最小启动检查清单”
+5. 如需长期维护，再考虑补前端 smoke test
+
+## Phase 2 建议目标
+
+如果正式进入下一阶段开发，建议目标只设为四件事：
+1. 取消会真正终止底层 LADA / Whisper / 翻译执行
+2. worker 生命周期保证单实例、单任务串行
+3. `queued / running / cancelled / completed / failed` 状态流只保留一条权威落库路径
+4. 为以上三点建立稳定回归测试
+
+## 当前对任务系统的判断
+
+### 已改善的部分
+- LADA 子进程取消路径已有 `SIGTERM / SIGKILL` 处理和临时文件清理
+- `JobManager` 已不再按 `running_job is None` 反复新建 worker
+- `cleanup_orphaned_jobs()` 已有明确契约返回，前端不再靠文案猜测结果
+
+### 仍然是 Phase 2 主风险的部分
+- Whisper 目前仍运行在独立线程中，取消只是在 manager 侧设置事件并等待线程自行退出，缺少真正可中断的底层执行边界
+- 状态落库分散在 `_process_queue()`、`_run_lada()`、`_run_whisper()`、`_run_translate_srt()` 多个位置，维护成本高且存在竞态窗口
+- Whisper 的 reader thread / pipeline thread / manager event queue 目前是多源并发更新，语义不够集中
+- 现有 `test_job_manager.py` 的 worker 级异步用例在当前环境会挂起，说明测试基座本身需要先稳住

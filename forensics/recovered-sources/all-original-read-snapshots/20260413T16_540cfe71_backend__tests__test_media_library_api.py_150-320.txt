@@ -1,0 +1,84 @@
+@pytest.mark.asyncio
+async def test_get_item_route_returns_404_when_item_missing(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_config', lambda: {'server_url': 'http://server', 'api_key': 'token'})
+
+    async def fake_get_item(config, item_id):
+        assert item_id == 'missing-item'
+        return None
+
+    monkeypatch.setattr(media_library, '_get_item', fake_get_item)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await media_library.get_item('missing-item')
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == '未找到媒体项目: missing-item'
+
+
+@pytest.mark.asyncio
+async def test_get_item_route_wraps_internal_error_as_502(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_config', lambda: {'server_url': 'http://server', 'api_key': 'token'})
+
+    async def fake_get_item(config, item_id):
+        assert item_id == 'broken-item'
+        raise RuntimeError('boom')
+
+    monkeypatch.setattr(media_library, '_get_item', fake_get_item)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await media_library.get_item('broken-item')
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == '获取详情失败: boom'
+
+
+@pytest.mark.asyncio
+async def test_get_hardlink_groups_includes_last_scanned_at(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_hardlink_groups', lambda: [{'code': 'ABC-123', 'entries': []}])
+    monkeypatch.setattr(media_library, '_hardlink_groups_last_scanned_at', lambda: '2026-04-13T12:34:56+00:00')
+
+    result = await media_library.get_hardlink_groups()
+
+    assert result['count'] == 1
+    assert result['last_scanned_at'] == '2026-04-13T12:34:56+00:00'
+    assert result['summary'] == {
+        'total_groups': 1,
+        'total_entries': 0,
+        'total_hardlinks': 0,
+        'issue_groups': 0,
+        'orphan_entries': 0,
+    }
+    assert result['groups'][0]['entry_count'] == 0
+    assert result['groups'][0]['hardlink_count'] == 0
+    assert result['groups'][0]['status'] == 'healthy'
+
+
+@pytest.mark.asyncio
+async def test_scan_hardlinks_returns_last_scanned_at(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'Group A', 'source_dir': '/tmp/source', 'hardlink_dir': '/tmp/hardlinks'}],
+    })
+    monkeypatch.setattr(media_library.os, 'stat', lambda path: object())
+
+    async def fake_build_groups():
+        return [{'code': 'ABC-123', 'entries': [{'source_path': '/tmp/source/a.mp4', 'hardlink_paths': ['/tmp/hardlinks/a.mp4']}]}]
+
+    monkeypatch.setattr(media_library, '_build_hardlink_groups', fake_build_groups)
+    monkeypatch.setattr(media_library, '_save_hardlink_groups', lambda groups: None)
+    monkeypatch.setattr(media_library, '_hardlink_groups_last_scanned_at', lambda: '2026-04-13T12:34:56+00:00')
+
+    result = await media_library.scan_hardlinks()
+
+    assert result['ok'] is True
+    assert result['total_count'] == 1
+    assert result['total_entries'] == 1
+    assert result['last_scanned_at'] == '2026-04-13T12:34:56+00:00'
+    assert result['summary'] == {
+        'total_groups': 1,
+        'total_entries': 1,
+        'total_hardlinks': 1,
+        'issue_groups': 0,
+        'orphan_entries': 0,
+    }
+    assert result['groups'][0]['entries'][0]['hardlink_count'] == 1
+    assert result['groups'][0]['entries'][0]['status'] == 'healthy'

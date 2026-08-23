@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useJobsStore } from '../stores/jobs'
+import { useRoute, useRouter } from 'vue-router'
+import type { Job, SSEEvent } from '../api/types'
+import api from '../api'
+import LogViewer from '../components/noor/LogViewer.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import VuiProgress from '../components/ui/Progress/VuiProgress.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import { useI18n } from '../composables/useI18n'
+import { useToast } from '../composables/useToast'
+import { useJobPresentation } from '../composables/useJobPresentation'
+const { t, currentLang } = useI18n()
+const jobsStore = useJobsStore()
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+const { connectingLabel, queuedLabel: queuedStatusLabel, blockedLabel: blockedStatusLabel, completedLabel: completedStatusLabel, failedLabel: failedStatusLabel, cancelledLabel: cancelledStatusLabel, fallbackStatusLabel, getChainMembers, getChainStepLabel, getChainRoleLabel, getChainWaitingLabel, getChainPositionLabel, getChainStatusSummary, getChainFlowLabel, getJobChainHint, getRunningBadgeLabel, getStatusTone, getEffectiveViewState, getDisplayPhaseLine, getCardView, getProgressView, getDescriptionView } = useJobPresentation(() => jobsStore.jobs)
+
+const MAX_VISIBLE_LOG_LINES = 400
+
+type JobRuntimeStatus = {
+  status: string
+  progress: number
+  phaseKey?: string
+  phaseLabel?: string
+  detail?: string
+  phaseProgress?: number
+}
+
+const logs = ref<{ time: string; line: string }[]>([])
+const jobStatuses = ref<Record<string, JobRuntimeStatus>>({})
+const selectedJobId = ref<string | null>(null)
+const flashJobId = ref<string | null>(null)
+let flashTimer: ReturnType<typeof setTimeout> | null = null
+const sseConnected = ref<Set<string>>(new Set())
+const watchedJobIds = ref<Set<string>>(new Set())
+
+function clampJobProgress(jobId: string, incoming: number | null | undefined) {
+  const next = Math.max(0, Math.min(100, Number(incoming ?? 0)))
+  const current = jobStatuses.value[jobId]?.progress ?? jobsStore.jobs.find(j => j.id === jobId)?.progress ?? 0
+  return Math.max(current, next)
+}
+
+function appendVisibleLog(entry: { time: string; line: string }) {
+  logs.value.push(entry)
+  if (logs.value.length > MAX_VISIBLE_LOG_LINES) {
+    logs.value.splice(0, logs.value.length - MAX_VISIBLE_LOG_LINES)
+  }
+}
+
+function shouldWatchJob(job: { status: string }) {
+  return job.status === 'running' || job.status === 'queued' || job.status === 'blocked'
+}
+
+function tabForJobStatus(status: string): 'running' | 'completed' | 'failed' {
+  if (status === 'completed') return 'completed'
+  if (status === 'failed' || status === 'cancelled' || status === 'skipped') return 'failed'
+  return 'running'
+}
+
+function flashFocusedJob(jobId: string) {
+  flashJobId.value = jobId
+  if (flashTimer) clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => {
+    if (flashJobId.value === jobId) flashJobId.value = null
+  }, 2200)
+}
+
+async function applyRouteFocus() {
+  const focusJobId = typeof route.query.job === 'string' ? route.query.job : ''
+  const focusChainId = typeof route.query.chain === 'string' ? route.query.chain : ''
+  if (!focusJobId && !focusChainId) return
+
+  let target = focusJobId ? jobsStore.jobs.find(job => job.id === focusJobId) || null : null
+  if (!target && focusChainId) {
+    target = jobsStore.jobs.find(job => job.chain_id === focusChainId) || null
+  }
+  if (!target) return
+
+  activeTab.value = tabForJobStatus(target.status)
+  flashFocusedJob(target.id)
+  await selectJob(target)
+  const nextQuery = { ...route.query }
+  delete nextQuery.job
+  delete nextQuery.chain
+  await router.replace({ query: nextQuery })
+}
+
+function seedJobStatus(job: Job) {
+  jobStatuses.value[job.id] = {
+    status: fallbackStatusLabel.value(job.status),
+    progress: job.progress || 0,
+    phaseKey: job.phase_key,
+    phaseLabel: job.phase_label,
+    detail: job.detail,
+    phaseProgress: job.phase_progress,
+  }
+}
+
+function ensureJobStatus(jobId: string): JobRuntimeStatus {
+  if (!jobStatuses.value[jobId]) {
+    jobStatuses.value[jobId] = { status: '', progress: 0, phaseKey: '', phaseLabel: '', detail: '', phaseProgress: 0 }
+  }
+  return jobStatuses.value[jobId]
+}
+
+function applyStructuredEvent(
+  jobId: string,
+  event: SSEEvent,
+  options: {
+    status?: string
+    progress?: number
+    phaseProgress?: number
+  } = {},
+) {
+  const current = ensureJobStatus(jobId)
+  jobStatuses.value[jobId] = {
+    ...current,
+    status: options.status ?? current.status,
+    progress: options.progress ?? current.progress,
+    phaseKey: event.phase_key ?? current.phaseKey,
+    phaseLabel: event.phase_label ?? current.phaseLabel,
+    detail: event.detail ?? current.detail,
+    phaseProgress: options.phaseProgress ?? event.phase_progress ?? current.phaseProgress,
+  }
+  sseConnected.value.add(jobId)
+}
+
+function syncWatchableJobs() {
+  for (const job of jobsStore.jobs) {
+    if (shouldWatchJob(job) && !watchedJobIds.value.has(job.id)) {
+      seedJobStatus(job)
+      void watchJob(job.id)
+    }
+  }
+}
+
+onMounted(async () => {
+  await jobsStore.fetchJobs()
+  syncWatchableJobs()
+  await applyRouteFocus()
+})
+
+onUnmounted(() => {
+  jobsStore.disconnectFromEvents()
+  if (flashTimer) clearTimeout(flashTimer)
+})
+
+watch(() => [route.query.job, route.query.chain, jobsStore.jobs.length], async () => {
+  await applyRouteFocus()
+}, { flush: 'post' })
+
+watch(
+  () => jobsStore.jobs.map(job => `${job.id}:${job.status}`).join('|'),
+  () => {
+    syncWatchableJobs()
+  },
+)
+
+async function watchJob(jobId: string) {
+  if (watchedJobIds.value.has(jobId)) return
+  watchedJobIds.value.add(jobId)
+
+  const job = jobsStore.jobs.find(j => j.id === jobId)
+  if (job) {
+    seedJobStatus(job)
+    if (job.status === 'running') {
+      jobStatuses.value[jobId].status = connectingLabel.value
+    }
+  }
+
+  jobsStore.connectToEvents(jobId, (event: SSEEvent) => {
+    const time = new Date().toLocaleTimeString()
+
+    if (event.type === 'progress') {
+      const progress = clampJobProgress(jobId, event.progress)
+      applyStructuredEvent(jobId, event, {
+        status: getRunningBadgeLabel.value({ status: 'running' }, ''),
+        progress,
+      })
+      jobsStore.updateJobProgress(jobId, progress, undefined, { phase_label: event.phase_label, phase_key: event.phase_key, phase_progress: event.phase_progress, detail: event.detail })
+    } else if (event.type === 'log' && event.line) {
+      if (selectedJobId.value === jobId || selectedJobId.value === null) {
+        appendVisibleLog({ time, line: event.line })
+      }
+    } else if (event.type === 'completed') {
+      applyStructuredEvent(jobId, event, {
+        status: completedStatusLabel.value,
+        progress: Math.max(ensureJobStatus(jobId).progress || 0, Number(event.progress ?? 100)),
+        phaseProgress: event.phase_progress ?? 100,
+      })
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? 100), 'completed', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || completedStatusLabel.value,
+        phase_progress: event.phase_progress ?? 100,
+        detail: event.detail,
+      })
+    } else if (event.type === 'cancelled') {
+      applyStructuredEvent(jobId, event, {
+        status: cancelledStatusLabel.value,
+        progress: Number(event.progress ?? ensureJobStatus(jobId).progress ?? 0),
+      })
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? (jobStatuses.value[jobId]?.progress || 0)), 'cancelled', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || cancelledStatusLabel.value,
+        phase_progress: event.phase_progress,
+        detail: event.detail,
+      })
+    } else if (event.type === 'failed') {
+      applyStructuredEvent(jobId, event, {
+        status: failedStatusLabel.value,
+        progress: Number(event.progress ?? ensureJobStatus(jobId).progress ?? 0),
+      })
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? (jobStatuses.value[jobId]?.progress || 0)), 'failed', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || failedStatusLabel.value,
+        phase_progress: event.phase_progress,
+        detail: event.detail,
+      })
+    } else if (event.type === 'skipped') {
+      applyStructuredEvent(jobId, event, {
+        status: t('jobs.status.skipped'),
+        progress: Number(event.progress ?? ensureJobStatus(jobId).progress ?? 0),
+      })
+      jobsStore.updateJobProgress(jobId, Number(event.progress ?? (jobStatuses.value[jobId]?.progress || 0)), 'skipped', {
+        phase_key: event.phase_key,
+        phase_label: event.phase_label || t('jobs.status.skipped'),
+        phase_progress: event.phase_progress,
+        detail: event.detail,
+      })
+    } else if (event.type === 'queued') {
+      applyStructuredEvent(jobId, event, {
+        status: queuedStatusLabel.value,
+        phaseProgress: event.phase_progress ?? 0,
+      })
+    } else if (event.type === 'blocked') {
+      applyStructuredEvent(jobId, event, {
+        status: blockedStatusLabel.value,
+        phaseProgress: event.phase_progress ?? 0,
+      })
+    }
+  })
+
+  setTimeout(() => {
+    if (!sseConnected.value.has(jobId)) {
+      const dbJob = jobsStore.jobs.find(j => j.id === jobId)
+      if (dbJob && jobStatuses.value[jobId]) {
+        jobStatuses.value[jobId].status = dbJob.status === 'running'
+          ? getRunningBadgeLabel.value({ status: 'running' }, '')
+          : fallbackStatusLabel.value(dbJob.status)
+      }
+    }
+  }, 10000)
+}
+
+async function selectJob(job: any) {

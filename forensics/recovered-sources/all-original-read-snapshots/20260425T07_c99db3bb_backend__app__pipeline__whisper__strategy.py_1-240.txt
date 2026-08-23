@@ -1,0 +1,704 @@
+ M Dockerfile
+ M backend/app/pipeline/whisper/orchestrator.py
+---
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+RECOMMENDED_WHISPER_STRATEGY = {
+    "strategy": "recommended",
+    "model": "anime-whisper",
+    "pipeline_mode": "ensemble",
+    "merge_strategy": "smart_merge",
+    "language": "ja",
+    "sensitivity": "balanced",
+    "vad_method": "semantic",
+    "speech_enhancer": "none",
+    "audio_preprocess_mode": "none",
+    "audio_preprocess_model": "vocal_balanced",
+    "pass1_pipeline": "anime",
+    "pass2_pipeline": "qwen",
+    "custom_config": None,
+    "timestamp_mode": "aligner_interpolation",
+    "aligner_backend": "qwen3",
+    "framer_backend": "vad-grouped",
+}
+
+
+def normalize_whisper_strategy(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    return "recommended" if normalized == "best" else (normalized or "advanced")
+
+
+@dataclass(frozen=True)
+class WhisperExecutionPlan:
+    strategy: str
+    executor_key: str
+    runtime_settings: dict[str, Any]
+    summary: str
+    detail_lines: tuple[str, ...] = ()
+
+
+def apply_whisper_strategy(payload: dict[str, Any], strategy: str | None) -> dict[str, Any]:
+    normalized = normalize_whisper_strategy(strategy)
+    if normalized != "recommended":
+        merged = dict(payload)
+        merged["strategy"] = normalized
+        return merged
+
+    merged = dict(payload)
+    merged.update(RECOMMENDED_WHISPER_STRATEGY)
+    return merged
+
+
+def is_recommended_whisper_strategy(strategy: str | None) -> bool:
+    return normalize_whisper_strategy(strategy) == "recommended"
+
+
+def build_whisper_execution_plan(payload: dict[str, Any], strategy: str | None) -> WhisperExecutionPlan:
+    normalized = normalize_whisper_strategy(strategy or payload.get("strategy"))
+    runtime_settings = apply_whisper_strategy(payload, normalized)
+    preprocess_mode = (runtime_settings.get("audio_preprocess_mode") or "none").strip().lower()
+    preprocess_model = (runtime_settings.get("audio_preprocess_model") or "vocal_balanced").strip().lower()
+
+    preprocess_detail_lines: tuple[str, ...] = ()
+    if preprocess_mode != "none":
+        preprocess_detail_lines = (
+            f"实验前处理: {preprocess_mode} / {preprocess_model}",
+            "注意: 音频前处理当前仅建议手动实验，不进入默认推荐链路",
+        )
+
+    if normalized == "recommended":
+        return WhisperExecutionPlan(
+            strategy="recommended",
+            executor_key="recommended",
+            runtime_settings=runtime_settings,
+            summary="推荐字幕策略",
+            detail_lines=(
+                "执行分支: recommended",
+                "主链路: Anime-Whisper + Qwen3-ASR fallback + Qwen3 ForcedAligner",
+                "固定参数: ensemble / anime+qwen3-align / ja / balanced / smart_merge",
+                *preprocess_detail_lines,
+            ),
+        )
+
+    return WhisperExecutionPlan(
+        strategy=normalized,
+        executor_key="advanced",
+        runtime_settings=runtime_settings,
+        summary="高级参数策略",
+        detail_lines=(
+            "执行分支: advanced",
+            "运行参数: 以任务保存的 pipeline / merge / custom_config 为准",
+            *preprocess_detail_lines,
+        ),
+    )
+---FILE2---
+export type WhisperStrategyMode = 'recommended' | 'compat'
+
+export type WhisperTranslationOverrides = {
+  audio_preprocess_mode?: string
+  audio_preprocess_model?: string
+  translate_to?: string
+  translate_base_url?: string
+  translate_api_key?: string
+  translate_model?: string
+  translate_style?: string
+}
+
+export function buildWhisperProfile(mode: WhisperStrategyMode) {
+  const isRecommended = mode === 'recommended'
+  return {
+    strategy: isRecommended ? 'recommended' : 'advanced',
+    model: isRecommended ? 'anime-whisper' : 'large-v3',
+    pipeline_mode: isRecommended ? 'ensemble' : 'qwen',
+    merge_strategy: 'smart_merge',
+    language: 'ja',
+    sensitivity: 'balanced',
+    vad_method: 'semantic',
+    pass1_pipeline: isRecommended ? 'anime' : 'qwen',
+    pass2_pipeline: isRecommended ? 'qwen' : '',
+    custom_config: undefined,
+  }
+}
+
+export function buildWhisperProfileWithTranslation(
+  mode: WhisperStrategyMode,
+  overrides: WhisperTranslationOverrides = {},
+) {
+  return {
+    ...buildWhisperProfile(mode),
+    audio_preprocess_mode: overrides.audio_preprocess_mode,
+    audio_preprocess_model: overrides.audio_preprocess_model,
+    translate_to: overrides.translate_to || '',
+    translate_base_url: overrides.translate_base_url,
+    translate_api_key: overrides.translate_api_key,
+    translate_model: overrides.translate_model,
+    translate_style: overrides.translate_style,
+  }
+}
+
+
+export function getWhisperStrategyMeta(mode: WhisperStrategyMode) {
+  if (mode === 'recommended') {
+    return {
+      titleKey: 'whisper.recommended.title',
+      descKey: 'whisper.recommended.desc',
+      stackKey: 'whisper.recommended.stack',
+      badgeKey: 'whisper.recommended.badge',
+      stackText: 'Anime-Whisper · Qwen3-ASR fallback · Qwen3 ForcedAligner',
+    }
+  }
+
+  return {
+    titleKey: 'whisper.presets.compat.title',
+    descKey: 'whisper.presets.compat.desc',
+    stackKey: 'whisper.presets.compat.stack',
+    badgeKey: 'whisper.presets.compat.badge',
+    stackText: 'large-v3 baseline · legacy compatibility route',
+  }
+}
+---FILE3---
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import { dictionaries } from '../../i18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+import { buildWhisperProfileWithTranslation, getWhisperStrategyMeta } from '../../composables/useWhisperProfiles'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const checkingDeps = ref(false)
+const checkingModels = ref(false)
+const downloadingModel = ref<string | null>(null)
+const installingDeps = computed(() => installStatus.value.status === 'running')
+const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
+const activeStrategy = ref<'recommended' | 'compat'>('recommended')
+const audioPreprocessMode = ref('none')
+const audioPreprocessModel = ref('vocal_balanced')
+
+// ===== Translation settings =====
+const translateEnabled = ref(true)
+const translateTo = ref('zh')
+const translateModel = ref('gpt-4o-mini')
+const translateStyle = ref('adult_explicit')
+const translateBaseUrl = ref('https://api.openai.com/v1')
+const translateApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ available: boolean; message: string; models?: string[] } | null>(null)
+
+const checkingDepsResult = ref<Record<string, any>>({})
+const whisperCudaAvailable = ref(false)
+const torchVariant = ref<'gpu' | 'cpu'>('gpu')
+const whisperModels = ref<any[]>([])
+const whisperFeatures = ref<any>({})
+const depsExpanded = ref(false)
+const modelsExpanded = ref(false)
+
+// 只显示不便 Docker build 的运行时依赖（installable: true）
+const runtimeInstallableDeps = computed(() =>
+  Object.fromEntries(
+    Object.entries(checkingDepsResult.value).filter(([, v]) => (v as any).installable)
+  )
+)
+
+// 是否有缺失的运行时依赖（控制安装按钮显示）
+const hasMissingRuntimeDeps = computed(() => {
+  return Object.values(runtimeInstallableDeps.value).some((v: any) => !v.installed)
+})
+const installStatus = ref<{ status: string; progress: number; message: string; current_package?: string }>({
+  status: 'idle',
+  progress: 0,
+  message: '',
+})
+
+onMounted(async () => {
+  await loadSettings()
+  await Promise.all([checkWhisperDeps(), loadWhisperModels()])
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      const w = resp.data.whisper
+      whisperFeatures.value = w.features || {}
+      activeStrategy.value = (w.strategy || 'recommended') === 'recommended' ? 'recommended' : 'compat'
+      audioPreprocessMode.value = w.audio_preprocess_mode || 'none'
+      audioPreprocessModel.value = w.audio_preprocess_model || 'vocal_balanced'
+      translateEnabled.value = !!w.translate_to
+      translateTo.value = w.translate_to || 'zh'
+      translateModel.value = w.translate_model || 'gpt-4o-mini'
+      translateStyle.value = w.translate_style || 'adult_explicit'
+      translateBaseUrl.value = w.translate_base_url || 'https://api.openai.com/v1'
+      translateApiKey.value = w.translate_api_key || ''
+    }
+  } catch (e) {
+    console.error('Failed to load whisper settings:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function checkWhisperDeps() {
+  checkingDeps.value = true
+  try {
+    const resp = await api.post('/settings/whisper/check')
+    checkingDepsResult.value = resp.data.dependencies
+    whisperFeatures.value = resp.data.features || whisperFeatures.value
+    whisperCudaAvailable.value = resp.data.cuda_available
+    torchVariant.value = resp.data.cuda_available ? 'gpu' : 'cpu'
+    const statusResp = await api.get('/settings/whisper/install-status')
+    installStatus.value = statusResp.data
+  } catch (e: any) {
+    toast.error(t('settings.whisper.checkFailed'))
+  } finally {
+    checkingDeps.value = false
+  }
+}
+
+async function loadWhisperModels() {
+  checkingModels.value = true
+  try {
+    const resp = await api.get('/settings/whisper/models')
+    whisperModels.value = resp.data.models
+    // 更新下载状态（如果有正在进行的下载）
+    if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'running') {
+      modelDownloadStatus.value = resp.data.downloadStatus
+      // 恢复 downloadingModel 状态
+      if (resp.data.downloadStatus.model) {
+        downloadingModel.value = resp.data.downloadStatus.model
+      }
+    } else if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'idle') {
+      // 下载完成或空闲时，清除状态
+      downloadingModel.value = null
+    }
+  } catch (e: any) {
+    console.error('Failed to load models:', e)
+  } finally {
+    checkingModels.value = false
+  }
+}
+
+function buildWhisperSettingsPayload() {
+  return buildWhisperProfileWithTranslation(activeStrategy.value, {
+    audio_preprocess_mode: audioPreprocessMode.value,
+    audio_preprocess_model: audioPreprocessModel.value,
+    translate_to: translateEnabled.value ? translateTo.value : '',
+    translate_model: translateModel.value,
+    translate_style: translateStyle.value,
+    translate_base_url: translateBaseUrl.value,
+    translate_api_key: translateApiKey.value,
+  })
+}
+
+async function saveWhisper() {
+  saving.value = true
+  try {
+    await api.put('/settings/whisper', buildWhisperSettingsPayload())
+    toast.success(t('settings.whisper.whisperSettingsSaved'))
+  } catch (e: any) {
+    toast.error(t('settings.whisper.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function applyRecommendedDefaultsLocally() {
+  activeStrategy.value = 'recommended'
+}
+
+function applyCompatDefaultsLocally() {
+  activeStrategy.value = 'compat'
+}
+
+async function saveRecommendedDefaults() {
+  applyRecommendedDefaultsLocally()
+  await saveWhisper()
+}
+
+async function saveCompatDefaults() {
+  applyCompatDefaultsLocally()
+  await saveWhisper()
+}
+
+async function testTranslateConnection() {
+  testingConnection.value = true
+  connectionResult.value = null
+  try {
+    const resp = await api.post('/whisper/translate/test', null, {
+      params: {
+        base_url: translateBaseUrl.value,
+        api_key: translateApiKey.value || undefined,
+        model: translateModel.value,
+      },
+    })
+    connectionResult.value = resp.data
+    if (resp.data.available) {
+      toast.success(resp.data.message)
+    } else {
+      toast.error(resp.data.message)
+    }
+  } catch (e: any) {
+    connectionResult.value = { available: false, message: t('settings.emby.connectFailed', { error: t('common.error') }) }
+    toast.error(t('settings.whisper.testFailed'))
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+async function installDeps() {
+  const torchIsInstalled = !!checkingDepsResult.value.torch?.installed
+  const librosaIsInstalled = !!checkingDepsResult.value.librosa?.installed
+  const variantChanged = torchIsInstalled && (torchVariant.value === 'gpu') !== !!checkingDepsResult.value.torch?.cuda
+  const parts: string[] = []
+  if (!librosaIsInstalled) parts.push('librosa')
+  if (!torchIsInstalled || variantChanged) parts.push(`torch ${torchVariant.value.toUpperCase()}`)
+  const msg = parts.length === 0
+    ? t('settings.whisper.installDepsReady')
+    : t('settings.whisper.installDepsPlan', { packages: parts.join(' + ') })
+  if (!await confirm({ message: msg, danger: false })) return
+
+  installStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.installing') }
+  try {
+    await api.post('/settings/whisper/install-deps', {
+      torch_variant: torchVariant.value,
+      torch_current_cuda: !!checkingDepsResult.value.torch?.cuda,
+    })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/install-status')
+      const status = statusResp.data
+      installStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(t('settings.whisper.installSuccess'))
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.installFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.installFailed'))
+  }
+}
+
+async function downloadModel(modelId: string) {
+  if (!await confirm({ message: t('settings.whisper.downloadModelConfirm', { modelId }) })) return
+
+  downloadingModel.value = modelId
+  modelDownloadStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.downloading') }
+  try {
+    await api.post('/settings/whisper/models/download', { model: modelId })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/models/download-status')
+      const status = statusResp.data
+      modelDownloadStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(status.message || t('settings.whisper.downloadSuccess'))
+        await loadWhisperModels()
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.downloadFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.downloadFailed'))
+  } finally {
+    downloadingModel.value = null
+  }
+}
+
+async function deleteModel(modelId: string) {
+  if (!await confirm({ message: t('settings.whisper.deleteModelConfirm', { modelId }), danger: true })) return
+  try {
+    await api.delete(`/settings/whisper/models/${modelId}`)
+    toast.success(t('settings.whisper.deleted'))
+    await loadWhisperModels()
+    await checkWhisperDeps()
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.deleteFailed'))
+  }
+}
+
+// ===== Option lists =====
+
+---FILE4---
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import VisionTabs from '../ui/Tabs.vue'
+import { buildWhisperProfileWithTranslation, getWhisperStrategyMeta, type WhisperStrategyMode } from '../../composables/useWhisperProfiles'
+import PanelHeader from './panels/PanelHeader.vue'
+import FilePathSelector from './panels/FilePathSelector.vue'
+import { useSubtitles } from '../../composables/useSubtitles'
+import { useWhisper } from '../../composables/useWhisper'
+import { useI18n } from '../../composables/useI18n'
+import { useToast } from '../../composables/useToast'
+import { useJobNavigation } from '../../composables/useJobNavigation'
+import SubtitlePreview from './SubtitlePreview.vue'
+import api from '../../api'
+import type { TranslateSrtTaskCreateResponse } from '../../api/types'
+import { useJobsStore } from '../../stores/jobs'
+
+const { t, i18nVersion } = useI18n()
+const toast = useToast()
+const jobsStore = useJobsStore()
+const { openJobsFocus } = useJobNavigation()
+
+const props = defineProps<{
+  open: boolean
+  detail: import('../../api/types').MediaItemDetail | null
+  loading?: boolean
+  initialSelectedPath?: string
+}>()
+
+// Convenience ref to detail
+const detail = computed(() => props.detail)
+
+const emit = defineEmits<{
+  close: []
+  refreshLocal: []
+}>()
+
+// Subtitle composable
+const {
+  subtitles,
+  onlineSubtitles,
+  loadingSubtitles,
+  searchingOnline,
+  subtitleError,
+  subtitlePreviewContent,
+  subtitlePreviewFilename,
+  loadingSubtitlePreview,
+  fetchSubtitles,
+  searchOnlineSubtitles,
+  downloadOnlineSubtitle,
+  previewOnlineSubtitle,
+  previewLocalSubtitle,
+  deleteSubtitle,
+  clearSubtitles,
+  formatFileSize,
+  closeSubtitlePreview,
+} = useSubtitles()
+
+// Whisper composable
+const {
+  whisperTaskId,
+  whisperStatus,
+  whisperQueuedHint,
+  whisperProgress,
+  whisperRunning,
+  whisperFeedbackVisible,
+  whisperFeedbackKind,
+  startWhisperTask,
+  openQueuedJob,
+} = useWhisper()
+
+// Whisper settings
+const whisperDefaultsLoaded = ref(false)
+const whisperDefaultStrategy = ref<WhisperStrategyMode>('recommended')
+const whisperAudioPreprocessMode = ref('none')
+const whisperAudioPreprocessModel = ref('vocal_balanced')
+
+// Translate settings (for local SRT translation feature)
+const whisperTranslateEnabled = ref(true)
+const whisperTranslateTo = ref('zh')
+const whisperTranslateModel = ref('gpt-4o-mini')
+const whisperTranslateStyle = ref('adult_explicit')
+const whisperTranslateBaseUrl = ref('https://api.openai.com/v1')
+const whisperTranslateApiKey = ref('')
+
+// Local SRT translation loading state
+const translatingSubtitle = ref('')
+
+
+// Tabs
+const subtitleTab = ref<'local' | 'search' | 'whisper'>('local')
+
+// Translation strings as computed (reactive to currentLang)
+const tabLabels = computed(() => {
+  void i18nVersion.value
+  return {
+    local: t('subtitle.local'),
+    search: t('subtitle.search'),
+    whisper: t('subtitle.whisper'),
+  }
+})
+const noResultsLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.noResults')
+})
+const previewLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.preview')
+})
+const deleteLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.delete')
+})
+const loadingLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.loading')
+})
+const downloadLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.download')
+})
+const rescanLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.rescan')
+})
+const sourceLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.source')
+})
+function displaySubtitleSource(sub: { source?: string; source_key?: string }) {
+  if (sub.source_key === 'local_library') return t('settings.system.localSubtitleLibraryTitle')
+  if (sub.source_key === 'xunlei') return t('subtitle.sourceName.xunlei')
+  return sub.source || ''
+}
+const whisperLangLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.language')
+})
+const whisperStartLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.start')
+})
+const whisperSubmitButtonLabel = computed(() => {
+  if (whisperFeedbackKind.value === 'queued') return t('whisper.status.queued')
+  if (whisperFeedbackKind.value === 'error') return whisperStatus.value
+  return whisperStatus.value || t('whisper.status.submitting')
+})
+
+const whisperRecommendedTitle = computed(() => t('whisper.recommended.title'))
+const whisperRecommendedDesc = computed(() => t('whisper.recommended.desc'))
+const whisperRecommendedStack = computed(() => t('whisper.recommended.stack'))
+const whisperRecommendedBadge = computed(() => t('whisper.recommended.badge'))
+const whisperCompatPresetTitle = computed(() => t('whisper.presets.compat.title'))
+const whisperCompatPresetDesc = computed(() => t('whisper.presets.compat.desc'))
+const whisperCompatPresetStack = computed(() => t('whisper.presets.compat.stack'))
+const whisperCompatPresetBadge = computed(() => t('whisper.presets.compat.badge'))
+const whisperDefaultMeta = computed(() => getWhisperStrategyMeta(whisperDefaultStrategy.value))
+const whisperDefaultProfileTitle = computed(() => t('settings.whisper.currentProfileTitle'))
+const whisperDefaultProfileDesc = computed(() => t('settings.whisper.currentProfileDesc'))
+const whisperTranslationSummary = computed(() => whisperTranslateEnabled.value ? `${whisperTranslateTo.value || 'zh'} · ${whisperTranslateModel.value || 'gpt-4o-mini'}` : t('settings.whisper.translationOff'))
+const whisperAudioPreprocessSummary = computed(() => {
+  if (whisperAudioPreprocessMode.value === 'none') return t('settings.whisper.audioPreprocessOff')
+  const modelLabel = whisperAudioPreprocessModel.value === 'vocal_clean'
+    ? t('settings.whisper.audioPreprocessModel.vocalClean')
+    : t('settings.whisper.audioPreprocessModel.vocalBalanced')
+  return `${t('settings.whisper.audioPreprocessMode.vocalIsolation')} · ${modelLabel}`
+})
+const whisperUseCurrentDefaultLabel = computed(() => t('settings.whisper.useCurrentDefault'))
+const whisperOpenJobsLabel = computed(() => t('whisper.status.viewJobs'))
+const whisperTranslateRunningLabel = computed(() => t('subtitle.translateRunning'))
+const whisperTranslateActionLabel = computed(() => t('subtitle.aiTranslate'))
+const whisperTranslateEnableLabel = computed(() => t('settings.whisper.translateEnable'))
+const whisperTranslateEnableDesc = computed(() => t('settings.whisper.translateEnableDesc'))
+// whisperTranslateProviderOptions removed — unified OpenAI-compatible API, no provider concept (translate fields kept for local SRT translation feature)
+
+// Selected file path (for multi-file work: current + siblings)
+const selectedPath = ref('')
+
+// When selected path changes, re-fetch subtitles
+watch(selectedPath, async (newPath) => {
+  if (newPath && props.open) {
+    await fetchSubtitles(newPath)
+  }
+})
+
+// Sibling paths from detail
+const siblingPaths = computed(() => {
+  return props.detail?.siblings?.filter(s => s.file_path) || undefined
+})
+
+// Load whisper defaults
+async function loadWhisperDefaults() {
+  if (whisperDefaultsLoaded.value) return
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      whisperDefaultStrategy.value = (resp.data.whisper.strategy || 'recommended') === 'recommended' ? 'recommended' : 'compat'
+      whisperAudioPreprocessMode.value = resp.data.whisper.audio_preprocess_mode || 'none'
+      whisperAudioPreprocessModel.value = resp.data.whisper.audio_preprocess_model || 'vocal_balanced'
+      whisperTranslateEnabled.value = !!resp.data.whisper.translate_to
+      whisperTranslateTo.value = resp.data.whisper.translate_to || 'zh'
+      whisperTranslateModel.value = resp.data.whisper.translate_model || 'gpt-4o-mini'
+      whisperTranslateStyle.value = resp.data.whisper.translate_style || 'adult_explicit'
+      whisperTranslateBaseUrl.value = resp.data.whisper.translate_base_url || 'https://api.openai.com/v1'
+      whisperTranslateApiKey.value = resp.data.whisper.translate_api_key || ''
+      whisperDefaultsLoaded.value = true
+    }
+  } catch (e) {
+    console.error('Failed to load Whisper defaults:', e)
+  }
+}
+
+// Watch for panel open AND detail arriving
+watch([() => props.open, () => props.detail, () => props.initialSelectedPath], async ([isOpen, detail, initialSelectedPath]) => {
+  if (isOpen && detail?.file_path) {
+    const targetPath = initialSelectedPath || detail.file_path
+    selectedPath.value = targetPath
+    await Promise.all([
+      loadWhisperDefaults(),
+      fetchSubtitles(targetPath),
+    ])
+    subtitleTab.value = 'local'
+  } else if (!isOpen) {
+    clearSubtitles()
+  }
+}, { immediate: true })
+
+// Trigger search when switching to search tab
+watch(subtitleTab, (tab) => {
+  if (tab === 'search') {
+    handleSearchOnline()
+  }
+})
+
+function handleClose() {
+  clearSubtitles()
+  emit('close')
+}
+
+async function handleSearchOnline() {
+  if (!selectedPath.value) return
+  await searchOnlineSubtitles(selectedPath.value)
+}
+
+async function handleDownloadSubtitle(url: string, _filename: string, source?: string) {
+  const matchedSubtitle = onlineSubtitles.value.find(sub => sub.url === url && sub.name === _filename)
+  const sourceType = matchedSubtitle?.source_type
+  const sourceKey = matchedSubtitle?.source_key
+  const success = await downloadOnlineSubtitle(url, selectedPath.value, source, sourceType, sourceKey)
+  if (success) {
+    subtitleTab.value = 'local'
+    emit('refreshLocal')
+  }
+}
+
+async function handlePreviewOnline(url: string, filename: string) {
+  await previewOnlineSubtitle(url, filename)
+}
+

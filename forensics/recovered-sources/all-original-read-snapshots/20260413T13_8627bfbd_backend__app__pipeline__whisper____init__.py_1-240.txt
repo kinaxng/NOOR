@@ -1,0 +1,54 @@
+"""Whisper 字幕生成模块"""
+from .types import (
+    WhisperConfig,
+    WhisperModel,
+    PipelineMode,
+    MergeStrategy,
+    Sensitivity,
+    SubtitleSegment,
+    TranscriptionResult,
+    WhisperTask,
+)
+from .translator import OpenAILikeTranslator
+from .merge import MergeEngine
+from .japanese_post import JapanesePostProcessor
+from .progress import AsyncProgressReporter
+
+# Lazy imports for heavy modules (avoid cascading import of librosa etc.)
+def __getattr__(name: str):
+    if name == "WhisperPipeline":
+        from .orchestrator import WhisperPipeline
+        return WhisperPipeline
+    if name == "create_task":
+        from .orchestrator import create_task
+        return create_task
+    if name == "get_task":
+        from .orchestrator import get_task
+        return get_task
+    if name == "run_whisper_task":
+        from .orchestrator import run_whisper_task
+        return run_whisper_task
+    if name == "AudioSceneDetector":
+        from .scene_detector import AudioSceneDetector
+        return AudioSceneDetector
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+__all__ = [
+    "WhisperConfig",
+    "WhisperModel",
+    "PipelineMode",
+    "MergeStrategy",
+    "Sensitivity",
+    "SubtitleSegment",
+    "TranscriptionResult",
+    "WhisperTask",
+    "OpenAILikeTranslator",
+    "WhisperPipeline",
+    "create_task",
+    "get_task",
+    "run_whisper_task",
+    "MergeEngine",
+    "JapanesePostProcessor",
+    "AudioSceneDetector",
+    "AsyncProgressReporter",
+]

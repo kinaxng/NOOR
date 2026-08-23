@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import subprocess
+
+import pytest
+
+from app.pipeline.whisper.runtime import run_cancellable_subprocess
+from app.pipeline.whisper.types import WhisperCancellationRequested
+
+
+def test_run_cancellable_subprocess_terminates_process_when_cancelled(monkeypatch: pytest.MonkeyPatch):
+    class FakeProcess:
+        def __init__(self):
+            self.terminated = False
+            self.killed = False
+            self.wait_calls = 0
+            self.poll_calls = 0
+            self.returncode = None
+
+        def poll(self):
+            self.poll_calls += 1
+            return self.returncode
+
+        def terminate(self):
+            self.terminated = True
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        def wait(self, timeout=None):
+            self.wait_calls += 1
+            if self.returncode is None:
+                self.returncode = -15
+            return 0
+
+        def communicate(self):
+            return ("", "")
+
+    fake_process = FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: fake_process)
+
+    states = iter([False, True])
+
+    with pytest.raises(WhisperCancellationRequested):
+        run_cancellable_subprocess(
+            ["ffmpeg", "-i", "input.mp4", "output.wav"],
+            cancel_callback=lambda: next(states),
+            poll_interval=0.0,
+        )
+
+    assert fake_process.terminated is True
+    assert fake_process.killed is False

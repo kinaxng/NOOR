@@ -1,0 +1,440 @@
+    message: t('hardlinks.deleteHardlinkConfirm', { path }),
+    danger: true,
+  })
+  if (!ok) return
+
+  withDeletingState(deletingHardlinkPaths, path, true)
+  try {
+    await api.post('/media-library/hardlinks/delete-hardlink', {
+      file_path: path,
+      remove_nfo: true,
+    })
+    toast.success(t('hardlinks.deleteHardlinkSuccess'))
+    await mediaStore.loadHardlinkGroups()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteHardlinkFailed'))
+  } finally {
+    withDeletingState(deletingHardlinkPaths, path, false)
+  }
+}
+
+async function deleteSourceChain(entry: HardlinkEntry) {
+  if (!entry.source_path || isDeletingSource(entry.source_path)) return
+  const ok = await confirm({
+    message: t('hardlinks.deleteSourceChainConfirm', {
+      source: entry.source_path,
+      count: entry.hardlink_paths.length,
+    }),
+    danger: true,
+  })
+  if (!ok) return
+
+  withDeletingState(deletingSourcePaths, entry.source_path, true)
+  try {
+    await api.post('/media-library/hardlinks/delete-source-chain', {
+      source_path: entry.source_path,
+      hardlink_paths: entry.hardlink_paths,
+      code: extractCodeFromEntry(entry),
+    })
+    toast.success(t('hardlinks.deleteSourceChainSuccess'))
+    await mediaStore.loadHardlinkGroups()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteSourceChainFailed'))
+  } finally {
+    withDeletingState(deletingSourcePaths, entry.source_path, false)
+  }
+}
+
+function extractCodeFromEntry(entry: HardlinkEntry): string | null {
+  if (!entry.source_path) return null
+  const base = entry.source_path.split('/').pop() || ''
+  const match = base.match(/[A-Za-z]{2,6}[-_ ]?\d{2,6}|\d{6}-\d{3}/)
+  return match ? match[0].replace(/[_ ]/g, '-').toUpperCase() : null
+}
+
+async function deleteGroup(group: HardlinkGroup) {
+  if (!group.code || isDeletingGroup(group.code)) return
+  const ok = await confirm({
+    message: t('hardlinks.deleteGroupConfirm', {
+      code: group.code,
+      entryCount: group.entries.length,
+    }),
+    danger: true,
+  })
+  if (!ok) return
+
+  withDeletingState(deletingGroupCodes, group.code, true)
+  try {
+    await api.post('/media-library/hardlinks/delete-group', {
+      code: group.code,
+      entries: group.entries.map((entry) => ({
+        source_path: entry.source_path,
+        hardlink_paths: entry.hardlink_paths,
+      })),
+    })
+    toast.success(t('hardlinks.deleteGroupSuccess'))
+    await mediaStore.loadHardlinkGroups()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteGroupFailed'))
+  } finally {
+    withDeletingState(deletingGroupCodes, group.code, false)
+  }
+}
+
+async function previewGroupDelete(group: HardlinkGroup) {
+  try {
+    const resp = await api.post('/media-library/hardlinks/delete-group', {
+      code: group.code,
+      entries: group.entries.map((entry) => ({
+        source_path: entry.source_path,
+        hardlink_paths: entry.hardlink_paths,
+      })),
+      dry_run: true,
+    })
+
+    const plannedDirs: string[] = resp.data?.planned_dirs || []
+    const plannedFiles: string[] = resp.data?.planned_files || []
+    const previewLines = [
+      t('hardlinks.previewSummary', { dirs: plannedDirs.length, files: plannedFiles.length }),
+      '',
+      ...plannedDirs.slice(0, 8).map((p) => `DIR  ${p}`),
+      ...plannedFiles.slice(0, 12).map((p) => `FILE ${p}`),
+    ]
+    if (plannedDirs.length > 8 || plannedFiles.length > 12) {
+      previewLines.push('...')
+    }
+    await confirm({
+      title: t('hardlinks.previewTitle', { code: group.code }),
+      message: previewLines.join('\n'),
+      confirmText: t('common.close'),
+      cancelText: t('common.cancel'),
+      danger: false,
+    })
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.previewFailed'))
+  }
+}
+
+function goPrevPage() {
+  if (currentPage.value > 1) currentPage.value -= 1
+}
+
+function goNextPage() {
+  if (currentPage.value < totalPages.value) currentPage.value += 1
+}
+
+function openSettings() {
+  router.push('/settings')
+}
+
+onMounted(async () => {
+  await mediaStore.loadHardlinkGroups()
+})
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <div class="page-header">
+      <div class="page-header__left">
+        <div>
+          <h1 class="page-title">{{ pageTitle }}</h1>
+          <div class="page-meta">
+            <span v-if="hasGroups">{{ totalLabel }}: {{ summary.total_groups }}</span>
+            <span>{{ lastScannedLabel }}: {{ lastScannedText }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="page-header__right header-actions">
+        <VuiButton
+          v-if="pagedGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="copyVisibleGroups"
+        >
+          {{ copyVisibleLabel }}
+        </VuiButton>
+        <VuiButton
+          v-if="pagedGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="exportVisibleGroups"
+        >
+          {{ exportVisibleLabel }}
+        </VuiButton>
+        <VuiButton
+          variant="gradient"
+          color="info"
+          size="small"
+          :loading="mediaStore.hardlinkScanning"
+          @click="handleScan"
+        >
+          <BaseIcon name="refresh" class="w-4 h-4" />
+          {{ scanBtnLabel }}
+        </VuiButton>
+      </div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="summary-card__label">{{ totalLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_groups }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-card__label">{{ entryCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_entries }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-card__label">{{ hardlinkCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_hardlinks }}</span>
+      </div>
+      <div class="summary-card" :class="{ 'summary-card--warn': summary.issue_groups > 0 }">
+        <span class="summary-card__label">{{ issueCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.issue_groups }}</span>
+      </div>
+    </div>
+
+    <div v-if="hasGroups" class="toolbar-card">
+        <div class="toolbar-main">
+          <div class="toolbar-block toolbar-block--search">
+            <input
+              v-model="searchQuery"
+              type="text"
+              :placeholder="searchPlaceholder"
+              class="hardlinks-search"
+            />
+          </div>
+          <div class="toolbar-block toolbar-block--controls">
+            <div class="sort-controls">
+              <span class="sort-label">{{ t('hardlinks.sortBy') }}:</span>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'code' }" @click="setSort('code')">
+                {{ codeLabel }} {{ sortArrow('code') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'entryCount' }" @click="setSort('entryCount')">
+                {{ entryCountLabel }} {{ sortArrow('entryCount') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'hardlinkCount' }" @click="setSort('hardlinkCount')">
+                {{ hardlinkCountLabel }} {{ sortArrow('hardlinkCount') }}
+              </button>
+              <button type="button" class="sort-btn" @click="toggleSortDirection">
+                {{ sortDirectionLabel }}
+              </button>
+            </div>
+            <div class="filter-controls">
+              <button
+                v-for="tab in filterTabs"
+                :key="tab.key"
+                type="button"
+                class="filter-btn"
+                :class="{ 'filter-btn--active': filterKey === tab.key }"
+                @click="filterKey = tab.key"
+              >
+                {{ tab.label }} ({{ filterCounts[tab.key] }})
+              </button>
+              <button type="button" class="filter-btn" @click="clearFilters">{{ clearFiltersLabel }}</button>
+            </div>
+          </div>
+        </div>
+        <div class="toolbar-summary">
+          <span>{{ visibleCountLabel }}: {{ visibleSummary.groups }} / {{ summary.total_groups }}</span>
+          <span>{{ visibleEntryCountLabel }}: {{ visibleSummary.entries }} / {{ summary.total_entries }}</span>
+          <span>{{ visibleHardlinkCountLabel }}: {{ visibleSummary.hardlinks }} / {{ summary.total_hardlinks }}</span>
+        </div>
+        <div v-if="visibleGroups.length > pageSize" class="pagination-bar">
+          <span class="pagination-bar__meta">{{ pageCounterLabel }}</span>
+          <div class="pagination-bar__actions">
+            <VuiButton variant="text" color="secondary" size="small" :disabled="currentPage <= 1" @click="goPrevPage">
+              {{ prevPageLabel }}
+            </VuiButton>
+            <VuiButton variant="text" color="secondary" size="small" :disabled="currentPage >= totalPages" @click="goNextPage">
+              {{ nextPageLabel }}
+            </VuiButton>
+          </div>
+        </div>
+    </div>
+
+    <div v-if="!hasGroups" class="empty-state">
+        <BaseIcon name="hardlink" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ noGroupsLabel }}</p>
+        <p class="empty-state__desc">{{ emptyDescLabel }}</p>
+        <VuiButton variant="text" color="secondary" size="small" @click="openSettings">
+          {{ goSettingsLabel }}
+        </VuiButton>
+    </div>
+
+    <div v-else-if="visibleGroups.length === 0" class="empty-state">
+        <BaseIcon name="search" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ emptyFilteredLabel }}</p>
+    </div>
+
+    <div v-else class="groups-list">
+        <div
+          v-for="group in pagedGroups"
+          :key="group.code"
+          class="hl-group"
+          :class="{ 'hl-group--issue': group.status === 'issue' }"
+        >
+          <div class="hl-group__header">
+            <div class="hl-group__summary">
+              <span class="hl-group__code font-mono">{{ group.code }}</span>
+              <span class="hl-group__meta">
+                {{ groupSourceCount(group) }} src · {{ groupHardlinkCount(group) }} hl
+              </span>
+            </div>
+            <div class="hl-group__badges">
+              <VuiBadge v-if="group.status === 'issue'" variant="gradient" color="warning" size="xs">
+                {{ abnormalLabel }}
+              </VuiBadge>
+              <VuiBadge v-if="(group.orphan_count || 0) > 0" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ orphanLabel }} × {{ group.orphan_count }}
+              </VuiBadge>
+              <VuiBadge v-if="group.issues?.includes('unparsed_code')" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ unparsedLabel }}
+              </VuiBadge>
+              <VuiBadge
+                v-if="(group.orphan_count || 0) >= (group.entry_count || group.entries.length)"
+                variant="gradient"
+                color="secondary"
+                size="xs"
+              >
+                {{ orphanSkippedLabel }}
+              </VuiBadge>
+            </div>
+          </div>
+
+          <div class="hl-group__entries">
+            <div
+              v-for="(entry, index) in group.entries"
+              :key="`${group.code}-${entry.source_path || 'orphan'}-${index}`"
+              class="hl-entry-row"
+              :class="{ 'hl-entry--issue': entry.status === 'issue' }"
+            >
+              <div class="hl-col hl-col--source">
+                <div class="hl-col__label">{{ t('hardlinks.mainFile') }}</div>
+                <div class="hl-row hl-row--source" :class="{ 'hl-row--missing': entry.issues?.includes('orphan_source') }">
+                  <span
+                    v-if="entry.source_path"
+                    class="hl-row__path font-mono text-xs"
+                    :title="t('hardlinks.copyPath')"
+                    @click="copyPath(entry.source_path)"
+                  >{{ entry.source_path }}</span>
+                  <span v-else class="hl-row__empty font-mono text-xs">{{ t('hardlinks.missingSource') }}</span>
+                  <button
+                    v-if="entry.source_path"
+                    type="button"
+                    class="row-action-btn row-action-btn--danger row-action-btn--hover-only"
+                    :disabled="isDeletingSource(entry.source_path)"
+                    @click.stop="deleteSourceChain(entry)"
+                  >
+                    {{ deleteSourceChainLabel }}
+                  </button>
+                </div>
+              </div>
+              <div class="hl-col hl-col--hardlinks">
+                <div class="hl-col__label">{{ t('hardlinks.hardlinks') }}</div>
+                <div
+                  v-for="hl in entry.hardlink_paths"
+                  :key="hl"
+                  class="hl-row hl-row--hardlink"
+                >
+                  <span class="hl-row__hl-arrow">→</span>
+                  <span class="hl-row__path font-mono text-xs">{{ hl }}</span>
+                  <button
+                    type="button"
+                    class="row-action-btn row-action-btn--danger row-action-btn--hover-only"
+                    :disabled="isDeletingHardlink(hl)"
+                    @click.stop="deleteHardlink(hl)"
+                  >
+                    {{ deleteHardlinkLabel }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="hl-group__footer">
+              <VuiButton
+                variant="text"
+                color="secondary"
+                size="small"
+                @click="previewGroupDelete(group)"
+              >
+                {{ previewDeleteLabel }}
+              </VuiButton>
+              <VuiButton
+                variant="text"
+                color="error"
+                size="small"
+                :loading="isDeletingGroup(group.code)"
+                @click="deleteGroup(group)"
+              >
+                {{ deleteGroupLabel }}
+              </VuiButton>
+            </div>
+          </div>
+        </div>
+    </div>
+
+    <div v-if="visibleGroups.length > pageSize" class="pagination-bar pagination-bar--bottom">
+        <span class="pagination-bar__meta">{{ pageCounterLabel }}</span>
+        <div class="pagination-bar__actions">
+          <VuiButton variant="text" color="secondary" size="small" :disabled="currentPage <= 1" @click="goPrevPage">
+            {{ prevPageLabel }}
+          </VuiButton>
+          <VuiButton variant="text" color="secondary" size="small" :disabled="currentPage >= totalPages" @click="goNextPage">
+            {{ nextPageLabel }}
+          </VuiButton>
+        </div>
+    </div>
+
+    <div v-if="mediaStore.hardlinkScanning" class="scan-overlay">
+      <div class="scan-overlay__card">
+        <div class="scan-overlay__spinner"></div>
+        <span>{{ scanBtnLabel }}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-header__right,
+.page-header__left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.summary-card {

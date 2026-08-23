@@ -1,0 +1,74 @@
+141:  function estimatePageSize() {
+170:  function setRelation(relType, relId, label) {
+181:  function actorRelationYears() {
+    ['monthly', '月榜'],
+  ]
+  const relationActorMagnetFilters = [
+    ['all', '全部'],
+    ['magnets', '有磁链'],
+  ]
+  const relationActorSubtitleFilters = [
+    ['all', '全部'],
+    ['cnsub', '字幕'],
+  ]
+  const relationActorSingleFilters = [
+    ['all', '全部'],
+    ['single', '单人'],
+  ]
+  const relationActorSortOptions = [
+    { label: '最新优先', value: 'release_desc' },
+    { label: '最早优先', value: 'release_asc' },
+    { label: '磁链数', value: 'magnets_desc' },
+    { label: '标题', value: 'title_asc' },
+  ]
+
+  function estimatePageSize() {
+    if (state.tab === 'rankings' && state.rankingMode === 'actors' && !state.relation) {
+      const width = grid.clientWidth || root.clientWidth || window.innerWidth
+      const top = grid.getBoundingClientRect?.().top || 240
+      const height = Math.max(360, window.innerHeight - top - 84)
+      const cardWidth = 236
+      const cardHeight = 280
+      const cols = Math.max(1, Math.floor((width + 16) / cardWidth))
+      const rows = Math.max(1, Math.floor((height + 16) / cardHeight))
+      state.limit = Math.max(cols, cols * rows)
+      return
+    }
+    state.limit = 48
+  }
+
+  function setTab(next) {
+    if (state.tab === next) return
+    state.tab = next
+    state.page = 1
+    state.latestFilter = 'all'
+    state.latestType = 'all'
+    state.rankingMode = 'top250'
+    state.rankingType = 0
+    state.rankingPeriod = 'daily'
+    state.top250Year = ''
+    state.relation = null
+    loadData()
+  }
+
+  function setRelation(relType, relId, label) {
+    state.relation = { relType, relId, label }
+    state.relationActorMagnetFilter = 'all'
+    state.relationActorSubtitleFilter = 'all'
+    state.relationActorSingleFilter = 'all'
+    state.relationActorYear = ''
+    state.relationActorSort = 'release_desc'
+    state.page = 1
+    loadData()
+  }
+
+  function actorRelationYears() {
+    const years = new Set()
+    for (const item of state.items) {
+      const year = String(item?.release_date || '').slice(0, 4)
+      if (year) years.add(year)
+    }
+    return [...years].sort((a, b) => Number(b) - Number(a))
+  }
+
+  function filteredItems() {

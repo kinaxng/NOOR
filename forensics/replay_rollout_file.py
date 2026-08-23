@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay one file's apply_patch history from a Codex rollout."""
+"""Replay one file's apply_patch history from original Codex rollouts."""
 
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ ORIGINAL_REPO_PREFIX = "/home/kinax/noor/"
 @dataclass(frozen=True)
 class PatchEvent:
     timestamp: str
+    source: str
+    call_id: str
     patch: str
 
 
@@ -52,40 +54,117 @@ def extract_file_patch(patch: str, target: str) -> str | None:
     return "*** Begin Patch\n" + "\n".join(sections) + "\n*** End Patch\n"
 
 
-def load_events(rollout: Path, target: str, cutoff: str, after: str = "") -> list[PatchEvent]:
-    pending: list[tuple[str, PatchEvent]] = []
-    successful_calls: set[str] = set()
-    with rollout.open(encoding="utf-8", errors="replace") as handle:
-        for line in handle:
+def parse_call_input(payload: dict[str, Any]) -> str:
+    for key in ("input", "arguments"):
+        value = payload.get(key)
+        if isinstance(value, str):
             try:
-                event: dict[str, Any] = json.loads(line)
+                parsed = json.loads(value)
+                if isinstance(parsed, dict):
+                    return str(parsed.get("input") or parsed.get("patch") or value)
             except json.JSONDecodeError:
-                continue
-            timestamp = str(event.get("timestamp") or "")
-            if cutoff and timestamp >= cutoff:
-                continue
-            if after and timestamp <= after:
-                continue
-            if event.get("type") != "response_item":
-                continue
-            payload = event.get("payload") or {}
-            payload_type = payload.get("type")
-            if payload_type == "custom_tool_call_output":
-                output = str(payload.get("output") or "")
-                if "Exit code: 0" in output or "Success. Updated" in output:
-                    successful_calls.add(str(payload.get("call_id") or ""))
-                continue
-            if payload_type != "custom_tool_call" or payload.get("name") != "apply_patch":
-                continue
-            file_patch = extract_file_patch(str(payload.get("input") or ""), target)
-            if file_patch:
-                pending.append(
-                    (
-                        str(payload.get("call_id") or ""),
-                        PatchEvent(timestamp=timestamp, patch=file_patch),
-                    )
-                )
-    return [event for call_id, event in pending if call_id in successful_calls]
+                pass
+            return value
+        if isinstance(value, dict):
+            return str(value.get("input") or value.get("patch") or value)
+    return ""
+
+
+def parse_exec_patches(input_text: str) -> list[str]:
+    patches: list[str] = []
+    for match in re.finditer(r'const patch = "(.*?)";', input_text, re.S):
+        try:
+            patch = json.loads('"' + match.group(1) + '"')
+        except json.JSONDecodeError:
+            continue
+        if "*** Begin Patch" in patch:
+            patches.append(patch)
+    return patches
+
+
+def output_succeeded(output_text: str) -> bool:
+    try:
+        payload = json.loads(output_text)
+        metadata = payload.get("metadata") or {}
+        if metadata.get("exit_code") == 0:
+            return True
+        return "Success" in str(payload.get("output") or "")
+    except json.JSONDecodeError:
+        return "Success" in output_text or "Exit code: 0" in output_text
+
+
+def load_events(
+    rollouts: list[Path],
+    target: str,
+    cutoff: str,
+    after: str = "",
+) -> list[PatchEvent]:
+    pending: list[PatchEvent] = []
+    outputs: dict[str, str] = {}
+    apply_ends: list[dict[str, Any]] = []
+    for rollout in rollouts:
+        with rollout.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                try:
+                    event: dict[str, Any] = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                timestamp = str(event.get("timestamp") or "")
+                if cutoff and timestamp >= cutoff:
+                    continue
+                if after and timestamp <= after:
+                    continue
+                payload = event.get("payload") or {}
+                payload_type = payload.get("type")
+                if event.get("type") == "event_msg" and payload_type == "patch_apply_end":
+                    apply_ends.append({"ts": timestamp, **payload})
+                    continue
+                if payload_type in ("function_call_output", "custom_tool_call_output"):
+                    outputs[str(payload.get("call_id") or "")] = str(payload.get("output") or "")
+                    continue
+                if payload_type not in ("function_call", "custom_tool_call"):
+                    continue
+                name = payload.get("name")
+                call_id = str(payload.get("call_id") or payload.get("id") or "")
+                input_text = parse_call_input(payload)
+                if name == "apply_patch":
+                    file_patch = extract_file_patch(input_text, target)
+                    if file_patch:
+                        pending.append(
+                            PatchEvent(
+                                timestamp=timestamp,
+                                source="apply_patch",
+                                call_id=call_id,
+                                patch=file_patch,
+                            )
+                        )
+                    continue
+                if name == "exec":
+                    for patch in parse_exec_patches(input_text):
+                        file_patch = extract_file_patch(patch, target)
+                        if file_patch:
+                            pending.append(
+                                PatchEvent(
+                                    timestamp=timestamp,
+                                    source="exec",
+                                    call_id=call_id,
+                                    patch=file_patch,
+                                )
+                            )
+    successful: list[PatchEvent] = []
+    for event in pending:
+        if event.source == "exec":
+            if any(
+                payload.get("success") is True
+                and payload.get("ts", "") >= event.timestamp
+                for payload in apply_ends
+            ):
+                successful.append(event)
+            continue
+        output_text = outputs.get(event.call_id, "")
+        if output_text and output_succeeded(output_text):
+            successful.append(event)
+    return sorted(successful, key=lambda item: item.timestamp)
 
 
 def replay(
@@ -141,21 +220,21 @@ def replay(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("rollout", type=Path)
+    parser.add_argument("rollouts", type=Path, nargs="+")
     parser.add_argument("target")
     parser.add_argument("output_dir", type=Path)
-    parser.add_argument("--cutoff", default="2026-08-09T17:05:00Z")
+    parser.add_argument("--cutoff", default="2026-08-09T16:52:00Z")
     parser.add_argument("--after", default="")
     parser.add_argument("--seed", type=Path)
     parser.add_argument(
         "--apply-patch",
         type=Path,
-        default=Path("/home/kinax/.codex/tmp/arg0/codex-arg0tFnK6x/apply_patch"),
+        default=Path("/home/kinax/.codex/tmp/arg0/codex-arg0bfVUZD/apply_patch"),
     )
     args = parser.parse_args()
 
     target = normalize_path(args.target)
-    events = load_events(args.rollout, target, args.cutoff, args.after)
+    events = load_events(args.rollouts, target, args.cutoff, args.after)
     if not events and args.seed is None:
         raise SystemExit(f"no patch events found for {target}")
     result_path = replay(events, target, args.output_dir, args.apply_patch, args.seed)

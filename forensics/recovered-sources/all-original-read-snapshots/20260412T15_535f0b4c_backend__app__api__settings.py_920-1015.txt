@@ -1,0 +1,96 @@
+            "v4 极速版",
+            "最新第四代检测模型的速度优先版本。推理速度最快，适合高吞吐量场景，精度损失极小。性能对比：★★★★"
+        ),
+        "v4-accurate": (
+            "v4 精准版 ⭐推荐",
+            "最新第四代检测模型的精度优先版本。比极速版稍慢，但检测准确率最高，适合对质量要求极高的场景。性能对比：★★★★★"
+        ),
+    }
+
+    RESTORATION_MODEL_INFO = {
+        "basicvsrpp-v1.0": (
+            "BasicVSR++ v1.0",
+            "基于 BasicVSR++ 架构的早期版本，画质提升稳定。模型较小，处理速度快，但细节恢复能力有限。性能对比：★★★"
+        ),
+        "basicvsrpp-v1.1": (
+            "BasicVSR++ v1.1",
+            "v1.0 的改进版本，在细节恢复和运动补偿上有优化。文件体积增大，输出质量更好。性能对比：★★★☆"
+        ),
+        "basicvsrpp-v1.2": (
+            "BasicVSR++ v1.2 ⭐推荐",
+            "LADA 最新推荐版本。基于 BasicVSR++ 深度增强，色彩和细节恢复效果最好，综合体验最优。性能对比：★★★★★"
+        ),
+        "deepmosaics": (
+            "DeepMosaics（备选）",
+            "来自已停止维护的 DeepMosaics 项目。使用与 BasicVSR++ 不同的 GAN/自编码器架构，风格略有差异。可作为效果对比备选。性能对比：★★★★（风格差异，非优劣）"
+        ),
+    }
+
+    # Map detection models
+    detection_models = []
+    for name, desc, path in all_detection_raw:
+        filename = os.path.basename(path)
+        file_size = downloaded_files.get(filename, 0)
+        downloaded = file_size > 1000
+        info = DETECTION_MODEL_INFO.get(name)
+        display_name, desc_zh = info if info else (name, desc or "")
+        detection_models.append({
+            "id": name,
+            "name": display_name,
+            "size": _format_size(file_size) if downloaded else "Not downloaded",
+            "description": desc or display_name,
+            "description_zh": desc_zh,
+            "downloaded": downloaded,
+            "filename": filename,
+        })
+
+    # Map restoration models
+    restoration_models = []
+    for name, desc, path in all_restoration_raw:
+        filename = os.path.basename(path)
+        file_size = downloaded_files.get(filename, 0)
+        downloaded = file_size > 1000
+        info = RESTORATION_MODEL_INFO.get(name)
+        display_name, desc_zh = info if info else (name, desc or "")
+        restoration_models.append({
+            "id": name,
+            "name": display_name,
+            "size": _format_size(file_size) if downloaded else "Not downloaded",
+            "description": desc or display_name,
+            "description_zh": desc_zh,
+            "downloaded": downloaded,
+            "filename": filename,
+        })
+
+    return {
+        "model_weights_dir": model_weights_dir,
+        "devices": devices,
+        "encoding_presets": LADA_ENCODING_PRESETS,
+        "detection_models": detection_models,
+        "restoration_models": restoration_models,
+        "install_mode": install_info["install_mode"],
+        "can_self_upgrade": install_info["can_self_upgrade"],
+        "upgrade_strategy": install_info["upgrade_strategy"],
+        "upgrade_hint": install_info["upgrade_hint"],
+    }
+
+
+# ==================== Whisper Settings ====================
+
+@router.put("/whisper")
+async def update_whisper_config(config: WhisperConfig):
+    """Update Whisper default configuration."""
+    import json
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Whisper 配置...")
+    try:
+        _assert_custom_pipeline_supported(config.pipeline_mode, config.pass1_pipeline, config.pass2_pipeline)
+        update_env_value("WHISPER_MODEL", config.model)
+        update_env_value("WHISPER_PIPELINE_MODE", config.pipeline_mode)
+        update_env_value("WHISPER_MERGE_STRATEGY", config.merge_strategy)
+        update_env_value("WHISPER_LANGUAGE", config.language)
+        update_env_value("WHISPER_SENSITIVITY", config.sensitivity)
+        update_env_value("WHISPER_VAD_METHOD", config.vad_method)
+        update_env_value("WHISPER_TRANSLATE_TO", config.translate_to)
+        update_env_value("WHISPER_TRANSLATE_MODEL", config.translate_model)
+        update_env_value("WHISPER_TRANSLATE_STYLE", config.translate_style)

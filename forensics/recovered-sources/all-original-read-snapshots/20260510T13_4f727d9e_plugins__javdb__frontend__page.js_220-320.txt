@@ -1,0 +1,103 @@
+    const code = typeof movie === 'string' ? movie : (movie?.number || movie?.code || '')
+    if (!code) return
+    modalRoot.innerHTML = ''
+    const mask = el('div', 'javdb-modal-mask'); const modal = el('div', 'javdb-modal javdb-modal--wide')
+    modal.innerHTML = `<div class="javdb-modal-head"><strong>${code}</strong><button class="javdb-modal-close">×</button></div><div class="javdb-modal-body">加载中…</div>`
+    mask.appendChild(modal); modalRoot.appendChild(mask); mask.onclick = e => { if (e.target === mask) closeModal() }; modal.querySelector('button').onclick = closeModal
+    const body = modal.querySelector('.javdb-modal-body')
+    try {
+      const expectedMagnetsCount = Number(movie?.magnets_count || 0)
+      const r = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code, expected_magnets_count: expectedMagnetsCount } }); const v = r.data.data || {}
+      body.innerHTML = ''
+      const gallery = galleryItems(v)
+      let activeIndex = 0
+      const hero = el('div','javdb-detail')
+      const media = el('div', 'javdb-detail-media')
+      const stage = el('div', 'javdb-gallery-stage')
+      const stageImg = el('img', 'javdb-gallery-image')
+      const prevBtn = el('button', 'javdb-gallery-nav javdb-gallery-nav--prev', '‹')
+      const nextBtn = el('button', 'javdb-gallery-nav javdb-gallery-nav--next', '›')
+      const thumbRow = el('div', 'javdb-gallery-thumbs')
+      const info = el('div','javdb-detail-info')
+      info.append(el('h3','',`${v.code || code} ${v.title || ''}`), el('p','',`发行 ${fmtDate(v.date)} · ${fmtMin(v.duration)} · 评分 ${v.score || '-'}`))
+      const rel = el('div','javdb-detail-rel')
+      function addRel(kind, obj, label) {
+        if (!obj?.name || !obj?.external_id) return
+        const b = el('button', 'javdb-rel-btn', `${label}：${obj.name}`)
+        b.type = 'button'; b.onclick = () => openRelation(kind, obj.external_id, `${label} · ${obj.name}`)
+        rel.appendChild(b)
+      }
+      addRel('director', v.director, '导演')
+      addRel('maker', v.maker, '片商')
+      addRel('publisher', v.publisher, '发行')
+      addRel('series', v.series, '系列')
+      ;(v.actors || []).forEach(a => addRel('actor', a, '演员'))
+      ;(v.categories || []).forEach(c => addRel('category', c, '分类'))
+      info.appendChild(rel)
+      function renderGallery() {
+        const current = gallery[activeIndex] || gallery[0] || null
+        stageImg.src = current?.src || ''
+        stageImg.alt = current?.label || `${v.code || code}`
+        prevBtn.disabled = gallery.length <= 1
+        nextBtn.disabled = gallery.length <= 1
+        thumbRow.innerHTML = ''
+        gallery.forEach((item, idx) => {
+          const thumb = el('button', `javdb-gallery-thumb${idx === activeIndex ? ' is-active' : ''}`)
+          thumb.type = 'button'
+          const img = el('img')
+          img.src = item.src
+          img.alt = item.label
+          img.loading = 'lazy'
+          thumb.append(img, el('span', 'javdb-gallery-thumb-label', item.label))
+          thumb.onclick = () => { activeIndex = idx; renderGallery() }
+          thumbRow.appendChild(thumb)
+        })
+      }
+      if (gallery.length) {
+        prevBtn.type = 'button'; nextBtn.type = 'button'
+        prevBtn.onclick = () => { activeIndex = (activeIndex - 1 + gallery.length) % gallery.length; renderGallery() }
+        nextBtn.onclick = () => { activeIndex = (activeIndex + 1) % gallery.length; renderGallery() }
+        stage.append(stageImg, prevBtn, nextBtn)
+        media.append(stage, thumbRow)
+        renderGallery()
+      }
+      hero.append(media, info); body.appendChild(hero)
+      if (Array.isArray(v.magnets) && v.magnets.length) {
+        const mags = el('div','javdb-magnets'); mags.append(el('h4','','磁链'))
+        v.magnets.forEach((m, idx) => {
+          const row=el('div','javdb-magnet')
+          const main=el('div','javdb-magnet-main')
+          main.append(el('strong','javdb-magnet-name',m.name || v.code), el('span','javdb-magnet-source',magnetSourceLabel(m)))
+          row.append(main, el('span','javdb-magnet-size',fmtSizeMb(m.size_mb)), el('span','javdb-magnet-date',fmtDate(m.date)))
+          const key=`${v.code || code}:${idx}`; const ps=state.push[key] || {status:'idle', pct:0}; const b=sdk.ui.submitButton ? sdk.ui.submitButton({ idleLabel:'推送', successLabel:'已推送', errorLabel:'重试', status:ps.status, progress:ps.pct || 0, className:'javdb-push', disabled:ps.status==='running'||ps.status==='success', onClick:()=>pushDownload(v,m,idx) }) : el('button','javdb-push','推送'); b.dataset.key=key; if (!sdk.ui.submitButton) b.onclick=()=>pushDownload(v,m,idx); state.pushButtons[key]=b; row.appendChild(b); mags.appendChild(row)
+        })
+        body.appendChild(mags)
+      }
+    } catch(e) { body.textContent = e?.response?.data?.detail || e?.message || '详情加载失败' }
+  }
+  function openActor(actor) {
+    openRelation('actor', actor.id, actor.name || '演员')
+  }
+  function openRelation(relType, id, label) {
+    if (!relType || !id) return
+    closeModal()
+    state.relation = { relType, id, label }
+    state.page = 1
+    state.items = []
+    state.actors = []
+    loadCurrent()
+  }
+  function setPushState(key, status, pct, label = '') {
+    state.push[key] = { status, pct }
+    state.pushButtons[key]?.__setState?.(status, pct, label)
+  }
+  async function pushDownload(v, m, idx) {
+    const key = `${v.code || v.number || ''}:${idx}`
+    if (state.push[key]?.status === 'running') return
+    setPushState(key, 'running', 8, '8%')
+    const timer = setInterval(() => {
+      const ps = state.push[key]
+      if (!ps || ps.status !== 'running') return
+      const next = Math.min(92, Number(ps.pct || 0) + 9)
+
+==== CSS CHECK ====

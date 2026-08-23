@@ -1,0 +1,38 @@
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == '获取详情失败: boom'
+
+
+@pytest.mark.asyncio
+async def test_get_hardlink_groups_includes_last_scanned_at(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_hardlink_groups', lambda: [{'code': 'ABC-123', 'entries': []}])
+    monkeypatch.setattr(media_library, '_hardlink_groups_last_scanned_at', lambda: '2026-04-13T12:34:56+00:00')
+
+    result = await media_library.get_hardlink_groups()
+
+    assert result == {
+        'groups': [{'code': 'ABC-123', 'entries': []}],
+        'count': 1,
+        'last_scanned_at': '2026-04-13T12:34:56+00:00',
+    }
+
+
+@pytest.mark.asyncio
+async def test_scan_hardlinks_returns_last_scanned_at(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'Group A', 'source_dir': '/tmp/source', 'hardlink_dir': '/tmp/hardlinks'}],
+    })
+    monkeypatch.setattr(media_library.os, 'stat', lambda path: object())
+
+    async def fake_build_groups():
+        return [{'code': 'ABC-123', 'entries': [{'source_path': '/tmp/source/a.mp4', 'hardlink_paths': ['/tmp/hardlinks/a.mp4']}]}]
+
+    monkeypatch.setattr(media_library, '_build_hardlink_groups', fake_build_groups)
+    monkeypatch.setattr(media_library, '_save_hardlink_groups', lambda groups: None)
+    monkeypatch.setattr(media_library, '_hardlink_groups_last_scanned_at', lambda: '2026-04-13T12:34:56+00:00')
+
+    result = await media_library.scan_hardlinks()
+
+    assert result['ok'] is True
+    assert result['total_count'] == 1
+    assert result['total_entries'] == 1
+    assert result['last_scanned_at'] == '2026-04-13T12:34:56+00:00'

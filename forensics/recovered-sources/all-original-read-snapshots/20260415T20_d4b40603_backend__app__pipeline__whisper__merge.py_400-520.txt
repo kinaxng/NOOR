@@ -1,0 +1,121 @@
+                index=i + 1,
+                start_time=sub.start_time,
+                end_time=sub.end_time,
+                text=sub.text,
+                words=[]
+            ))
+
+        return TranscriptionResult(
+            segments=segments,
+            language=primary_result.language,
+            duration=primary_result.duration,
+            source="merged",
+            metadata={"strategy": f"{primary}_overlap"}
+        )
+
+    def _collapse_redundant_overlaps(self, subtitles: list[Subtitle]) -> list[Subtitle]:
+        if len(subtitles) < 2:
+            return subtitles
+
+        collapsed: list[Subtitle] = [subtitles[0]]
+        for current in subtitles[1:]:
+            prev = collapsed[-1]
+            overlap = self._overlap_duration(prev, current)
+            if overlap <= 0:
+                collapsed.append(current)
+                continue
+
+            overlap_ratio = overlap / max(prev.duration, current.duration, 1e-6)
+            prev_norm = self._normalize_for_overlap(prev.text)
+            curr_norm = self._normalize_for_overlap(current.text)
+            texts_related = (
+                self._is_near_duplicate(prev.text, current.text)
+                or (prev_norm and prev_norm in curr_norm)
+                or (curr_norm and curr_norm in prev_norm)
+            )
+            if overlap_ratio < 0.45 and not texts_related:
+                collapsed.append(current)
+                continue
+
+            chosen = self._choose_by_quality(prev, current)
+            if chosen is prev:
+                prev.end_time = max(prev.end_time, current.end_time)
+                continue
+            current.start_time = min(prev.start_time, current.start_time)
+            collapsed[-1] = current
+        return collapsed
+
+    @staticmethod
+    def _normalize_for_overlap(text: str) -> str:
+        return re.sub(r"\s+", "", text or "")
+
+    def _is_near_duplicate(self, left: str, right: str) -> bool:
+        lnorm = self._normalize_text(left)
+        rnorm = self._normalize_text(right)
+        if not lnorm or not rnorm:
+            return False
+        if lnorm == rnorm:
+            return True
+        if len(lnorm) >= 6 and (lnorm in rnorm or rnorm in lnorm):
+            return True
+        return False
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        normalized = re.sub(r"\s+", "", text or "")
+        normalized = re.sub(r"[。、「」『』!！?？…~〜]+", "", normalized)
+        return normalized.strip()
+
+    def _choose_by_quality(self, s1: Subtitle, s2: Subtitle) -> Subtitle:
+        """根据质量选择"""
+        noise1 = self._is_noise_only(s1.text)
+        noise2 = self._is_noise_only(s2.text)
+        if noise1 != noise2:
+            return s2 if noise1 else s1
+
+        len1 = self._quality_length(s1.text)
+        len2 = self._quality_length(s2.text)
+        if len1 != len2:
+            return s1 if len1 > len2 else s2
+
+        score1 = self._dialogue_score(s1.text)
+        score2 = self._dialogue_score(s2.text)
+        if score1 != score2:
+            return s1 if score1 > score2 else s2
+
+        # 时长短优先
+        if s1.duration != s2.duration:
+            return s1 if s1.duration <= s2.duration else s2
+
+        # 早开始优先
+        return s1 if s1.start_time <= s2.start_time else s2
+
+    def _overlap_duration(self, s1: Subtitle, s2: Subtitle) -> float:
+        """计算两个字幕的重叠时长"""
+        start = max(s1.start_time, s2.start_time)
+        end = min(s1.end_time, s2.end_time)
+        return max(0, end - start)
+
+    def _coverage_ratio(self, sub: Subtitle, overlap_dur: float) -> float:
+        """计算覆盖率"""
+        if overlap_dur <= 0:
+            return 0
+        return overlap_dur / sub.duration
+
+    @staticmethod
+    def _quality_length(text: str) -> int:
+        """计算调整后的字符数，重复文本返回0"""
+        stripped = text.strip()
+        if not stripped:
+            return 0
+        unique_ratio = len(set(stripped)) / len(stripped)
+        if unique_ratio < MergeEngine._DIVERSITY_FLOOR:
+            return 0  # 拒绝 hallucination
+        return len(stripped)
+    @classmethod
+    def _is_noise_only(cls, text: str) -> bool:
+        compact = re.sub(r"\s+", "", text or "")
+        if not compact:
+            return True
+        if cls._PUNCT_ONLY_RE.fullmatch(compact):
+            return True

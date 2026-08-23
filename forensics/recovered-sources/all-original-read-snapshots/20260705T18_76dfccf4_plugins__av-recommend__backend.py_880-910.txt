@@ -1,0 +1,135 @@
+    if value >= 14:
+        return "medium"
+    if value > 0:
+        return "weak"
+    return "none"
+
+
+def _candidate_label(item: dict[str, Any], code: str = "") -> str:
+    return str(item.get("display_title") or item.get("title") or item.get("number") or item.get("code") or code or "").strip()
+
+
+def _merge_candidate(existing: dict[str, Any] | None, item: dict[str, Any], source: str, source_label: str) -> dict[str, Any]:
+    today = _today_key()
+    current = dict(existing or {})
+    if not current:
+        current.update(item)
+        current["first_seen_date"] = today
+        current["first_seen_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    else:
+        for key, value in item.items():
+            if value not in (None, "", [], {}) and (not current.get(key) or key in {"magnets_count", "has_cnsub", "is_cracked"}):
+                if key == "magnets_count":
+                    current[key] = max(int(current.get(key) or 0), int(value or 0))
+                elif key in {"has_cnsub", "is_cracked"}:
+                    current[key] = bool(current.get(key) or value)
+                else:
+                    current[key] = value
+    sources = current.get("source_tags") if isinstance(current.get("source_tags"), list) else []
+    source_entry = {"id": source, "label": source_label, "date": today}
+    if not any(x.get("id") == source for x in sources if isinstance(x, dict)):
+        sources.append(source_entry)
+                try:
+                    detail = await runtime.handle_action("javdb", "video", {"code": code})
+                    data = detail.get("data") if isinstance(detail, dict) else {}
+                    if isinstance(data, dict):
+                        item["detail"] = data
+                        item["actors"] = _names(data.get("actors"))
+                        item["categories"] = _names(data.get("categories"))
+                        item["maker"] = data.get("maker") or data.get("publisher") or ""
+                        item["series"] = _name_one(data.get("series"))
+                        item["director"] = _name_one(data.get("director"))
+                        item["cover_url"] = data.get("cover_url") or item.get("cover_url")
+                        item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
+                        item["image_candidates"] = _image_candidates(data, item, data.get("preview_images"))
+                        item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
+                        item["is_cracked"] = bool(item.get("is_cracked") or _text_has_cracked(data))
+                        magnets = data.get("magnets") if isinstance(data.get("magnets"), list) else []
+                        if magnets:
+                            item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
+                            item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
+                        _ensure_title_profile(item)
+                except Exception:
+                    pass
+            return item
+
+        enriched = await asyncio.gather(*(enrich(item) for item in items[:detail_limit]))
+        by_code.update({_norm_code(item.get("code") or item.get("number")): item for item in enriched if _norm_code(item.get("code") or item.get("number"))})
+                pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+                item = pool_items.get(code)
+                if not isinstance(item, dict):
+                    return
+                item["detail"] = data
+                item["actors"] = _names(data.get("actors"))
+                item["categories"] = _names(data.get("categories"))
+                item["maker"] = data.get("maker") or data.get("publisher") or item.get("maker") or ""
+                item["series"] = _name_one(data.get("series")) or item.get("series") or ""
+                item["director"] = _name_one(data.get("director")) or item.get("director") or ""
+                item["cover_url"] = data.get("cover_url") or item.get("cover_url")
+                item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
+                item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
+                item["is_cracked"] = bool(item.get("is_cracked") or _text_has_cracked(data))
+                magnets = data.get("magnets") if isinstance(data.get("magnets"), list) else []
+                if magnets:
+                    item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
+                    item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
+                _ensure_title_profile(item)
+                pool_items[code] = item
+                pool["items"] = pool_items
+                _save_candidate_pool(pool)
+                detail_updated += 1
+
+        if detail_targets:
+            await asyncio.gather(*(enrich_pool_detail(code) for code in detail_targets))
+def _public_subscription(sub: dict[str, Any]) -> dict[str, Any]:
+    out = dict(sub)
+    best = out.get("best_resource") if isinstance(out.get("best_resource"), dict) else {}
+    if not out.get("fanart_url"):
+        out["fanart_url"] = best.get("fanart_url") or best.get("cover_url") or out.get("cover_url") or ""
+    out["image_candidates"] = _image_candidates(out, best)
+    out["current_profile"] = {
+        "score": int(out.get("current_score") or 0),
+        "is_cracked": bool(out.get("current_is_cracked")),
+        "has_subtitle": bool(out.get("current_has_subtitle")),
+        "is_new_model_uncensored_crack": bool(out.get("current_is_new_model_uncensored_crack")),
+            sub["require_cracked"] = bool(config.get("default_require_cracked", False))
+            sub["require_subtitle"] = bool(config.get("default_require_subtitle", False))
+            sub["updated_at"] = _now()
+            changed += 1
+            _event(data, sub.get("id", ""), "info", "已套用默认订阅规则", {"mode": sub["mode"], "require_cracked": sub["require_cracked"], "require_subtitle": sub["require_subtitle"]})
+        _save(data)
+        return {"ok": True, "changed": changed}
+    if action == "update":
+        sub_id = str(payload.get("id") or "")
+        sub = next((s for s in data["subscriptions"] if s.get("id") == sub_id), None)
+        if not sub:
+            raise ValueError("订阅不存在")
+        for key in ["mode", "require_cracked", "require_subtitle", "status", "title"]:
+            if key in payload:
+                sub[key] = payload[key]
+        sub["updated_at"] = _now()
+        _event(data, sub_id, "info", "更新订阅设置", {k: payload.get(k) for k in payload.keys() if k != "id"})
+        _save(data)
+        return {"ok": True, "subscription": _public_subscription(sub)}
+    if action == "delete":
+        sub_id = str(payload.get("id") or "")
+        sub = next((s for s in data["subscriptions"] if s.get("id") == sub_id), None)
+        if not sub:
+            raise ValueError("订阅不存在")
+        sub["status"] = "deleted"
+        sub["updated_at"] = _now()
+        _event(data, sub_id, "warning", "删除订阅")
+        _save(data)
+        return {"ok": True}
+    if action == "check_once":
+        return await _run_due_checks(config, sub_id=str(payload.get("id") or ""), force=bool(payload.get("force", True)), limit=0, submit=bool(payload.get("submit", config.get("auto_submit_on_match", True))))
+    if action in {"submit_best", "retry_submit"}:
+        return await _submit_existing_best(config, str(payload.get("id") or ""), force=bool(payload.get("force", True)), force_submit=bool(payload.get("force_submit", False)))
+    if action == "force_submit":
+        return await _submit_existing_best(config, str(payload.get("id") or ""), force=True, force_submit=True)
+    if action == "reset_submit":
+        sub_id = str(payload.get("id") or "")
+        sub = next((s for s in data["subscriptions"] if s.get("id") == sub_id and s.get("status") != "deleted"), None)
+        if not sub:
+            raise ValueError("订阅不存在")
+        sub["status"] = "active"

@@ -1,0 +1,101 @@
+    { value: 'zh', label: t('whisper.lang.zh') },
+  ]
+})
+const whisperSensitivityOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'conservative', label: t('whisper.sensitivity.conservative') },
+    { value: 'balanced', label: t('whisper.sensitivity.balanced') },
+    { value: 'aggressive', label: t('whisper.sensitivity.aggressive') },
+  ]
+})
+// whisperTranslateProviderOptions removed — unified OpenAI-compatible API, no provider concept (translate fields kept for local SRT translation feature)
+
+// Selected file path (for multi-file work: current + siblings)
+const selectedPath = ref('')
+
+// When selected path changes, re-fetch subtitles
+watch(selectedPath, async (newPath) => {
+  if (newPath && props.open) {
+    await fetchSubtitles(newPath)
+  }
+})
+
+// Sibling paths from detail
+const siblingPaths = computed(() => {
+  return props.detail?.siblings?.filter(s => s.file_path) || undefined
+})
+
+// Load whisper defaults
+async function loadWhisperDefaults() {
+  if (whisperDefaultsLoaded.value) return
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      whisperMergeStrategy.value = resp.data.whisper.merge_strategy || 'smart_merge'
+      whisperLanguage.value = resp.data.whisper.language || 'ja'
+      whisperSensitivity.value = resp.data.whisper.sensitivity || 'balanced'
+      whisperTranslateTo.value = resp.data.whisper.translate_to || 'zh'
+      whisperTranslateModel.value = resp.data.whisper.translate_model || 'gpt-4o-mini'
+      whisperTranslateStyle.value = resp.data.whisper.translate_style || 'adult_explicit'
+      whisperTranslateBaseUrl.value = resp.data.whisper.translate_base_url || 'https://api.openai.com/v1'
+      whisperTranslateApiKey.value = resp.data.whisper.translate_api_key || ''
+      // Load pipeline selection
+      whisperSelectedPipelines.value = []
+      if (resp.data.whisper.pass1_pipeline) whisperSelectedPipelines.value.push(resp.data.whisper.pass1_pipeline)
+      if (resp.data.whisper.pass2_pipeline) whisperSelectedPipelines.value.push(resp.data.whisper.pass2_pipeline)
+      // Load custom config
+      if (resp.data.whisper.custom_config) {
+        whisperCustomConfig.value = {
+          model: resp.data.whisper.custom_config.model || 'large-v3',
+          vad_method: resp.data.whisper.custom_config.vad_method || 'semantic',
+          enhancers: resp.data.whisper.custom_config.enhancers || [],
+          segmenter: resp.data.whisper.custom_config.segmenter || 'silero-v6.2',
+          timestamp_mode: resp.data.whisper.custom_config.timestamp_mode || 'aligner_interpolation',
+          aligner_backend: resp.data.whisper.custom_config.aligner_backend || 'qwen3',
+          framer_backend: resp.data.whisper.custom_config.framer_backend || 'vad-grouped',
+          generator_backend: resp.data.whisper.custom_config.generator_backend || 'anime-whisper',
+        }
+      }
+      whisperDefaultsLoaded.value = true
+    }
+  } catch (e) {
+    console.error('Failed to load Whisper defaults:', e)
+  }
+}
+
+// Watch for panel open AND detail arriving
+watch([() => props.open, () => props.detail], async ([isOpen, detail]) => {
+  if (isOpen && detail?.file_path) {
+    selectedPath.value = detail.file_path
+    await Promise.all([
+      loadWhisperDefaults(),
+      fetchSubtitles(detail.file_path),
+    ])
+    subtitleTab.value = 'local'
+  } else if (!isOpen) {
+    clearSubtitles()
+  }
+}, { immediate: true })
+
+// Trigger search when switching to search tab
+watch(subtitleTab, (tab) => {
+  if (tab === 'search') {
+    handleSearchOnline()
+  }
+})
+
+function handleClose() {
+  clearSubtitles()
+  emit('close')
+}
+
+async function handleSearchOnline() {
+  if (!selectedPath.value) return
+  await searchOnlineSubtitles(selectedPath.value)
+}
+
+async function handleDownloadSubtitle(url: string, _filename: string, source?: string) {
+  const matchedSubtitle = onlineSubtitles.value.find(sub => sub.url === url && sub.name === _filename)
+  const sourceType = matchedSubtitle?.source_type
+  const sourceKey = matchedSubtitle?.source_key

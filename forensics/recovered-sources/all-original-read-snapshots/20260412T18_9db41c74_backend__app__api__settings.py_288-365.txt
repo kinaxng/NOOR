@@ -1,0 +1,78 @@
+class DirectoryEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+
+
+class DirectoryBrowseResponse(BaseModel):
+    path: str
+    parent: str | None
+    entries: list[DirectoryEntry]
+
+
+@router.get("/directories", response_model=DirectoryBrowseResponse)
+async def browse_directory(path: str = ""):
+    """Browse directory contents for path picker.
+    If path is empty, starts from source_dir or home.
+    Only returns directories within allowed paths."""
+    settings = get_settings()
+
+    def is_allowed(p: str) -> bool:
+        try:
+            real = os.path.realpath(os.path.expanduser(p))
+            # Allow home directory of the running user
+            home = os.path.expanduser("~")
+            if real.startswith(home + "/") or real == home:
+                return True
+            # Allow configured directories
+            for allowed in [settings.source_dir, settings.output_dir,
+                             settings.whisper_model_dir or "", settings.lada_model_dir or ""]:
+                if allowed:
+                    allowed_real = os.path.realpath(os.path.expanduser(allowed))
+                    if real.startswith(allowed_real + "/") or real == allowed_real:
+                        return True
+            # Allow /volume1, /mnt, /media (common Docker media mounts)
+            if real.startswith("/volume1/") or real.startswith("/mnt/") or real.startswith("/media/"):
+                return True
+            # Allow /home (user home directories)
+            if real.startswith("/home/") or real == "/home":
+                return True
+            return False
+        except Exception:
+            return False
+
+    if not path:
+        # Default to source_dir or home
+        browse_path = settings.source_dir or os.path.expanduser("~")
+    else:
+        browse_path = os.path.expanduser(path)
+
+    if not os.path.isdir(browse_path):
+        raise HTTPException(status_code=400, detail=f"Not a directory: {browse_path}")
+
+    if not is_allowed(browse_path):
+        raise HTTPException(status_code=403, detail="Access denied: path not within allowed directories")
+
+    try:
+        entries = []
+        for entry in os.scandir(browse_path):
+            try:
+                entries.append(DirectoryEntry(
+                    name=entry.name,
+                    path=entry.path,
+                    is_dir=entry.is_dir(),
+                ))
+            except PermissionError:
+                continue
+        # Sort: directories first, then alphabetically
+        entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
+        parent = os.path.dirname(browse_path) if browse_path not in ["/", os.path.expanduser("~")] else None
+        return DirectoryBrowseResponse(
+            path=browse_path,
+            parent=parent,
+            entries=entries,
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+

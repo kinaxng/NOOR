@@ -1,0 +1,61 @@
+        "smart_title": smart_title,
+    }
+
+
+def _prefer_chinese_title(raw_title: str) -> str:
+    return _title_parts(raw_title)["display_title"]
+
+
+def _with_display_title(item: dict[str, Any]) -> dict[str, Any]:
+    parts = _title_parts(str(item.get("title") or item.get("name") or ""))
+    item.update(parts)
+    return item
+
+
+def _plugin_cache_file(plugin_id: str, namespace: str, key: str) -> Path:
+    safe_key = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+    return PLUGIN_CACHE_DIR / plugin_id / f"{namespace}-{safe_key}.json"
+
+
+def _read_cache(path: Path, ttl_days: int) -> dict[str, Any] | None:
+    if ttl_days <= 0 or not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        created_at = float(data.get("created_at") or 0)
+        if created_at <= 0:
+            return None
+        if time.time() - created_at > ttl_days * 86400:
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def _write_cache(path: Path, payload: dict[str, Any]) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass
+
+
+
+def _cover_cache_path(torrent_id: int) -> Path:
+    return PLUGIN_CACHE_DIR / PLUGIN_ID / "covers" / f"{torrent_id}.json"
+
+
+def _read_cover_cache(torrent_id: int, ttl_days: int) -> dict[str, Any] | None:
+    return _read_cache(_cover_cache_path(torrent_id), ttl_days)
+
+
+def _write_cover_cache(torrent_id: int, image_url: str, is_dmm: bool) -> None:
+    if not image_url:
+        return
+    _write_cache(_cover_cache_path(torrent_id), {"created_at": time.time(), "image_url": image_url, "is_dmm": is_dmm})
+
+
+def _local_cached_image_url(plugin_id: str, original_url: str, ttl_days: int) -> tuple[str, str] | None:
+    if not original_url:

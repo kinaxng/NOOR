@@ -1,0 +1,46 @@
+      .filter(value => value && !seen.has(value) && seen.add(value))
+  }
+
+  function pickerMultiLabel(list, values, emptyLabel, unitLabel = '项') {
+    const selected = uniqueValues(values)
+    if (!selected.length) return emptyLabel
+    const labels = selected
+      .map(value => (Array.isArray(list) ? list : []).find(item => String(item.value) === value)?.label)
+      .filter(Boolean)
+    if (labels.length <= 2) return labels.join(' · ')
+    return `已选 ${labels.length} ${unitLabel}`
+  }
+
+  function pickerSingleLabel(list, value, emptyLabel) {
+    const current = String(value || '').trim()
+    if (!current) return emptyLabel
+    return (Array.isArray(list) ? list : []).find(item => String(item.value) === current)?.label || emptyLabel
+  }
+
+  function openMultiPickerModal(title, items, currentValues, onApply, emptyLabel = '全部', titleMeta = '') {
+    if (!sdk.ui?.modal) return
+    chooserState.search = ''
+    const body = el('div', 'noor-control-panel__picker-list')
+    const searchWrap = el('div', 'noor-control-panel__picker-search')
+    const searchInput = sdk.ui.input
+      ? sdk.ui.input({
+          value: '',
+          placeholder: `搜索${title}`,
+          className: 'noor-control-panel__search-input',
+          onInput: value => {
+            chooserState.search = String(value || '').trim().toLowerCase()
+            renderOptions()
+          },
+        })
+      : null
+    if (searchInput) searchWrap.appendChild(searchInput)
+    const optionsWrap = el('div', 'noor-control-panel__picker-options')
+    body.append(searchWrap, optionsWrap)
+    let draft = uniqueValues(currentValues)
+
+    const modal = sdk.ui.modal({
+      title,
+      titleMeta,
+      width: 'lg',
+      content: body,
+      footer: [

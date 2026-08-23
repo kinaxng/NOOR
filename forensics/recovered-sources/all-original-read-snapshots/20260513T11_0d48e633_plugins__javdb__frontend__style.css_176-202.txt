@@ -1,0 +1,27 @@
+  align-items: center;
+  justify-content: center;
+  transition: opacity .18s ease, visibility .18s ease;
+}
+.javdb-gallery-nav:hover:not(:disabled),
+.javdb-gallery-nav:focus-visible,
+.javdb-gallery-nav:active {
+  border: 0;
+  box-shadow: none;
+  background: linear-gradient(90deg, rgba(10, 14, 24, 0.55), rgba(10, 14, 24, 0));
+  color: rgba(255,255,255,.92);
+  outline: none;
+}
+.javdb-gallery-nav.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.javdb-gallery-nav--prev {
+  left: 0;
+  border-top-left-radius: var(--radius-lg);
+  border-bottom-left-radius: var(--radius-lg);
+}
+.javdb-gallery-nav--next {
+  right: 0;
+  background: linear-gradient(270deg, rgba(10, 14, 24, 0.55), rgba(10, 14, 24, 0));
+  border-top-right-radius: var(--radius-lg);

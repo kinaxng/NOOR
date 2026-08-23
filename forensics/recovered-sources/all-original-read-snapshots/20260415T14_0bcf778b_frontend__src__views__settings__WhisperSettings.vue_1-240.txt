@@ -1,0 +1,240 @@
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import { dictionaries } from '../../i18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const checkingDeps = ref(false)
+const checkingModels = ref(false)
+const downloadingModel = ref<string | null>(null)
+const installingDeps = computed(() => installStatus.value.status === 'running')
+const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
+
+// ===== Pipeline selection (multi-select, max 2) =====
+const selectedPipelines = ref<string[]>([])
+
+// Pipeline priority: higher index = higher priority (used for Pass1)
+const PIPELINE_PRIORITY = ['custom', 'qwen', 'faster', 'balanced', 'transformers', 'anime']
+
+// Computed: Pass1 / Pass2 derived from selectedPipelines by priority
+const pass1Pipeline = computed(() => {
+  if (selectedPipelines.value.length === 0) return 'anime'
+  return [...selectedPipelines.value].sort((a, b) => PIPELINE_PRIORITY.indexOf(b) - PIPELINE_PRIORITY.indexOf(a))[0]
+})
+
+const pass2Pipeline = computed(() => {
+  if (selectedPipelines.value.length < 2) return ''
+  const sorted = [...selectedPipelines.value].sort((a, b) => PIPELINE_PRIORITY.indexOf(b) - PIPELINE_PRIORITY.indexOf(a))
+  return sorted[1]
+})
+
+const showMergeStrategy = computed(() => selectedPipelines.value.length === 2)
+const mergeStrategy = ref('smart_merge')
+
+// ===== Custom Pipeline config =====
+const customConfig = ref({
+  model: 'large-v3',
+  vad_method: 'semantic',
+  scene_detector: 'semantic',
+  enhancers: [] as string[],
+  segmenter: 'silero-v6.2',
+})
+
+// Custom pipeline enhancer options (multi-select pill toggles)
+const enhancerOptions = computed(() => [
+  { value: 'ffmpeg-dsp', label: t('settings.whisper.enhancerLabel.ffmpegDsp'), cssVar: '--color-success' },
+  { value: 'clearvoice', label: t('settings.whisper.enhancerLabel.clearvoice'), cssVar: '--color-info' },
+  { value: 'bs-roformer', label: t('settings.whisper.enhancerLabel.bsRoformer'), cssVar: '--color-warning' },
+])
+
+function isEnhancerActive(value: string) {
+  return customConfig.value.enhancers.includes(value)
+}
+
+function toggleEnhancer(value: string) {
+  const idx = customConfig.value.enhancers.indexOf(value)
+  if (idx >= 0) {
+    customConfig.value.enhancers.splice(idx, 1)
+  } else {
+    customConfig.value.enhancers.push(value)
+  }
+}
+
+// ===== Common settings =====
+const language = ref('ja')
+const sensitivity = ref('balanced')
+const vadMethod = ref('semantic')
+
+// ===== Translation settings =====
+const translateTo = ref('zh')
+const translateModel = ref('gpt-4o-mini')
+const translateStyle = ref('adult_explicit')
+const translateBaseUrl = ref('https://api.openai.com/v1')
+const translateApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ available: boolean; message: string; models?: string[] } | null>(null)
+
+const checkingDepsResult = ref<Record<string, any>>({})
+const whisperCudaAvailable = ref(false)
+const torchVariant = ref<'gpu' | 'cpu'>('gpu')
+const whisperModels = ref<any[]>([])
+const whisperFeatures = ref<any>({})
+const depsExpanded = ref(false)
+const modelsExpanded = ref(false)
+const defaultAdvancedExpanded = ref(false)
+
+// 只显示不便 Docker build 的运行时依赖（installable: true）
+const runtimeInstallableDeps = computed(() =>
+  Object.fromEntries(
+    Object.entries(checkingDepsResult.value).filter(([, v]) => (v as any).installable)
+  )
+)
+
+// 是否有缺失的运行时依赖（控制安装按钮显示）
+const hasMissingRuntimeDeps = computed(() => {
+  return Object.values(runtimeInstallableDeps.value).some((v: any) => !v.installed)
+})
+const installStatus = ref<{ status: string; progress: number; message: string; current_package?: string }>({
+  status: 'idle',
+  progress: 0,
+  message: '',
+})
+
+onMounted(async () => {
+  await loadSettings()
+  await Promise.all([checkWhisperDeps(), loadWhisperModels()])
+})
+
+function customPipelineAvailable() {
+  return !!whisperFeatures.value?.custom_pipeline?.available
+}
+
+function customPipelineReason() {
+  return whisperFeatures.value?.custom_pipeline?.reason || ''
+}
+
+function sanitizeSelectedPipelines() {
+  if (!customPipelineAvailable()) {
+    selectedPipelines.value = selectedPipelines.value.filter(p => p !== 'custom')
+  }
+  selectedPipelines.value = selectedPipelines.value.slice(0, 2)
+}
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      const w = resp.data.whisper
+      whisperFeatures.value = w.features || {}
+      defaultAdvancedExpanded.value = (w.strategy || 'recommended') !== 'recommended'
+
+      // Reconstruct selected pipelines from pass1/pass2
+      selectedPipelines.value = []
+      if (w.pass1_pipeline) selectedPipelines.value.push(w.pass1_pipeline)
+      if (w.pass2_pipeline) selectedPipelines.value.push(w.pass2_pipeline)
+      sanitizeSelectedPipelines()
+
+      // Custom config
+      if (w.custom_config) {
+        customConfig.value = { ...customConfig.value, ...w.custom_config }
+      }
+
+      mergeStrategy.value = w.merge_strategy || 'smart_merge'
+      language.value = w.language || 'ja'
+      sensitivity.value = w.sensitivity || 'balanced'
+      vadMethod.value = w.vad_method || 'semantic'
+      translateTo.value = w.translate_to || 'zh'
+      translateModel.value = w.translate_model || 'gpt-4o-mini'
+      translateStyle.value = w.translate_style || 'adult_explicit'
+      translateBaseUrl.value = w.translate_base_url || 'https://api.openai.com/v1'
+      translateApiKey.value = w.translate_api_key || ''
+    }
+  } catch (e) {
+    console.error('Failed to load whisper settings:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function checkWhisperDeps() {
+  checkingDeps.value = true
+  try {
+    const resp = await api.post('/settings/whisper/check')
+    checkingDepsResult.value = resp.data.dependencies
+    whisperFeatures.value = resp.data.features || whisperFeatures.value
+    sanitizeSelectedPipelines()
+    whisperCudaAvailable.value = resp.data.cuda_available
+    torchVariant.value = resp.data.cuda_available ? 'gpu' : 'cpu'
+    const statusResp = await api.get('/settings/whisper/install-status')
+    installStatus.value = statusResp.data
+  } catch (e: any) {
+    toast.error(t('settings.whisper.checkFailed'))
+  } finally {
+    checkingDeps.value = false
+  }
+}
+
+async function loadWhisperModels() {
+  checkingModels.value = true
+  try {
+    const resp = await api.get('/settings/whisper/models')
+    whisperModels.value = resp.data.models
+    // 更新下载状态（如果有正在进行的下载）
+    if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'running') {
+      modelDownloadStatus.value = resp.data.downloadStatus
+      // 恢复 downloadingModel 状态
+      if (resp.data.downloadStatus.model) {
+        downloadingModel.value = resp.data.downloadStatus.model
+      }
+    } else if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'idle') {
+      // 下载完成或空闲时，清除状态
+      downloadingModel.value = null
+    }
+  } catch (e: any) {
+    console.error('Failed to load models:', e)
+  } finally {
+    checkingModels.value = false
+  }
+}
+
+async function saveWhisper() {
+  saving.value = true
+  try {
+    if (selectedPipelines.value.includes('custom') && !customPipelineAvailable()) {
+      toast.error(customPipelineReason() || t('settings.whisper.customPipelineUnavailable'))
+      return
+    }
+    const p1 = pass1Pipeline.value
+    const p2 = pass2Pipeline.value
+
+    await api.put('/settings/whisper', {
+      strategy: defaultAdvancedExpanded.value ? 'advanced' : 'recommended',
+      pipeline_mode: p2 ? 'ensemble' : p1,
+      merge_strategy: mergeStrategy.value,
+      language: language.value,
+      sensitivity: sensitivity.value,
+      vad_method: vadMethod.value,
+      pass1_pipeline: p1,
+      pass2_pipeline: p2 || '',
+      custom_config: customConfig.value,
+      translate_to: translateTo.value,
+      translate_model: translateModel.value,
+      translate_style: translateStyle.value,
+      translate_base_url: translateBaseUrl.value,
+      translate_api_key: translateApiKey.value,
+    })
+    toast.success(t('settings.whisper.whisperSettingsSaved'))
+  } catch (e: any) {

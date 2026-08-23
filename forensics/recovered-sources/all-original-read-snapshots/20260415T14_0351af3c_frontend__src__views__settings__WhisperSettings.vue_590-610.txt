@@ -1,0 +1,21 @@
+              <VuiButton variant="gradient" color="info" size="small" :loading="saving" @click="saveRecommendedDefaults">
+                {{ saving ? t('settings.whisper.saving') : t('settings.whisper.useRecommendedDefaults') }}
+              </VuiButton>
+              <VuiButton
+                variant="outlined"
+                color="secondary"
+                size="small"
+                @click="defaultAdvancedExpanded = !defaultAdvancedExpanded"
+              >
+                {{ defaultAdvancedExpanded ? t('settings.whisper.hideDebugDefaults') : t('settings.whisper.showDebugDefaults') }}
+              </VuiButton>
+            </div>
+          </div>
+
+          <div v-if="defaultAdvancedExpanded" class="settings-field-hint !mt-0">
+            {{ t('settings.whisper.debugDefaultsHint') }}
+          </div>
+
+          <!-- Pipeline Selector -->
+          <div v-if="defaultAdvancedExpanded" class="settings-form__field">
+            <label class="settings-form__label">{{ t('settings.whisper.pipelineLabel') }}</label>

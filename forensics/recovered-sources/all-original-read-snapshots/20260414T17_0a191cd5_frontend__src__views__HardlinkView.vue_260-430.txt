@@ -1,0 +1,315 @@
+function isDeletingHardlink(path: string) {
+  return deletingHardlinkPaths.value.has(path)
+}
+
+function isDeletingSource(path: string | null) {
+  return !!path && deletingSourcePaths.value.has(path)
+}
+
+function isDeletingGroup(code: string) {
+  return deletingGroupCodes.value.has(code)
+}
+
+function withDeletingState(setRef: typeof deletingHardlinkPaths, key: string, active: boolean) {
+  const next = new Set(setRef.value)
+  if (active) next.add(key)
+  else next.delete(key)
+  setRef.value = next
+}
+
+
+function buildDeletePreviewDetails(plannedDirs: string[], plannedFiles: string[]) {
+  return [
+    { label: `${t('hardlinks.previewDirs')} · ${plannedDirs.length}`, items: plannedDirs },
+    { label: `${t('hardlinks.previewFiles')} · ${plannedFiles.length}`, items: plannedFiles },
+  ].filter((section) => section.items.length > 0)
+}
+
+async function deleteHardlink(path: string) {
+  if (!path || isDeletingHardlink(path)) return
+  const preview = await api.post('/media-library/hardlinks/delete-hardlink', {
+    file_path: path,
+    remove_nfo: true,
+    dry_run: true,
+  })
+  const plannedFiles: string[] = preview.data?.planned_files || []
+  const ok = await confirm({
+    title: t('hardlinks.previewTitle', { code: path.split('/').pop() || path }),
+    message: t('hardlinks.previewSummary', { dirs: 0, files: plannedFiles.length }),
+    confirmText: t('common.delete'),
+    danger: true,
+    size: 'lg',
+    note: previewDeleteNote.value,
+    details: buildDeletePreviewDetails([], plannedFiles),
+  })
+  if (!ok) return
+
+  withDeletingState(deletingHardlinkPaths, path, true)
+  try {
+    await api.post('/media-library/hardlinks/delete-hardlink', {
+      file_path: path,
+      remove_nfo: true,
+    })
+    toast.success(t('hardlinks.deleteHardlinkSuccess'))
+    await refreshGroupsAfterDelete()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteHardlinkFailed'))
+  } finally {
+    withDeletingState(deletingHardlinkPaths, path, false)
+  }
+}
+
+async function deleteSourceChain(entry: HardlinkEntry) {
+  if (!entry.source_path || isDeletingSource(entry.source_path)) return
+  const preview = await api.post('/media-library/hardlinks/delete-source-chain', {
+    source_path: entry.source_path,
+    hardlink_paths: entry.hardlink_paths,
+    code: extractCodeFromEntry(entry),
+    dry_run: true,
+  })
+  const plannedDirs: string[] = preview.data?.planned_dirs || []
+  const plannedFiles: string[] = preview.data?.planned_files || []
+  const ok = await confirm({
+    title: t('hardlinks.previewTitle', { code: extractCodeFromEntry(entry) || (entry.source_path.split('/').pop() || '') }),
+    message: t('hardlinks.previewSummary', { dirs: plannedDirs.length, files: plannedFiles.length }),
+    confirmText: t('common.delete'),
+    danger: true,
+    size: 'xl',
+    note: previewDeleteNote.value,
+    details: buildDeletePreviewDetails(plannedDirs, plannedFiles),
+  })
+  if (!ok) return
+
+  withDeletingState(deletingSourcePaths, entry.source_path, true)
+  try {
+    await api.post('/media-library/hardlinks/delete-source-chain', {
+      source_path: entry.source_path,
+      hardlink_paths: entry.hardlink_paths,
+      code: extractCodeFromEntry(entry),
+    })
+    toast.success(t('hardlinks.deleteSourceChainSuccess'))
+    await refreshGroupsAfterDelete()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteSourceChainFailed'))
+  } finally {
+    withDeletingState(deletingSourcePaths, entry.source_path, false)
+  }
+}
+
+function extractCodeFromEntry(entry: HardlinkEntry): string | null {
+  if (!entry.source_path) return null
+  const base = entry.source_path.split('/').pop() || ''
+  const match = base.match(/[A-Za-z]{2,6}[-_ ]?\d{2,6}|\d{6}-\d{3}/)
+  return match ? match[0].replace(/[_ ]/g, '-').toUpperCase() : null
+}
+
+async function deleteGroup(group: HardlinkGroup) {
+  if (!group.code || isDeletingGroup(group.code)) return
+  const preview = await api.post('/media-library/hardlinks/delete-group', {
+    code: group.code,
+    entries: group.entries.map((entry) => ({
+      source_path: entry.source_path,
+      hardlink_paths: entry.hardlink_paths,
+    })),
+    dry_run: true,
+  })
+  const plannedDirs: string[] = preview.data?.planned_dirs || []
+  const plannedFiles: string[] = preview.data?.planned_files || []
+  const ok = await confirm({
+    title: t('hardlinks.previewTitle', { code: group.code }),
+    message: t('hardlinks.previewSummary', { dirs: plannedDirs.length, files: plannedFiles.length }),
+    confirmText: t('common.delete'),
+    danger: true,
+    size: 'xl',
+    note: previewDeleteNote.value,
+    details: buildDeletePreviewDetails(plannedDirs, plannedFiles),
+  })
+  if (!ok) return
+
+  withDeletingState(deletingGroupCodes, group.code, true)
+  try {
+    await api.post('/media-library/hardlinks/delete-group', {
+      code: group.code,
+      entries: group.entries.map((entry) => ({
+        source_path: entry.source_path,
+        hardlink_paths: entry.hardlink_paths,
+      })),
+    })
+    toast.success(t('hardlinks.deleteGroupSuccess'))
+    await refreshGroupsAfterDelete()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteGroupFailed'))
+  } finally {
+    withDeletingState(deletingGroupCodes, group.code, false)
+  }
+}
+
+async function previewGroupDelete(group: HardlinkGroup) {
+  try {
+    const resp = await api.post('/media-library/hardlinks/delete-group', {
+      code: group.code,
+      entries: group.entries.map((entry) => ({
+        source_path: entry.source_path,
+        hardlink_paths: entry.hardlink_paths,
+      })),
+      dry_run: true,
+    })
+
+    const plannedDirs: string[] = resp.data?.planned_dirs || []
+    const plannedFiles: string[] = resp.data?.planned_files || []
+    await confirm({
+      title: t('hardlinks.previewTitle', { code: group.code }),
+      message: t('hardlinks.previewSummary', { dirs: plannedDirs.length, files: plannedFiles.length }),
+      confirmText: t('common.close'),
+      cancelText: t('common.cancel'),
+      danger: false,
+      size: 'xl',
+      details: [
+        { label: t('hardlinks.previewDirs'), items: plannedDirs },
+        { label: t('hardlinks.previewFiles'), items: plannedFiles },
+      ],
+
+--- types ---
+export interface MediaNFO {
+  title?: string
+  originaltitle?: string
+  sorttitle?: string
+  year?: string
+  premiered?: string
+  studio?: string
+  plot?: string
+  outline?: string
+  genres?: string[]
+  actors?: { name: string; role?: string }[]
+  director?: string
+  rating?: string
+  set?: string
+  id?: string
+  tagline?: string
+  votes?: string
+  tag?: string
+  maker?: string
+  publisher?: string
+  label?: string
+  num?: string
+}
+
+export interface MediaLibrary {
+  id: string
+  name: string
+  type: string
+  poster_path?: string
+}
+
+export interface FileTags {
+  is_uncensored: boolean  // -u 流出
+  has_chinese: boolean    // -c 中文
+  is_cracked: boolean     // 破解
+  is_leaked: boolean      // 流出
+  release_type: string | null  // 流出 / 无码
+  release_type_key?: 'leaked' | 'uncensored' | null
+}
+
+export interface MediaItem {
+  id: string
+  name: string
+  type: string
+  media_type?: string
+  poster_path?: string
+  date_created?: string
+  path?: string
+  nfo?: MediaNFO
+  tags?: FileTags
+  subtitle_count?: number
+  variant_count?: number
+}
+
+export interface SiblingItem {
+  label?: string
+  file_path?: string
+  id?: string
+  name?: string
+  poster_path?: string
+  tags?: FileTags
+}
+
+export interface MediaItemDetail {
+  id: string
+  name: string
+  media_type: string
+  file_path?: string
+  stream_url?: string
+  date_created?: string
+  premiered?: string
+  studios?: string[]
+  genres?: string[]
+  poster_path?: string
+  backdrop_path?: string
+  tags?: FileTags
+  nfo?: MediaNFO
+  siblings?: SiblingItem[]
+  main_nfo?: string
+  variant_count?: number
+}
+
+export interface JobSettings {
+  detection_model: string
+  restoration_model: string
+  encoding_preset: string
+}
+
+export interface Job {
+  id: string
+  job_type?: 'lada' | 'whisper' | 'translate-srt'
+  emby_item_id: string
+  emby_item_name: string
+  input_path: string
+  output_path?: string
+  status: 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  error_message?: string
+  settings: JobSettings
+  created_at: string
+  completed_at?: string
+}
+
+export interface JobCreate {
+  emby_item_id: string
+  emby_item_name: string
+  input_path: string
+  settings: JobSettings
+}
+
+export interface SSEEvent {
+  type: 'progress' | 'log' | 'completed' | 'failed' | 'cancelled' | 'queued'
+  progress?: number
+  line?: string
+  success?: boolean
+}
+
+export interface HardlinkEntry {
+  source_path: string | null
+  hardlink_paths: string[]
+  hardlink_count?: number
+  issues?: string[]
+  status?: 'healthy' | 'issue'
+}
+
+export interface HardlinkGroup {
+  code: string
+  entries: HardlinkEntry[]
+  entry_count?: number
+  hardlink_count?: number
+  orphan_count?: number
+  issue_count?: number
+  status?: 'healthy' | 'issue'
+  issues?: string[]
+}
+
+export interface HardlinkSummary {
+  total_groups: number
+  total_entries: number
+  total_hardlinks: number
+  issue_groups: number
+  orphan_entries: number
+}

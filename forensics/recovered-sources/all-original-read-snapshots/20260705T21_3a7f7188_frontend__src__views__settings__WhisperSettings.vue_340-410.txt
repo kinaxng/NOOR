@@ -1,0 +1,103 @@
+  return formatWhisperAudioPreprocessSummary(t, {
+    audioPreprocessMode: audioPreprocessMode.value,
+    audioPreprocessModel: audioPreprocessModel.value,
+  })
+})
+
+const recommendedMeta = computed(() => getWhisperStrategyMeta('recommended'))
+const reazonNemoMeta = computed(() => getWhisperStrategyMeta('reazon_nemo'))
+const recommendedPresentation = computed(() => getWhisperSelectableStrategyPresentation(t, 'recommended'))
+const reazonPresentation = computed(() => getWhisperSelectableStrategyPresentation(t, 'reazon_nemo'))
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">
+      <!-- 1. Default Settings -->
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.currentProfileTitle') }}</h2>
+        <p class="settings-card__desc settings-card__desc--compact">{{ t('settings.whisper.currentProfileDesc') }}</p>
+
+        <div class="settings-form mt-2.5 space-y-1.5">
+          <button
+            type="button"
+            class="whisper-strategy-card whisper-strategy-card--primary whisper-strategy-card--summary"
+            :class="{ 'whisper-strategy-card--active': activeStrategy === 'recommended' }"
+            @click="activeStrategy = 'recommended'"
+          >
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t(recommendedMeta.titleKey) }}</div>
+              </div>
+              <VuiBadge :color="recommendedPresentation.badgeColor" variant="gradient" size="sm">{{ t(recommendedMeta.badgeKey) }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">{{ t(recommendedMeta.stackKey) }}</p>
+            <div class="whisper-strategy-card__meta">
+              <span class="whisper-strategy-card__chip">{{ activeAudioPreprocessSummary }}</span>
+              <span class="whisper-strategy-card__chip">{{ activeTranslateSummary }}</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="whisper-strategy-card whisper-strategy-card--muted whisper-strategy-card--summary"
+            :class="{ 'whisper-strategy-card--active': activeStrategy === 'reazon_nemo' }"
+            @click="activeStrategy = 'reazon_nemo'"
+          >
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t(reazonNemoMeta.titleKey) }}</div>
+              </div>
+              <VuiBadge :color="reazonPresentation.badgeColor" variant="gradient" size="sm">{{ t(reazonNemoMeta.badgeKey) }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">{{ t(reazonNemoMeta.stackKey) }}</p>
+            <div class="whisper-strategy-card__meta">
+              <span class="whisper-strategy-card__chip">{{ t(reazonNemoMeta.descKey) }}</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card ui-card settings-card--compact">
+        <h2 class="settings-card__title">{{ t('settings.whisper.audioLabTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.audioLabDesc') }}</p>
+
+        <div class="settings-form settings-form--compact mt-2.5">
+          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.audioPreprocessLabel')" :description="t('settings.whisper.audioPreprocessDesc')">
+            <select v-model="audioPreprocessMode" class="settings-input">
+              <option value="none">{{ t('settings.whisper.audioPreprocessMode.none') }}</option>
+  'whisper.mergeStrategy': '合并策略',
+  'whisper.mergeStrategy.smart': '智能合并',
+  'whisper.mergeStrategy.none': '不合并',
+  'whisper.mergeStrategy.strict': '严格合并',
+  'whisper.mergeStrategy.loose': '宽松合并',
+  'whisper.language': '语言',
+  'whisper.sensitivity': '敏感度',
+  'whisper.start': '开始生成',
+  'whisper.recommended.title': '默认链路',
+  'whisper.recommended.badge': '推荐',
+  'whisper.recommended.desc': '默认用于日语 / JAV 字幕生成，自动完成转写、补救识别与时间对齐。',
+  'whisper.recommended.stack': '主转写、逐级补救，并在最后统一对齐。',
+  'whisper.presets.baseline.title': 'large-v3 单链路',
+  'whisper.presets.baseline.badge': 'large-v3',
+  'whisper.presets.baseline.desc': '保留给旧任务与 large-v3 单链路兼容使用，不再作为设置页主入口。',
+  'whisper.presets.baseline.stack': 'faster-whisper large-v3 单链路，主要用于旧任务兼容与内部排查。',
+  'whisper.mergeStrategy': 'Merge Strategy',
+  'whisper.mergeStrategy.smart': 'Smart Merge',
+  'whisper.mergeStrategy.none': 'No Merge',
+  'whisper.mergeStrategy.strict': 'Strict Merge',
+  'whisper.mergeStrategy.loose': 'Loose Merge',
+  'whisper.language': 'Language',
+  'whisper.sensitivity': 'Sensitivity',
+  'whisper.start': 'Start Generation',
+  'whisper.recommended.title': 'Default Path',
+  'whisper.recommended.badge': 'Recommended',
+  'whisper.recommended.desc': 'Default for Japanese / JAV subtitles with automatic transcription, fallback recognition, and alignment.',
+  'whisper.recommended.stack': 'Primary transcription, staged recovery, then final alignment.',
+  'whisper.presets.baseline.title': 'large-v3 Single-pass Path',
+  'whisper.presets.baseline.badge': 'large-v3',
+  'whisper.presets.baseline.desc': 'Kept for legacy jobs and single-pass large-v3 compatibility, and no longer exposed as the main settings entry.',
+  'whisper.presets.baseline.stack': 'Single faster-whisper large-v3 route mainly kept for legacy compatibility and internal troubleshooting.',

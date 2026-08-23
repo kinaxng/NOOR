@@ -1,0 +1,468 @@
+                "repetition_penalty": 1.5,
+            }
+
+    def _get_model_runtime(self) -> tuple[object, str]:
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            self.log("[Pass2] 错误: 需要安装 faster-whisper")
+            raise RuntimeError("faster-whisper 库未安装")
+
+        model_size = self.config.pass2_model.value
+
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+
+        device = "cuda" if self.config.device == "auto" else self.config.device
+        compute_type = self.config.compute_type if self.config.compute_type != "default" else "float16"
+        signature = (model_size, device, compute_type, whisper_model_dir)
+
+        if self._model is None or self._model_signature != signature:
+            self.log(f"[Pass2] 加载模型: {model_size} (dir: {whisper_model_dir})")
+            self.log(f"[Pass2] 使用设备: {device}, compute: {compute_type}")
+            self._model = WhisperModel(
+                model_size,
+                device=device,
+                compute_type=compute_type,
+                download_root=whisper_model_dir,
+            )
+            self._model_signature = signature
+
+            import torch
+            if device == "cuda" and torch.cuda.is_available():
+                self.log(f"[Pass2] GPU 已激活: {torch.cuda.get_device_name(0)}")
+            else:
+                self.log("[Pass2] 警告: 使用 CPU 计算")
+            self.log("[Pass2] 模型加载完成")
+        else:
+            self.log(f"[Pass2] 复用已加载模型: {model_size}")
+
+        return self._model, model_size
+
+    def process(self, audio_path: str, output_srt: str) -> TranscriptionResult:
+        """处理音频文件"""
+        raise_if_cancelled(self.cancel_callback)
+        self._max_end_time = 0.0
+        model, model_size = self._get_model_runtime()
+
+        # 获取敏感度参数
+        params = self._get_sensitivity_params()
+
+        self.log("[Pass2] 开始转写...")
+
+        # 转写 - 边收片段边处理，不等全部完成
+        raise_if_cancelled(self.cancel_callback)
+        segments, info = model.transcribe(
+            audio_path,
+            language=self.config.language if self.config.language != "auto" else None,
+            beam_size=params.get("beam_size", self.config.beam_size),
+            best_of=params.get("best_of", self.config.best_of),
+            vad_filter=self.config.vad_filter,
+            vad_parameters=dict(
+                min_silence_duration_ms=self.config.vad_min_silence_ms,
+                min_speech_duration_ms=self.config.vad_min_speech_ms,
+            ),
+            word_timestamps=True,  # 启用词级时间戳用于 REGROUP_JAV
+        )
+
+        self.log(f"[Pass2] 检测语言: {info.language}，时长: {info.duration:.1f}s")
+
+        # 流式收集片段并实时报告进度
+        result_segments = []
+        import itertools
+        seg_iter = iter(segments)
+        last_progress_time = 0.0
+        for i, seg in enumerate(itertools.chain(seg_iter, [None]), start=1):
+            raise_if_cancelled(self.cancel_callback)
+            if seg is None:
+                break
+            result_segments.append(SubtitleSegment(
+                index=i,
+                start_time=seg.start,
+                end_time=seg.end,
+                text=seg.text.strip(),
+            ))
+            # 更新最大时间
+            if seg.end > self._max_end_time:
+                self._max_end_time = seg.end
+            # 每 2 秒音频覆盖报告一次进度
+            if self._max_end_time - last_progress_time >= 2.0:
+                self._report_duration_progress(self._max_end_time, info.duration)
+                last_progress_time = self._max_end_time
+
+        total_segments = len(result_segments)
+        self.log(f"[Pass2] 转写完成，共 {total_segments} 个片段", 84)
+
+        return TranscriptionResult(
+            segments=result_segments,
+            language=info.language,
+            duration=info.duration,
+            source="faster-whisper",
+            metadata={"model": model_size}
+        )
+
+
+def generate_srt(segments: list[SubtitleSegment], output_path: str):
+    """生成 SRT 文件"""
+    with open(output_path, "w", encoding="utf-8") as f:
+        for seg in segments:
+            start = _ms_to_srt_time(seg.start_time * 1000)
+            end = _ms_to_srt_time(seg.end_time * 1000)
+            f.write(f"{seg.index}\n")
+            f.write(f"{start} --> {end}\n")
+            f.write(f"{seg.text}\n\n")
+
+
+def _ms_to_srt_time(ms: float) -> str:
+    """毫秒转换为 SRT 时间格式"""
+    total_seconds = ms / 1000
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    seconds = int(total_seconds % 60)
+    milliseconds = int(ms % 1000)
+    return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
+
+
+class KotobaWhisperProcessor:
+    """Kotoba-Whisper-v2.2 处理 — 直接用 transformers 低层 API，不依赖 stable_whisper"""
+
+    def __init__(
+        self,
+        config: WhisperConfig,
+        progress_callback: Optional[Callable] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ):
+        self.config = config
+        self.progress_callback = progress_callback
+        self.cancel_callback = cancel_callback
+        self._log_lines = []
+        self._processor = None
+        self._model = None
+        self._device = None
+        self._dtype = None
+
+    def log(self, msg: str, progress: int = None):
+        self._log_lines.append(msg)
+        if self.progress_callback:
+            try:
+                self.progress_callback(msg, progress)
+            except TypeError:
+                self.progress_callback(msg)
+            except Exception:
+                pass
+
+    def _ensure_model(self):
+        """延迟加载模型（只加载一次）"""
+        if self._model is not None:
+            return
+        raise_if_cancelled(self.cancel_callback)
+
+        import os
+
+---- qwen3.py
+from __future__ import annotations
+
+import importlib.util
+import logging
+import re
+from pathlib import Path
+from typing import Any
+
+from .types import AlignmentResult, WordTimestamp
+
+logger = logging.getLogger(__name__)
+
+_SENTENCE_END_RE = re.compile(r"[。！？?!]$")
+_SOFT_BREAK_RE = re.compile(r"[、，,]$")
+
+
+def _normalize_language(language: str) -> str:
+    normalized = (language or "").strip().lower()
+    if normalized in {"ja", "jp", "japanese", "日本語"}:
+        return "Japanese"
+    if normalized in {"zh", "zh-cn", "zh-tw", "chinese", "中文"}:
+        return "Chinese"
+    if normalized in {"en", "english"}:
+        return "English"
+    return language or "Japanese"
+
+
+def qwen3_aligner_available() -> bool:
+    try:
+        return importlib.util.find_spec("qwen_asr") is not None
+    except Exception:
+        return False
+
+
+def merge_master_with_timestamps(master_text: str, timestamps: list[Any]) -> list[dict[str, float | str]]:
+    if not master_text or not master_text.strip():
+        return []
+    if not timestamps:
+        return [{"word": master_text.strip(), "start": 0.0, "end": 0.0}]
+
+    def get_attr(obj: Any, attr: str):
+        if hasattr(obj, attr):
+            return getattr(obj, attr)
+        if isinstance(obj, dict):
+            return obj.get(attr)
+        return None
+
+    result: list[dict[str, float | str]] = []
+    master_pos = 0
+
+    for ts in timestamps:
+        ts_word = get_attr(ts, "text")
+        ts_start = get_attr(ts, "start_time")
+        ts_end = get_attr(ts, "end_time")
+        if not ts_word:
+            continue
+
+        word_start = master_text.find(ts_word, master_pos)
+        if word_start == -1:
+            result.append({
+                "word": ts_word,
+                "start": float(ts_start) if ts_start is not None else 0.0,
+                "end": float(ts_end) if ts_end is not None else 0.0,
+            })
+            continue
+
+        word_end = word_start + len(ts_word)
+        if word_start > master_pos:
+            gap = master_text[master_pos:word_start]
+            if result:
+                result[-1]["word"] += gap
+            else:
+                ts_word = gap + ts_word
+
+        result.append({
+            "word": ts_word,
+            "start": float(ts_start) if ts_start is not None else 0.0,
+            "end": float(ts_end) if ts_end is not None else 0.0,
+        })
+        master_pos = word_end
+
+    if master_pos < len(master_text):
+        trailing = master_text[master_pos:]
+        if result:
+            result[-1]["word"] += trailing
+        elif trailing.strip():
+            result.append({"word": trailing, "start": 0.0, "end": 0.0})
+
+    return result
+
+
+class Qwen3ForcedAligner:
+    def __init__(
+        self,
+        *,
+        aligner_id: str = "Qwen/Qwen3-ForcedAligner-0.6B",
+        device: str = "auto",
+        dtype: str = "auto",
+    ) -> None:
+        self.aligner_id = aligner_id
+        self.device = device
+        self.dtype = dtype
+        self._aligner = None
+        self._resolved_device = None
+        self._resolved_dtype = None
+
+    def _resolve_device_dtype(self) -> tuple[str, Any]:
+        import torch
+
+        if self.device == "auto":
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        elif self.device == "cuda":
+            device = "cuda:0"
+        else:
+            device = self.device
+
+        if self.dtype == "auto":
+            if device.startswith("cuda"):
+                dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+            else:
+                dtype = torch.float32
+        else:
+            dtype = getattr(torch, self.dtype)
+        return device, dtype
+
+    def load(self) -> None:
+        if self._aligner is not None:
+            return
+        if not qwen3_aligner_available():
+            raise RuntimeError("qwen-asr 未安装，无法使用 Qwen3 ForcedAligner")
+
+        from qwen_asr.inference.qwen3_forced_aligner import Qwen3ForcedAligner as _Qwen3ForcedAligner
+
+        device, dtype = self._resolve_device_dtype()
+        self._resolved_device = device
+        self._resolved_dtype = dtype
+        logger.info("[Qwen3Aligner] loading %s (%s, %s)", self.aligner_id, device, dtype)
+        self._aligner = _Qwen3ForcedAligner.from_pretrained(
+            self.aligner_id,
+            dtype=dtype,
+            device_map=device,
+        )
+
+    def unload(self) -> None:
+        if self._aligner is None:
+            return
+        self._aligner = None
+        try:
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except Exception:
+            pass
+
+    def align_batch(
+        self,
+        *,
+        audio_paths: list[Path],
+        texts: list[str],
+        language: str = "ja",
+        audio_durations: list[float] | None = None,
+    ) -> list[AlignmentResult]:
+        if self._aligner is None:
+            raise RuntimeError("Qwen3ForcedAligner.align_batch() called before load()")
+
+        normalized_language = _normalize_language(language)
+        raw_results = self._aligner.align(
+            audio=[str(p) for p in audio_paths],
+            text=texts,
+            language=normalized_language,
+        )
+
+        final_results: list[AlignmentResult] = []
+        for index, (raw, text) in enumerate(zip(raw_results, texts)):
+            items = getattr(raw, "items", None)
+            if items is None:
+                try:
+                    items = list(raw)
+                except Exception:
+                    items = []
+            merged = merge_master_with_timestamps(text, items or [])
+            final_results.append(
+                AlignmentResult(
+                    words=[WordTimestamp(word=str(w["word"]), start=float(w["start"]), end=float(w["end"])) for w in merged],
+                    metadata={
+                        "scene_index": index,
+                        "aligner": "qwen3",
+                        "raw_word_count": len(items or []),
+                        "merged_word_count": len(merged),
+                    },
+                )
+            )
+        return final_results
+
+
+def split_aligned_words_into_segments(
+    words: list[WordTimestamp],
+    *,
+    max_chars: int = 28,
+    max_duration: float = 8.0,
+    comma_break_chars: int = 18,
+    min_chars: int = 6,
+    min_duration: float = 1.0,
+) -> list[tuple[float, float, str]]:
+    if not words:
+        return []
+
+    segments: list[tuple[float, float, str]] = []
+    bucket: list[WordTimestamp] = []
+
+    def flush() -> None:
+        if not bucket:
+            return
+        text = "".join(item.word for item in bucket).strip()
+        if text:
+            segments.append((bucket[0].start, bucket[-1].end, text))
+        bucket.clear()
+
+    for word in words:
+        bucket.append(word)
+        text = "".join(item.word for item in bucket)
+        duration = max(0.0, bucket[-1].end - bucket[0].start)
+        should_break = False
+        if _SENTENCE_END_RE.search(word.word):
+            should_break = True
+        elif _SOFT_BREAK_RE.search(word.word) and len(text) >= comma_break_chars:
+            should_break = True
+        elif len(text) >= max_chars or duration >= max_duration:
+            should_break = True
+        if should_break:
+            flush()
+
+    flush()
+    return _merge_tiny_segments(
+        segments,
+        max_chars=max_chars,
+        max_duration=max_duration,
+        min_chars=min_chars,
+        min_duration=min_duration,
+    )
+
+
+def _merge_tiny_segments(
+    segments: list[tuple[float, float, str]],
+    *,
+    max_chars: int,
+    max_duration: float,
+    min_chars: int,
+    min_duration: float,
+) -> list[tuple[float, float, str]]:
+    if len(segments) < 2:
+        return segments
+
+    merged: list[list[float | str]] = []
+    for start, end, text in segments:
+        cleaned = (text or '').strip()
+        duration = max(0.0, end - start)
+
+---- cleaners.py
+from __future__ import annotations
+
+import re
+
+
+_SENTENCE_FINAL_PUNCT = frozenset('。、!?…！？♪～』」')
+_REPEAT_RE = re.compile(r'(.{2,20}?)\1{2,}')
+_WHITESPACE_RE = re.compile(r'\s+')
+_QWEN_NOISE_RE = re.compile(r'(.)\1{5,}')
+_QWEN_BRACKET_RE = re.compile(r'[\[\]【】<>＜＞]')
+
+
+class AnimeWhisperCleaner:
+    """Clean common anime-whisper artifacts for JAV dialogue."""
+
+    def clean(self, text: str) -> str:
+        if not text or not text.strip():
+            return ''
+        cleaned = _WHITESPACE_RE.sub(' ', text).strip()
+        cleaned = _REPEAT_RE.sub(r'\1', cleaned)
+        if cleaned and cleaned[-1] not in _SENTENCE_FINAL_PUNCT:
+            cleaned += '。'
+        return cleaned
+
+
+class Qwen3TextCleaner:
+    """Lightweight cleaner for Qwen3-ASR fallback output."""
+
+    _filler_tokens = (
+        '字幕をご覧ください', 'ご視聴ありがとうございました', 'チャンネル登録',
+    )
+
+    def clean(self, text: str) -> str:
+        if not text or not text.strip():
+            return ''
+        cleaned = _WHITESPACE_RE.sub(' ', text).strip()
+        cleaned = _QWEN_BRACKET_RE.sub('', cleaned)
+        cleaned = _REPEAT_RE.sub(r'\1', cleaned)
+        cleaned = _QWEN_NOISE_RE.sub(lambda m: m.group(1) * 3, cleaned)
+        for token in self._filler_tokens:
+            cleaned = cleaned.replace(token, '')
+        cleaned = _WHITESPACE_RE.sub(' ', cleaned).strip(' ・,，')
+        return cleaned

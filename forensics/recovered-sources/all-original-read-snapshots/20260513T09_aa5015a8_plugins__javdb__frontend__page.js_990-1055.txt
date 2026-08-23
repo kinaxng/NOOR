@@ -1,0 +1,66 @@
+    const code = item.number || item.code || item.id
+    const panel = sdk.ui.panel({ title: '影片详情', eyebrow: 'JavDB', scroll: true })
+    state.activePanel = panel
+    panel.body.appendChild(sdk.ui.loadingState({ text: '正在调取详情数据...' }))
+
+    try {
+      const res = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code } })
+      const video = res.data.data
+      panel.body.innerHTML = ''
+
+      const content = el('div', 'javdb-detail')
+      const previewList = Array.isArray(video.previews) ? video.previews : []
+      const images = [video.cover_url, ...previewList].filter(Boolean)
+
+      const gallery = el('div', 'javdb-detail-gallery')
+      const galleryViewport = el('div', 'javdb-detail-gallery__viewport')
+      const galleryRail = el('div', 'javdb-detail-gallery__rail')
+      images.forEach(src => {
+        const frame = el('button', 'javdb-gallery-frame')
+        frame.type = 'button'
+        const img = el('img', 'javdb-gallery-img')
+        img.src = src
+        img.alt = detailTitle(video)
+        frame.onclick = () => sdk.ui.previewImage?.(src, images)
+        frame.appendChild(img)
+        galleryRail.appendChild(frame)
+      })
+      if (!images.length) galleryRail.appendChild(sdk.ui.emptyState({ text: '暂无封面与剧照' }))
+      galleryViewport.appendChild(galleryRail)
+      gallery.appendChild(galleryViewport)
+      if (images.length > 1) {
+        const scrollGallery = direction => {
+          const amount = Math.max(320, galleryViewport.clientWidth * 0.9)
+          galleryViewport.scrollBy({ left: direction * amount, behavior: 'smooth' })
+        }
+        gallery.appendChild(sdk.ui.button({ label: '‹', className: 'javdb-gallery-nav javdb-gallery-nav--prev', onClick: () => scrollGallery(-1) }))
+        gallery.appendChild(sdk.ui.button({ label: '›', className: 'javdb-gallery-nav javdb-gallery-nav--next', onClick: () => scrollGallery(1) }))
+      }
+      content.appendChild(gallery)
+
+      const hero = el('section', 'ui-card javdb-detail-section javdb-detail-hero')
+      const heroHead = el('div', 'javdb-detail-hero__head')
+      const heroMeta = el('div', 'javdb-detail-hero__meta')
+      const codeText = detailCode(video)
+      if (codeText) heroMeta.appendChild(el('span', 'javdb-detail-hero__code', codeText))
+      heroMeta.appendChild(el('h2', 'javdb-detail-hero__title', detailTitle(video)))
+      const subtitle = String(video?.origin_title || '').trim()
+      if (subtitle && subtitle !== String(video?.title || '').trim()) {
+        heroMeta.appendChild(el('p', 'javdb-detail-hero__subtitle', subtitle))
+      }
+      const heroBadges = el('div', 'javdb-detail-hero__badges')
+      const categoryText = classifyCategory(video)
+      if (categoryText) heroBadges.appendChild(sdk.ui.badge({ label: categoryText, tone: 'info' }))
+      if (detectCnsub(video)) heroBadges.appendChild(sdk.ui.badge({ label: '中字', tone: 'success' }))
+      if (detectCracked(video)) heroBadges.appendChild(sdk.ui.badge({ label: '破解', tone: 'danger' }))
+      if (Number(video?.magnets?.length || 0) > 0) heroBadges.appendChild(sdk.ui.badge({ label: `${video.magnets.length} 磁链`, tone: 'info' }))
+      heroMeta.appendChild(heroBadges)
+      heroHead.appendChild(heroMeta)
+      hero.appendChild(heroHead)
+
+      const overview = el('div', 'javdb-detail-overview')
+      ;[
+        ['上映日期', formatReleaseDate(video?.date || video?.release_date)],
+        ['时长', fmtMin(video?.duration)],
+        ['评分', numericScore(video?.score) ? String(video.score) : ''],
+        ['来源', String(video?.source || video?.site || 'JavDB').trim()],

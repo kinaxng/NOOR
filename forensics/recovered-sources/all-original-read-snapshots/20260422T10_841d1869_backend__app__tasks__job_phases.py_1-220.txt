@@ -1,0 +1,246 @@
+from __future__ import annotations
+
+from typing import Any
+
+PHASE_PREPARE = "prepare"
+PHASE_ANALYZE = "analyze"
+PHASE_TRANSCRIBE = "transcribe"
+PHASE_RETRY = "retry"
+PHASE_ALIGN = "align"
+PHASE_TRANSLATE = "translate"
+PHASE_PROCESS = "process"
+PHASE_ENCODE = "encode"
+PHASE_OUTPUT = "output"
+
+PHASE_LABELS = {
+    PHASE_PREPARE: "准备任务",
+    PHASE_ANALYZE: "分析内容",
+    PHASE_TRANSCRIBE: "生成字幕",
+    PHASE_RETRY: "补救识别",
+    PHASE_ALIGN: "对齐时间轴",
+    PHASE_TRANSLATE: "字幕翻译",
+    PHASE_PROCESS: "处理中",
+    PHASE_ENCODE: "编码输出文件",
+    PHASE_OUTPUT: "整理输出",
+}
+
+TERMINAL_STATUS_LABELS = {
+    "completed": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消",
+    "skipped": "已跳过",
+}
+
+JOB_TYPE_PHASE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "translate-srt": {
+        "phase_key": PHASE_TRANSLATE,
+        "phase_label": PHASE_LABELS[PHASE_TRANSLATE],
+    },
+}
+
+PHASE_NORMALIZATION = {
+    "prepare": PHASE_PREPARE,
+    "extract_audio": PHASE_PREPARE,
+    "load_subtitle": PHASE_PREPARE,
+    "detect": PHASE_ANALYZE,
+    "segment": PHASE_ANALYZE,
+    "segment_text": PHASE_ANALYZE,
+    "transcribe_primary": PHASE_TRANSCRIBE,
+    "retry": PHASE_RETRY,
+    "align": PHASE_ALIGN,
+    "translate": PHASE_TRANSLATE,
+    "restore": PHASE_PROCESS,
+    "postprocess": PHASE_PROCESS,
+    "merge_output": PHASE_PROCESS,
+    "encode": PHASE_ENCODE,
+    "write_output": PHASE_OUTPUT,
+    "finalize": PHASE_OUTPUT,
+}
+
+
+def normalize_phase_key(phase_key: str | None) -> str | None:
+    if not phase_key:
+        return None
+    return PHASE_NORMALIZATION.get(phase_key, phase_key)
+
+
+def get_phase_label(phase_key: str | None, fallback: str | None = None) -> str | None:
+    normalized = normalize_phase_key(phase_key)
+    if normalized and normalized in PHASE_LABELS:
+        return PHASE_LABELS[normalized]
+    return fallback
+
+
+def get_job_type_phase_defaults(job_type: str | None) -> dict[str, Any]:
+    if not job_type:
+        return {}
+    return dict(JOB_TYPE_PHASE_DEFAULTS.get(job_type, {}))
+
+
+def get_terminal_phase_label(
+    status: str | None,
+    *,
+    phase_key: str | None = None,
+    fallback: str | None = None,
+) -> str | None:
+    phase_label = get_phase_label(phase_key)
+    if phase_label:
+        return phase_label
+    if status and status in TERMINAL_STATUS_LABELS:
+        return TERMINAL_STATUS_LABELS[status]
+    return fallback
+
+---manager followup block---
+
+    def _build_job_create_from_row(self, job: Job) -> JobCreate:
+        return JobCreate(
+            emby_item_id=job.emby_item_id,
+            emby_item_name=job.emby_item_name,
+            input_path=job.input_path,
+            settings=job.settings or {},
+            chain_id=job.chain_id,
+            depends_on_task_id=job.depends_on_task_id,
+            parent_task_id=job.parent_task_id,
+        )
+
+    def _default_followup_phase_state(self, job_type: str) -> dict[str, object]:
+        return get_job_type_phase_defaults(job_type)
+
+    async def _activate_blocked_dependents(self, parent_job_id: str) -> list[str]:
+        activated_ids: list[str] = []
+        pending_jobs: list[tuple[str, JobCreate, str]] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status == "blocked",
+                    ).order_by(Job.created_at)
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "queued"
+                    job.error_message = None
+                    defaults = self._default_followup_phase_state(job.job_type)
+                    if defaults:
+                        job.phase_key = defaults.get("phase_key")  # type: ignore[assignment]
+                        job.phase_label = defaults.get("phase_label")  # type: ignore[assignment]
+                        job.phase_progress = 0
+                        job.detail = FOLLOWUP_QUEUED_DETAIL
+                    pending_jobs.append((job.id, self._build_job_create_from_row(job), job.job_type))
+                    activated_ids.append(job.id)
+                await session.commit()
+        for job_id, job_data, job_type in pending_jobs:
+            defaults = self._default_followup_phase_state(job_type)
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put({
+                "type": "queued",
+                "job_id": job_id,
+                "phase_key": defaults.get("phase_key"),
+                "phase_label": defaults.get("phase_label"),
+                "phase_progress": 0 if defaults else None,
+                "detail": FOLLOWUP_QUEUED_DETAIL if defaults else None,
+            })
+        if pending_jobs:
+            self._ensure_worker()
+        return activated_ids
+
+    async def _skip_blocked_dependents(self, parent_job_id: str, reason: str) -> list[str]:
+        skipped_ids: list[str] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status.in_(["blocked", "pending"]),
+                    )
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "skipped"
+                    defaults = self._default_followup_phase_state(job.job_type)
+                    if defaults:
+                        job.phase_key = defaults.get("phase_key")  # type: ignore[assignment]
+                        job.phase_label = defaults.get("phase_label")  # type: ignore[assignment]
+                        job.phase_progress = 0
+                        job.detail = reason
+                    job.error_message = reason
+                    job.completed_at = utcnow_naive()
+                    skipped_ids.append(job.id)
+                await session.commit()
+        for job_id in skipped_ids:
+            await self.get_event_queue(job_id).put({"type": "skipped", "success": False, "error": reason})
+        return skipped_ids
+
+    async def create_job(
+        self,
+        job_data: JobCreate,
+        *,
+        job_type: str = "lada",
+        status: str = "queued",
+        enqueue_now: bool = True,
+    ) -> JobResponse:
+        job_id = str(uuid.uuid4())
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                job = Job(
+                    id=job_id,
+                    job_type=job_type,
+                    emby_item_id=job_data.emby_item_id,
+                    emby_item_name=job_data.emby_item_name,
+                    input_path=job_data.input_path,
+                    status=status,
+                    chain_id=job_data.chain_id,
+                    depends_on_task_id=job_data.depends_on_task_id,
+                    parent_task_id=job_data.parent_task_id,
+                    settings=job_data.settings.model_dump() if hasattr(job_data, 'settings') else {},
+                )
+                session.add(job)
+                await session.commit()
+                await session.refresh(job)
+                response = JobResponse.model_validate(job)
+
+        if enqueue_now and status == "queued":
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put({"type": "queued", "job_id": job_id})
+            self._ensure_worker()
+        elif status == "blocked":
+            defaults = self._default_followup_phase_state(job_type)
+            if defaults:
+                await self._set_job_progress_state(
+                    job_id,
+                    progress=0,
+                    phase_key=defaults.get("phase_key"),  # type: ignore[arg-type]
+                    phase_label=defaults.get("phase_label"),  # type: ignore[arg-type]
+                    phase_progress=0,
+                    detail=FOLLOWUP_WAITING_DETAIL,
+                )
+                refreshed = await self.get_job(job_id)
+                if refreshed:
+                    response = refreshed
+            await self.get_event_queue(job_id).put({
+                "type": "blocked",
+                "job_id": job_id,
+                "phase_key": defaults.get("phase_key"),
+                "phase_label": defaults.get("phase_label"),
+                "phase_progress": 0 if defaults else None,
+                "detail": FOLLOWUP_WAITING_DETAIL if defaults else None,
+            })
+
+        return response
+
+    async def enqueue(self, job_data: JobCreate, job_type: str = "lada") -> JobResponse:
+        """入队 Lada 或 Whisper 任务"""
+        return await self.create_job(job_data, job_type=job_type, status="queued", enqueue_now=True)
+
+    async def enqueue_whisper(self, job_data: JobCreate) -> JobResponse:
+        """入队 Whisper 任务"""
+        return await self.enqueue(job_data, job_type="whisper")
+
+    async def enqueue_translate_srt(self, job_data: JobCreate) -> JobResponse:
+        """入队 SRT 翻译任务"""
+        return await self.enqueue(job_data, job_type="translate-srt")
+
+    def set_max_concurrent(self, max_concurrent: int):

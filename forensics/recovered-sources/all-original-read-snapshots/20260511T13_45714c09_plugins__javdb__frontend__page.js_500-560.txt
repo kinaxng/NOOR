@@ -1,0 +1,67 @@
+164:    renderPager()
+533:    renderPager()
+597:  function renderPager() {
+617:        renderPager()
+733:          renderPager()
+735:          renderPager()
+        ...(state.tab === 'latest' ? { type: state.latestType, filter_by: remoteLatestFilter, filters: [...state.latestSelectedFilters], sort_by: 'update' } : {}),
+        ...(state.tab === 'rankings' && ['daily', 'weekly', 'monthly'].includes(state.rankingMode)
+          ? { type: state.rankingType, period: state.rankingMode }
+          : {}),
+        ...(state.tab === 'rankings' && state.rankingMode === 'top250'
+          ? { type_value: state.top250Year || String(state.rankingType) }
+          : {}),
+        ...(isActorRankingFrame() ? { type: state.rankingType } : {}),
+      }
+      if (state.relation?.relType === 'actor') {
+        payload.page = 1
+        payload.limit = 200
+        payload.sort_by = 'release'
+        payload.order_by = 'desc'
+      }
+      const res = await sdk.api.post(`/plugins/javdb/actions/${action}`, { payload })
+      if (seq !== loadSeq) return
+      state.items = res.data.items || []
+      state.total = Number(res.data.total || state.items.length)
+      if (state.items.length && (state.relation?.relType === 'actor' || (state.tab === 'latest' && remoteLatestFilter !== 'all'))) {
+        await enrichWorkItems(state.items)
+        if (seq !== loadSeq) return
+      }
+    } catch (e) {
+      if (seq !== loadSeq) return
+      sdk.toast.error(e.message || '数据加载失败')
+      state.items = []
+      state.total = 0
+    }
+    if (seq !== loadSeq) return
+    state.loading = false
+    renderFilters()
+    renderGrid()
+    renderPager()
+  }
+
+  function renderGrid() {
+    grid.innerHTML = ''
+    grid.classList.toggle('javdb-grid--actors', isActorRankingFrame())
+    const items = filteredItems()
+
+    if (state.loading && !items.length) {
+      for (let i = 0; i < 12; i++) grid.appendChild(el('div', 'javdb-card javdb-skeleton'))
+      return
+    }
+
+    if (!items.length) {
+      grid.appendChild(sdk.ui.emptyState({ text: '暂无符合条件的作品' }))
+      return
+    }
+
+    const start = (state.page - 1) * state.limit
+    const visible = isLatestRemoteBuffered() ? items : items.slice(start, start + state.limit)
+
+    visible.forEach(item => {
+      if (isActorRankingFrame()) {
+        const actorTitle = item.name_zht || item.name || '-'
+        const actorMeta = [item.name, item.other_name].filter(Boolean).join(' · ')
+        const actorCard = el('button', 'javdb-actor-card')
+        actorCard.type = 'button'
+        actorCard.onclick = () => setRelation('actor', item.id, actorTitle)

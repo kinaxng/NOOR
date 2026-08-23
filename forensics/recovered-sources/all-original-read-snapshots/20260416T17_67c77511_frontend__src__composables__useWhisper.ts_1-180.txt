@@ -1,0 +1,132 @@
+import { ref } from 'vue'
+import api from '../api'
+import { useJobsStore } from '../stores/jobs'
+import { useToast } from './useToast'
+import { useI18n } from './useI18n'
+
+export function useWhisper() {
+  const jobsStore = useJobsStore()
+  const toast = useToast()
+  const { t } = useI18n()
+
+  const whisperTaskId = ref('')
+  const whisperStatus = ref('')
+  const whisperProgress = ref(0)
+  const whisperRunning = ref(false)
+  const whisperFeedbackVisible = ref(false)
+  const whisperFeedbackKind = ref<'submitting' | 'queued' | 'error'>('submitting')
+  const whisperQueuedHint = ref('')
+
+  let feedbackTimer: ReturnType<typeof setTimeout> | null = null
+
+  function clearFeedbackTimer() {
+    if (feedbackTimer) {
+      clearTimeout(feedbackTimer)
+      feedbackTimer = null
+    }
+  }
+
+  function hideWhisperFeedback() {
+    clearFeedbackTimer()
+    whisperFeedbackVisible.value = false
+    whisperQueuedHint.value = ''
+    if (whisperFeedbackKind.value !== 'error') {
+      whisperStatus.value = ''
+      whisperProgress.value = 0
+    }
+  }
+
+  function showQueuedFeedback(translateEnabled?: boolean) {
+    whisperFeedbackVisible.value = true
+    whisperFeedbackKind.value = 'queued'
+    whisperStatus.value = t('whisper.status.queued')
+    whisperQueuedHint.value = translateEnabled ? t('whisper.status.queuedHintTranslate') : t('whisper.status.queuedHint')
+    whisperProgress.value = 100
+    whisperRunning.value = false
+    clearFeedbackTimer()
+    feedbackTimer = setTimeout(() => {
+      hideWhisperFeedback()
+    }, 2200)
+  }
+
+  async function startWhisperTask(params: {
+    video_path: string
+    strategy?: string
+    model: string
+    pipeline_mode?: string
+    merge_strategy: string
+    language: string
+    sensitivity: string
+    vad_method?: string
+    speech_enhancer?: string
+    pass1_pipeline?: string
+    pass2_pipeline?: string
+    custom_config?: {
+      model: string
+      vad_method: string
+      enhancers: string[]
+      segmenter: string
+      timestamp_mode: string
+      aligner_backend: string
+      framer_backend: string
+      generator_backend: string
+    }
+    translate_to?: string
+    translate_base_url?: string
+    translate_api_key?: string
+    translate_model?: string
+    translate_style?: string
+  }) {
+    if (!params.video_path) {
+      toast.warning(t('whisper.selectVideoFirst'))
+      return
+    }
+
+    clearFeedbackTimer()
+    whisperRunning.value = true
+    whisperFeedbackVisible.value = true
+    whisperFeedbackKind.value = 'submitting'
+    whisperStatus.value = t('whisper.status.submitting')
+    whisperProgress.value = 24
+
+    try {
+      const createResp = await api.post('/whisper/tasks', params)
+      whisperTaskId.value = createResp.data.task_id
+      whisperProgress.value = 68
+
+      await api.post(`/whisper/tasks/${whisperTaskId.value}/run`)
+      await jobsStore.fetchJobs()
+      showQueuedFeedback(Boolean(params.translate_to))
+    } catch (e: any) {
+      console.error('Whisper task failed:', e)
+      whisperFeedbackVisible.value = true
+      whisperFeedbackKind.value = 'error'
+      whisperStatus.value = t('whisper.status.createFailed', { detail: e?.response?.data?.detail || e.message })
+      whisperQueuedHint.value = ''
+      whisperProgress.value = 0
+      whisperRunning.value = false
+    }
+  }
+
+  function stopWhisper() {
+    clearFeedbackTimer()
+    whisperRunning.value = false
+    whisperFeedbackVisible.value = false
+    whisperStatus.value = ''
+    whisperQueuedHint.value = ''
+    whisperProgress.value = 0
+  }
+
+  return {
+    whisperTaskId,
+    whisperStatus,
+    whisperQueuedHint,
+    whisperProgress,
+    whisperRunning,
+    whisperFeedbackVisible,
+    whisperFeedbackKind,
+    startWhisperTask,
+    stopWhisper,
+    hideWhisperFeedback,
+  }
+}

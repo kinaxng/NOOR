@@ -1,0 +1,41 @@
+        return cleaned, removed
+
+    @classmethod
+    def _is_noise_only(cls, text: str) -> bool:
+        compact = re.sub(r"\s+", "", text or "")
+        if not compact:
+            return True
+        if cls._PUNCT_ONLY_RE.fullmatch(compact):
+            return True
+
+        normalized = re.sub(r"[。、「」『』、,，.!！?？…~〜・\-]", "", compact)
+        if not normalized:
+            return True
+        if len(normalized) <= 48 and cls._consists_of_noise_tokens(normalized):
+            return True
+
+        for width in range(1, min(5, len(normalized) // 4 + 1)):
+            unit = normalized[:width]
+            if unit and unit * max(4, len(normalized) // width) == normalized[: len(unit) * max(4, len(normalized) // width)]:
+                if len(normalized) >= width * 4 and normalized == unit * (len(normalized) // width):
+                    return True
+        return False
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        normalized = re.sub(r"\s+", "", text or "")
+        normalized = re.sub(r"[。、「」『』!！?？…~〜]+", "", normalized)
+        return normalized.strip()
+
+    def _is_near_duplicate(self, left: str, right: str) -> bool:
+        lnorm = self._normalize_text(left)
+        rnorm = self._normalize_text(right)
+        if not lnorm or not rnorm:
+            return False
+        if lnorm == rnorm:
+            return True
+        if len(lnorm) >= 6 and (lnorm in rnorm or rnorm in lnorm):
+            return True
+        if len(lnorm) >= 8 and len(rnorm) >= 8:
+            common = lnorm if len(lnorm) <= len(rnorm) else rnorm
+            other = rnorm if common is lnorm else lnorm

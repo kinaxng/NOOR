@@ -1,0 +1,260 @@
+"""Whisper 字幕生成引擎"""
+import os
+import asyncio
+import subprocess
+import warnings
+from pathlib import Path
+from typing import Optional, Callable
+import tempfile
+
+warnings.filterwarnings("ignore", message=".*chunk_length_s.*is very experimental.*")
+
+from .types import (
+    WhisperConfig, WhisperModel, PipelineMode, MergeStrategy,
+    SubtitleSegment, TranscriptionResult, WhisperTask
+)
+
+
+class AudioExtractor:
+    """音频提取器"""
+
+    @staticmethod
+    def extract(audio_path: str, output_path: str, sample_rate: int = 16000) -> tuple[str, float]:
+        """使用 FFmpeg 提取音频"""
+        cmd = [
+            "ffmpeg", "-i", audio_path,
+            "-vn", "-acodec", "pcm_s16le",
+            "-ar", str(sample_rate), "-ac", "1",
+            "-threads", "8",
+            "-y", output_path
+        ]
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+        # 获取时长
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", audio_path],
+            capture_output=True, text=True
+        )
+        duration = float(result.stdout.strip())
+        return output_path, duration
+
+
+class AnimeWhisperProcessor:
+    """Anime-Whisper 处理 (Pass1) — 直接用 transformers 低层 API，避免 pipeline 的 mel feature 限制"""
+
+    def __init__(self, config: WhisperConfig, progress_callback: Optional[Callable] = None):
+        self.config = config
+        self.progress_callback = progress_callback
+        self._log_lines = []
+        self._processor = None  # 缓存 processor 实例
+        self._model = None       # 缓存 model 实例
+        self._device = None
+        self._dtype = None
+
+    def log(self, msg: str, progress: int = None):
+        self._log_lines.append(msg)
+        if self.progress_callback:
+            try:
+                self.progress_callback(msg, progress)
+            except TypeError:
+                self.progress_callback(msg)
+
+    def _ensure_model(self):
+        """延迟加载并缓存模型（只加载一次）"""
+        if self._model is not None:
+            return
+
+        import os
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        os.environ["HF_HOME"] = whisper_model_dir
+        os.environ["TRANSFORMERS_CACHE"] = whisper_model_dir
+        settings.apply_network_env()
+
+        try:
+            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+            import torch
+        except ImportError:
+            self.log("[Pass1] 错误: 需要安装 transformers 和 torch")
+            raise RuntimeError("anime-whisper 需要 transformers 库")
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+        model_id = "litagin/anime-whisper"
+        self.log(f"[Pass1] 加载模型: {model_id} (device: {device}), cache: {whisper_model_dir}")
+
+        # 尝试 accelerate（device_map 自动分配层到设备）
+        try:
+            import accelerate
+            self._processor = AutoProcessor.from_pretrained(model_id, cache_dir=whisper_model_dir)
+            self._model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+                device_map=device,
+                cache_dir=whisper_model_dir,
+            )
+        except Exception:
+            self.log("[Pass1] 使用 fallback 加载方式（device 参数）")
+            self._processor = AutoProcessor.from_pretrained(model_id, cache_dir=whisper_model_dir)
+            self._model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+                cache_dir=whisper_model_dir,
+            ).to(device)
+
+        self._device = device
+        self._dtype = dtype
+
+        if torch.cuda.is_available():
+            self.log(f"[Pass1] GPU: {torch.cuda.get_device_name(0)}")
+        self.log("[Pass1] 模型加载完成", 10)
+
+    def process(self, audio_path: str, output_srt: str) -> TranscriptionResult:
+        """同步处理音频文件"""
+        import traceback
+        import torch
+        import numpy as np
+
+        self._ensure_model()
+
+        self.log(f"[Pass1] 开始转写: {audio_path}", 20)
+
+        try:
+            # 用 librosa 加载音频
+            import librosa
+            try:
+                y, _sr = librosa.load(audio_path, sr=16000, mono=True)
+            except Exception:
+                import soundfile as sf
+                y, sr = sf.read(audio_path)
+                if sr != 16000:
+                    y = librosa.resample(y, orig_sr=sr, target_sr=16000)
+                if y.ndim > 1:
+                    y = y.mean(axis=1)
+                y = y.astype(float)
+            audio_duration = len(y) / 16000.0
+
+            # 提取特征
+            inputs = self._processor(
+                y, sampling_rate=16000, return_tensors="pt"
+            )
+            input_features = inputs.input_features.to(self._device, dtype=self._dtype)
+
+            # 直接调用 model.generate()（不用 pipeline，避免 3000 mel feature 限制）
+            # 使用 greedy 解码（anime-whisper 推荐参数）
+            with torch.no_grad():
+                output_ids = self._model.generate(
+                    input_features,
+                    language="ja",
+                    task="transcribe",
+                    do_sample=False,
+                    num_beams=1,
+                    max_new_tokens=440,
+                )
+
+            text = self._processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+
+            self.log(f"[Pass1] 转写完成，文本长度: {len(text)} 字符", 90)
+
+            # anime-whisper 不返回时间戳，用整个音频时长作为单一段落
+            # JapanesePostProcessor 会做断句处理
+            segments = [SubtitleSegment(
+                index=1,
+                start_time=0.0,
+                end_time=audio_duration,
+                text=text,
+            )]
+
+            return TranscriptionResult(
+                segments=segments,
+                language="ja",
+                duration=audio_duration,
+                source="anime-whisper",
+                metadata={},
+            )
+
+        except Exception as e:
+            self.log(f"[Pass1] 异常: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
+            raise
+
+
+class FasterWhisperProcessor:
+    """Faster-Whisper 处理 (Pass2)"""
+
+    def __init__(self, config: WhisperConfig, progress_callback: Optional[Callable] = None):
+        self.config = config
+        self.progress_callback = progress_callback
+        self._log_lines = []
+        self._max_end_time = 0.0
+
+    def log(self, msg: str, progress: int = None):
+        self._log_lines.append(msg)
+        if self.progress_callback:
+            try:
+                self.progress_callback(msg, progress)
+            except TypeError:
+                self.progress_callback(msg)
+
+    def _report_duration_progress(self, current_time: float, total_duration: float):
+        """基于音频时长覆盖率报告进度"""
+        if total_duration <= 0:
+            return
+        coverage = min(1.0, current_time / total_duration)
+        # Pass2 阶段映射: 28-85%
+        pct = int(28 + coverage * 57)
+        pct = min(84, pct)
+        self.log(f"[Pass2] 音频覆盖 {current_time:.0f}s / {total_duration:.0f}s", pct)
+
+    def _get_sensitivity_params(self) -> dict:
+        """获取敏感度参数"""
+        if self.config.sensitivity.value == "conservative":
+            return {
+                "beam_size": 1,
+                "best_of": 1,
+                "no_speech_threshold": 0.7,
+                "repetition_penalty": 1.8,
+            }
+        elif self.config.sensitivity.value == "aggressive":
+            return {
+                "beam_size": 3,
+                "best_of": 3,
+                "no_speech_threshold": 0.22,
+            }
+        else:  # balanced
+            return {
+                "beam_size": 2,
+                "best_of": 2,
+                "no_speech_threshold": 0.4,
+                "repetition_penalty": 1.5,
+            }
+
+    def process(self, audio_path: str, output_srt: str) -> TranscriptionResult:
+        """处理音频文件"""
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            self.log("[Pass2] 错误: 需要安装 faster-whisper")
+            raise RuntimeError("faster-whisper 库未安装")
+
+        model_size = self.config.pass2_model.value
+
+        # 获取自定义模型目录
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+
+        self.log(f"[Pass2] 加载模型: {model_size} (dir: {whisper_model_dir})")
+
+        device = "cuda" if self.config.device == "auto" else self.config.device
+        compute_type = self.config.compute_type if self.config.compute_type != "default" else "float16"
+
+        self.log(f"[Pass2] 使用设备: {device}, compute: {compute_type}")
+
+        model = WhisperModel(
+            model_size,
+            device=device,
+            compute_type=compute_type,
+            download_root=whisper_model_dir,

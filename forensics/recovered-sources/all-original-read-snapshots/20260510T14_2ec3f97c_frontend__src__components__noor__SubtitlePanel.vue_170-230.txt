@@ -1,0 +1,123 @@
+const whisperDefaultMeta = computed(() => getWhisperStrategyMeta(whisperDefaultStrategy.value))
+const whisperTranslationSummary = computed(() => formatWhisperTranslationSummary(t, {
+  translateEnabled: whisperTranslateEnabled.value,
+  translateTo: whisperTranslateTo.value,
+  translateModel: whisperTranslateModel.value,
+}))
+const whisperHasRunOverrides = computed(() => (
+  whisperRunAudioPreprocessMode.value !== whisperSavedAudioPreprocessMode.value
+  || whisperRunAudioPreprocessModel.value !== whisperSavedAudioPreprocessModel.value
+  || whisperTranslateEnabled.value !== whisperSavedTranslateEnabled.value
+))
+const whisperAudioPreprocessSummary = computed(() => formatWhisperAudioPreprocessSummary(t, {
+  audioPreprocessMode: whisperRunAudioPreprocessMode.value,
+  audioPreprocessModel: whisperRunAudioPreprocessModel.value,
+}))
+const whisperStrategyPresentation = computed(() => getWhisperSelectableStrategyPresentation(t, whisperDefaultStrategy.value))
+const whisperExperimentalHint = computed(() => whisperStrategyPresentation.value.experimentalHint)
+const whisperDefaultSummaryClass = computed(() => whisperStrategyPresentation.value.summaryClass)
+const whisperOpenJobsLabel = computed(() => t('whisper.status.viewJobs'))
+const whisperTranslateRunningLabel = computed(() => t('subtitle.translateRunning'))
+const whisperTranslateActionLabel = computed(() => t('subtitle.aiTranslate'))
+const whisperRunAudioModeClean = computed(() => t('settings.whisper.audioPreprocessModel.vocalClean'))
+const whisperRunAudioModeBalanced = computed(() => t('settings.whisper.audioPreprocessModel.vocalBalanced'))
+const whisperAudioPreprocessEnabled = computed({
+  get: () => whisperRunAudioPreprocessMode.value !== 'none',
+  set: (enabled: boolean) => {
+    if (enabled) {
+      whisperRunAudioPreprocessMode.value = 'vocal_isolation'
+      if (!whisperRunAudioPreprocessModel.value || whisperRunAudioPreprocessModel.value === 'none') {
+        whisperRunAudioPreprocessModel.value = 'vocal_balanced'
+      }
+    } else {
+      whisperRunAudioPreprocessMode.value = 'none'
+    }
+  },
+})
+const whisperFlowSteps = computed(() => {
+  if (whisperDefaultStrategy.value === 'reazon_nemo') {
+    return [
+      { title: '语义分段', desc: '按语音活动切分音频，避免整段长音频直接进模型。' },
+      { title: 'ReazonSpeech NeMo v2 日语转写', desc: '实验链路单模型识别，作为当前默认链路之外的兼容观察方案。' },
+      { title: '时间轴整理', desc: '按分段结果整理字幕时间线，并保持日语输出。' },
+      { title: '日语字幕后处理', desc: '清理异常空白、重复片段和明显噪声行，生成 ja.srt。' },
+    ]
+  }
+  return [
+    { title: '语义 VAD 分段', desc: '先按语音活动切段，控制每段长度并降低长片段污染。' },
+    { title: 'Anime-Whisper 主转写', desc: '优先使用 Anime-Whisper 生成日语文本，作为主识别结果。' },
+    { title: '质量门控', desc: '检测空段、重复、噪声、异常长假名串和疑似污染片段。' },
+    { title: 'large-v3 fallback', desc: '仅对异常片段切换 faster-whisper large-v3 补救，不全量重跑。' },
+    { title: 'Qwen3-ASR fallback', desc: 'large-v3 仍不稳定时，再对该异常片段使用 Qwen3-ASR 补救。' },
+    { title: 'Qwen3 ForcedAligner 对齐', desc: '用识别文本重新做强制对齐，统一修正字幕时间轴。' },
+    { title: '智能合并与日语后处理', desc: '合并主转写与补救结果，清理重复、噪声和窗口回声，生成 ja.srt。' },
+  ]
+})
+// whisperTranslateProviderOptions removed — unified OpenAI-compatible API, no provider concept (translate fields kept for local SRT translation feature)
+
+// Selected file path (for multi-file work: current + siblings)
+const selectedPath = ref('')
+
+
+==== LADA ====
+    <Transition name="panel">
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex justify-end"
+      >
+        <!-- Backdrop -->
+        <div
+          class="absolute inset-0 bg-bg-void/80 backdrop-blur-sm"
+          @click="handleClose"
+        ></div>
+
+        <!-- Panel -->
+        <div class="relative bg-bg-surface border-l border-border-default flex flex-col overflow-hidden shadow-2xl h-full w-full max-w-md">
+          <!-- Content -->
+          <template v-if="detail">
+            <!-- Scrollable wrapper -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-4 relative">
+
+              <div class="panel-topbar">
+                <span class="panel-topbar__title">{{ panelTitle }}</span>
+                <button
+                  @click="handleClose"
+                  :title="t('common.close')"
+                  :aria-label="t('common.close')"
+                  class="panel-topbar__close"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Shared Header: backdrop + title + tagline + actors -->
+              <PanelHeader :detail="detail" :show-play="false" />
+
+              <!-- File Selector -->
+              <FilePathSelector
+                :file-path="detail?.file_path"
+                :sibling-paths="detail?.siblings"
+                v-model="selectedSubmitPath"
+                @update:model-value="selectedSubmitId = allSubmitPaths.find(p => p.path === $event)?.id || detail?.id || ''"
+              />
+
+              <!-- Processing Settings -->
+              <div class="ui-card">
+                <span class="text-[10px] text-text-muted uppercase tracking-wider">{{ t('ladaPanel.processingSettings') }}</span>
+                <div class="space-y-3 mt-3">
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.detectionModel') }}</label>
+                    <select v-model="settings.detection_model" class="settings-input w-full">
+                      <option v-for="m in mergedDetectionModels" :key="m.id" :value="m.id">{{ m.name }} ({{ m.id }})</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.restorationModel') }}</label>
+                    <select v-model="settings.restoration_model" class="settings-input w-full">
+                      <option v-for="m in mergedRestorationModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.encodingPreset') }}</label>

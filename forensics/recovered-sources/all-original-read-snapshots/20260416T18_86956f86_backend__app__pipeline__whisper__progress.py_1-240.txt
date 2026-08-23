@@ -1,0 +1,342 @@
+"""Whisper progress parsing for the unified task progress protocol."""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ProgressPhase:
+    key: str
+    label: str
+    start_pct: int
+    end_pct: int
+    description: str = ""
+
+
+PHASES = {
+    "prepare": ProgressPhase("prepare", "准备任务", 0, 3, "读取配置和准备运行环境"),
+    "extract_audio": ProgressPhase("extract_audio", "提取音频", 3, 10, "从视频提取音频流"),
+    "segment": ProgressPhase("segment", "音频分段", 10, 20, "场景检测与片段准备"),
+    "transcribe_primary": ProgressPhase("transcribe_primary", "主转写", 20, 62, "Anime-Whisper 主转写"),
+    "align": ProgressPhase("align", "Qwen3 对齐", 62, 85, "Qwen3 ForcedAligner 对齐时间轴"),
+    "postprocess": ProgressPhase("postprocess", "后处理", 85, 95, "日语后处理与清洗"),
+    "write_output": ProgressPhase("write_output", "写出字幕", 95, 100, "输出字幕文件"),
+}
+
+
+@dataclass
+class ProgressUpdate:
+    phase_key: str
+    phase_label: str
+    phase_progress: float
+    overall_progress: int
+    detail: str
+    line: str = ""
+
+
+class AsyncProgressReporter:
+    PHASE_PATTERNS = [
+        (r"开始 Whisper 字幕生成|Whisper 架构", "prepare"),
+        (r"音频提取|extract", "extract_audio"),
+        (r"场景检测|检测到\s*\d+\s*个场景段落|准备段落", "segment"),
+        (r"推荐段落|Anime 转写|Pass 1|Anime-Whisper", "transcribe_primary"),
+        (r"Qwen3 ForcedAligner|Qwen3 对齐|Decoupled 推荐链路完成|对齐中", "align"),
+        (r"日语后处理|后处理策略|recommended-cleanup|后处理完成", "postprocess"),
+        (r"生成 SRT|SRT 已保存|字幕已保存|原始字幕已保存", "write_output"),
+    ]
+
+    def __init__(self, job_id: str, event_queue, audio_duration: float = 0.0):
+        self.job_id = job_id
+        self.event_queue = event_queue
+        self.audio_duration = audio_duration
+        self.current_phase_key = "prepare"
+
+    def _update_phase(self, line: str) -> None:
+        for pattern, phase_key in self.PHASE_PATTERNS:
+            if re.search(pattern, line, re.IGNORECASE):
+                self.current_phase_key = phase_key
+                break
+
+    def parse_line(self, line: str) -> ProgressUpdate | None:
+        self._update_phase(line)
+        return self._build_update(line)
+
+    def _build_update(self, line: str) -> ProgressUpdate | None:
+        phase = PHASES.get(self.current_phase_key)
+        if not phase:
+            return None
+
+        phase_progress = self._infer_phase_progress(phase.key, line)
+        overall = phase.start_pct + int((phase.end_pct - phase.start_pct) * phase_progress)
+        if phase.key != "write_output":
+            overall = min(phase.end_pct - 1, overall)
+        else:
+            overall = min(100, max(overall, phase.start_pct))
+        detail = self._infer_detail(phase.key, line, phase_progress)
+        return ProgressUpdate(
+            phase_key=phase.key,
+            phase_label=phase.label,
+            phase_progress=phase_progress,
+            overall_progress=overall,
+            detail=detail,
+            line=line,
+        )
+
+    def _infer_phase_progress(self, phase_key: str, line: str) -> float:
+        if phase_key in {"segment", "transcribe_primary", "align"}:
+            m = re.search(r"(\d+)\s*/\s*(\d+)", line)
+            if m:
+                done = max(0, int(m.group(1)))
+                total = max(1, int(m.group(2)))
+                return min(1.0, done / total)
+        if phase_key == "write_output":
+            return 1.0 if re.search(r"已保存|字幕已保存|SRT 已保存", line) else 0.5
+        if phase_key == "postprocess":
+            return 1.0 if "后处理完成" in line else 0.5
+        if phase_key == "extract_audio":
+            return 1.0 if "失败" not in line and ("音频" in line or "extract" in line.lower()) else 0.5
+        return 0.5
+
+    def _infer_detail(self, phase_key: str, line: str, phase_progress: float) -> str:
+        if phase_key in {"segment", "transcribe_primary", "align"}:
+            m = re.search(r"(\d+)\s*/\s*(\d+)", line)
+            if m:
+                done = int(m.group(1))
+                total = int(m.group(2))
+                if phase_key == "segment":
+                    return f"已准备 {done} / {total} 段"
+                if phase_key == "transcribe_primary":
+                    return f"已转写 {done} / {total} 段"
+                return f"已对齐 {done} / {total} 段"
+        if phase_key == "postprocess":
+            return "整理日语片段与格式"
+        if phase_key == "write_output":
+            return "写出 ja.srt 文件"
+        if phase_key == "extract_audio":
+            return "提取视频音频流"
+        if phase_key == "prepare":
+            return "初始化字幕任务"
+        return f"{int(phase_progress * 100)}%"
+
+---LADA---
+import asyncio
+import concurrent.futures
+import os
+import re
+import signal
+import subprocess
+import threading
+from app.core.config import get_settings
+
+
+default_settings = get_settings()
+
+
+LADA_PHASE_LABELS = {
+    "prepare": "准备任务",
+    "detect": "检测马赛克区域",
+    "restore": "修复视频",
+    "encode": "编码输出文件",
+    "finalize": "整理输出",
+}
+
+
+def _build_lada_env(lada_model_dir: str) -> dict:
+    """Build environment dict with LADA_MODEL_WEIGHTS_DIR set."""
+    env = os.environ.copy()
+    if lada_model_dir:
+        env["LADA_MODEL_WEIGHTS_DIR"] = lada_model_dir
+    return env
+
+
+def _lada_progress_event(
+    *,
+    progress: int,
+    phase_key: str,
+    phase_progress: int,
+    detail: str | None = None,
+) -> dict:
+    return {
+        "type": "progress",
+        "progress": max(0, min(100, int(progress))),
+        "phase_key": phase_key,
+        "phase_label": LADA_PHASE_LABELS.get(phase_key, "LADA 处理中"),
+        "phase_progress": max(0, min(100, int(phase_progress))),
+        "detail": detail,
+    }
+
+
+def _restore_overall(progress: int) -> int:
+    return min(80, max(15, 15 + round(progress * 0.65)))
+
+
+def _encode_overall(progress: int) -> int:
+    return min(98, max(80, 80 + round(progress * 0.18)))
+
+
+async def run_lada_restoration(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    job_settings: dict,
+    progress_queue: asyncio.Queue,
+    cancel_event: asyncio.Event | None = None,
+) -> bool:
+    """Run lada-cli restoration using a dedicated thread pool executor."""
+    settings = get_settings()
+
+    # Resolve model weights directory
+    lada_model_dir = job_settings.get("lada_model_dir", settings.lada_model_dir) or ""
+
+    # Build lada-cli command
+    # Support two invocation styles:
+    #   1. File path: /home/kinax/.local/bin/lada-cli  → uses unbuffered wrapper
+    #   2. Module:     python3 -m lada.cli.main         → python3 -u -m lada.cli.main
+    lada_cli_path = job_settings.get("lada_cli_path", settings.lada_cli_path)
+    lada_cli_path = lada_cli_path.strip()
+
+    if " " in lada_cli_path:
+        # Module invocation style: "python3 -m lada.cli.main" or just "python3.13 -m lada.cli.main"
+        parts = lada_cli_path.split()
+        cmd = [parts[0], "-u"] + parts[1:]  # python3 -u -m lada.cli.main
+    else:
+        # File path style: use unbuffered wrapper if available
+        unbuffered_path = re.sub(r"/lada-cli$", "/lada-cli-unbuffered", lada_cli_path)
+        if os.path.exists(unbuffered_path):
+            cmd = [unbuffered_path]
+        else:
+            cmd = [lada_cli_path]
+
+    cmd.extend([
+        "--input", input_path,
+        "--output", output_path,
+        "--device", job_settings.get("device", settings.lada_device or "cuda:0"),
+        "--mosaic-detection-model", job_settings.get("detection_model", settings.lada_detection_model or "v4-fast"),
+        "--mosaic-restoration-model", job_settings.get("restoration_model", settings.lada_restoration_model or "basicvsrpp-v1.2"),
+        "--encoding-preset", job_settings.get("encoding_preset", settings.lada_encoding_preset or "hevc-nvidia-gpu-hq"),
+        "--max-clip-length", str(job_settings.get("max_clip_length", settings.lada_max_clip_length or 180)),
+    ])
+
+    # FP16 flag
+    lada_fp16 = job_settings.get("fp16", settings.lada_fp16)
+    if lada_fp16:
+        cmd.append("--fp16")
+    else:
+        cmd.append("--no-fp16")
+
+    # Face mosaics flag
+    detect_face = job_settings.get("detect_face_mosaics", settings.lada_detect_face_mosaics)
+    if detect_face:
+        cmd.append("--detect-face-mosaics")
+
+    await progress_queue.put(_lada_progress_event(
+        progress=1,
+        phase_key="prepare",
+        phase_progress=10,
+        detail="初始化 LADA 运行环境",
+    ))
+    await progress_queue.put({
+        "type": "log",
+        "line": f"Starting command: {' '.join(cmd)}"
+    })
+    await progress_queue.put(_lada_progress_event(
+        progress=5,
+        phase_key="detect",
+        phase_progress=0,
+        detail="启动 LADA CLI，准备检测视频中的马赛克区域",
+    ))
+
+    env = _build_lada_env(lada_model_dir)
+
+    # Thread-safe result container
+    result = {"returncode": None, "lines": [], "cancelled": False}
+    proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
+    proc_lock = threading.Lock()
+    terminate_requested = threading.Event()
+    progress_state = {
+        "overall": 5,
+        "phase_key": "detect",
+        "restore_progress": 0,
+        "encode_progress": 0,
+    }
+    state_lock = threading.Lock()
+
+    def push_progress(event: dict):
+        try:
+            progress_queue.put_nowait(event)
+        except Exception:
+            pass
+
+    def publish_progress(
+        *,
+        progress: int,
+        phase_key: str,
+        phase_progress: int,
+        detail: str | None = None,
+        allow_equal: bool = False,
+    ):
+        progress = max(0, min(100, int(progress)))
+        phase_progress = max(0, min(100, int(phase_progress)))
+        with state_lock:
+            current_overall = int(progress_state["overall"])
+            if progress < current_overall or (progress == current_overall and not allow_equal):
+                return
+            if progress == current_overall and phase_key == progress_state.get("phase_key"):
+                prev = int(progress_state.get(f"{phase_key}_progress", 0))
+                if phase_progress <= prev and not allow_equal:
+                    return
+            progress_state["overall"] = progress
+            progress_state["phase_key"] = phase_key
+            progress_state[f"{phase_key}_progress"] = phase_progress
+        push_progress(_lada_progress_event(
+            progress=progress,
+            phase_key=phase_key,
+            phase_progress=phase_progress,
+            detail=detail,
+        ))
+
+    def _terminate_process_tree(proc: subprocess.Popen | None):
+        if proc is None or proc.poll() is not None:
+            return
+        result["cancelled"] = True
+        terminate_requested.set()
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+    def _kill_process_tree(proc: subprocess.Popen | None):
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    def run_in_thread():
+        creation_kwargs = {"start_new_session": True} if os.name == "posix" else {}
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            **creation_kwargs,
+        )
+        with proc_lock:

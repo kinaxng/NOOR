@@ -1,0 +1,41 @@
+        el('div', 'javdb-filter-divider'),
+        sortGroup,
+        el('div', 'javdb-filter-divider'),
+        orderGroup,
+      )
+    }
+  }
+
+  async function loadData() {
+    const seq = ++loadSeq
+    estimatePageSize()
+    state.loading = true
+    renderFilters()
+    renderGrid()
+    try {
+      const remoteLatestFilter = latestRemoteFilter()
+      const action = state.relation
+        ? 'related_movies'
+        : (
+          state.tab === 'rankings'
+            ? (state.rankingMode === 'actors' ? 'actors' : state.rankingMode === 'top250' ? 'top250' : 'rankings')
+            : state.tab
+        )
+      const payload = {
+        page: state.page,
+        limit: state.limit,
+        ...(state.relation ? { rel_type: state.relation.relType, rel_id: state.relation.relId } : {}),
+        ...(state.tab === 'latest' ? { type: state.latestType, filter_by: remoteLatestFilter, filters: [...state.latestSelectedFilters], sort_by: 'update' } : {}),
+        ...(state.tab === 'videos'
+        ? {
+              ...(state.videosFilter ? { filter: state.videosFilter } : {}),
+              sort: state.videosSort,
+              order: state.videosOrder,
+              ...(state.videosActorId ? { actor_id: state.videosActorId } : {}),
+              ...(state.videosMinScore ? { min_score: state.videosMinScore } : {}),
+              ...(state.videosCategoryIds.length ? { category_ids: [...state.videosCategoryIds] } : {}),
+            }
+          : {}),
+        ...(state.tab === 'rankings' && ['daily', 'weekly', 'monthly'].includes(state.rankingMode)
+          ? { type: state.rankingType, period: state.rankingMode }
+          : {}),

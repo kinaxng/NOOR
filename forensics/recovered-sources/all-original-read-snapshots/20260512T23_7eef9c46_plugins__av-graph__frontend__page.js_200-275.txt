@@ -1,0 +1,76 @@
+  return clean.slice(0, 2)
+}
+
+function svgEl(tag, attrs = {}) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag)
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value))
+  return node
+}
+
+export async function mount(root, sdk) {
+  let state = {
+    downloadDialog: { open: false, item: null, name: '', savepath: '', category: '', options: null },
+    query: '',
+    type: '',
+    filter: '',
+    results: [],
+    actionables: { missing: [], high: [], multi: [] },
+    actionStates: [],
+    clusters: [],
+    graph: null,
+    graphLoading: false,
+    graphDepth: 1,
+    graphTypeFilter: new Set(['media_item', 'torrent', 'video_code', 'actor', 'studio', 'series', 'subtitle', 'file_version']),
+    graphHighlightIds: new Set(),
+    graphHighlightMode: false,
+    memberFilter: 'all',
+    selected: null,
+    detail: null,
+    stats: null,
+    rebuild: null,
+    loading: false,
+    pushing: new Set(),
+    pushProgress: {},
+  }
+  let disposed = false
+
+  root.innerHTML = ''
+  const page = el('div', 'av-graph')
+  const topbar = el('div', 'av-graph__topbar')
+  const search = sdk.ui.input({ placeholder: '搜索番号、演员、片商、系列...', className: 'av-graph__search' })
+  const typeSelect = sdk.ui.select({
+    value: '',
+    options: [
+      { label: '全部', value: '' },
+      { label: '作品', value: 'media_item' },
+      { label: '种子', value: 'torrent' },
+      { label: '番号', value: 'video_code' },
+      { label: '演员', value: 'actor' },
+      { label: '片商', value: 'studio' },
+      { label: '系列', value: 'series' },
+      { label: '字幕', value: 'subtitle' },
+    ],
+    onChange: value => {
+      state.type = value
+      loadSearch()
+    },
+  })
+  const filterSelect = sdk.ui.select({
+    value: '',
+    options: [
+      { label: '全部状态', value: '' },
+      { label: '有下载候选', value: 'has_torrent_candidate' },
+      { label: '有洞察', value: 'has_anomaly' },
+      { label: '缺字幕', value: 'missing_subtitle' },
+      { label: '缺字幕可下载', value: 'missing_subtitle_with_candidate' },
+    ],
+    onChange: value => {
+      state.filter = value
+      state.selected = null
+      state.detail = null
+      loadSearch()
+    },
+  })
+  const smartFilterBtn = sdk.ui.button({
+    label: '缺字幕可下载',
+    onClick: () => {

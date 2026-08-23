@@ -1,0 +1,441 @@
+                  size="sm"
+                >
+                  {{ connectionResult.message }}
+                </VuiBadge>
+              </span>
+            </div>
+          </FieldRow>
+
+          <div class="mt-2">
+            <VuiButton variant="gradient" color="info" size="small" :loading="saving" @click="saveWhisper">
+              {{ saving ? t('settings.whisper.saving') : t('common.save') }}
+            </VuiButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Dependencies Card (collapsible) -->
+      <div class="settings-card ui-card">
+        <div class="collapsible-card__header" @click="depsExpanded = !depsExpanded">
+          <div class="flex items-center gap-2">
+            <svg class="collapsible-card__chevron" :class="{ 'collapsible-card__chevron--open': depsExpanded }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            <h2 class="settings-card__title !mb-0">{{ t('settings.whisper.dependencies') }}</h2>
+          </div>
+          <VuiButton variant="outlined" color="secondary" size="small" :loading="checkingDeps" @click.stop="checkWhisperDeps">
+            {{ checkingDeps ? t('settings.whisper.checking') : t('settings.whisper.refresh') }}
+          </VuiButton>
+        </div>
+
+        <div class="collapsible-card__body" :class="{ 'collapsible-card__body--open': depsExpanded }">
+          <div class="collapsible-card__inner">
+            <div class="space-y-2 mt-4">
+              <div v-for="(info, name) in runtimeInstallableDeps" :key="String(name)" class="dep-row">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="dep-row__name">{{ name === 'torch' ? 'torch (' + torchVariant.toUpperCase() + ')' : name }}</span>
+                  <VuiBadge v-if="info.installed" color="success" variant="gradient" size="xs">{{ info.version || t('settings.whisper.installed') }}</VuiBadge>
+                  <VuiBadge v-else-if="installStatus.status === 'running' && installStatus.message?.includes(String(name))" color="info" variant="gradient" size="xs">{{ t('settings.whisper.installingShort') }}</VuiBadge>
+                  <VuiBadge v-else color="error" variant="gradient" size="xs">{{ t('settings.whisper.notInstalled') }}</VuiBadge>
+                </div>
+                <div v-if="installStatus.status === 'running' && installStatus.message?.includes(String(name))">
+                  <VuiProgress :value="installStatus.progress" color="info" variant="gradient" />
+                </div>
+              </div>
+
+              <div class="dep-row">
+                <div class="flex items-center justify-between">
+                  <span class="dep-row__name">{{ t('settings.whisper.cuda') }}</span>
+                  <VuiBadge v-if="checkingDepsResult.torch?.cuda" color="success" variant="gradient" size="xs">
+                    {{ checkingDepsResult.torch.cuda_info?.device_name || t('settings.whisper.gpuAvailable') }}
+                  </VuiBadge>
+                  <VuiBadge v-else color="warning" variant="gradient" size="xs">{{ t('settings.whisper.cpuOnly') }}</VuiBadge>
+                </div>
+              </div>
+
+              <!-- torch GPU/CPU variant selector -->
+              <div class="dep-row">
+                <div class="flex items-center justify-between">
+                  <span class="dep-row__name">{{ t('settings.whisper.torchVariant') || 'torch 版本' }}</span>
+                  <div class="flex gap-1">
+                    <button
+                      class="filter-btn"
+                      :class="{ 'filter-btn--active': torchVariant === 'gpu' }"
+                      @click="torchVariant = 'gpu'"
+                    >GPU</button>
+                    <button
+                      class="filter-btn"
+                      :class="{ 'filter-btn--active': torchVariant === 'cpu' }"
+                      @click="torchVariant = 'cpu'"
+                    >CPU</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <p v-if="installStatus.status === 'running'" class="settings-note mt-3">
+              {{ installStatus.message }}
+            </p>
+
+            <div v-if="hasMissingRuntimeDeps" class="mt-4">
+              <VuiButton variant="gradient" color="success" size="small" :loading="installingDeps" @click="installDeps">
+                {{ installingDeps ? t('settings.whisper.installing') : t('settings.whisper.installDeps') }}
+              </VuiButton>
+            </div>
+            <p v-else class="mt-4 settings-note">{{ t('settings.whisper.installSuccess') || '所有运行时依赖已就绪' }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Models Card (collapsible) -->
+      <div class="settings-card ui-card">
+        <div class="collapsible-card__header" @click="modelsExpanded = !modelsExpanded">
+          <div class="flex items-center gap-2">
+            <svg class="collapsible-card__chevron" :class="{ 'collapsible-card__chevron--open': modelsExpanded }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            <h2 class="settings-card__title !mb-0">{{ t('settings.whisper.models') }}</h2>
+          </div>
+          <VuiButton variant="outlined" color="secondary" size="small" :loading="checkingModels" @click.stop="loadWhisperModels">
+            {{ checkingModels ? t('settings.whisper.refreshing') : t('settings.whisper.refresh') }}
+          </VuiButton>
+        </div>
+
+        <div class="collapsible-card__body" :class="{ 'collapsible-card__body--open': modelsExpanded }">
+          <div class="collapsible-card__inner">
+            <div class="space-y-2 mt-4">
+              <div v-for="model in whisperModels" :key="model.id" class="model-row">
+                <div class="model-row__info">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="model-row__name">{{ model.name }}</span>
+                    <VuiBadge :color="model.type === 'transformers' ? 'info' : 'secondary'" variant="gradient" size="xs">
+                      {{ model.type }}
+                    </VuiBadge>
+                  </div>
+                  <p class="model-row__desc">{{ model.size }}{{ model.description ? ' · ' + model.description : (model.downloaded ? ' · ' + t('settings.whisper.downloaded') : ' · ' + t('settings.whisper.notInstalled')) }}</p>
+                </div>
+
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <VuiBadge v-if="model.downloaded" color="success" variant="gradient" size="xs">{{ t('settings.whisper.downloaded') }}</VuiBadge>
+
+                  <div v-else-if="downloadingModel === model.id" class="flex items-center gap-2">
+                    <div class="model-progress">
+                      <div class="model-progress__bar" :style="{ width: modelDownloadStatus.progress + '%' }"></div>
+                    </div>
+                    <span class="model-progress__text">{{ modelDownloadStatus.progress }}%</span>
+                  </div>
+
+                  <VuiButton
+                    v-else
+                    variant="outlined"
+                    color="secondary"
+                    size="small"
+                    :disabled="downloadingModel !== null"
+                    @click="downloadModel(model.id)"
+                  >
+                    {{ t('settings.whisper.download') }}
+                  </VuiButton>
+
+                  <VuiButton
+                    v-if="model.downloaded"
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    @click="deleteModel(model.id)"
+                  >
+                    {{ t('settings.whisper.deleteModel') }}
+                  </VuiButton>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+/* 强制 VuiBadge 截断 */
+.connection-result-badge :deep(.vui-badge) {
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: inline-flex;
+}
+
+.settings-card__title {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.settings-card__desc {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 0;
+}
+
+.settings-form__label {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.settings-form__field {
+  margin-bottom: 0;
+}
+
+.settings-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.settings-field-hint {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.25);
+  margin-top: 0.375rem;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  color: rgba(255, 255, 255, 0.8);
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  transition: all var(--transition-fast);
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: rgba(0, 117, 255, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-input option {
+  background: #0a0e23;
+  color: #fff;
+}
+
+.pipeline-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.pipeline-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(0, 117, 255, 0.3);
+}
+
+.pipeline-card--active {
+  background: rgba(0, 117, 255, 0.1);
+  border-color: rgba(0, 117, 255, 0.5);
+}
+
+.pipeline-card__name {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.pipeline-card--active .pipeline-card__name {
+  color: #0075FF;
+}
+
+.pipeline-card__desc {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.3);
+  margin-top: 0.25rem;
+}
+
+.pipeline-card__check {
+  color: #00e676;
+  margin-left: 0.25rem;
+}
+
+.dep-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+}
+
+.dep-row__name {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.8125rem;
+  color: #FFFFFF;
+}
+
+.model-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.model-row__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-row__name {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.model-row__desc {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.3);
+  margin-top: 0.25rem;
+}
+
+.model-progress {
+  width: 6rem;
+  height: 0.375rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.model-progress__bar {
+  height: 100%;
+  background: #0075FF;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.model-progress__text {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.4);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.settings-note {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(0, 117, 255, 0.7);
+  margin-top: 0;
+}
+
+.custom-pipeline-panel {
+  background: rgba(0, 117, 255, 0.04);
+  border: 1px solid rgba(0, 117, 255, 0.12);
+  border-left: 3px solid rgba(0, 117, 255, 0.5);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.custom-pipeline-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.625rem 1rem;
+  background: rgba(0, 117, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 117, 255, 0.1);
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgba(0, 117, 255, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.custom-pipeline-panel__body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.custom-pipeline-panel__body > * {
+  margin: 0;
+}
+
+.pipeline-specs-panel {
+  margin-top: 0.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.625rem;
+}
+
+.pipeline-specs-panel:not(.pipeline-specs-panel--dual) {
+  grid-template-columns: 1fr;
+  max-width: 50%;
+}
+
+.pipeline-specs-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+.pipeline-specs-card--primary {
+  border-color: rgba(0, 117, 255, 0.3);
+  background: rgba(0, 117, 255, 0.04);
+}
+
+.pipeline-specs-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.pipeline-specs-card__name {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pipeline-specs-card--primary .pipeline-specs-card__name {
+  color: #0075FF;
+}
+
+.pipeline-specs-card__best-for {
+  font-family: var(--font-display);
+  font-size: 0.625rem;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.pipeline-specs-card__body {
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;

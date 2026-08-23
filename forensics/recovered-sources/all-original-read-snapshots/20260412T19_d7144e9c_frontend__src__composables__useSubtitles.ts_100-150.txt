@@ -1,0 +1,51 @@
+      loadingSubtitlePreview.value = false
+    }
+  }
+
+  async function previewLocalSubtitle(path: string, filename: string) {
+    loadingSubtitlePreview.value = true
+    subtitlePreviewContent.value = ''
+    subtitlePreviewFilename.value = filename
+
+    try {
+      const resp = await api.get('/subtitles/content', {
+        params: { path }
+      })
+      subtitlePreviewContent.value = resp.data.content
+    } catch (e: any) {
+      console.error('Failed to load subtitle:', e)
+      subtitlePreviewContent.value = '加载字幕失败'
+    } finally {
+      loadingSubtitlePreview.value = false
+    }
+  }
+
+  async function deleteSubtitle(path: string, filename: string) {
+    if (!confirm(`确定删除字幕文件 "${filename}" 吗？`)) return false
+
+    try {
+      await api.delete('/subtitles', {
+        params: { path }
+      })
+      subtitles.value = subtitles.value.filter(s => s.path !== path)
+      toast.success('字幕文件已删除')
+      return true
+    } catch (e: any) {
+      console.error('Failed to delete subtitle:', e)
+      toast.error(e?.response?.data?.detail || '删除失败')
+      return false
+    }
+  }
+
+  function closeSubtitlePreview() {
+    subtitlePreviewContent.value = ''
+    subtitlePreviewFilename.value = ''
+    loadingSubtitlePreview.value = false
+  }
+
+  function clearSubtitles() {
+    subtitles.value = []
+    onlineSubtitles.value = []
+    videoCodeForSearch.value = ''
+    subtitleError.value = null
+  }

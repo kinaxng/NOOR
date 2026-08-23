@@ -1,0 +1,124 @@
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:524:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:536:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:550:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:586:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:595:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:602:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:609:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:616:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:622:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:630:  display: inline-flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:635:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:659:  display: inline-flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:693:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:700:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:715:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:734:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:740:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:755:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:764:  display: inline-block;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:927:  display: inline-flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:931:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:941:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:948:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:955:  display: block;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:963:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:969:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:982:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:999:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1022:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1033:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1062:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1074:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1081:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1103:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1111:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1126:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1132:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1142:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1153:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1177:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1186:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1197:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1204:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1210:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1217:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1247:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1256:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1264:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1279:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1288:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1298:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1309:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1365:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1379:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1389:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1396:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:1414:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:367:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:377:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:384:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:393:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:406:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:419:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:442:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:448:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:455:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:461:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:469:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:487:  display: grid;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:369:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:379:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:386:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:409:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:423:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:430:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:438:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:446:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:471:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:480:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:506:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:529:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:540:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:547:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:553:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:561:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:568:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:575:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:583:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:596:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:604:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:610:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:621:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:628:  display: flex;
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:652:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/History.vue:111:      <h3 class="text-base font-medium mb-1 text-white font-display">{{ t('history.noHistory') }}</h3>
+/home/kinax/noor/frontend/src/views/History.vue:212:  display: flex;
+/home/kinax/noor/frontend/src/views/History.vue:220:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/History.vue:228:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/History.vue:244:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/History.vue:276:  display: flex;
+/home/kinax/noor/frontend/src/views/History.vue:286:  display: flex;
+/home/kinax/noor/frontend/src/views/History.vue:294:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/History.vue:306:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/History.vue:316:  display: flex;
+/home/kinax/noor/frontend/src/views/History.vue:327:  font-family: var(--font-display);
+/home/kinax/noor/frontend/src/views/Home.vue:12:const AsyncMediaDetailPanel = defineAsyncComponent(() => import('../components/noor/MediaDetailPanel.vue'))
+/home/kinax/noor/frontend/src/views/Home.vue:47:const showDetailPanel = ref(false)
+/home/kinax/noor/frontend/src/views/Home.vue:112:  showDetailPanel.value = true
+/home/kinax/noor/frontend/src/views/Home.vue:141:  // Always fetch detail to get siblings (folder paths)
+/home/kinax/noor/frontend/src/views/Home.vue:146:    // Build all folder paths: current + siblings
+/home/kinax/noor/frontend/src/views/Home.vue:148:    if (detail?.siblings) {
+/home/kinax/noor/frontend/src/views/Home.vue:149:      for (const s of detail.siblings) {
+/home/kinax/noor/frontend/src/views/Home.vue:163:  showDetailPanel.value = false
+/home/kinax/noor/frontend/src/views/Home.vue:171:  showDetailPanel.value = false
+/home/kinax/noor/frontend/src/views/Home.vue:179:    // Build all folder paths: current + siblings
+/home/kinax/noor/frontend/src/views/Home.vue:181:    if (videoDetail.value.siblings) {
+/home/kinax/noor/frontend/src/views/Home.vue:182:      for (const s of videoDetail.value.siblings) {
+/home/kinax/noor/frontend/src/views/Home.vue:247:      <h2 class="text-lg font-semibold mb-2 text-white font-display">{{ t('library.emptyTitle') }}</h2>
+/home/kinax/noor/frontend/src/views/Home.vue:259:      <h2 class="text-lg font-semibold mb-2 text-white font-display">{{ t('library.noLibraryTitle') }}</h2>
+/home/kinax/noor/frontend/src/views/Home.vue:308:    <AsyncMediaDetailPanel
+grep: write error: Broken pipe
+
+--- FILE ---
+sed: can't read /home/kinax/noor/frontend/src/components/media/MediaDetailPanel.vue: No such file or directory

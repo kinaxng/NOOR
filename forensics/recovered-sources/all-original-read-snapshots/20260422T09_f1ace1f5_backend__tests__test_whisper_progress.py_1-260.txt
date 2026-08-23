@@ -1,0 +1,242 @@
+from app.pipeline.whisper.progress import AsyncProgressReporter
+
+
+class _DummyQueue:
+    async def put(self, item):
+        return None
+
+
+def test_progress_reporter_maps_retry_phase():
+    reporter = AsyncProgressReporter('job-1', _DummyQueue())
+    update = reporter.parse_line('[Anime+Qwen3] 补救识别: 命中污染段，切 Qwen3-ASR 二次识别...')
+    assert update is not None
+    assert update.phase_key == 'retry'
+    assert update.phase_label == '补救识别'
+
+
+def test_progress_reporter_maps_chain_completion_to_align():
+    reporter = AsyncProgressReporter('job-1', _DummyQueue())
+    update = reporter.parse_line('Anime+Qwen3 链路完成: 对齐 3/5 · fallback 2 · hardening 5')
+    assert update is not None
+    assert update.phase_key == 'align'
+    assert '已对齐 3 / 5 段' == update.detail
+
+---API TEST---
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+
+from app.api import whisper as whisper_api
+from app.core.models import JobResponse
+
+
+@pytest.mark.asyncio
+async def test_get_whisper_task_returns_last_50_log_lines(monkeypatch: pytest.MonkeyPatch):
+    job = JobResponse(
+        id='job-1',
+        job_type='whisper',
+        emby_item_id='item-1',
+        emby_item_name='Test Item',
+        input_path='/tmp/test.mp4',
+        status='running',
+        progress=42,
+        error_message=None,
+        settings={},
+        logs=[],
+        created_at='2026-04-13T00:00:00Z',
+        completed_at=None,
+    )
+    log_lines = [f'line-{i}' for i in range(60)]
+
+    async def fake_get_job(task_id: str):
+        assert task_id == 'job-1'
+        return job
+
+    async def fake_get_logs(task_id: str):
+        assert task_id == 'job-1'
+        return log_lines
+
+    monkeypatch.setattr(whisper_api.job_manager, 'get_job', fake_get_job)
+    monkeypatch.setattr(whisper_api.job_manager, 'get_logs', fake_get_logs)
+
+    result = await whisper_api.get_whisper_task('job-1')
+
+    assert result['task_id'] == 'job-1'
+    assert result['status'] == 'running'
+    assert result['progress'] == 42
+    assert result['log_lines'] == log_lines[-50:]
+    assert result['error'] is None
+
+
+@pytest.mark.asyncio
+async def test_get_whisper_task_raises_404_when_missing(monkeypatch: pytest.MonkeyPatch):
+    async def fake_get_job(task_id: str):
+        assert task_id == 'missing'
+        return None
+
+    monkeypatch.setattr(whisper_api.job_manager, 'get_job', fake_get_job)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await whisper_api.get_whisper_task('missing')
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_whisper_task_applies_recommended_preset(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+
+    async def fake_enqueue_whisper(job_data):
+        captured["job_data"] = job_data
+        return JobResponse(
+            id='job-recommended',
+            job_type='whisper',
+            emby_item_id='item-recommended',
+            emby_item_name='Recommended',
+            input_path='/tmp/test.mp4',
+            status='queued',
+            progress=0,
+            error_message=None,
+            settings={},
+            logs=[],
+            created_at='2026-04-15T00:00:00Z',
+            completed_at=None,
+        )
+
+    monkeypatch.setattr(whisper_api.os.path, 'exists', lambda path: True)
+    monkeypatch.setattr(whisper_api, 'map_emby_path_to_local', lambda path: '/tmp/test.mp4')
+    monkeypatch.setattr(whisper_api.job_manager, 'enqueue_whisper', fake_enqueue_whisper)
+
+    response = await whisper_api.create_whisper_task(
+        whisper_api.WhisperRequest(
+            video_path='/data/media/test.mp4',
+            preset='recommended',
+            pipeline_mode='ensemble',
+            pass1_pipeline='custom',
+            pass2_pipeline='qwen',
+            merge_strategy='full_merge',
+            language='auto',
+            sensitivity='aggressive',
+            custom_config={'model': 'large-v3'},
+        )
+    )
+
+    settings = captured["job_data"].settings
+    assert response.task_id == 'job-recommended'
+    assert response.chain_id is not None
+    assert response.followup_task_id is None
+    assert settings.pipeline_mode == 'ensemble'
+    assert settings.merge_strategy == 'smart_merge'
+    assert settings.language == 'ja'
+    assert settings.sensitivity == 'balanced'
+    assert settings.pass1_pipeline == 'anime'
+    assert settings.pass2_pipeline == 'qwen'
+    assert settings.custom_config is None
+
+
+@pytest.mark.asyncio
+async def test_create_whisper_task_defaults_to_recommended_strategy(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+
+    async def fake_enqueue_whisper(job_data):
+        captured["job_data"] = job_data
+        return JobResponse(
+            id='job-default-recommended',
+            job_type='whisper',
+            emby_item_id='item-default-recommended',
+            emby_item_name='Recommended Default',
+            input_path='/tmp/test.mp4',
+            status='queued',
+            progress=0,
+            error_message=None,
+            settings={},
+            logs=[],
+            created_at='2026-04-15T00:00:00Z',
+            completed_at=None,
+        )
+
+    monkeypatch.setattr(whisper_api.os.path, 'exists', lambda path: True)
+    monkeypatch.setattr(whisper_api, 'map_emby_path_to_local', lambda path: '/tmp/test.mp4')
+    monkeypatch.setattr(whisper_api.job_manager, 'enqueue_whisper', fake_enqueue_whisper)
+
+    response = await whisper_api.create_whisper_task(
+        whisper_api.WhisperRequest(
+            video_path='/data/media/test.mp4',
+        )
+    )
+
+    settings = captured["job_data"].settings
+    assert response.task_id == 'job-default-recommended'
+    assert response.message == 'Whisper 转写任务已创建'
+    assert settings.strategy == 'recommended'
+    assert settings.pipeline_mode == 'ensemble'
+    assert settings.pass1_pipeline == 'anime'
+    assert settings.pass2_pipeline == 'qwen'
+
+
+@pytest.mark.asyncio
+async def test_create_whisper_task_creates_blocked_translate_job_when_translate_enabled(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+
+    async def fake_enqueue_whisper(job_data):
+        captured['whisper_job'] = job_data
+        return JobResponse(
+            id='job-whisper-main',
+            job_type='whisper',
+            emby_item_id='item-main',
+            emby_item_name='Whisper Main',
+            input_path='/tmp/test.mp4',
+            status='queued',
+            progress=0,
+            error_message=None,
+            settings={},
+            logs=[],
+            created_at='2026-04-15T00:00:00Z',
+            completed_at=None,
+        )
+
+    async def fake_create_job(job_data, *, job_type, status, enqueue_now):
+        captured['translate_job'] = (job_data, job_type, status, enqueue_now)
+        return JobResponse(
+            id='job-translate-child',
+            job_type='translate-srt',
+            emby_item_id='item-child',
+            emby_item_name='Translate Child',
+            input_path=job_data.input_path,
+            status=status,
+            progress=0,
+            error_message=None,
+            settings={},
+            logs=[],
+            created_at='2026-04-15T00:00:00Z',
+            completed_at=None,
+        )
+
+    monkeypatch.setattr(whisper_api.os.path, 'exists', lambda path: True)
+    monkeypatch.setattr(whisper_api, 'map_emby_path_to_local', lambda path: '/tmp/test.mp4')
+    monkeypatch.setattr(whisper_api.job_manager, 'enqueue_whisper', fake_enqueue_whisper)
+    monkeypatch.setattr(whisper_api.job_manager, 'create_job', fake_create_job)
+
+    response = await whisper_api.create_whisper_task(
+        whisper_api.WhisperRequest(
+            video_path='/data/media/test.mp4',
+            translate_to='zh',
+            translate_model='gpt-4o-mini',
+        )
+    )
+
+    assert response.task_id == 'job-whisper-main'
+    assert response.chain_id is not None
+    assert response.followup_task_id == 'job-translate-child'
+    assert response.followup_job_type == 'translate-srt'
+    assert response.message == 'Whisper 转写任务已创建，翻译任务将自动衔接'
+    whisper_job = captured['whisper_job']
+    assert whisper_job.settings.translate_to is None
+    translate_job, job_type, status, enqueue_now = captured['translate_job']
+    assert job_type == 'translate-srt'
+    assert status == 'blocked'
+    assert enqueue_now is False
+    assert translate_job.depends_on_task_id == 'job-whisper-main'
+    assert translate_job.parent_task_id == 'job-whisper-main'
+    assert translate_job.input_path.endswith('.ja.srt')

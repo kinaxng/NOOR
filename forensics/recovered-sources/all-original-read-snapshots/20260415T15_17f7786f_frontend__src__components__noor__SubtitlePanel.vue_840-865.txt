@@ -1,0 +1,26 @@
+.panel-leave-from .bg-bg-surface {
+  transform: translateX(100%);
+}
+
+.subtitle-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.subtitle-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.whisper-strategy-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.whisper-advanced-toggle {
+  border: 0;
+  padding: 0.125rem 0;
+  font-size: 0.75rem;
+  font-weight: 600;

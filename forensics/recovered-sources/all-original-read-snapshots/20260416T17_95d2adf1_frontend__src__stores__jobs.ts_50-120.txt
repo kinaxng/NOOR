@@ -1,0 +1,177 @@
+        jobs.value = resp.data.jobs
+        if (!status) {
+          _jobsCache.data = resp.data.jobs
+          _jobsCache.loaded = true
+        }
+      } catch (e: any) {
+        error.value = e.message || t('jobs.fetchFailed')
+      } finally {
+        loading.value = false
+      }
+    }
+
+    if (!status) {
+      _jobsFetchPromise = run().finally(() => {
+        _jobsFetchPromise = null
+      })
+      await _jobsFetchPromise
+      return
+    }
+
+    await run()
+  }
+
+  // Fire-and-forget preload
+  if (!_jobsCache.loaded) {
+    _fetchJobsBg()
+  } else {
+    jobs.value = _jobsCache.data
+  }
+
+  function updateJobProgress(jobId: string, progress: number, status?: string, patch: Partial<Job> = {}) {
+    const job = jobs.value.find(j => j.id === jobId)
+    if (job) {
+      const next = Math.max(0, Math.min(100, Number(progress || 0)))
+      if ((status ?? job.status) === 'running') {
+        job.progress = Math.max(job.progress || 0, next)
+      } else {
+        job.progress = next
+      }
+      Object.assign(job, patch)
+      if (status) job.status = status as Job['status']
+    }
+  }
+
+  async function createJob(jobData: JobCreate): Promise<Job> {
+    loading.value = true
+    error.value = null
+    try {
+      const resp = await api.post('/jobs', jobData)
+      return resp.data
+    } catch (e: any) {
+      error.value = e.message || t('jobs.createFailed')
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function getJob(jobId: string) {
+    try {
+      const resp = await api.get(`/jobs/${jobId}`)
+      return resp.data as Job
+    } catch (e: any) {
+      return null
+    }
+  }
+
+  function upsertJob(job: Job) {
+    const idx = jobs.value.findIndex(j => j.id === job.id)
+    if (idx >= 0) {
+      jobs.value[idx] = { ...jobs.value[idx], ...job }
+
+---
+      aligner_backend: string
+      framer_backend: string
+      generator_backend: string
+    }
+    translate_to?: string
+    translate_base_url?: string
+    translate_api_key?: string
+    translate_model?: string
+    translate_style?: string
+  }) {
+    if (!params.video_path) {
+      toast.warning(t('whisper.selectVideoFirst'))
+      return
+    }
+
+    clearFeedbackTimer()
+    whisperRunning.value = true
+    whisperFeedbackVisible.value = true
+    whisperFeedbackKind.value = 'submitting'
+    whisperStatus.value = t('whisper.status.submitting')
+    whisperProgress.value = 24
+
+    try {
+      const createResp = await api.post('/whisper/tasks', params)
+      whisperTaskId.value = createResp.data.task_id
+      whisperProgress.value = 68
+
+      await api.post(`/whisper/tasks/${whisperTaskId.value}/run`)
+      const createdJob = await jobsStore.getJob(whisperTaskId.value)
+      if (createdJob) {
+        jobsStore.upsertJob(createdJob)
+      }
+      showQueuedFeedback(Boolean(params.translate_to))
+    } catch (e: any) {
+      console.error('Whisper task failed:', e)
+      whisperFeedbackVisible.value = true
+      whisperFeedbackKind.value = 'error'
+      whisperStatus.value = t('whisper.status.createFailed', { detail: e?.response?.data?.detail || e.message })
+      whisperQueuedHint.value = ''
+      whisperProgress.value = 0
+      whisperRunning.value = false
+
+---
+const filterTabs = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: 'all', label: t('history.filter.all') },
+    { key: 'completed', label: t('history.filter.completed') },
+    { key: 'failed', label: t('history.filter.failed') },
+  ]
+})
+
+onMounted(() => {
+  jobsStore.fetchJobs()
+})
+
+const failedStatuses = ['failed', 'cancelled', 'skipped'] as const
+
+const filteredJobs = computed(() => {
+  if (filter.value === 'all') {
+    return jobsStore.jobs.filter(j => j.status === 'completed' || failedStatuses.includes(j.status as any))
+  }
+  if (filter.value === 'failed') {
+    return jobsStore.jobs.filter(j => failedStatuses.includes(j.status as any))
+  }
+  return jobsStore.jobs.filter(j => j.status === filter.value)
+})
+
+const historyTitle = computed(() => {
+  void i18nVersion.value
+  return t('history.title')
+})
+const colName = computed(() => { void i18nVersion.value; return t('history.col.name') })
+const colStatus = computed(() => { void i18nVersion.value; return t('history.col.status') })
+const colCreated = computed(() => { void i18nVersion.value; return t('history.col.created') })
+const colCompleted = computed(() => { void i18nVersion.value; return t('history.col.completed') })
+const colActions = computed(() => { void i18nVersion.value; return t('history.col.actions') })
+const unknownJobLabel = computed(() => { void i18nVersion.value; return t('history.unknownJob') })
+const completedLabel = computed(() => { void i18nVersion.value; return t('history.filter.completed') })
+const failedLabel = computed(() => { void i18nVersion.value; return t('history.filter.failed') })
+const cancelledLabel = computed(() => { void i18nVersion.value; return t('jobs.status.cancelled') })
+const skippedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.skipped') })
+
+// Status info (reactive)
+const statusInfoMap = computed(() => {
+  void i18nVersion.value
+  return {
+    completed: { label: completedLabel.value, color: 'success' as const, variant: 'gradient' as const },
+    failed: { label: failedLabel.value, color: 'error' as const, variant: 'gradient' as const },
+    cancelled: { label: cancelledLabel.value, color: 'error' as const, variant: 'standard' as const },
+    skipped: { label: skippedLabel.value, color: 'secondary' as const, variant: 'standard' as const },
+  }
+})
+function getStatusInfo(status: string) {
+  return (statusInfoMap.value as Record<string, { label: string; color: string; variant: string }>)[status] || { label: status, color: 'secondary' as const, variant: 'standard' as const }
+}
+
+function formatDate(dateStr?: string) {
+  if (!dateStr) return t('common.notAvailable')
+  return new Date(dateStr).toLocaleString(currentLang.value === 'zh' ? 'zh-CN' : 'en-US')
+}
+
+function downloadOutput(job: any) {
+  if (job.output_path) {

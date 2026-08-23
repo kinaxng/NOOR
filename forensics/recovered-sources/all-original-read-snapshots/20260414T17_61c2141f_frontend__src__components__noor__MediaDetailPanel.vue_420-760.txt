@@ -1,0 +1,83 @@
+                class="absolute top-4 right-4 w-10 h-10 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-default transition-colors shadow-lg"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+            </div>
+          </template>
+
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <BaseModal
+    v-if="previewVideoPath"
+    :title="previewVideoName"
+    size="lg"
+    @close="closePreview"
+  >
+    <div class="preview-modal">
+      <div class="preview-modal__meta font-mono text-xs">{{ previewVideoPath }}</div>
+      <video
+        :key="previewVideoUrl"
+        class="preview-modal__player"
+        :src="previewVideoUrl"
+        controls
+        autoplay
+        preload="metadata"
+      />
+      <p class="preview-modal__hint">{{ previewUnsupportedLabel }}</p>
+    </div>
+  </BaseModal>
+</template>
+
+<style scoped>
+.panel-enter-active {
+  transition: opacity 0.25s ease;
+}
+.panel-enter-active .bg-bg-surface {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.panel-enter-from {
+  opacity: 0;
+}
+.panel-enter-from .bg-bg-surface {
+  transform: translateX(100%);
+}
+.panel-leave-active {
+  transition: opacity 0.2s ease;
+}
+.panel-leave-to {
+  opacity: 0;
+}
+.panel-leave-from .bg-bg-surface {
+  transform: translateX(100%);
+}
+
+.preview-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.preview-modal__meta {
+  color: var(--color-text-muted);
+  word-break: break-all;
+}
+
+.preview-modal__player {
+  width: 100%;
+  max-height: 70vh;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+.preview-modal__hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+</style>

@@ -1,0 +1,293 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { Job } from '../../api/types'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import VuiProgress from '../ui/Progress/VuiProgress.vue'
+import { useI18n } from '../../composables/useI18n'
+
+const { t, i18nVersion } = useI18n()
+
+const props = defineProps<{
+  job: Job
+  selected?: boolean
+  statusLabel?: string
+  progress?: number
+}>()
+
+defineEmits<{
+  click: [job: Job]
+  cancel: [jobId: string]
+}>()
+
+const isWhisperJob = computed(() => props.job.job_type === 'whisper' || props.job.job_type === 'whisper_transcribe')
+const isTranslateJob = computed(() => props.job.job_type === 'translate-srt' || props.job.job_type === 'subtitle_translate')
+const isLadaJob = computed(() => props.job.job_type === 'lada' || props.job.job_type === 'lada_restore')
+
+const jobTypeLabel = computed(() => {
+  void i18nVersion.value
+  if (isWhisperJob.value) return t('jobs.type.whisper')
+  if (isTranslateJob.value) return t('jobs.translateTag')
+  if (isLadaJob.value) return t('jobs.type.lada')
+  return t('dashboard.unknown')
+})
+
+const badgeColor = computed(() => {
+  if (isTranslateJob.value) return 'cyan'
+  if (isWhisperJob.value) return 'magenta'
+  return 'info'
+})
+
+const progressColor = computed(() => {
+  if (isTranslateJob.value) return 'cyan'
+  if (isWhisperJob.value) return 'magenta'
+  return 'primary'
+})
+
+const chainHint = computed(() => {
+  void i18nVersion.value
+  if (props.job.status === 'blocked' && isTranslateJob.value && props.job.depends_on_task_id) {
+    return t('jobs.chain.waitingTranscription')
+  }
+  if (props.job.status === 'skipped' && props.job.depends_on_task_id) {
+    return t('jobs.chain.skippedUpstream')
+  }
+  if (props.job.parent_task_id) {
+    return t('jobs.chain.childTask')
+  }
+  return ''
+})
+
+const secondaryLine = computed(() => {
+  void i18nVersion.value
+  return props.job.detail || props.job.phase_label || chainHint.value || ''
+})
+</script>
+
+<template>
+  <div
+    class="job-card bg-surface border border-border-subtle rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-border-default"
+    :class="selected ? 'ring-2 ring-accent-cyan glow-cyan' : ''"
+    @click="$emit('click', job)"
+  >
+    <div class="flex justify-between items-start gap-3 mb-3">
+      <div class="flex-1 min-w-0">
+        <VuiBadge :color="badgeColor" class="mb-1">
+          {{ jobTypeLabel }}
+        </VuiBadge>
+        <h3 class="font-medium text-sm text-text-primary truncate">{{ job.emby_item_name }}</h3>
+        <p class="text-xs text-text-secondary mt-0.5">{{ statusLabel || job.status }}</p>
+        <p v-if="secondaryLine" class="text-[11px] text-text-muted mt-1 truncate">{{ secondaryLine }}</p>
+      </div>
+
+      <button
+        v-if="job.status === 'running' || job.status === 'queued'"
+        @click.stop="$emit('cancel', job.id)"
+        class="text-text-muted hover:text-status-error transition-colors p-1"
+        :title="t('common.cancel')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <VuiProgress
+      :value="progress ?? job.progress ?? 0"
+      :color="progressColor"
+      shimmer
+    />
+  </div>
+</template>
+
+---PRESENTATION---
+      const phaseKey = runtime.phaseKey || job.phase_key || ''
+      const phaseLabel = phaseGroupLabel.value(phaseKey, runtime.phaseLabel || job.phase_label || '') || ''
+      const detail = runtime.detail || job.detail || ''
+      const statusLabel = runtime.status || fallbackStatusLabel.value(job.status || '')
+      return {
+        phaseKey,
+        phaseLabel,
+        detail,
+        statusLabel,
+      }
+    }
+  })
+
+  const getDisplayPhaseLine = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>, runtime: JobRuntimeView = {}) => {
+      const view = getEffectiveViewState.value(job, runtime)
+      if (!view.detail) return view.phaseLabel
+      if (view.phaseKey === 'retry' || view.phaseKey === 'align') {
+        return view.phaseLabel ? `${view.phaseLabel} · ${view.detail}` : view.detail
+      }
+      return view.detail
+    }
+  })
+
+  const shouldShowPhaseProgress = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (job.status !== 'running') return false
+      if (!job.phase_key) return false
+      if (job.phase_key === 'finalize') return false
+      const phaseProgress = Number(job.phase_progress ?? 0)
+      return phaseProgress >= 0 && phaseProgress <= 100
+    }
+  })
+
+  const getRunningBadgeLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>, runtimeStatus?: string) => {
+      if (job.status === 'queued') return queuedLabel.value
+      if (job.status === 'blocked') return blockedLabel.value
+      if (runtimeStatus === connectingLabel.value) return connectingLabel.value
+      if (job.status === 'running') return runningLabel.value
+      return fallbackStatusLabel.value(job.status || '')
+    }
+  })
+
+  const getStatusTone = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (job.status === 'completed') return 'success'
+      if (job.status === 'failed') return 'error'
+      if (job.status === 'cancelled') return 'warning'
+      if (job.status === 'skipped') return 'warning'
+      if (job.status === 'blocked' || job.status === 'queued') return 'warning'
+      return 'info'
+    }
+  })
+
+  const getTerminalBadgeLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (job.status === 'cancelled') return cancelledLabel.value
+      if (job.status === 'skipped') return skippedLabel.value
+      if (job.status === 'failed') return failedLabel.value
+      if (job.status === 'completed') return completedLabel.value
+      return fallbackStatusLabel.value(job.status || '')
+    }
+  })
+
+  const getTerminalIconName = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (job.status === 'skipped') return 'minus'
+      if (job.status === 'cancelled') return 'clock'
+      if (job.status === 'completed') return 'check'
+      return 'x'
+    }
+  })
+
+  const getTerminalIconClass = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (job.status === 'skipped') return 'job-card__icon--skipped'
+      if (job.status === 'cancelled') return 'job-card__icon--cancelled'
+      if (job.status === 'completed') return 'job-card__icon--completed'
+      return 'job-card__icon--failed'
+    }
+  })
+
+  const getCardView = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>, runtime: JobRuntimeView = {}): JobCardView => {
+      const status = job.status || ''
+      if (status === 'running' || status === 'queued' || status === 'blocked') {
+        return {
+          badgeLabel: getRunningBadgeLabel.value(job, runtime.status),
+          badgeTone: status === 'running' ? 'info' : 'warning',
+          iconName: status === 'running' ? 'loading' : 'clock',
+          iconClass: status === 'running' ? 'job-card__icon--running' : 'job-card__icon--queued',
+        }
+      }
+
+      if (status === 'completed') {
+        return {
+          badgeLabel: getTerminalBadgeLabel.value(job),
+          badgeTone: getStatusTone.value(job),
+          iconName: getTerminalIconName.value(job),
+          iconClass: getTerminalIconClass.value(job),
+        }
+      }
+
+      return {
+        badgeLabel: getTerminalBadgeLabel.value(job),
+        badgeTone: getStatusTone.value(job),
+        iconName: getTerminalIconName.value(job),
+        iconClass: getTerminalIconClass.value(job),
+      }
+    }
+  })
+
+  const getProgressView = computed(() => {
+    void i18nVersion.value
+    return (
+      job: Partial<Job>,
+      runtime: JobRuntimeView & { progress?: number; phaseProgress?: number } = {},
+    ): JobProgressView => {
+      const status = job.status || ''
+      const overallValue = Math.max(0, Math.min(100, Number(runtime.progress ?? job.progress ?? 0)))
+      const phaseKey = runtime.phaseKey || job.phase_key || ''
+      const phaseValue = Math.max(0, Math.min(100, Number(runtime.phaseProgress ?? job.phase_progress ?? 0)))
+      const showOverall = status === 'running'
+      const showPhase = status === 'running' && !!phaseKey && phaseKey !== 'finalize' && phaseValue >= 0 && phaseValue <= 100
+
+      return {
+        showOverall,
+        overallValue,
+        overallText: `${overallValue}%`,
+        showPhase,
+        phaseValue,
+        phaseText: `${phaseValue}%`,
+      }
+    }
+  })
+
+  const getDescriptionView = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>, runtime: JobRuntimeView = {}): JobDescriptionView => {
+      const summaryLine = getDisplayPhaseLine.value(job, runtime)
+      const metaLine = (job as Job).error_message || runtime.detail || job.detail || ''
+      return {
+        summaryLine,
+        metaLine: summaryLine === metaLine ? '' : metaLine,
+      }
+    }
+  })
+
+  return {
+    runningLabel,
+    connectingLabel,
+    queuedLabel,
+    blockedLabel,
+    completedLabel,
+    failedLabel,
+    cancelledLabel,
+    skippedLabel,
+    fallbackStatusLabel,
+    phaseGroupLabel,
+    getJobTypeLabel,
+    getChainMembers,
+    getChainStepLabel,
+    getChainRoleLabel,
+    getChainWaitingLabel,
+    getChainPositionLabel,
+    getChainStatusSummary,
+    getChainFlowLabel,
+    getJobChainHint,
+    getJobPhaseLine,
+    getEffectiveViewState,
+    getDisplayPhaseLine,
+    shouldShowPhaseProgress,
+    getRunningBadgeLabel,
+    getStatusTone,
+    getTerminalBadgeLabel,
+    getTerminalIconName,
+    getTerminalIconClass,
+    getCardView,
+    getProgressView,
+    getDescriptionView,
+  }
+}

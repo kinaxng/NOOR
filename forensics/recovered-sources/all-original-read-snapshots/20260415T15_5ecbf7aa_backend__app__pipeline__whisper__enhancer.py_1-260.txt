@@ -1,0 +1,207 @@
+Total output lines: 260
+
+"""语音增强器 — 在转写前对音频进行响度标准化/静音移除/人声增强"""
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Optional, Callable
+
+from .runtime import raise_if_cancelled, run_cancellable_subprocess
+
+
+class AudioEnhancer:
+    """语音增强器，支持多种增强方法串行组合"""
+
+    def __init__(
+        self,
+        enhancers: list[str],  # e.g. ['ffmpeg-dsp', 'demucs', 'silero-vad']
+        progress_callback: Optional[Callable] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ):
+        self.enhancers = enhancers
+        self.progress_callback = progress_callback
+        self.cancel_callback = cancel_callback
+
+    def log(self, msg: str, progress: int = None):
+        if self.progress_callback:
+            try:
+                self.progress_callback(msg, progress)
+            except TypeError:
+                self.progress_callback(msg)
+
+    def enhance(self, audio_path: str, output_path: str, sample_rate: int = 16000) -> str:
+        """
+        对音频应用增强处理。
+        各方法说明：
+          - ffmpeg-dsp: loudnorm 响度标准化（CPU）
+          - clearvoice: WebRTC VAD 静音移除 + 轻降噪（CPU）
+          - silero-vad: Silero VAD 静音检测（不增强，用于 VAD 信息）
+          - demucs: GPU 神经人声分离，提取 vocals 轨（GPU，最强）
+        返回增强后的音频路径。
+        """
+        current_path = audio_path
+
+        for i, enhancer in enumerate(self.enhancers):
+            raise_if_cancelled(self.cancel_callback)
+            if enhancer == 'none' or not enhancer:
+                continue
+
+            step_pct = int(20 + (i / max(len(self.enhancers), 1)) * 10)
+            self.log(f"[Enhancer] 应用 {enhancer}...", step_pct)
+
+            if enhancer == 'ffmpeg-dsp':
+                current_path = self._apply_ffmpeg_dsp(current_path, output_path, sample_rate)
+            elif enhancer == 'clearvoice':
+                current_path = self._apply_clearvoice(current_path, output_path, sample_rate)
+            elif enhancer == 'silero-vad':
+                # Silero VAD 仅检测静音区间，不改变音频（透传）
+                self.log(f"[Enhancer] Silero VAD 检测完成（透传）")
+                continue
+            elif enhancer == 'demucs':
+                current_path = self._apply_demucs(current_path, output_path, sample_rate)
+            else:
+                self.log(f"[Enhancer] 未知方法: {enhancer}，跳过")
+
+        # 如果没有任何增强或所有都跳过了，复制原文件
+        if current_path == audio_path:
+            import shutil
+            shutil.copy(audio_path, output_path)
+            return output_path
+
+        return current_path
+
+    # ─── FFmpeg DSP（响度标准化）──────────────────────────────────────────────
+
+    def _apply_ffmpeg_dsp(self, input_path: str, final_output: str, sample_rate: int) -> str:
+        """
+        loudnorm 响度标准化 — CPU 快速执行，保证音量一致。
+        不做降噪，保持原始音频质量。
+        """
+        tmp_path = self._temp_wav(input_path)
+        try:
+            cmd = [
+                "ffmpeg", "-i", input_path,
+                "-vn",
+                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-ar", str(sample_rate), "-ac", "1",
+                "-threads", "8",
+                "-y", tmp_path,
+            ]
+            result = run_cancellable_subprocess(cmd, cancel_callback=self.cancel_callback)
+
+            if result.returncode != 0:
+                self.log(f"[Enhancer] loudnorm 失败: {result.stderr[:200]}")
+                return input_path
+
+            self.log(f"[Enhancer] ffmpeg-dsp 完成: loudnorm 响度标准化")
+            return tmp_path
+        except Exception as e:
+            self.log(f"[Enhancer] ffmpeg-dsp 异常: {e}")
+            return input_path
+
+    # ─── ClearVoice（VAD 静音移除）──────────────────────────────────────────
+
+    def _apply_clearvoice(self, input_path: str, final_output: str, sample_rate: int) -> str:
+        """
+        WebRTC VAD 静音移除 — 保留语音段，拼接受损语音段…473 tokens truncated…  except Exception as e:
+            self.log(f"[Enhancer] WebRTC VAD 异常: {e}")
+
+        # 方案2: FFmpeg silenceremove — 纯 FFmpeg，最轻量 fallback
+        try:
+            self.log("[Enhancer] FFmpeg silenceremove fallback...")
+            cmd = [
+                "ffmpeg", "-i", input_path,
+                "-vn",
+                "-af", "silenceremove=1:0:-50dB:1:0:-50dB",
+                "-ar", str(sample_rate), "-ac", "1",
+                "-threads", "8", "-y", tmp_path,
+            ]
+            result = run_cancellable_subprocess(cmd, cancel_callback=self.cancel_callback)
+            if result.returncode == 0:
+                self.log("[Enhancer] ClearVoice (silenceremove) 完成")
+                return tmp_path
+        except Exception as e:
+            self.log(f"[Enhancer] silenceremove fallback 失败: {e}")
+
+        return input_path
+
+    # ─── BS-RoFormer（强静音移除 + 低频过滤）────────────────────────────────
+
+    def _apply_bs_roformer(self, input_path: str, final_output: str, sample_rate: int) -> str:
+        """
+        强静音移除 + 低频过滤 — 去除静音段并过滤低频噪声（空调/风声等）。
+        CPU 执行，适合嘈杂环境或强噪声场景。
+        """
+        tmp_path = self._temp_wav(input_path)
+
+        try:
+            # 强静音移除 + 高通滤波去低频噪声
+            # silenceremove: 前导/尾部 -50dB 静音，每个段落内部 -50dB
+            # highpass=f=80: 过滤 80Hz 以下低频（空调/风声/雷声等）
+            cmd = [
+                "ffmpeg", "-i", input_path,
+                "-vn",
+                "-af", "silenceremove=1:0:-50dB:1:0:-50dB,highpass=f=80,lowpass=f=8000",
+                "-ar", str(sample_rate), "-ac", "1",
+                "-threads", "8", "-y", tmp_path,
+            ]
+            result = run_cancellable_subprocess(cmd, cancel_callback=self.cancel_callback)
+            if result.returncode == 0:
+                self.log(f"[Enhancer] BS-RoFormer 完成 — 静音移除 + 低频过滤")
+                return tmp_path
+            else:
+                self.log(f"[Enhancer] BS-RoFormer 失败: {result.stderr[:200]}")
+        except Exception as e:
+            self.log(f"[Enhancer] BS-RoFormer 异常: {e}")
+
+        # Fallback: 仅静音移除
+        try:
+            cmd = [
+                "ffmpeg", "-i", input_path,
+                "-vn",
+                "-af", "silenceremove=1:0:-50dB:1:0:-50dB",
+                "-ar", str(sample_rate), "-ac", "1",
+                "-threads", "8", "-y", tmp_path,
+            ]
+            result = run_cancellable_subprocess(cmd, cancel_callback=self.cancel_callback)
+            if result.returncode == 0:
+                self.log("[Enhancer] BS-RoFormer fallback 完成")
+                return tmp_path
+        except Exception as e:
+            self.log(f"[Enhancer] BS-RoFormer fallback 也失败: {e}")
+
+        return input_path
+
+    # ─── Demucs（GPU 神经人声分离）──────────────────────────────────────────
+
+    def _apply_demucs(self, input_path: str, final_output: str, sample_rate: int) -> str:
+        """
+        Demucs GPU 神经人声分离 — 提取 vocals 轨，去除 BGM/噪声。
+
+        使用 htdemucs 模型（two-stems vocals），将人声从背景音乐中分离出来。
+        demucs 输出: tmp/htdemucs/basename/vocals.wav
+        """
+        import shutil
+
+        tmp_dir = tempfile.mkdtemp()
+        basename = os.path.splitext(os.path.basename(input_path))[0]
+
+        demucs_bin = os.environ.get("DEMUCS_BIN") or shutil.which("demucs") or "demucs"
+        try:
+            cmd = [
+                demucs_bin,
+                "-n", "htdemucs",
+                "-o", tmp_dir,
+                "--two-stems", "vocals",
+                input_path,
+            ]
+            self.log(f"[Demucs] 运行 demucs htdemucs (two-stems vocals)...")
+            result = run_cancellable_subprocess(cmd, cancel_callback=self.cancel_callback)
+            if result.returncode != 0:
+                self.log(f"[Demucs] demucs 失败: {result.stderr[:200]}")
+                return input_path
+
+            vocal_path = os.path.join(
+                tmp_dir, "htdemucs", basename, "vocals.wav"
+            )

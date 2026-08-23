@@ -1,0 +1,81 @@
+    size_bytes = 0
+    if enclosure is not None:
+        try:
+            size_bytes = int(enclosure.attrib.get("length") or 0)
+        except Exception:
+            size_bytes = 0
+    category = (item.findtext("category") or "").strip()
+    category_el = item.find("category")
+    category_domain = category_el.attrib.get("domain", "").strip() if category_el is not None else ""
+    return _with_display_title({
+        "title": html.unescape((item.findtext("title") or "").strip()),
+        "link": html.unescape((item.findtext("link") or "").strip()),
+        "pubDate": (item.findtext("pubDate") or "").strip(),
+        "guid": html.unescape((item.findtext("guid") or "").strip()),
+        "description": description,
+        "plain_description": _strip_html(description),
+        "image_url": image_url,
+        "image_source": "dmm" if _is_dmm_image(image_url) else (urlparse(image_url).hostname or "" if image_url else ""),
+        "is_av": _is_dmm_image(image_url),
+        "category": html.unescape(category),
+        "category_domain": html.unescape(category_domain),
+        "size_bytes": size_bytes,
+        "enclosure_url": enclosure_url,
+        "enclosure_type": enclosure_type,
+        "download_url": enclosure_url,
+    })
+
+
+def _normalize_api_item(it: dict[str, Any], base_url: str) -> dict[str, Any]:
+    title = str(it.get("name") or it.get("title") or it.get("subject") or "").strip()
+    link = str(it.get("link") or it.get("url") or it.get("downloadUrl") or "").strip()
+    tid = it.get("id") or it.get("torrentId")
+    if not link and tid and base_url:
+        link = f"{base_url}/detail/{tid}"
+    pub = str(it.get("createdDate") or it.get("createdAt") or it.get("pubDate") or "")
+    description = str(it.get("smallDescr") or it.get("description") or "")
+    image_list = it.get("imageList") if isinstance(it.get("imageList"), list) else []
+    image_url = str(it.get("image") or it.get("cover") or it.get("poster") or it.get("imageUrl") or "").strip()
+    if not image_url and image_list:
+        image_url = str(image_list[0] or "").strip()
+    status = it.get("status") if isinstance(it.get("status"), dict) else {}
+    dmm_info = it.get("dmmInfo") if isinstance(it.get("dmmInfo"), dict) else {}
+    try:
+        size_bytes = int(it.get("size") or 0)
+    except Exception:
+        size_bytes = 0
+    try:
+        numfiles = int(it.get("numfiles") or 0)
+    except Exception:
+        numfiles = 0
+    return _with_display_title({
+        "title": title,
+        "link": link,
+        "pubDate": pub,
+        "guid": str(tid or it.get("guid") or ""),
+        "description": description,
+        "plain_description": _strip_html(description),
+        "image_url": image_url,
+        "image_source": "dmm" if _is_dmm_image(image_url) else (urlparse(image_url).hostname or "" if image_url else ""),
+        "is_av": _is_dmm_image(image_url),
+        "category": str(it.get("category") or ""),
+        "size_bytes": size_bytes,
+        "numfiles": numfiles,
+        "labels": it.get("labelsNew") if isinstance(it.get("labelsNew"), list) else [],
+        "download_token_available": bool(tid),
+        "discount": str(status.get("discount") or ""),
+        "seeders": int(status.get("seeders") or 0) if str(status.get("seeders") or "").isdigit() else 0,
+        "leechers": int(status.get("leechers") or 0) if str(status.get("leechers") or "").isdigit() else 0,
+        "times_completed": int(status.get("timesCompleted") or 0) if str(status.get("timesCompleted") or "").isdigit() else 0,
+        "dmm": {
+            "product_number": dmm_info.get("productNumber") or "",
+            "maker": dmm_info.get("maker") or "",
+            "label": dmm_info.get("label") or "",
+            "series": dmm_info.get("series") or "",
+            "actress": dmm_info.get("actressList") if isinstance(dmm_info.get("actressList"), list) else [],
+        },
+    })
+
+
+def _apply_feed_filters(items: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
+    if bool(config.get("filter_dmm_images", False)):

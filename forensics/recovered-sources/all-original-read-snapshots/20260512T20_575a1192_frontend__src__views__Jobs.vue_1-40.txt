@@ -1,0 +1,40 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useJobsStore } from '../stores/jobs'
+import { useRoute, useRouter } from 'vue-router'
+import type { Job, SSEEvent } from '../api/types'
+import api from '../api'
+import LogViewer from '../components/noor/LogViewer.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import JobCard from '../components/noor/JobCard.vue'
+import JobChainPanel from '../components/noor/JobChainPanel.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import NoorPagination from '../components/ui/Pagination.vue'
+import { useI18n } from '../composables/useI18n'
+import { useToast } from '../composables/useToast'
+import { useJobPresentation } from '../composables/useJobPresentation'
+import { useJobsTabs } from '../composables/useJobsTabs'
+import { useJobEventState } from '../composables/useJobEventState'
+import { useJobSelection } from '../composables/useJobSelection'
+import { useJobRuntimePresentation, type JobTabKey } from '../composables/useJobRuntimePresentation'
+const { t } = useI18n()
+const jobsStore = useJobsStore()
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+const allJobs = () => jobsStore.jobs
+
+const MAX_VISIBLE_LOG_LINES = 400
+
+const {
+  jobStatuses,
+  sseConnected,
+  watchedJobIds,
+  getJobById,
+  clampJobProgress,
+  seedJobStatus,
+  refreshJobStatus,
+  ensureJobStatus,
+  applyStructuredEvent,
+  updateStorePhaseState,

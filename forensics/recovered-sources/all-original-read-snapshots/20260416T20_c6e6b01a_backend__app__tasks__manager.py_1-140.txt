@@ -1,0 +1,325 @@
+import asyncio
+import json
+import uuid
+import logging
+import os
+import re
+import shutil
+import time
+import queue
+from typing import Optional
+
+import httpx
+from app.core.database import async_session_maker
+from app.core.models import Job, JobCreate, JobResponse
+from app.core.config import get_settings
+from app.pipeline.lada.runner import run_lada_restoration
+from app.tasks.manager_helpers import (
+    append_log_line,
+    build_lada_output_path,
+    log_file_path,
+    read_log_lines,
+    utcnow_naive,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class JobManager:
+    def __init__(self):
+        self.queue: asyncio.Queue = asyncio.Queue()  # 通用队列
+        self.running_job: Optional[JobCreate] = None
+        self.running_job_id: Optional[str] = None
+        self._worker_task: Optional[asyncio.Task] = None
+        self._event_queues: dict[str, asyncio.Queue] = {}
+        self._logs: dict[str, list[str]] = {}  # job_id -> logs
+        self._db_lock = asyncio.Lock()
+        self._max_concurrent = 1  # 默认最多1个并发任务
+        # 已取消的 job ID 集合（worker 检查此集合决定是否跳过）
+        self._cancelled_jobs: set = set()
+        # 追踪当前 running job 的开始时间，用于检测 worker 崩溃后的卡死状态
+        self._running_since: Optional[float] = None
+        # job_id -> cancellation event. Running pipelines/runners check this to stop work.
+        self._cancel_events: dict[str, asyncio.Event] = {}
+
+    def _ensure_worker(self):
+        """Ensure exactly one queue worker is alive.
+
+        The worker is intentionally long-lived: enqueue/recover only starts it
+        when missing or crashed, never based on running_job. This preserves the
+        single-GPU, single-task execution contract.
+        """
+        if self._worker_task is None or self._worker_task.done():
+            self._worker_task = asyncio.create_task(self._process_queue())
+
+    def _cancel_event_for(self, job_id: str) -> asyncio.Event:
+        event = self._cancel_events.get(job_id)
+        if event is None:
+            event = asyncio.Event()
+            self._cancel_events[job_id] = event
+        return event
+
+    @staticmethod
+    def _iter_exception_chain(exc: BaseException):
+        current: BaseException | None = exc
+        seen: set[int] = set()
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            yield current
+            current = current.__cause__ or current.__context__
+
+    @classmethod
+    def _is_rate_limit_error(cls, exc: BaseException) -> bool:
+        for current in cls._iter_exception_chain(exc):
+            if isinstance(current, httpx.HTTPStatusError) and current.response is not None:
+                if current.response.status_code == 429:
+                    return True
+            err_str = str(current).lower()
+            if '429' in err_str or 'too many requests' in err_str or 'rate limit' in err_str:
+                return True
+        return False
+
+    @classmethod
+    def _is_connection_error(cls, exc: BaseException) -> bool:
+        for current in cls._iter_exception_chain(exc):
+            if isinstance(current, (ConnectionError, TimeoutError, OSError, asyncio.TimeoutError, httpx.RequestError)):
+                return True
+            err_str = str(current).lower()
+            if any(token in err_str for token in ('连接失败', '无法连接', 'connecterror', 'connection refused', 'timed out', 'timeout')):
+                return True
+        return False
+
+
+    async def _is_cancelled(self, job_id: str) -> bool:
+        if job_id in self._cancelled_jobs:
+            return True
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(select(Job.status).where(Job.id == job_id))
+                return result.scalar_one_or_none() == "cancelled"
+
+    async def _get_job_row(self, session, job_id: str) -> Job | None:
+        from sqlalchemy import select
+
+        result = await session.execute(select(Job).where(Job.id == job_id))
+        return result.scalar_one_or_none()
+
+    async def _mark_job_running(self, job_id: str) -> bool:
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                job = await self._get_job_row(session, job_id)
+                if not job or job.status == "cancelled" or job_id in self._cancelled_jobs:
+                    return False
+                job.status = "running"
+                job.error_message = None
+                await session.commit()
+                return True
+
+    async def _set_job_progress(self, job_id: str, progress: int) -> None:
+        await self._set_job_progress_state(job_id, progress=progress)
+
+    async def _set_job_progress_state(
+        self,
+        job_id: str,
+        *,
+        progress: int | None = None,
+        phase_key: str | None = None,
+        phase_label: str | None = None,
+        phase_progress: int | None = None,
+        detail: str | None = None,
+    ) -> None:
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                job = await self._get_job_row(session, job_id)
+                if not job or job.status == "cancelled":
+                    return
+                if progress is not None:
+                    job.progress = progress
+                if phase_key is not None:
+                    job.phase_key = phase_key
+
+---LADA---
+import asyncio
+import concurrent.futures
+import os
+import re
+import signal
+import subprocess
+import threading
+from app.core.config import get_settings
+
+
+default_settings = get_settings()
+
+
+LADA_PHASE_LABELS = {
+    "prepare": "准备任务",
+    "detect": "检测马赛克区域",
+    "restore": "修复视频",
+    "encode": "编码输出文件",
+    "finalize": "整理输出",
+}
+
+
+def _build_lada_env(lada_model_dir: str) -> dict:
+    """Build environment dict with LADA_MODEL_WEIGHTS_DIR set."""
+    env = os.environ.copy()
+    if lada_model_dir:
+        env["LADA_MODEL_WEIGHTS_DIR"] = lada_model_dir
+    return env
+
+
+def _lada_progress_event(
+    *,
+    progress: int,
+    phase_key: str,
+    phase_progress: int,
+    detail: str | None = None,
+) -> dict:
+    return {
+        "type": "progress",
+        "progress": max(0, min(100, int(progress))),
+        "phase_key": phase_key,
+        "phase_label": LADA_PHASE_LABELS.get(phase_key, "LADA 处理中"),
+        "phase_progress": max(0, min(100, int(phase_progress))),
+        "detail": detail,
+    }
+
+
+def _restore_overall(progress: int) -> int:
+    return min(80, max(15, 15 + round(progress * 0.65)))
+
+
+def _encode_overall(progress: int) -> int:
+    return min(98, max(80, 80 + round(progress * 0.18)))
+
+
+async def run_lada_restoration(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    job_settings: dict,
+    progress_queue: asyncio.Queue,
+    cancel_event: asyncio.Event | None = None,
+) -> bool:
+    """Run lada-cli restoration using a dedicated thread pool executor."""
+    settings = get_settings()
+
+    # Resolve model weights directory
+    lada_model_dir = job_settings.get("lada_model_dir", settings.lada_model_dir) or ""
+
+    # Build lada-cli command
+    # Support two invocation styles:
+    #   1. File path: /home/kinax/.local/bin/lada-cli  → uses unbuffered wrapper
+    #   2. Module:     python3 -m lada.cli.main         → python3 -u -m lada.cli.main
+    lada_cli_path = job_settings.get("lada_cli_path", settings.lada_cli_path)
+    lada_cli_path = lada_cli_path.strip()
+
+    if " " in lada_cli_path:
+        # Module invocation style: "python3 -m lada.cli.main" or just "python3.13 -m lada.cli.main"
+        parts = lada_cli_path.split()
+        cmd = [parts[0], "-u"] + parts[1:]  # python3 -u -m lada.cli.main
+    else:
+        # File path style: use unbuffered wrapper if available
+        unbuffered_path = re.sub(r"/lada-cli$", "/lada-cli-unbuffered", lada_cli_path)
+        if os.path.exists(unbuffered_path):
+            cmd = [unbuffered_path]
+        else:
+            cmd = [lada_cli_path]
+
+    cmd.extend([
+        "--input", input_path,
+        "--output", output_path,
+        "--device", job_settings.get("device", settings.lada_device or "cuda:0"),
+        "--mosaic-detection-model", job_settings.get("detection_model", settings.lada_detection_model or "v4-fast"),
+        "--mosaic-restoration-model", job_settings.get("restoration_model", settings.lada_restoration_model or "basicvsrpp-v1.2"),
+        "--encoding-preset", job_settings.get("encoding_preset", settings.lada_encoding_preset or "hevc-nvidia-gpu-hq"),
+        "--max-clip-length", str(job_settings.get("max_clip_length", settings.lada_max_clip_length or 180)),
+    ])
+
+    # FP16 flag
+    lada_fp16 = job_settings.get("fp16", settings.lada_fp16)
+    if lada_fp16:
+        cmd.append("--fp16")
+    else:
+        cmd.append("--no-fp16")
+
+    # Face mosaics flag
+    detect_face = job_settings.get("detect_face_mosaics", settings.lada_detect_face_mosaics)
+    if detect_face:
+        cmd.append("--detect-face-mosaics")
+
+    await progress_queue.put(_lada_progress_event(
+        progress=1,
+        phase_key="prepare",
+        phase_progress=10,
+        detail="初始化 LADA 运行环境",
+    ))
+    await progress_queue.put({
+        "type": "log",
+        "line": f"Starting command: {' '.join(cmd)}"
+    })
+
+---WHISPER-RUNTIME---
+        batches.append((start, len(subtitles)))
+
+    return batches
+
+
+def _translation_process_entry(
+    srt_path: str,
+    target_lang: str,
+    model_name: str,
+    base_url: str,
+    api_key: Optional[str],
+    translate_style: str,
+    progress_base: int,
+    progress_span: int,
+    message_queue,
+    cancel_event,
+) -> None:
+    from .translator import get_translator, _is_ollama_url
+
+    def emit_log(line: str) -> None:
+        message_queue.put({"type": "log", "line": line})
+
+    def emit_progress(
+        progress: int,
+        *,
+        phase_key: str,
+        phase_label: str,
+        phase_progress: int | None = None,
+        detail: str | None = None,
+    ) -> None:
+        payload = {
+            "type": "progress",
+            "progress": progress,
+            "phase_key": phase_key,
+            "phase_label": phase_label,
+        }
+        if phase_progress is not None:
+            payload["phase_progress"] = phase_progress
+        if detail is not None:
+            payload["detail"] = detail
+        message_queue.put(payload)
+
+    try:
+        if cancel_event.is_set():
+            raise WhisperCancellationRequested("Translation cancelled")
+        emit_log(f"开始翻译字幕: {srt_path} -> {target_lang}")
+        emit_progress(progress_base + 2, phase_key="load_subtitle", phase_label="读取字幕", phase_progress=20, detail="读取 SRT 文件")
+
+        if "openrouter.ai" in base_url:
+            base_delay = 3.0
+        elif "siliconflow" in base_url:
+            base_delay = 1.0
+        elif "together" in base_url:
+            base_delay = 1.0
+        elif _is_ollama_url(base_url):
+            base_delay = 0.0
+        else:
+            base_delay = 2.0
+
+        max_retries = 4
+        emit_log("批量翻译（自适应分批），基础延迟 %.1fs，429 时指数退避" % base_delay)

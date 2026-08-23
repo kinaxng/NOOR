@@ -1,0 +1,146 @@
+  const logs = ref<{ jobId: string; line: string }[]>([])
+
+  async function _fetchJobsBg() {
+    try {
+      const resp = await api.get('/jobs', { params: {} })
+      jobs.value = resp.data.jobs
+      _jobsCache.data = resp.data.jobs
+      _jobsCache.loaded = true
+    } catch {
+      // Silently fail - background refresh
+    }
+  }
+
+  async function fetchJobs(status?: string) {
+    if (_jobsCache.loaded && !status) {
+      jobs.value = _jobsCache.data
+    }
+
+    if (!status && _jobsFetchPromise) {
+      await _jobsFetchPromise
+      return
+    }
+
+    loading.value = true
+    error.value = null
+
+    const run = async () => {
+      try {
+        const params = status ? { status } : {}
+        const resp = await api.get('/jobs', { params })
+        jobs.value = resp.data.jobs
+        if (!status) {
+          _jobsCache.data = resp.data.jobs
+          _jobsCache.loaded = true
+        }
+      } catch (e: any) {
+        error.value = e.message || t('jobs.fetchFailed')
+      } finally {
+        loading.value = false
+      }
+    }
+
+    if (!status) {
+      _jobsFetchPromise = run().finally(() => {
+        _jobsFetchPromise = null
+      })
+      await _jobsFetchPromise
+      return
+    }
+
+    await run()
+  }
+
+  // Fire-and-forget preload
+  if (!_jobsCache.loaded) {
+    _fetchJobsBg()
+  } else {
+    jobs.value = _jobsCache.data
+  }
+
+  function updateJobProgress(jobId: string, progress: number, status?: string, patch: Partial<Job> = {}) {
+    const job = jobs.value.find(j => j.id === jobId)
+    if (job) {
+      const next = Math.max(0, Math.min(100, Number(progress || 0)))
+      if ((status ?? job.status) === 'running') {
+        job.progress = Math.max(job.progress || 0, next)
+      } else {
+        job.progress = next
+      }
+      Object.assign(job, patch)
+      if (status) job.status = status as Job['status']
+
+---
+    }
+    loading.value = true
+    error.value = null
+    await _fetchAllItemsBg(page, cacheKey, effectiveSearch)
+    loading.value = false
+  }
+
+  async function fetchItemDetail(itemId: string) {
+    detailLoading.value = true
+    error.value = null
+    try {
+      const resp = await api.get(`/media-library/item/${itemId}`)
+      selectedItem.value = resp.data
+      return resp.data as MediaItemDetail
+    } catch (e: any) {
+      error.value = e.message || t('library.itemDetailFailed')
+      throw e
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  function selectLibrary(library: MediaLibrary | null) {
+    selectedLibrary.value = library
+    items.value = []
+    total.value = 0
+
+---
+})
+
+function handleSelectVideo(item: MediaItem) {
+  detailActionPath.value = ''
+  detailActionId.value = ''
+  selectedVideo.value = item
+  showDetailPanel.value = true
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  mediaLibraryStore.fetchItemDetail(item.id)
+    .then((detail) => { videoDetail.value = detail })
+    .catch((e: any) => { detailError.value = e?.message || t('common.loadFailed') })
+    .finally(() => { loadingDetail.value = false })
+}
+
+function handleQuickAction(item: MediaItem) {
+  detailActionPath.value = ''
+  detailActionId.value = ''
+  selectedVideo.value = item
+  showLadaPanel.value = true
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  mediaLibraryStore.fetchItemDetail(item.id)
+    .then((detail) => { videoDetail.value = detail })
+    .catch((e: any) => { detailError.value = e?.message || t('common.loadFailed') })
+    .finally(() => { loadingDetail.value = false })
+}
+
+function handleSubtitleAction(item: MediaItem) {
+  selectedVideo.value = item
+  subtitleVideoId.value = item.id
+  loadingDetail.value = true
+  videoDetail.value = null
+  // Always fetch detail to get siblings (folder paths)
+  mediaLibraryStore.fetchItemDetail(item.id).then((detail) => {
+    videoDetail.value = detail
+    subtitleVideoPath.value = detail?.file_path || item.path || ''
+    // Build all folder paths: current + siblings
+    const allPaths = [subtitleVideoPath.value]
+    if (detail?.siblings) {
+      for (const s of detail.siblings) {
+        if (s.file_path && !allPaths.includes(s.file_path)) {
+          allPaths.push(s.file_path)

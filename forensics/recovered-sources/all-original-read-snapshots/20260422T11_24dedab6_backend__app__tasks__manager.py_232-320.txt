@@ -1,0 +1,204 @@
+        await self._set_job_progress_state(
+            job_id,
+            progress=progress,
+            phase_key=phase_key,
+            phase_label=phase_label,
+            phase_progress=phase_progress,
+            detail=detail,
+        )
+
+    async def _finalize_job(
+        self,
+        job_id: str,
+        *,
+        status: str,
+        output_path: str | None = None,
+        error_message: str | None = None,
+        progress: int | None = None,
+    ) -> str | None:
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                job = await self._get_job_row(session, job_id)
+                if not job:
+                    return None
+                if job.status == "cancelled" and status != "cancelled":
+                    return job.status
+
+                job.status = status
+                job.completed_at = utcnow_naive()
+                if output_path is not None:
+                    job.output_path = output_path
+                if progress is not None:
+                    job.progress = progress
+                    if progress >= 100 and status == "completed":
+                        job.phase_progress = 100
+                if status in ("completed", "failed", "cancelled", "skipped") and not job.phase_label:
+                    job.phase_label = get_terminal_phase_label(
+                        status,
+                        phase_key=job.phase_key,
+                        fallback=status,
+                    )
+                if error_message is not None:
+                    job.error_message = error_message
+                elif status != "failed":
+                    job.error_message = None
+                await session.commit()
+                return job.status
+
+    async def _emit_terminal_event(
+        self,
+        event_queue: asyncio.Queue,
+        *,
+        status: str,
+        success: bool,
+        job_id: str | None = None,
+        progress: int | None = None,
+        error: str | None = None,
+    ) -> None:
+        snapshot = await self._get_job_event_snapshot(job_id) if job_id else {}
+        payload: dict[str, object] = self._build_state_event_payload(
+            status=status,
+            success=success,
+            progress=progress if progress is not None else snapshot.get("progress"),  # type: ignore[arg-type]
+            error=error,
+            phase_state=snapshot,
+        )
+        await event_queue.put(payload)
+
+    async def _finish_cancelled_job(
+        self,
+        job_id: str,
+        *,
+        event_queue: asyncio.Queue,
+        log_message: str,
+    ) -> None:
+        await self._finalize_job(job_id, status="cancelled")
+        await self._skip_blocked_dependents(job_id, "上游任务已取消，后续任务跳过")
+        await self._emit_terminal_event(event_queue, status="cancelled", success=False, job_id=job_id)
+        await self.add_log(job_id, log_message)
+
+    async def _run_translation_process(
+        self,
+        job_id: str,
+        *,
+        event_queue: asyncio.Queue,
+        process_handle,
+        cancel_log_message: str,
+    ) -> tuple[str | None, str | None, bool]:
+        process = process_handle.process
+        message_queue = process_handle.message_queue
+
+---lada end---
+                            job_id,
+                            progress=msg["progress"],
+                            phase_key=msg.get("phase_key", "process"),
+                            phase_label=msg.get("phase_label") or get_phase_label(msg.get("phase_key", "process"), "LADA 处理中"),
+                            phase_progress=msg.get("phase_progress", msg["progress"]),
+                            detail=msg.get("detail") or msg.get("line"),
+                        )
+                except asyncio.TimeoutError:
+                    continue
+                except Exception:
+                    break
+
+        reader_task = asyncio.create_task(progress_reader())
+
+        settings_dict = job_data.settings.model_dump() if hasattr(job_data, 'settings') else {}
+        strategy_name = settings_dict.get("strategy") or settings_dict.get("preset") or "recommended"
+
+        await self.add_log(job_id, "开始 Lada 视频修复...")
+
+        cancel_event = self._cancel_event_for(job_id)
+        success = await run_lada_restoration(
+            job_id=job_id,
+            input_path=input_path,
+            output_path=output_path,
+            job_settings=settings_dict,
+            progress_queue=progress_queue,
+            cancel_event=cancel_event,
+        )
+
+        reader_task.cancel()
+        try:
+            await reader_task
+        except asyncio.CancelledError:
+            pass
+
+        if cancel_event.is_set():
+            await self._finish_cancelled_job(
+                job_id,
+                event_queue=self.get_event_queue(job_id),
+                log_message="Lada 任务已取消",
+            )
+            return
+
+        await self._finalize_job(
+            job_id,
+            status="completed" if success else "failed",
+            output_path=output_path if success else None,
+            error_message=None if success else "Process exited with non-zero status",
+            progress=100 if success else None,
+        )
+
+
+---whisper end---
+            if callable(close):
+                close()
+        join_thread = getattr(worker_message_queue, "join_thread", None)
+        if callable(join_thread):
+            join_thread()
+
+        while progress_update_futures:
+            future = progress_update_futures.pop(0)
+            try:
+                await asyncio.wrap_future(future)
+            except Exception as e:
+                logger.warning("DB update error while streaming whisper progress for job %s: %s", job_id, e)
+
+        if self._cancel_event_for(job_id).is_set():
+            await self._finish_cancelled_job(
+                job_id,
+                event_queue=event_queue,
+                log_message="Whisper 任务已取消",
+            )
+            return
+
+        final_status = "completed" if success else "failed"
+        await self._finalize_job(
+            job_id,
+            status=final_status,
+            output_path=output_path,
+            error_message=None if success else (error_msg or "Unknown error"),
+            progress=100 if success else None,
+        )
+        if success:
+            await self._activate_blocked_dependents(job_id)
+
+---translate end---
+        translate_style = settings_dict.get("translate_style", "adult_explicit")
+
+        event_queue = self.get_event_queue(job_id)
+        translation_handle = launch_translation_process(
+            srt_path,
+            target_lang,
+            model_name=model_name,
+            base_url=base_url,
+            api_key=api_key,
+            translate_style=translate_style,
+            progress_base=0,
+            progress_span=100,
+        )
+
+        output_path, error_msg, cancelled = await self._run_translation_process(
+            job_id,
+            event_queue=event_queue,
+            process_handle=translation_handle,
+            cancel_log_message="翻译取消请求已发送；等待当前批次安全退出...",
+        )
+
+        if cancelled:
+            await self._finish_cancelled_job(
+                job_id,
+                event_queue=event_queue,
+                log_message="翻译任务已取消",
+            )

@@ -1,0 +1,139 @@
+import { computed } from 'vue'
+import { useI18n } from './useI18n'
+import type { Job } from '../api/types'
+
+const PHASE_GROUP_MAP: Record<string, string> = {
+  prepare: 'prepare',
+  extract_audio: 'prepare',
+  load_subtitle: 'prepare',
+  detect: 'analyze',
+  segment: 'analyze',
+  segment_text: 'analyze',
+  transcribe_primary: 'transcribe',
+  align: 'align',
+  translate: 'translate',
+  restore: 'process',
+  postprocess: 'process',
+  merge_output: 'process',
+  encode: 'encode',
+  write_output: 'output',
+  finalize: 'output',
+}
+
+export function useJobPresentation(allJobs?: () => Job[]) {
+  const { t, i18nVersion } = useI18n()
+
+  const runningLabel = computed(() => { void i18nVersion.value; return t('jobs.running') })
+  const connectingLabel = computed(() => { void i18nVersion.value; return t('jobs.status.connecting') })
+  const queuedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.queued') })
+  const blockedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.blocked') })
+  const completedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.completed') })
+  const failedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.failed') })
+  const cancelledLabel = computed(() => { void i18nVersion.value; return t('jobs.status.cancelled') })
+  const skippedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.skipped') })
+
+  const phaseGroupLabel = computed(() => {
+    void i18nVersion.value
+    return (phaseKey?: string, phaseLabel?: string) => {
+      const group = phaseKey ? PHASE_GROUP_MAP[phaseKey] : ''
+      if (group === 'prepare') return t('jobs.phase.prepare')
+      if (group === 'analyze') return t('jobs.phase.analyze')
+      if (group === 'transcribe') return t('jobs.phase.transcribe')
+      if (group === 'align') return t('jobs.phase.align')
+      if (group === 'translate') return t('jobs.phase.translate')
+      if (group === 'process') return t('jobs.phase.process')
+      if (group === 'encode') return t('jobs.phase.encode')
+      if (group === 'output') return t('jobs.phase.output')
+      return phaseLabel || ''
+    }
+  })
+
+  const fallbackStatusLabel = computed(() => {
+    void i18nVersion.value
+    return (status: string) => {
+      if (status === 'running') return runningLabel.value
+      if (status === 'blocked') return blockedLabel.value
+      if (status === 'queued') return queuedLabel.value
+      if (status === 'completed') return completedLabel.value
+      if (status === 'failed') return failedLabel.value
+      if (status === 'cancelled') return cancelledLabel.value
+      if (status === 'skipped') return skippedLabel.value
+      return status
+    }
+  })
+
+  const getJobTypeLabel = computed(() => {
+    void i18nVersion.value
+    return (jobType?: string) => {
+      if (jobType === 'whisper' || jobType === 'whisper_transcribe') return t('jobs.type.whisper')
+      if (jobType === 'translate-srt' || jobType === 'subtitle_translate') return t('jobs.translateTag')
+      if (jobType === 'lada' || jobType === 'lada_restore') return t('jobs.type.lada')
+      return t('dashboard.unknown')
+    }
+  })
+
+  const getJobChainHint = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const isTranslate = job.job_type === 'translate-srt' || job.job_type === 'subtitle_translate'
+      if (job.status === 'blocked' && isTranslate && job.depends_on_task_id) {
+        return t('jobs.chain.waitingTranscription')
+      }
+      if (job.status === 'skipped' && job.depends_on_task_id) {
+        return t('jobs.chain.skippedUpstream')
+      }
+      if (job.parent_task_id) {
+        return t('jobs.chain.childTask')
+      }
+      if (job.id && allJobs && allJobs().some(candidate => candidate.depends_on_task_id === job.id)) {
+        return t('jobs.chain.hasFollowUp')
+      }
+      return ''
+    }
+  })
+
+  const getJobPhaseLine = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => job.detail || phaseGroupLabel.value(job.phase_key, job.phase_label) || ''
+  })
+
+  const shouldShowPhaseProgress = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (job.status !== 'running') return false
+      if (!job.phase_key) return false
+      if (job.phase_key === 'finalize') return false
+      const phaseProgress = Number(job.phase_progress ?? 0)
+      return phaseProgress >= 0 && phaseProgress <= 100
+    }
+  })
+
+  const getRunningBadgeLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>, runtimeStatus?: string) => {
+      if (job.status === 'queued') return queuedLabel.value
+      if (job.status === 'blocked') return blockedLabel.value
+      if (runtimeStatus === connectingLabel.value) return connectingLabel.value
+      if (job.status === 'running') return runningLabel.value
+      return fallbackStatusLabel.value(job.status || '')
+    }
+  })
+
+  return {
+    runningLabel,
+    connectingLabel,
+    queuedLabel,
+    blockedLabel,
+    completedLabel,
+    failedLabel,
+    cancelledLabel,
+    skippedLabel,
+    fallbackStatusLabel,
+    phaseGroupLabel,
+    getJobTypeLabel,
+    getJobChainHint,
+    getJobPhaseLine,
+    shouldShowPhaseProgress,
+    getRunningBadgeLabel,
+  }
+}

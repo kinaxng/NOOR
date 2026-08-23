@@ -1,0 +1,221 @@
+            :description="t('settings.whisper.sensitivityDesc')"
+          >
+            <select v-model="sensitivity" class="settings-input">
+              <option value="conservative">{{ t('whisper.sensitivity.conservative') }}</option>
+              <option value="balanced">{{ t('whisper.sensitivity.balanced') }}</option>
+              <option value="aggressive">{{ t('whisper.sensitivity.aggressive') }}</option>
+            </select>
+          </FieldRow>
+
+          <div v-if="defaultAdvancedExpanded" class="mt-2">
+            <VuiButton variant="gradient" color="info" size="small" :loading="saving" @click="saveWhisper">
+              {{ saving ? t('settings.whisper.saving') : t('settings.whisper.saveDefaults') }}
+            </VuiButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. OpenAI Translation Card -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.whisper.translationTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.translationDesc') }}</p>
+
+        <div class="settings-form mt-4">
+          <FieldRow :label="t('settings.whisper.translateTargetLabel')" :description="t('settings.whisper.translateTargetDesc')">
+            <select v-model="translateTo" class="settings-input">
+              <option v-for="opt in translateLangOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow :label="t('settings.whisper.translateModelLabel')" :description="t('settings.whisper.translateModelDesc')">
+            <input v-model="translateModel" type="text" class="settings-input" placeholder="gpt-4o-mini" />
+          </FieldRow>
+
+          <FieldRow :label="t('settings.whisper.translateBaseUrlLabel')" :description="t('settings.whisper.translateBaseUrlDesc')">
+            <input v-model="translateBaseUrl" type="text" class="settings-input" placeholder="https://api.openai.com/v1" />
+          </FieldRow>
+
+          <FieldRow :label="t('settings.whisper.translateApiKeyLabel')" :description="t('settings.whisper.translateApiKeyDesc')">
+            <input v-model="translateApiKey" type="password" class="settings-input" placeholder="sk-..." />
+          </FieldRow>
+
+          <FieldRow :label="t('settings.whisper.translateStyleLabel')" :description="t('settings.whisper.translateStyleDesc')">
+            <select v-model="translateStyle" class="settings-input">
+              <option v-for="opt in translateStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow :label="t('settings.emby.connectionTest')" :description="t('settings.whisper.translateConnectionDesc')">
+            <div class="flex items-center gap-3">
+              <VuiButton variant="outlined" color="info" size="small" :loading="testingConnection" @click="testTranslateConnection">
+                {{ testingConnection ? t('settings.whisper.testing') : t('settings.whisper.testConnection') }}
+              </VuiButton>
+              <span class="connection-result-badge">
+                <VuiBadge
+                  v-if="connectionResult"
+                  :color="connectionResult.available ? 'success' : 'error'"
+                  variant="gradient"
+                  size="sm"
+                >
+                  {{ connectionResult.message }}
+                </VuiBadge>
+              </span>
+            </div>
+          </FieldRow>
+
+          <div class="mt-2">
+            <VuiButton variant="gradient" color="info" size="small" :loading="saving" @click="saveWhisper">
+              {{ saving ? t('settings.whisper.saving') : t('common.save') }}
+            </VuiButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Dependencies Card (collapsible) -->
+      <div class="settings-card ui-card">
+        <div class="collapsible-card__header" @click="depsExpanded = !depsExpanded">
+          <div class="flex items-center gap-2">
+            <svg class="collapsible-card__chevron" :class="{ 'collapsible-card__chevron--open': depsExpanded }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            <h2 class="settings-card__title !mb-0">{{ t('settings.whisper.dependencies') }}</h2>
+          </div>
+          <VuiButton variant="outlined" color="secondary" size="small" :loading="checkingDeps" @click.stop="checkWhisperDeps">
+            {{ checkingDeps ? t('settings.whisper.checking') : t('settings.whisper.refresh') }}
+          </VuiButton>
+        </div>
+
+        <div class="collapsible-card__body" :class="{ 'collapsible-card__body--open': depsExpanded }">
+          <div class="collapsible-card__inner">
+            <div class="space-y-2 mt-4">
+              <div v-for="(info, name) in runtimeInstallableDeps" :key="String(name)" class="dep-row">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="dep-row__name">{{ name === 'torch' ? 'torch (' + torchVariant.toUpperCase() + ')' : name }}</span>
+                  <VuiBadge v-if="info.installed" color="success" variant="gradient" size="xs">{{ info.version || t('settings.whisper.installed') }}</VuiBadge>
+                  <VuiBadge v-else-if="installStatus.status === 'running' && installStatus.message?.includes(String(name))" color="info" variant="gradient" size="xs">{{ t('settings.whisper.installingShort') }}</VuiBadge>
+                  <VuiBadge v-else color="error" variant="gradient" size="xs">{{ t('settings.whisper.notInstalled') }}</VuiBadge>
+                </div>
+                <div v-if="installStatus.status === 'running' && installStatus.message?.includes(String(name))">
+                  <VuiProgress :value="installStatus.progress" color="info" variant="gradient" />
+                </div>
+              </div>
+
+              <div class="dep-row">
+                <div class="flex items-center justify-between">
+                  <span class="dep-row__name">{{ t('settings.whisper.cuda') }}</span>
+                  <VuiBadge v-if="checkingDepsResult.torch?.cuda" color="success" variant="gradient" size="xs">
+                    {{ checkingDepsResult.torch.cuda_info?.device_name || t('settings.whisper.gpuAvailable') }}
+                  </VuiBadge>
+                  <VuiBadge v-else color="warning" variant="gradient" size="xs">{{ t('settings.whisper.cpuOnly') }}</VuiBadge>
+                </div>
+              </div>
+
+              <!-- torch GPU/CPU variant selector -->
+              <div class="dep-row">
+                <div class="flex items-center justify-between">
+                  <span class="dep-row__name">{{ t('settings.whisper.torchVariant') }}</span>
+                  <div class="flex gap-1">
+                    <button
+                      class="filter-btn"
+                      :class="{ 'filter-btn--active': torchVariant === 'gpu' }"
+                      @click="torchVariant = 'gpu'"
+                    >{{ t('settings.whisper.torchVariant.gpu') }}</button>
+                    <button
+                      class="filter-btn"
+                      :class="{ 'filter-btn--active': torchVariant === 'cpu' }"
+                      @click="torchVariant = 'cpu'"
+                    >{{ t('settings.whisper.torchVariant.cpu') }}</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <p v-if="installStatus.status === 'running'" class="settings-note mt-3">
+              {{ installStatus.message }}
+            </p>
+
+            <div v-if="hasMissingRuntimeDeps" class="mt-4">
+              <VuiButton variant="gradient" color="success" size="small" :loading="installingDeps" @click="installDeps">
+                {{ installingDeps ? t('settings.whisper.installing') : t('settings.whisper.installDeps') }}
+              </VuiButton>
+            </div>
+            <p v-else class="mt-4 settings-note">{{ t('settings.whisper.runtimeReady') }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Models Card (collapsible) -->
+      <div class="settings-card ui-card">
+        <div class="collapsible-card__header" @click="modelsExpanded = !modelsExpanded">
+          <div class="flex items-center gap-2">
+            <svg class="collapsible-card__chevron" :class="{ 'collapsible-card__chevron--open': modelsExpanded }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            <h2 class="settings-card__title !mb-0">{{ t('settings.whisper.models') }}</h2>
+          </div>
+          <VuiButton variant="outlined" color="secondary" size="small" :loading="checkingModels" @click.stop="loadWhisperModels">
+            {{ checkingModels ? t('settings.whisper.refreshing') : t('settings.whisper.refresh') }}
+          </VuiButton>
+        </div>
+
+        <div class="collapsible-card__body" :class="{ 'collapsible-card__body--open': modelsExpanded }">
+          <div class="collapsible-card__inner">
+            <div class="space-y-2 mt-4">
+              <div v-for="model in whisperModels" :key="model.id" class="model-row">
+                <div class="model-row__info">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="model-row__name">{{ model.name }}</span>
+                    <VuiBadge :color="model.type === 'transformers' ? 'info' : 'secondary'" variant="gradient" size="xs">
+                      {{ model.type }}
+                    </VuiBadge>
+                  </div>
+                  <p class="model-row__desc">{{ model.size }}{{ model.description ? ' · ' + model.description : (model.downloaded ? ' · ' + t('settings.whisper.downloaded') : ' · ' + t('settings.whisper.notInstalled')) }}</p>
+                </div>
+
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <VuiBadge v-if="model.downloaded" color="success" variant="gradient" size="xs">{{ t('settings.whisper.downloaded') }}</VuiBadge>
+
+                  <div v-else-if="downloadingModel === model.id" class="flex items-center gap-2">
+                    <div class="model-progress">
+                      <div class="model-progress__bar" :style="{ width: modelDownloadStatus.progress + '%' }"></div>
+                    </div>
+                    <span class="model-progress__text">{{ modelDownloadStatus.progress }}%</span>
+                  </div>
+
+                  <VuiButton
+                    v-else
+                    variant="outlined"
+                    color="secondary"
+                    size="small"
+                    :disabled="downloadingModel !== null"
+                    @click="downloadModel(model.id)"
+                  >
+                    {{ t('settings.whisper.download') }}
+                  </VuiButton>
+
+                  <VuiButton
+                    v-if="model.downloaded"
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    @click="deleteModel(model.id)"
+                  >
+                    {{ t('settings.whisper.deleteModel') }}
+                  </VuiButton>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+/* 强制 VuiBadge 截断 */
+.connection-result-badge :deep(.vui-badge) {
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: inline-flex;
+}
+

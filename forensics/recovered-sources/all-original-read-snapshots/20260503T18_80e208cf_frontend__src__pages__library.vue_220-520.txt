@@ -1,0 +1,301 @@
+  { id: 'h264-nvidia-gpu-fast', name: 'H264 NVidia GPU Fast' },
+  { id: 'h264-cpu-fast', name: 'H264 CPU Fast' },
+  { id: 'h264-cpu-uhq', name: 'H264 CPU UHQ' },
+  { id: 'av1-cpu-uhq', name: 'AV1 CPU UHQ' },
+]
+
+// --- Helpers ---
+function fileNameOf(path?: string | null, fallback = '-') {
+  if (!path) return fallback
+  return path.split('/').pop() || fallback
+}
+
+function formatBytes(value?: number | null) {
+  const size = Number(value || 0)
+  if (!size) return '-'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let n = size; let i = 0
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1 }
+  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+// --- Subtitle path watch ---
+watch(subtitleSelectedPath, async (newPath) => {
+  if (newPath && showSubtitlePanel.value) {
+    selectVariant(newPath)
+  }
+})
+
+// --- Image helpers ---
+function imageSrc(item: MediaItem) {
+  if (coverMode.value === 'fanart' && item.fanart_path && !fanartFailures.value.has(item.id)) {
+    return item.fanart_path
+  }
+  return item.poster_path
+}
+
+function imageWrapClass() {
+  return coverMode.value === 'fanart' ? 'aspect-[2184/1468]' : 'aspect-[2/3]'
+}
+
+function handleImageError(item: MediaItem) {
+  if (coverMode.value === 'fanart' && item.fanart_path) {
+    const s = new Set(fanartFailures.value); s.add(item.id); fanartFailures.value = s
+  }
+}
+
+// --- Responsive page sizing ---
+function estimateResponsivePageSize() {
+  const gridEl = gridRef.value || pageRootRef.value
+  if (!gridEl) return media.pageSize
+  const gridWidth = gridEl.clientWidth || pageRootRef.value?.clientWidth || window.innerWidth
+  const columns = Math.max(1, Math.floor((gridWidth + GRID_GAP) / (gridMinCardWidth.value + GRID_GAP)))
+  const firstCard = gridRef.value?.querySelector('.media-card') as HTMLElement | null
+  const cardHeight = firstCard?.offsetHeight || FALLBACK_CARD_HEIGHT
+  const gridTop = gridRef.value?.getBoundingClientRect().top ?? gridEl.getBoundingClientRect().top
+  const paginationHeight = paginationRef.value?.offsetHeight || 52
+  const availableHeight = Math.max(cardHeight, window.innerHeight - gridTop - paginationHeight - PAGE_CHROME_OFFSET)
+  const measuredRows = Math.max(1, Math.floor((availableHeight + GRID_GAP) / (cardHeight + GRID_GAP)))
+  let minRows = 1
+  if (window.innerHeight >= 1200) minRows = 3
+  else if (window.innerHeight >= 900) minRows = 2
+  return Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, columns * Math.max(measuredRows, minRows)))
+}
+
+async function syncResponsivePageSize(force = false) {
+  const nextSize = estimateResponsivePageSize()
+  if (!force && nextSize === media.pageSize) return
+  const offset = Math.max(0, (media.page - 1) * media.pageSize)
+  media.pageSize = nextSize
+  const nextPage = Math.max(1, Math.floor(offset / nextSize) + 1)
+  media.page = nextPage
+  await media.fetchItems(nextPage)
+}
+
+function scheduleResponsiveSync(force = false) {
+  if (responsiveSyncTimer) clearTimeout(responsiveSyncTimer)
+  responsiveSyncTimer = setTimeout(() => { void syncResponsivePageSize(force) }, force ? 0 : 120)
+}
+
+// --- Cover mode ---
+function toggleCoverMode() {
+  coverMode.value = coverMode.value === 'cover' ? 'fanart' : 'cover'
+  if (typeof window !== 'undefined') localStorage.setItem(COVER_MODE_KEY, coverMode.value)
+  fanartFailures.value = new Set()
+  scheduleResponsiveSync(true)
+}
+
+// --- Filter ---
+watch(activeFilter, (key) => {
+  media.filterTag = key || null
+  media.fetchItems(1)
+  router.replace({ query: key ? { filter: key } : {} })
+})
+
+watch(() => route.query.filter, (f) => {
+  const key = (f as string) || ''
+  if (key !== activeFilter.value) activeFilter.value = key
+})
+
+watch(() => media.selectedLibraryId, () => media.fetchItems(1))
+
+// --- Debounced search ---
+watch(searchText, (val) => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    media.query = val
+    media.fetchItems(1)
+  }, 220)
+})
+
+// --- Video preview ---
+const previewVideoPath = ref('')
+const previewVideoName = computed(() => previewVideoPath.value.split('/').pop() || previewVideoPath.value)
+const previewVideoUrl = computed(() => {
+  if (!previewVideoPath.value) return ''
+  return `/api/media-library/hardlinks/preview-file?path=${encodeURIComponent(previewVideoPath.value)}`
+})
+
+function openVideoPreview(path?: string) {
+  const target = path || selectedVariantPath.value
+  if (target) previewVideoPath.value = target
+}
+
+// --- LADA actions ---
+async function loadLadaDefaults() {
+  try {
+    const data = await api.get<any>('/settings')
+    const defaults = data?.lada_defaults || {}
+    ladaSettings.value = {
+      detection_model: defaults.detection_model || 'v4-fast',
+      restoration_model: defaults.restoration_model || 'basicvsrpp-v1.2',
+      encoding_preset: defaults.encoding_preset || 'hevc-nvidia-gpu-hq',
+    }
+  } catch { /* use hardcoded defaults */ }
+}
+
+async function submitLadaJob() {
+  if (!ladaSelectedPath.value || !detail.value) return
+  ladaSubmitStatus.value = 'submitting'
+  ladaSubmitProgress.value = 20
+  ladaProgressTimer = setInterval(() => {
+    ladaSubmitProgress.value = Math.min(92, ladaSubmitProgress.value + 12)
+  }, 180)
+  try {
+    const result = await api.post<Job>('/jobs', {
+      emby_item_id: detail.value.id,
+      emby_item_name: `[LADA] ${detail.value.name}`,
+      input_path: ladaSelectedPath.value,
+      settings: { ...ladaSettings.value },
+    })
+    ladaSubmitProgress.value = 100
+    ladaSubmitStatus.value = 'success'
+    toast.success(t('ladaPanel.submitQueued') || 'LADA 任务已提交')
+    await jobs.fetchJobs()
+    handleCloseDetail()
+  } catch (e: any) {
+    ladaSubmitStatus.value = 'error'
+    toast.error(e?.message || '提交失败')
+  } finally {
+    if (ladaProgressTimer) { clearInterval(ladaProgressTimer); ladaProgressTimer = undefined }
+  }
+}
+
+// --- Whisper task submit ---
+const whisperSubmitting = ref(false)
+async function submitWhisperTask() {
+  const path = subtitleSelectedPath.value || selectedVariantPath.value
+  if (!path) return
+  whisperSubmitting.value = true
+  try {
+    await media.submitWhisperTask()
+    handleCloseDetail()
+  } finally {
+    whisperSubmitting.value = false
+  }
+}
+
+// --- Subtitle tab change ---
+watch(subtitleTab, (val) => {
+  if (val === 'online') media.searchOnlineSubtitles()
+})
+
+// --- Lifecycle ---
+onMounted(async () => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(COVER_MODE_KEY)
+    if (saved === 'cover' || saved === 'fanart') coverMode.value = saved
+  }
+  const initialFilter = (route.query.filter as string) || ''
+  activeFilter.value = initialFilter
+  media.filterTag = initialFilter || null
+  await media.initialize()
+  await nextTick()
+  scheduleResponsiveSync(true)
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => scheduleResponsiveSync())
+    if (pageRootRef.value) resizeObserver.observe(pageRootRef.value)
+    if (gridRef.value) resizeObserver.observe(gridRef.value)
+    if (paginationRef.value) resizeObserver.observe(paginationRef.value)
+  }
+  window.addEventListener('resize', handleResize, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  if (responsiveSyncTimer) clearTimeout(responsiveSyncTimer)
+  if (searchDebounce) clearTimeout(searchDebounce)
+  if (ladaProgressTimer) clearInterval(ladaProgressTimer)
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  window.removeEventListener('resize', handleResize)
+})
+</script>
+
+<template>
+  <UDashboardPanel id="library" grow>
+    <template #header>
+      <UDashboardNavbar :title="t('library.title')">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
+        <template #right>
+          <div class="flex items-center gap-2">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              class="h-9 w-9"
+              :class="coverMode === 'fanart' ? 'ring-1 ring-(--color-noor-500) bg-(--color-noor-600)/15' : ''"
+              :aria-label="coverModeAriaLabel"
+              :title="coverModeAriaLabel"
+              icon="i-heroicons-squares-2x2-20-solid"
+              @click="toggleCoverMode"
+            />
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              class="h-9 w-9"
+              :class="blurEnabled ? 'ring-1 ring-(--color-noor-500) bg-(--color-noor-600)/15' : ''"
+              :title="blurTitle"
+              :icon="blurEnabled ? 'i-heroicons-eye-slash-20-solid' : 'i-heroicons-eye-20-solid'"
+              @click="toggleBlur"
+            />
+            <select v-model="media.selectedLibraryId" class="h-8 px-3 rounded-lg border border-(--ui-border) bg-(--ui-bg) text-sm text-(--ui-text) outline-none focus:border-(--ui-border-accented)">
+              <option v-for="lib in libraryOptions" :key="String(lib.value)" :value="String(lib.value)">{{ lib.label }}</option>
+            </select>
+            <UInput v-model="searchText" icon="i-heroicons-magnifying-glass-20-solid" :placeholder="t('library.search.placeholder')" clearable />
+          </div>
+        </template>
+      </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <UNavigationMenu :items="filters" highlight class="-mx-1 flex-1" />
+      </UDashboardToolbar>
+    </template>
+
+    <template #body>
+      <div ref="pageRootRef">
+        <!-- Loading -->
+        <div v-if="media.loading" class="flex flex-col items-center justify-center py-12 text-(--ui-text-muted)">
+          <UIcon name="i-heroicons-arrow-path-20-solid" class="w-8 h-8 animate-spin mb-4" />
+          <p>{{ t('common.loading') }}</p>
+        </div>
+
+        <!-- Error -->
+        <div v-else-if="media.error" class="flex flex-col items-center justify-center py-12">
+          <UIcon name="i-heroicons-exclamation-triangle-20-solid" class="w-12 h-12 text-(--ui-error) mb-4" />
+          <p class="text-(--ui-error) font-medium">{{ media.error }}</p>
+          <UButton color="primary" size="sm" class="mt-4" to="/settings">{{ t('library.goToSettings') }}</UButton>
+        </div>
+
+        <!-- Empty -->
+        <div v-else-if="!media.items.length" class="flex flex-col items-center justify-center py-12 text-(--ui-text-muted)">
+          <UIcon name="i-heroicons-film-20-solid" class="w-12 h-12 mb-4 opacity-50" />
+          <p>{{ t('library.emptyTitle') }}</p>
+          <p class="text-xs mt-1">{{ t('library.emptyDesc') }}</p>
+        </div>
+
+        <template v-else>
+          <!-- Grid -->
+          <div
+            ref="gridRef"
+            class="grid gap-4"
+            :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${gridMinCardWidth}px, 1fr))` }"
+          >
+            <UCard
+              v-for="(item, i) in media.items"
+              :key="item.id"
+              class="media-card stagger-item cursor-pointer group overflow-hidden flex flex-col"
+              :class="selectedItem?.id === item.id && (showDetailPanel || showLadaPanel || showSubtitlePanel) ? 'ring-1 ring-(--color-noor-500)' : ''"
+              :style="{ animationDelay: `${(i % 18) * 50}ms` }"
+              :ui="{ body: { padding: 'p-0' } }"
+            >
+              <!-- Cover -->
+              <div
+                :class="imageWrapClass()"
+                class="bg-(--ui-bg-elevated) relative overflow-hidden"
+                @click="openDetail(item)"
+              >
+                <img
+                  v-if="imageSrc(item)"

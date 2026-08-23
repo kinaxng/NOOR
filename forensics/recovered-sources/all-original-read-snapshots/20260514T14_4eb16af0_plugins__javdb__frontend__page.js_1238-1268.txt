@@ -1,0 +1,31 @@
+          tabs.__noorSetValue?.(selectedProvider)
+          return
+        }
+        providerGroups.forEach(group => {
+          const badge = sdk.ui.badge({
+            label: `${group.label} ${group.count}`,
+            tone: selectedProvider === group.key ? (group.isPrivateTracker ? 'warning' : 'info') : 'neutral',
+            onClick: () => {
+              if (selectedProvider === group.key) return
+              selectedProvider = group.key
+              renderProviderBar()
+              renderResourceList()
+            },
+          })
+          if (selectedProvider === group.key) badge.classList.add('javdb-resource-provider--active')
+          providerBar.appendChild(badge)
+        })
+      }
+
+      function renderResourceList() {
+        magnetList.innerHTML = ''
+        const visibleResources = resources.filter(resource => String(resource.provider || resource.provider_label || 'other') === selectedProvider)
+        if (!visibleResources.length) {
+          magnetList.appendChild(el('div', 'javdb-no-data', '暂无磁链资源'))
+          return
+        }
+        visibleResources.forEach(resource => {
+          const row = el('div', 'javdb-magnet-row')
+          const info = el('div', 'javdb-magnet-info')
+          info.appendChild(el('div', 'javdb-magnet-name', resource.title || '未知资源'))
+          const magnetMeta = el('div', 'javdb-magnet-meta')

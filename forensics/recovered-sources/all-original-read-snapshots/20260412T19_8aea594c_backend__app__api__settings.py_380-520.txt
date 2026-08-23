@@ -1,0 +1,141 @@
+            status_code=409,
+            detail="Docker 模式下不建议在容器内直接升级 LADA。请更新镜像后重建容器。",
+        )
+
+    lada_path = install_info["repo_path"]
+    if not lada_path:
+        log_mgr.add_log("error", "[LADA] 升级失败：未找到可升级的 LADA 工作副本")
+        raise HTTPException(
+            status_code=400,
+            detail="当前未检测到可自升级的 LADA 源码工作副本，请手动升级你的 lada-cli 安装来源。",
+        )
+
+    # Apply network settings for git
+    settings = get_settings()
+    settings.apply_network_env()
+    env = os.environ.copy()
+
+    try:
+        # Unset proxy env vars for git pull to avoid proxy redirect issues
+        no_proxy_env = {}
+        for k, v in env.items():
+            k_lower = k.lower()
+            if k_lower not in ("http_proxy", "https_proxy", "http://proxy", "https://proxy"):
+                no_proxy_env[k] = v
+        no_proxy_env.pop("HTTP_PROXY", None)
+        no_proxy_env.pop("HTTPS_PROXY", None)
+        no_proxy_env.pop("http_proxy", None)
+        no_proxy_env.pop("https_proxy", None)
+
+        branch_result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=no_proxy_env,
+        )
+        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+
+        log_mgr.add_log("info", "[LADA] 正在拉取最新代码...")
+        fetch = subprocess.run(
+            ["git", "fetch", "--tags", "origin"],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=no_proxy_env,
+        )
+        if fetch.returncode != 0:
+            log_mgr.add_log("error", f"[LADA] git fetch 失败 — {fetch.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Git fetch failed: {fetch.stderr}")
+
+        result = subprocess.run(
+            ["git", "pull", "--ff-only", "origin", branch],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=no_proxy_env,
+        )
+
+        if result.returncode != 0:
+            if "redirect" in result.stderr.lower() or "ghfast" in result.stderr:
+                log_mgr.add_log("error", "[LADA] 升级失败：代理镜像重定向错误")
+                raise HTTPException(status_code=500,
+                    detail="代理镜像重定向错误。GitHub 被重定向到了不可用的镜像。 "
+                           "请在代理软件中将 github.com 加入直连，或手动执行以下命令：\n"
+                           f"cd {lada_path} && git pull --ff-only origin {branch}")
+            if "Could not connect" in result.stderr or "timeout" in result.stderr.lower() or "curl 28" in result.stderr:
+                log_mgr.add_log("error", "[LADA] 升级失败：无法连接 GitHub")
+                raise HTTPException(status_code=500,
+                    detail="无法连接 GitHub。请检查网络代理设置，确保可以访问 github.com。")
+            log_mgr.add_log("error", f"[LADA] 升级失败 — {result.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Git pull failed: {result.stderr}")
+
+        log_mgr.add_log("info", "[LADA] 代码拉取成功，正在重新安装...")
+        pip_cmd = [_python_executable(), "-m", "pip", "install", "-e", lada_path, "--no-deps"]
+        if not hasattr(sys, "base_prefix") or sys.prefix == getattr(sys, "base_prefix", sys.prefix):
+            pip_cmd.append("--break-system-packages")
+        reinstall = subprocess.run(
+            pip_cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=no_proxy_env,
+        )
+
+        if reinstall.returncode != 0:
+            log_mgr.add_log("error", f"[LADA] pip 安装失败 — {reinstall.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Reinstall failed: {reinstall.stderr}")
+
+        # Get new version
+        version_cp = subprocess.run(
+            [_python_executable(), "-c", "import lada; print(lada.VERSION)"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        new_version = version_cp.stdout.strip() if version_cp.returncode == 0 else None
+
+        log_mgr.add_log("success", f"[LADA] 升级完成 — 新版本：{new_version or '未知'}")
+        return {
+            "success": True,
+            "version": new_version,
+            "output": result.stdout,
+        }
+    except subprocess.TimeoutExpired:
+        log_mgr.add_log("error", "[LADA] 升级超时")
+        raise HTTPException(status_code=500, detail="Upgrade timeout")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[LADA] 升级异常 — {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== LADA Settings ====================
+
+@router.put("/lada/defaults")
+async def update_lada_defaults(config: LadaDefaultsConfig):
+    """Update Lada default configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA 默认参数...")
+    try:
+        update_env_value("LADA_DEVICE", config.device)
+        update_env_value("LADA_FP16", "true" if config.fp16 else "false")
+        update_env_value("LADA_DETECTION_MODEL", config.detection_model)
+        update_env_value("LADA_RESTORATION_MODEL", config.restoration_model)
+        update_env_value("LADA_ENCODING_PRESET", config.encoding_preset)
+        update_env_value("LADA_MAX_CLIP_LENGTH", str(config.max_clip_length))
+        update_env_value("LADA_DETECT_FACE_MOSAICS", "true" if config.detect_face_mosaics else "false")
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA 默认参数已保存")
+        return {"success": True, "message": "Lada defaults saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA 默认参数保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.get("/lada/info")
+async def get_lada_info():

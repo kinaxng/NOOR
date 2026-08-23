@@ -1,0 +1,21 @@
+    OPENAI = "openai"
+
+
+@dataclass
+class WhisperConfig:
+    """Whisper 处理配置"""
+    strategy: str = "recommended"
+    executor_key: str = "recommended"
+
+    # 模型设置
+    model: WhisperModel = WhisperModel.ANIME
+    device: str = "auto"  # auto/cuda/cpu
+    compute_type: str = "default"  # default/float16/int8
+
+    # Pass 模式
+    # 管线设置
+    pipeline_mode: PipelineMode = PipelineMode.ENSEMBLE
+    merge_strategy: MergeStrategy = MergeStrategy.SMART
+
+    # VAD 设置
+    vad_method: VADMethod = VADMethod.SEMANTIC

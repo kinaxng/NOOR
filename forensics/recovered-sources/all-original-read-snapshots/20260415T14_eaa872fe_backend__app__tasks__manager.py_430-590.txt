@@ -1,0 +1,161 @@
+            )
+            return
+
+        await self._finalize_job(
+            job_id,
+            status="completed" if success else "failed",
+            output_path=output_path if success else None,
+            error_message=None if success else "Process exited with non-zero status",
+        )
+
+        await self._emit_terminal_event(
+            self.get_event_queue(job_id),
+            status="completed" if success else "failed",
+            success=success,
+        )
+
+        await self.add_log(job_id, "Lada 任务完成" if success else "Lada 任务失败")
+
+    async def _run_whisper(self, job_id: str, job_data: JobCreate):
+        """执行 Whisper 任务"""
+        from app.pipeline.whisper import (
+            WhisperConfig,
+            WhisperModel,
+            PipelineMode,
+            MergeStrategy,
+            Sensitivity,
+        )
+        from app.pipeline.whisper.strategy import build_whisper_execution_plan
+        from app.pipeline.whisper.runtime import (
+            launch_advanced_whisper_process,
+            launch_best_whisper_process,
+            launch_translation_process,
+        )
+        from app.pipeline.whisper.progress import AsyncProgressReporter
+        import queue
+        import threading
+        import re as re_module
+
+        input_path = job_data.input_path
+        settings_dict = job_data.settings.model_dump() if hasattr(job_data, 'settings') else {}
+        execution_plan = build_whisper_execution_plan(
+            settings_dict,
+            settings_dict.get("strategy") or settings_dict.get("preset"),
+        )
+        settings_dict = execution_plan.runtime_settings
+        strategy_name = execution_plan.strategy
+
+        event_queue = self.get_event_queue(job_id)
+
+        # 构建 Whisper 配置
+        model_str = settings_dict.get("model", "anime-whisper")
+        pipeline_mode_str = settings_dict.get("pipeline_mode", "ensemble")
+
+        config = WhisperConfig(
+            strategy=strategy_name or "advanced",
+            executor_key=execution_plan.executor_key,
+            model=WhisperModel(model_str),
+            pipeline_mode=PipelineMode(pipeline_mode_str),
+            merge_strategy=MergeStrategy(settings_dict.get("merge_strategy", "smart_merge")),
+            language=settings_dict.get("language", "ja"),
+            sensitivity=Sensitivity(settings_dict.get("sensitivity", "balanced")),
+            pass1_pipeline=PipelineMode(settings_dict.get("pass1_pipeline", "anime")) if settings_dict.get("pass1_pipeline") else PipelineMode.ANIME,
+            pass2_pipeline=PipelineMode(settings_dict.get("pass2_pipeline", "faster")) if settings_dict.get("pass2_pipeline") else PipelineMode.FASTER,
+            # Decoupled pipeline 设置（custom 模式）
+            timestamp_mode=settings_dict.get("timestamp_mode", "aligner_interpolation"),
+            aligner_backend=settings_dict.get("aligner_backend", "qwen3"),
+            framer_backend=settings_dict.get("framer_backend", "vad-grouped"),
+            # 翻译设置
+            translate_to=settings_dict.get("translate_to"),
+            translate_base_url=settings_dict.get("translate_base_url", "https://api.openai.com/v1"),
+            translate_api_key=settings_dict.get("translate_api_key", ""),
+            translate_model=settings_dict.get("translate_model", "llama3.2"),
+            translate_style=settings_dict.get("translate_style", "adult_explicit"),
+        )
+        # 处理 custom_config（当 pass1_pipeline 或 pass2_pipeline 为 custom 时使用）
+        custom_config = settings_dict.get("custom_config", {})
+        if custom_config:
+            from app.pipeline.whisper.types import VADMethod
+            cfg_model_str = custom_config.get("model", model_str)
+            cfg_vad = custom_config.get("vad_method", "semantic")
+            cfg_enhancers = custom_config.get("enhancers", [])
+            cfg_timestamp_mode = custom_config.get("timestamp_mode", "aligner_interpolation")
+            cfg_aligner_backend = custom_config.get("aligner_backend", "qwen3")
+            cfg_framer_backend = custom_config.get("framer_backend", "vad-grouped")
+            try:
+                config.vad_method = VADMethod(cfg_vad)
+            except ValueError:
+                config.vad_method = VADMethod.SEMANTIC
+            config.enhancers = cfg_enhancers
+            config.timestamp_mode = cfg_timestamp_mode
+            config.aligner_backend = cfg_aligner_backend
+            config.framer_backend = cfg_framer_backend
+            # custom pipeline 时，使用 custom_config 中的模型
+            if config.pass1_pipeline == PipelineMode.CUSTOM:
+                try:
+                    config.pass1_model = WhisperModel(cfg_model_str)
+                except ValueError:
+                    config.pass1_model = WhisperModel.LARGE_V3
+            if config.pass2_pipeline == PipelineMode.CUSTOM:
+                try:
+                    config.pass2_model = WhisperModel(cfg_model_str)
+                except ValueError:
+                    config.pass2_model = WhisperModel.LARGE_V3
+
+        p1 = config.pass1_pipeline.value
+        p2 = config.pass2_pipeline.value if config.pass2_pipeline else "none"
+
+        # 日志记录 pipeline 架构和配置
+        old_arch_model_map = {
+            PipelineMode.FASTER: "tiny",
+            PipelineMode.BALANCED: "large-v3",
+            PipelineMode.TRANSFORMERS: "kotoba-whisper-v2.2",
+            PipelineMode.ANIME: "anime-whisper",
+            PipelineMode.QWEN: "large-v3",
+            PipelineMode.SINGLE: config.model.value,
+        }
+        actual_model = old_arch_model_map.get(config.pipeline_mode, config.model.value)
+        await self.add_log(job_id, f"Whisper 架构: lada-webui Whisper Pipeline")
+        if strategy_name:
+            await self.add_log(job_id, f"  策略: {strategy_name}")
+        await self.add_log(job_id, f"  模式: {execution_plan.summary}")
+        for detail_line in execution_plan.detail_lines:
+            await self.add_log(job_id, f"  {detail_line}")
+        await self.add_log(job_id, f"  Pipeline: {p1} | 模型: {actual_model} | Merge: {config.merge_strategy.value}")
+        if config.translate_to:
+            await self.add_log(job_id, f"  翻译: {config.translate_model} → {config.translate_to} | 风格: {config.translate_style}")
+        await self.add_log(job_id, "开始 Whisper 字幕生成...")
+
+        # 日志文件
+        log_file = self._log_file_path(job_id)
+
+        launcher = launch_best_whisper_process if execution_plan.executor_key == "best" else launch_advanced_whisper_process
+        process_handle = launcher(
+            config,
+            input_path,
+            os.path.splitext(os.path.basename(input_path))[0],
+        )
+        worker_process = process_handle.process
+        worker_message_queue = process_handle.message_queue
+        worker_cancel_event = process_handle.cancel_event
+
+        control_queue: queue.Queue = queue.Queue()
+        running = [True]  # 用列表便于在线程中修改
+        progress_update_futures = []
+
+        # 独立线程：从队列读取 + 发 SSE + 更新数据库
+        main_loop = asyncio.get_running_loop()  # 在 async 函数中获取
+
+        # 进度报告器（替代硬编码模式匹配）
+        reporter = AsyncProgressReporter(job_id, event_queue)
+
+        def reader_thread_fn():
+            while running[0] or worker_process.is_alive():
+                try:
+                    item = worker_message_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+
+                if item.get("type") != "log":
+                    control_queue.put(item)
+                    continue

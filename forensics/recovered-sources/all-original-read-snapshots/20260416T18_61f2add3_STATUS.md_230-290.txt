@@ -1,0 +1,31 @@
+### 低优先级
+4. 补一份更面向部署的“最小启动检查清单”
+5. 如需长期维护，再考虑补前端 smoke test
+
+## Phase 2 建议目标
+
+如果正式进入下一阶段开发，建议目标只设为四件事：
+1. 取消会真正终止底层 LADA / Whisper / 翻译执行
+2. worker 生命周期保证单实例、单任务串行
+3. `queued / running / cancelled / completed / failed` 状态流只保留一条权威落库路径
+4. 为以上三点建立稳定回归测试
+
+## 当前对任务系统的判断
+
+### 已改善的部分
+- LADA 子进程取消路径已有 `SIGTERM / SIGKILL` 处理和临时文件清理
+- `JobManager` 已不再按 `running_job is None` 反复新建 worker
+- `cleanup_orphaned_jobs()` 已有明确契约返回，前端不再靠文案猜测结果
+- 运行中任务取消已改为“请求取消”而非“立即伪终态”
+- `cancelled` 已重新纳入 SSE 终态流
+- Whisper 流式进度写库已回收到 manager helper
+- Whisper 已具备 cooperative cancellation hook，外部子进程可被取消
+- Whisper 主执行路径已隔离到独立进程，manager 可硬终止 worker
+- translate-srt 与 Whisper inline translation 也已隔离到独立进程
+
+### 仍然是 Phase 2 主风险的部分
+- Whisper 目前仍运行在独立线程中，取消只是在 manager 侧设置事件并等待线程自行退出，缺少真正可中断的底层执行边界
+- 状态落库分散在 `_process_queue()`、`_run_lada()`、`_run_whisper()`、`_run_translate_srt()` 多个位置，维护成本高且存在竞态窗口
+- Whisper 的 pipeline thread / manager event queue 仍然存在多源并发协作，取消边界还不够硬
+- 目前进程间消息协议还是 manager 私有实现，若后续继续扩展 Whisper 执行模型，建议把 process runner 进一步独立成明确的 service/adapter
+- 目前转写与翻译都已进程隔离，但消息协议仍是 manager 私有实现；如果继续演进，建议把 runner 协议抽为独立 service/adapter

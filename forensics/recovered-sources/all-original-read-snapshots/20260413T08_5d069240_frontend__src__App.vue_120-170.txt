@@ -1,0 +1,51 @@
+          <h1 class="text-base font-semibold text-white font-display">
+            {{ activeNavName }}
+          </h1>
+        </div>
+
+        <!-- Right: Controls -->
+        <div class="flex items-center gap-2 md:gap-3">
+          <!-- Blur toggle -->
+          <button
+            @click="toggleBlur"
+            class="navbar-icon-btn"
+            :class="{ 'navbar-icon-btn--active': blurEnabled }"
+            :title="blurTitle"
+          >
+            <BaseIcon :name="blurEnabled ? 'eye-off' : 'eye'" class="w-4 h-4" />
+          </button>
+
+          <!-- Language toggle -->
+          <button
+            @click="switchLang(currentLang === 'zh' ? 'en' : 'zh')"
+            class="navbar-icon-btn"
+            :title="langTitle"
+          >
+            <span class="text-xs font-bold font-display">{{ currentLang === 'zh' ? '中' : 'EN' }}</span>
+          </button>
+
+          <!-- System Log toggle -->
+          <button
+            @click="toggleSystemLog"
+            class="navbar-icon-btn"
+            :class="{ 'navbar-icon-btn--active': showSystemLog }"
+            :title="showSystemLog ? t('toolbar.logsOff') : t('toolbar.logs')"
+          >
+            <BaseIcon name="terminal" class="w-4 h-4" />
+          </button>
+
+          <!-- User menu -->
+          <button class="navbar-user-btn">
+            <div class="navbar-user-avatar">
+              <BaseIcon name="user" class="w-4 h-4" />
+            </div>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="p-4 md:p-6">
+        <RouterView :key="currentLang" />
+      </div>
+    </main>
+

@@ -1,0 +1,80 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import BaseModal from '../ui/BaseModal.vue'
+import { useI18n } from '../../composables/useI18n'
+import type { FileTags, MediaItem, MediaItemDetail } from '../../api/types'
+import PanelHeader from './panels/PanelHeader.vue'
+
+const { t, i18nVersion, currentLang } = useI18n()
+
+const directorLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.director')
+})
+const errorLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.error')
+})
+const closeLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.close')
+})
+const codeLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.code')
+})
+const releaseLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.release')
+})
+const premieredLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.premiered')
+})
+const addedLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.added')
+})
+const ratingLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.rating')
+})
+const seriesLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.series')
+})
+const plotLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.plot')
+})
+const originalTitleLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.originalTitle')
+})
+const tagsLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.tags')
+})
+const notAvailableLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.notAvailable')
+})
+const previewUnsupportedLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.previewUnsupported')
+})
+const previewFailedLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.previewFailed')
+})
+const overviewLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.overview')
+})
+const filesLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.files')
+})
+const subtitlePanelLabel = computed(() => {

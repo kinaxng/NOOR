@@ -1,0 +1,43 @@
+import { computed } from 'vue'
+import { useI18n } from './useI18n'
+import type { Job } from '../api/types'
+
+export function resolveWhisperStrategyKey(job: Partial<Job>) {
+  const execution = (job as Job).result_metadata?.whisper_execution as { strategy?: string } | undefined
+  const raw = String(execution?.strategy || (job as Job).settings?.strategy || '').trim().toLowerCase()
+  if (raw === 'recommended' || raw === 'best') return 'recommended'
+  if (['baseline', 'compat', 'compatibility', 'experimental', 'experiment', 'fast', 'faster', 'compare', 'contrast'].includes(raw)) {
+    return 'baseline'
+  }
+  if (['reazon_nemo', 'reazon', 'nemo', 'reazonspeech', 'reazonspeech-nemo-v2'].includes(raw)) {
+    return 'reazon_nemo'
+  }
+  return raw ? 'advanced' : ''
+}
+
+type JobRuntimeView = {
+  status?: string
+  phaseKey?: string
+  phaseGroup?: string
+  phaseLabel?: string
+  detail?: string
+}
+
+  })
+
+  const getWhisperStrategyLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (!(job.job_type === 'whisper' || job.job_type === 'whisper_transcribe')) return ''
+      const strategy = resolveWhisperStrategyKey(job)
+      if (strategy === 'recommended') return t('jobs.strategy.recommended')
+      if (strategy === 'baseline') return t('jobs.strategy.baseline')
+      if (strategy === 'reazon_nemo') return t('jobs.strategy.experimental')
+      if (strategy) return t('jobs.strategy.advanced')
+      return ''
+    }
+  })
+
+  const getWhisperStrategyHint = computed(() => {
+/home/kinax/noor/frontend/src/i18n/zh.ts:596:  'jobs.strategy.recommended': '默认链路',
+/home/kinax/noor/frontend/src/i18n/en.ts:594:  'jobs.strategy.recommended': 'Default Path',

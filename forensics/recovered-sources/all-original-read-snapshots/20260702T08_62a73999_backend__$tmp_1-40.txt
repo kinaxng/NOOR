@@ -1,0 +1,11 @@
+HTTP/1.1 204 No Content
+Date: Thu, 02 Jul 2026 08:57:30 GMT
+Server: UPnP/1.0 DLNADOC/1.50
+Access-Control-Allow-Headers: Accept, Accept-Language, Authorization, Cache-Control, Content-Disposition, Content-Encoding, Content-Language, Content-Length, Content-MD5, Content-Range, Content-Type, Date, Host, If-Match, If-Modified-Since, If-None-Match, If-Unmodified-Since, Origin, OriginToken, Pragma, Range, Slug, Transfer-Encoding, Want-Digest, X-MediaBrowser-Token, X-Emby-Token, X-Emby-Client, X-Emby-Client-Version, X-Emby-Device-Id, X-Emby-Device-Name, X-Emby-Authorization
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
+Access-Control-Allow-Origin: *
+Cross-Origin-Resource-Policy: cross-origin
+Access-Control-Allow-Private-Network: true
+Private-Network-Access-Name: NSFW
+Private-Network-Access-Id: ddc1c78454a1432ca9055dbb6520bb90
+

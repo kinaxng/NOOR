@@ -1,0 +1,101 @@
+  void loadItemDetail(item)
+}
+
+function handleQuickAction(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  showLadaPanel.value = true
+  void loadItemDetail(item)
+}
+
+async function handleSubtitleAction(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  subtitleVideoId.value = item.id
+  const detail = await loadItemDetail(item)
+  if (!detail) return
+  subtitleVideoPath.value = detail.file_path || item.path || ''
+  const allPaths = [subtitleVideoPath.value]
+  if (detail.siblings) {
+    for (const s of detail.siblings) {
+      if (s.file_path && !allPaths.includes(s.file_path)) {
+        allPaths.push(s.file_path)
+      }
+    }
+  }
+  subtitleFolderPaths.value = allPaths
+  showSubtitlePanel.value = true
+}
+
+function handleCloseDetail() {
+  detailRequestToken += 1
+  resetPanelState()
+}
+
+function handleCloseSubtitle() {
+  detailRequestToken += 1
+  resetPanelState()
+}
+
+function goPage(page: number) {
+  if (mediaLibraryStore.enabledLibraryIds.length === 0) {
+    mediaLibraryStore.fetchAllItems(page)
+    return
+  }
+  if (mediaLibraryStore.selectedLibrary?.id) mediaLibraryStore.fetchItems(mediaLibraryStore.selectedLibrary.id, page)
+}
+
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <div class="library-toolbar">
+      <div class="library-toolbar__row">
+        <VisionTabs v-model="activeFilterStr" :tabs="filters" />
+        <div class="library-toolbar__search-wrap">
+          <button
+            type="button"
+            class="library-toolbar__icon-btn"
+            :aria-label="imageModeTitle"
+            :title="imageModeTitle"
+            @click="toggleImageMode"
+          >
+            <BaseIcon :name="imageMode === 'backdrop' ? 'grid' : 'library'" class="h-4 w-4" />
+          </button>
+          <div class="library-toolbar__search">
+            <BaseIcon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+            <input
+              v-model="searchQuery"
+              type="search"
+              :placeholder="searchPlaceholder"
+              class="library-toolbar__search-input"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="mediaLibraryStore.loading" class="flex flex-col items-center justify-center py-24">
+      <div class="w-10 h-10 border-2 rounded-full animate-spin mb-4 border-[#0075FF] border-t-transparent"></div>
+      <span class="text-sm text-white/30">{{ t('common.loading') }}</span>
+    </div>
+
+    <!-- Empty content -->
+    <div
+      v-else-if="visibleItems.length === 0 && !mediaLibraryStore.error"
+      class="library-state-card ui-card flex flex-col items-center justify-center text-center"
+    >
+      <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 empty-state-icon">
+        <BaseIcon name="folder" class="w-8 h-8 text-white/20" />
+      </div>
+      <h2 class="text-lg font-semibold mb-2 text-white font-display">{{ t('library.emptyTitle') }}</h2>
+      <p class="text-sm text-white/30">{{ t('library.emptyDesc') }}</p>
+    </div>
+
+    <!-- Media library not configured / disabled -->
+    <div
+      v-else-if="mediaLibraryStore.error"
+      class="library-state-card ui-card flex flex-col items-center justify-center text-center"
+    >
+      <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 empty-state-icon">

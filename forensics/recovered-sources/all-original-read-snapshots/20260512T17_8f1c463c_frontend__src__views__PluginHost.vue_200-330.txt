@@ -1,0 +1,194 @@
+    wrap.appendChild(btn)
+  }
+
+  scheduleRefresh()
+  requestAnimationFrame(() => {
+    refresh()
+    wrap.classList.add('noor-plugin-tabs--ready')
+  })
+  window.addEventListener('resize', scheduleRefresh)
+  const setValue = (value: string) => {
+    options.value = String(value)
+    refresh()
+  }
+  const dispose = () => {
+    if (raf) cancelAnimationFrame(raf)
+    window.removeEventListener('resize', scheduleRefresh)
+  }
+  wrap.dispose = dispose
+  wrap.__noorDispose = dispose
+  ;(wrap as any).__noorSetValue = setValue
+  return wrap
+}
+
+function makePagination(options: any = {}) {
+  const wrap = document.createElement('div')
+  wrap.className = 'noor-pagination noor-plugin-pagination'
+  const page = Number(options.page || 1)
+  const total = Math.max(1, Number(options.totalPages || 1))
+  const go = (target: number) => {
+    const next = Math.min(Math.max(1, target), total)
+    if (next !== page) options.onPage?.(next)
+  }
+  const mk = (label: string, target: number, disabled = false, active = false) => {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = `noor-pagination__btn${active ? ' noor-pagination__page is-active' : ''}`
+    btn.textContent = label
+    btn.disabled = disabled
+    btn.onclick = () => !disabled && go(target)
+    return btn
+  }
+  wrap.append(mk('上一页', page - 1, page <= 1))
+  const siblingCount = Math.max(1, Number(options.siblingCount ?? 2))
+  const start = Math.max(1, page - siblingCount)
+  const end = Math.min(total, page + siblingCount)
+  for (let p = start; p <= end; p++) wrap.append(mk(String(p), p, false, p === page))
+  wrap.append(mk('下一页', page + 1, page >= total))
+  const onKeydown = (event: KeyboardEvent) => {
+    if (options.keyboard === false) return
+    const target = event.target as HTMLElement | null
+    if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+    if (event.key === 'PageUp') { event.preventDefault(); go(page - 1) }
+    else if (event.key === 'PageDown') { event.preventDefault(); go(page + 1) }
+    else if (event.key === 'Home') { event.preventDefault(); go(1) }
+    else if (event.key === 'End') { event.preventDefault(); go(total) }
+  }
+  window.addEventListener('keydown', onKeydown)
+  ;(wrap as any).__noorDispose = () => window.removeEventListener('keydown', onKeydown)
+  return wrap
+}
+
+function makeSubmitButton(options: any = {}) {
+  const btn = makeButton({ label: '', tone: 'primary', className: ['noor-submit-btn', options.className || ''].filter(Boolean).join(' ') })
+  const bar = document.createElement('i')
+  bar.className = 'noor-submit-btn__bar'
+  const text = document.createElement('span')
+  text.className = 'noor-submit-btn__text'
+  btn.append(bar, text)
+  const normalize = (state: string) => state === 'submitting' ? 'running' : (state || 'idle')
+  const labelFor = (state: string, progress = 0, label = '') => {
+    if (label) return label
+    if (state === 'success') return options.successLabel || '已完成'
+    if (state === 'error') return options.errorLabel || '失败'
+    if (state === 'running') return options.submittingLabel || options.runningLabel || (progress > 0 ? `${Math.round(progress)}%` : '提交中')
+    return options.idleLabel || options.label || '提交'
+  }
+  const setState = (state: string, progress = 0, label = '') => {
+    const next = normalize(state)
+    const pct = Math.max(0, Math.min(100, Number(progress || 0)))
+    btn.dataset.state = next
+    btn.classList.toggle('is-running', next === 'running')
+    btn.classList.toggle('is-success', next === 'success')
+    btn.classList.toggle('is-error', next === 'error')
+    btn.style.setProperty('--submit-progress', `${pct}%`)
+    text.textContent = labelFor(next, pct, label)
+    if (options.disableWhileRunning !== false && next === 'running') btn.disabled = true
+    else if (next === 'success' && options.disableOnSuccess !== false) btn.disabled = true
+    else btn.disabled = !!options.disabled
+  }
+  btn.onclick = event => {
+    if (btn.disabled) return
+    options.onClick?.(event)
+  }
+  ;(btn as any).__setState = setState
+  setState(options.status || 'idle', Number(options.progress || 0), options.labelOverride || '')
+  return btn
+}
+
+function appendChildren(parent: HTMLElement, children?: any) {
+  if (!children) return parent
+  const list = Array.isArray(children) ? children : [children]
+  for (const child of list) {
+    if (!child) continue
+    if (child instanceof Node) parent.appendChild(child)
+    else parent.appendChild(document.createTextNode(String(child)))
+  }
+  return parent
+}
+
+function makeTopBar(options: any = {}) {
+  const bar = document.createElement('div')
+  bar.className = ['noor-plugin-topbar', options.className || ''].filter(Boolean).join(' ')
+  const tabs = document.createElement('div')
+  tabs.className = 'noor-plugin-topbar__tabs'
+  const actions = document.createElement('div')
+  actions.className = 'noor-plugin-topbar__actions'
+  appendChildren(tabs, options.tabs || options.left)
+  appendChildren(actions, options.actions || options.right)
+  bar.append(tabs, actions)
+  return { el: bar, tabs, actions }
+}
+
+function makeChip(options: any = {}) {
+  const chip = document.createElement('button')
+  chip.type = 'button'
+  chip.className = ['noor-pagination__btn', 'noor-plugin-chip', options.active ? 'is-active' : '', options.className || ''].filter(Boolean).join(' ')
+  chip.textContent = options.label || ''
+  if (options.disabled) chip.disabled = true
+  if (options.onClick) chip.onclick = options.onClick
+  return chip
+}
+
+---
+          try {
+            const result = await submit()
+            options.onSuccess?.(result)
+          } catch (e: any) {
+            options.onError?.(e)
+          }
+        },
+      })
+      state.submitButton = submitBtn
+      footer.append(cancel, submitBtn)
+      const existingFooter = modal.el.querySelector('.noor-plugin-modal__actions')
+      if (existingFooter) existingFooter.remove()
+      modal.el.querySelector('.noor-plugin-modal')?.appendChild(footer)
+    }
+
+    await loadOptions()
+    if (allowBatchUrls) {
+      window.setTimeout(() => {
+        const input = modal.body.querySelector('.noor-downloader-textarea') as HTMLTextAreaElement | null
+        input?.focus()
+      }, 0)
+    }
+    render()
+    return modal
+  }
+
+  return { open, openTask: open }
+}
+
+function sdkFor(id: string) {
+  const pluginFetch = (path: string, init?: RequestInit) => fetch(`/api/plugins/${id}${path}`, init)
+  const downloads = createDownloaderDialogContext(id)
+  return {
+    pluginId: id,
+    api: {
+      plugin: pluginFetch,
+      wsUrl: (path: string) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/plugins/${id}${path}`,
+      get: (path: string, config?: any) => api.get(path, config),
+      post: (path: string, data?: any, config?: any) => api.post(path, data, config),
+    },
+    toast: {
+      success: (msg: string) => toast.success(msg),
+      error: (msg: string) => toast.error(msg),
+      info: (msg: string) => toast.info(msg),
+      warning: (msg: string) => toast.warning(msg),
+    },
+    downloads: downloads,
+    ui: {
+      button: makeButton,
+      input: makeInput,
+      select: makeSelect,
+      field: makeField,
+      modal: makeModal,
+      panel: makePanel,
+      tabs: makeTabs,
+      pagination: makePagination,
+      submitButton: makeSubmitButton,
+      topBar: makeTopBar,
+      controlPanel: makeControlPanel,
+      controlPanelGroup: makeControlPanelGroup,
+      controlPanelSection: makeControlPanelSection,

@@ -1,0 +1,161 @@
+  async function enrichWorkItems(items) {
+    const targets = (items || []).filter(item => item && item.code && !item.__detailEnriched)
+    if (!targets.length) return
+    const queue = targets.slice(0, state.relation?.relType === 'actor' ? 120 : 80)
+    const concurrency = 8
+    let index = 0
+    async function worker() {
+      while (index < queue.length) {
+        const current = queue[index++]
+        try {
+          const res = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code: current.code } })
+          const detail = res.data?.data || {}
+          current.actor_count = Array.isArray(detail.actors) ? detail.actors.length : Number(current.actor_count || 0)
+          current.has_cnsub = !!(current.has_cnsub || current.play_subtitle || detectCnsub(detail))
+          current.is_cracked = !!(current.is_cracked || detectCracked(detail))
+          current.__detailEnriched = true
+        } catch {
+          current.__detailEnriched = true
+          if (current.actor_count == null) current.actor_count = 0
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+  }
+
+  function renderTabs() {
+    if (!tabControl) {
+      tabControl = sdk.ui.tabs({ tabs: tabDefs, value: state.tab, onChange: setTab })
+      tabsWrap.appendChild(tabControl)
+    }
+    tabControl.__noorSetValue?.(state.tab)
+  }
+
+  function buildPanelGroup(label, children) {
+    if (sdk.ui?.controlPanelGroup) return sdk.ui.controlPanelGroup({ label, items: children })
+    const group = el('div', 'noor-control-panel__group')
+    if (label) group.appendChild(el('span', 'noor-control-panel__group-label', label))
+    const items = el('div', 'noor-control-panel__group-items')
+    ;(Array.isArray(children) ? children : [children]).filter(Boolean).forEach(child => items.appendChild(child))
+    group.appendChild(items)
+    return group
+  }
+
+  function buildPanelSection(label, children) {
+    if (sdk.ui?.controlPanelSection) return sdk.ui.controlPanelSection({ label, items: children })
+    return buildPanelGroup(label, children)
+  }
+
+  function uniqueValues(values) {
+    const seen = new Set()
+    return (Array.isArray(values) ? values : [])
+      .map(value => String(value || '').trim())
+      .filter(value => value && !seen.has(value) && seen.add(value))
+  }
+
+  function pickerMultiLabel(list, values, emptyLabel, unitLabel = '项') {
+    const selected = uniqueValues(values)
+    if (!selected.length) return emptyLabel
+    const labels = selected
+      .map(value => (Array.isArray(list) ? list : []).find(item => String(item.value) === value)?.label)
+      .filter(Boolean)
+    if (labels.length <= 2) return labels.join(' · ')
+    return `已选 ${labels.length} ${unitLabel}`
+  }
+
+  function openMultiPickerModal(title, items, currentValues, onApply, emptyLabel = '全部') {
+    if (!sdk.ui?.modal) return
+    chooserState.search = ''
+    const body = el('div', 'noor-control-panel__picker-list')
+    const searchWrap = el('div', 'noor-control-panel__picker-search')
+    const searchInput = sdk.ui.input
+      ? sdk.ui.input({
+          value: '',
+          placeholder: `搜索${title}`,
+          className: 'noor-control-panel__search-input',
+          onInput: value => {
+            chooserState.search = String(value || '').trim().toLowerCase()
+            renderOptions()
+          },
+        })
+      : null
+    if (searchInput) searchWrap.appendChild(searchInput)
+    const optionsWrap = el('div', 'noor-control-panel__picker-options')
+    body.append(searchWrap, optionsWrap)
+    let draft = uniqueValues(currentValues)
+
+    const modal = sdk.ui.modal({
+      title,
+      width: 'lg',
+      content: body,
+      footer: [
+        sdk.ui.button({
+          label: emptyLabel,
+          onClick: () => {
+            draft = []
+            renderOptions()
+          },
+        }),
+        sdk.ui.button({
+          label: '应用',
+          tone: 'primary',
+          onClick: () => {
+            onApply([...draft])
+            modal.close()
+          },
+        }),
+        sdk.ui.button({ label: '关闭', onClick: () => modal.close() }),
+      ],
+      onClose: () => { chooserState.modal = null },
+    })
+    chooserState.modal = modal
+
+    function renderOptions() {
+      optionsWrap.innerHTML = ''
+      const keyword = chooserState.search
+      const fullList = [{ label: emptyLabel, value: '' }, ...(Array.isArray(items) ? items : [])]
+      fullList
+        .filter(item => !keyword || String(item.label || '').toLowerCase().includes(keyword))
+        .forEach(item => {
+          optionsWrap.appendChild(sdk.ui.chip({
+            label: item.label,
+            active: draft.includes(String(item.value || '')),
+            className: 'noor-plugin-chip--soft',
+            onClick: () => {
+              const value = String(item.value || '')
+              draft = draft.includes(value)
+                ? draft.filter(entry => entry !== value)
+                : [...draft, value]
+              renderOptions()
+            },
+          }))
+        })
+    }
+
+    renderOptions()
+  }
+
+  function buildPickerButton(title, values, options, onApply, emptyLabel, unitLabel) {
+    const btn = sdk.ui.button({
+      label: pickerMultiLabel(options, values, emptyLabel, unitLabel),
+      className: `noor-control-panel__picker-btn ${uniqueValues(values).length ? '' : 'is-empty'}`.trim(),
+      onClick: () => openMultiPickerModal(title, options, values, onApply, emptyLabel),
+    })
+    return btn
+  }
+
+  function sortChipLabel(option) {
+    if (state.videosSort !== option.value) return option.label
+    return `${option.label} ${state.videosOrder === 'asc' ? '↑' : '↓'}`
+  }
+
+  function renderControlPanel() {
+    panelWrap.innerHTML = ''
+    if (!sdk.ui?.controlPanel || state.tab !== 'videos') return
+    const rows = [
+      {
+        sections: [
+          buildPanelSection('筛选方式', videosFilterOptions.map(([value, label]) => sdk.ui.chip({
+            label,
+            active: (state.videosFilter || 'all') === value,
+            className: 'noor-plugin-chip--soft',

@@ -1,0 +1,96 @@
+  const meta = document.createElement('div')
+  meta.className = 'detail-panel-topbar__meta noor-plugin-panel__meta'
+  if (options.eyebrow) {
+    const eyebrow = document.createElement('span')
+    eyebrow.className = 'detail-panel-topbar__eyebrow noor-plugin-panel__eyebrow'
+    eyebrow.textContent = options.eyebrow
+    meta.appendChild(eyebrow)
+  }
+  const title = document.createElement('div')
+  title.className = 'noor-plugin-panel__title'
+  title.textContent = options.title || ''
+  meta.appendChild(title)
+  const closeBtn = document.createElement('button')
+  closeBtn.type = 'button'
+  closeBtn.className = 'detail-panel-topbar__close noor-plugin-panel__close'
+  closeBtn.title = '关闭'
+  closeBtn.setAttribute('aria-label', '关闭')
+  closeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`
+  head.append(meta, closeBtn)
+  const body = document.createElement('div')
+  body.className = 'noor-plugin-panel__body'
+  if (Array.isArray(options.content)) options.content.forEach((x: Node) => body.appendChild(x))
+  else if (options.content) body.appendChild(options.content)
+  scroll.append(head, body)
+  panel.appendChild(scroll)
+  mask.appendChild(panel)
+  const close = () => { mask.remove(); options.onClose?.() }
+  closeBtn.onclick = close
+  mask.onclick = event => { if (event.target === mask && options.closeOnMask !== false) close() }
+  document.body.appendChild(mask)
+  return { el: mask, body, close, panel }
+}
+
+function makeTabs(options: any = {}) {
+  const wrap = document.createElement('div') as HTMLDivElement & { dispose?: () => void; __noorDispose?: () => void }
+  wrap.className = 'noor-plugin-tabs'
+  const marker = document.createElement('span')
+  marker.className = 'noor-plugin-tabs__marker'
+  wrap.appendChild(marker)
+
+  const buttons: HTMLButtonElement[] = []
+  const getTabValue = (tab: any) => String(tab?.value ?? tab?.key ?? '')
+  const initialTabs = Array.isArray(options.tabs) ? options.tabs : []
+  const initialValue = String(options.value ?? '') || getTabValue(initialTabs[0])
+  options.value = initialValue
+  let raf = 0
+
+  const refresh = () => {
+    if (!wrap.isConnected) return
+    const activeValue = String(options.value ?? '')
+    buttons.forEach(button => button.classList.toggle('is-active', button.dataset.value === activeValue))
+    const active = buttons.find(b => b.dataset.value === activeValue) || buttons[0]
+    if (!active) return
+    marker.style.width = `${active.offsetWidth}px`
+    marker.style.transform = `translateX(${active.offsetLeft}px)`
+  }
+
+  const scheduleRefresh = () => {
+    if (raf) cancelAnimationFrame(raf)
+    raf = requestAnimationFrame(() => { raf = 0; refresh() })
+  }
+
+  for (const tab of initialTabs) {
+    const value = getTabValue(tab)
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.textContent = tab.label ?? value
+    btn.dataset.value = value
+    btn.className = 'noor-plugin-tabs__item'
+    btn.onclick = (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (String(options.value ?? '') === value) return
+      options.value = value
+      refresh()
+      options.onChange?.(value)
+      scheduleRefresh()
+    }
+    buttons.push(btn)
+    wrap.appendChild(btn)
+  }
+
+  scheduleRefresh()
+  requestAnimationFrame(() => {
+    refresh()
+    wrap.classList.add('noor-plugin-tabs--ready')
+  })
+  window.addEventListener('resize', scheduleRefresh)
+  const setValue = (value: string) => {
+    options.value = String(value)
+    refresh()
+  }
+  const dispose = () => {
+    if (raf) cancelAnimationFrame(raf)
+    window.removeEventListener('resize', scheduleRefresh)
+  }

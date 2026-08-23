@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import { dictionaries } from '../../i18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+import { buildWhisperProfileWithTranslation, getWhisperStrategyMeta } from '../../composables/useWhisperProfiles'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const checkingDeps = ref(false)
+const checkingModels = ref(false)
+const downloadingModel = ref<string | null>(null)
+const installingDeps = computed(() => installStatus.value.status === 'running')
+const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
+const activeStrategy = ref<'recommended' | 'baseline'>('recommended')
+const audioPreprocessMode = ref('none')
+const audioPreprocessModel = ref('vocal_balanced')
+
+// ===== Translation settings =====
+const translateEnabled = ref(true)
+const translateTo = ref('zh')
+const translateModel = ref('gpt-4o-mini')
+const translateStyle = ref('adult_explicit')
+const translateBaseUrl = ref('https://api.openai.com/v1')
+const translateApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ available: boolean; message: string; models?: string[] } | null>(null)
+
+const checkingDepsResult = ref<Record<string, any>>({})
+const whisperCudaAvailable = ref(false)
+const torchVariant = ref<'gpu' | 'cpu'>('gpu')
+const whisperModels = ref<any[]>([])
+const whisperFeatures = ref<any>({})
+const depsExpanded = ref(false)
+const modelsExpanded = ref(false)
+
+// 只显示不便 Docker build 的运行时依赖（installable: true）
+const runtimeInstallableDeps = computed(() =>
+  Object.fromEntries(
+    Object.entries(checkingDepsResult.value).filter(([, v]) => (v as any).installable)
+  )
+)
+
+// 是否有缺失的运行时依赖（控制安装按钮显示）
+const hasMissingRuntimeDeps = computed(() => {
+  return Object.values(runtimeInstallableDeps.value).some((v: any) => !v.installed)
+})
+const installStatus = ref<{ status: string; progress: number; message: string; current_package?: string }>({
+  status: 'idle',
+  progress: 0,
+  message: '',
+})
+
+onMounted(async () => {
+  await loadSettings()
+  await Promise.all([checkWhisperDeps(), loadWhisperModels()])
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      const w = resp.data.whisper
+      whisperFeatures.value = w.features || {}
+      activeStrategy.value = (w.strategy || 'recommended') === 'recommended' ? 'recommended' : 'baseline'
+      audioPreprocessMode.value = w.audio_preprocess_mode || 'none'
+      audioPreprocessModel.value = w.audio_preprocess_model || 'vocal_balanced'
+      translateEnabled.value = !!w.translate_to
+      translateTo.value = w.translate_to || 'zh'
+      translateModel.value = w.translate_model || 'gpt-4o-mini'
+      translateStyle.value = w.translate_style || 'adult_explicit'
+      translateBaseUrl.value = w.translate_base_url || 'https://api.openai.com/v1'
+      translateApiKey.value = w.translate_api_key || ''
+    }
+  } catch (e) {
+    console.error('Failed to load whisper settings:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function checkWhisperDeps() {
+  checkingDeps.value = true
+  try {
+    const resp = await api.post('/settings/whisper/check')
+    checkingDepsResult.value = resp.data.dependencies
+    whisperFeatures.value = resp.data.features || whisperFeatures.value
+    whisperCudaAvailable.value = resp.data.cuda_available
+    torchVariant.value = resp.data.cuda_available ? 'gpu' : 'cpu'
+    const statusResp = await api.get('/settings/whisper/install-status')
+    installStatus.value = statusResp.data
+  } catch (e: any) {
+    toast.error(t('settings.whisper.checkFailed'))
+  } finally {
+    checkingDeps.value = false
+  }
+}
+
+async function loadWhisperModels() {
+  checkingModels.value = true
+  try {
+    const resp = await api.get('/settings/whisper/models')
+    whisperModels.value = resp.data.models
+    // 更新下载状态（如果有正在进行的下载）
+    if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'running') {
+      modelDownloadStatus.value = resp.data.downloadStatus
+      // 恢复 downloadingModel 状态
+      if (resp.data.downloadStatus.model) {
+        downloadingModel.value = resp.data.downloadStatus.model
+      }
+    } else if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'idle') {
+      // 下载完成或空闲时，清除状态
+      downloadingModel.value = null
+    }
+  } catch (e: any) {
+    console.error('Failed to load models:', e)
+  } finally {
+    checkingModels.value = false
+  }
+}
+
+function buildWhisperSettingsPayload() {
+  return buildWhisperProfileWithTranslation(activeStrategy.value, {
+    audio_preprocess_mode: audioPreprocessMode.value,
+    audio_preprocess_model: audioPreprocessModel.value,
+    translate_to: translateEnabled.value ? translateTo.value : '',
+    translate_model: translateModel.value,
+    translate_style: translateStyle.value,
+    translate_base_url: translateBaseUrl.value,
+    translate_api_key: translateApiKey.value,
+  })
+}
+
+async function saveWhisper() {
+  saving.value = true
+  try {
+    await api.put('/settings/whisper', buildWhisperSettingsPayload())
+    toast.success(t('settings.whisper.whisperSettingsSaved'))
+  } catch (e: any) {
+    toast.error(t('settings.whisper.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function applyRecommendedDefaultsLocally() {
+  activeStrategy.value = 'recommended'
+}
+
+function applyBaselineDefaultsLocally() {
+  activeStrategy.value = 'baseline'
+}
+
+async function saveRecommendedDefaults() {
+  applyRecommendedDefaultsLocally()
+  await saveWhisper()
+}
+
+async function saveBaselineDefaults() {
+  applyBaselineDefaultsLocally()
+  await saveWhisper()
+}
+
+async function testTranslateConnection() {
+  testingConnection.value = true
+  connectionResult.value = null
+  try {
+    const resp = await api.post('/whisper/translate/test', null, {
+      params: {
+        base_url: translateBaseUrl.value,
+        api_key: translateApiKey.value || undefined,
+        model: translateModel.value,
+      },
+    })
+    connectionResult.value = resp.data
+    if (resp.data.available) {
+      toast.success(resp.data.message)
+    } else {
+      toast.error(resp.data.message)
+    }
+  } catch (e: any) {
+    connectionResult.value = { available: false, message: t('settings.emby.connectFailed', { error: t('common.error') }) }
+    toast.error(t('settings.whisper.testFailed'))
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+async function installDeps() {
+  const torchIsInstalled = !!checkingDepsResult.value.torch?.installed
+  const librosaIsInstalled = !!checkingDepsResult.value.librosa?.installed
+  const variantChanged = torchIsInstalled && (torchVariant.value === 'gpu') !== !!checkingDepsResult.value.torch?.cuda
+  const parts: string[] = []
+  if (!librosaIsInstalled) parts.push('librosa')
+  if (!torchIsInstalled || variantChanged) parts.push(`torch ${torchVariant.value.toUpperCase()}`)
+  const msg = parts.length === 0
+    ? t('settings.whisper.installDepsReady')
+    : t('settings.whisper.installDepsPlan', { packages: parts.join(' + ') })
+  if (!await confirm({ message: msg, danger: false })) return
+
+  installStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.installing') }
+  try {
+    await api.post('/settings/whisper/install-deps', {
+      torch_variant: torchVariant.value,
+      torch_current_cuda: !!checkingDepsResult.value.torch?.cuda,
+    })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/install-status')
+      const status = statusResp.data
+      installStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(t('settings.whisper.installSuccess'))
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.installFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.installFailed'))
+  }
+}
+
+async function downloadModel(modelId: string) {
+  if (!await confirm({ message: t('settings.whisper.downloadModelConfirm', { modelId }) })) return
+
+  downloadingModel.value = modelId
+  modelDownloadStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.downloading') }
+  try {
+    await api.post('/settings/whisper/models/download', { model: modelId })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/models/download-status')
+      const status = statusResp.data
+      modelDownloadStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(status.message || t('settings.whisper.downloadSuccess'))
+        await loadWhisperModels()
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.downloadFailed'))
+        break
+      }
+    }
+  } catch (e: any) {

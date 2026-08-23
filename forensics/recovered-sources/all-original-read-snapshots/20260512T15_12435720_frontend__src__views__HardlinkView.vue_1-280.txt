@@ -1,0 +1,864 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import api from '../api'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
+import { useI18n } from '../composables/useI18n'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
+import BaseModal from '../components/ui/BaseModal.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import NoorPagination from '../components/ui/Pagination.vue'
+import type { HardlinkEntry, HardlinkGroup } from '../api/types'
+
+type SortKey = 'code' | 'entryCount' | 'hardlinkCount' | 'sourceSize'
+type SortDir = 'asc' | 'desc'
+type FilterKey = 'all' | 'withSource' | 'withHardlink' | 'issueOnly' | 'multiSource' | 'multiHardlink' | 'onlySource' | 'onlyHardlink'
+
+const mediaStore = useMediaLibraryStore()
+const toast = useToast()
+const router = useRouter()
+const { confirm } = useConfirm()
+const { t, i18nVersion } = useI18n()
+
+const searchQuery = ref('')
+const sortKey = ref<SortKey>('hardlinkCount')
+const sortDir = ref<SortDir>('desc')
+const filterKey = ref<FilterKey>('all')
+const currentPage = ref(1)
+const pageSize = 20
+const deletingHardlinkPaths = ref<Set<string>>(new Set())
+const deletingSourcePaths = ref<Set<string>>(new Set())
+const deletingGroupCodes = ref<Set<string>>(new Set())
+const previewVideoPath = ref('')
+
+const pageTitle = computed(() => { void i18nVersion.value; return t('hardlinks.title') })
+const scanBtnLabel = computed(() => { void i18nVersion.value; return t('hardlinks.scan') })
+const noGroupsLabel = computed(() => { void i18nVersion.value; return t('hardlinks.empty') })
+const emptyDescLabel = computed(() => { void i18nVersion.value; return t('hardlinks.emptyDesc') })
+const totalLabel = computed(() => { void i18nVersion.value; return t('hardlinks.total') })
+const codeLabel = computed(() => { void i18nVersion.value; return t('hardlinks.code') })
+const entryCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.entryCount') })
+const hardlinkCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.hardlinkCount') })
+const sourceSizeLabel = computed(() => { void i18nVersion.value; return t('hardlinks.sourceSize') })
+const issueCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.issueCount') })
+const searchPlaceholder = computed(() => { void i18nVersion.value; return t('hardlinks.searchPlaceholder') })
+const lastScannedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.lastScanned') })
+const emptyFilteredLabel = computed(() => { void i18nVersion.value; return t('hardlinks.emptyFiltered') })
+const deleteHardlinkLabel = computed(() => { void i18nVersion.value; return t('hardlinks.deleteHardlink') })
+const deleteSourceChainLabel = computed(() => { void i18nVersion.value; return t('hardlinks.deleteSourceChain') })
+const previewDeleteLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewDelete') })
+const deleteGroupLabel = computed(() => { void i18nVersion.value; return t('hardlinks.deleteGroup') })
+const processingLabel = computed(() => { void i18nVersion.value; return t('hardlinks.processing') })
+const orphanSkippedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.orphanSkipped') })
+const previewPathLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewPath') })
+const previewUnsupportedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewUnsupported') })
+const previewDeleteNote = computed(() => { void i18nVersion.value; return t('hardlinks.previewDeleteNote') })
+const abnormalLabel = computed(() => { void i18nVersion.value; return t('hardlinks.status.issue') })
+const orphanLabel = computed(() => { void i18nVersion.value; return t('hardlinks.status.orphan') })
+const unparsedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.status.unparsed') })
+const goSettingsLabel = computed(() => { void i18nVersion.value; return t('library.goToSettings') })
+const previewVideoName = computed(() => previewVideoPath.value.split('/').pop() || previewVideoPath.value)
+const previewVideoUrl = computed(() => {
+  if (!previewVideoPath.value) return ''
+  return `/api/media-library/hardlinks/preview-file?path=${encodeURIComponent(previewVideoPath.value)}`
+})
+
+const filterTabs = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: 'all' as FilterKey, label: t('hardlinks.filter.all') },
+    { key: 'multiSource' as FilterKey, label: t('hardlinks.filter.multiSource') },
+    { key: 'multiHardlink' as FilterKey, label: t('hardlinks.filter.multiHardlink') },
+    { key: 'onlySource' as FilterKey, label: t('hardlinks.filter.onlySource') },
+    { key: 'onlyHardlink' as FilterKey, label: t('hardlinks.filter.onlyHardlink') },
+  ]
+})
+
+const hasGroups = computed(() => mediaStore.hardlinkGroups.length > 0)
+
+const summary = computed(() => {
+  const backendSummary = mediaStore.hardlinkSummary
+  const groups = mediaStore.hardlinkGroups
+  const fallback = {
+    total_groups: groups.length,
+    total_entries: groups.reduce((sum, group) => sum + (group.entry_count || group.entries.length), 0),
+    total_hardlinks: groups.reduce((sum, group) => sum + (group.hardlink_count || group.entries.reduce((s, entry) => s + (entry.hardlink_count || entry.hardlink_paths.length), 0)), 0),
+    issue_groups: groups.filter((group) => group.status === 'issue' || (group.issue_count || 0) > 0).length,
+    orphan_entries: groups.reduce((sum, group) => sum + (group.orphan_count || 0), 0),
+  }
+
+  if (!backendSummary || backendSummary.total_groups === 0 && groups.length > 0) {
+    return fallback
+  }
+
+  return {
+    total_groups: backendSummary.total_groups ?? fallback.total_groups,
+    total_entries: backendSummary.total_entries ?? fallback.total_entries,
+    total_hardlinks: backendSummary.total_hardlinks ?? fallback.total_hardlinks,
+    issue_groups: backendSummary.issue_groups ?? fallback.issue_groups,
+    orphan_entries: backendSummary.orphan_entries ?? fallback.orphan_entries,
+  }
+})
+
+const lastScannedText = computed(() => {
+  const value = mediaStore.hardlinkLastScannedAt
+  if (!value) return t('common.notAvailable')
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return t('common.notAvailable')
+  return date.toLocaleString()
+})
+
+const searchedGroups = computed<HardlinkGroup[]>(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  return mediaStore.hardlinkGroups.filter((group) => {
+    const matchesSearch = !query || group.code.toLowerCase().includes(query) || group.entries.some((entry) => {
+      const source = entry.source_path || ''
+      return source.toLowerCase().includes(query) || entry.hardlink_paths.some((path) => path.toLowerCase().includes(query))
+    })
+    return matchesSearch
+  })
+})
+
+const filterCounts = computed(() => {
+  const groups = searchedGroups.value
+  return {
+    all: groups.length,
+    withSource: groups.filter((group) => groupSourceCount(group) > 0).length,
+    withHardlink: groups.filter((group) => groupHardlinkCount(group) > 0).length,
+    issueOnly: groups.filter((group) => group.status === 'issue' || (group.issue_count || 0) > 0).length,
+    multiSource: groups.filter((group) => (group.entry_count || group.entries.length) > 1).length,
+    multiHardlink: groups.filter((group) => (group.hardlink_count || groupHardlinkCount(group)) > 1).length,
+    onlySource: groups.filter((group) => groupHardlinkCount(group) === 0 && groupSourceCount(group) > 0).length,
+    onlyHardlink: groups.filter((group) => {
+      const entryCount = group.entry_count || group.entries.length
+      return entryCount > 0 && (group.orphan_count || 0) >= entryCount
+    }).length,
+  }
+})
+
+const visibleGroups = computed<HardlinkGroup[]>(() => {
+  const dir = sortDir.value === 'asc' ? 1 : -1
+
+  const filtered = searchedGroups.value.filter((group) => {
+    switch (filterKey.value) {
+      case 'withSource':
+        return groupSourceCount(group) > 0
+      case 'withHardlink':
+        return groupHardlinkCount(group) > 0
+      case 'issueOnly':
+        return group.status === 'issue' || (group.issue_count || 0) > 0
+      case 'multiSource':
+        return (group.entry_count || group.entries.length) > 1
+      case 'multiHardlink':
+        return (group.hardlink_count || groupHardlinkCount(group)) > 1
+      case 'onlySource':
+        return groupHardlinkCount(group) === 0 && groupSourceCount(group) > 0
+      case 'onlyHardlink': {
+        const entryCount = group.entry_count || group.entries.length
+        return entryCount > 0 && (group.orphan_count || 0) >= entryCount
+      }
+      default:
+        return true
+    }
+  })
+
+  filtered.sort((a, b) => {
+    if (sortKey.value === 'code') return dir * a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
+    if (sortKey.value === 'entryCount') return dir * ((a.entry_count || 0) - (b.entry_count || 0))
+    if (sortKey.value === 'sourceSize') return dir * (groupSourceSize(a) - groupSourceSize(b))
+    return dir * ((a.hardlink_count || 0) - (b.hardlink_count || 0))
+  })
+
+  return filtered
+})
+
+const totalPages = computed(() => Math.max(1, Math.ceil(visibleGroups.value.length / pageSize)))
+
+
+const pagedGroups = computed<HardlinkGroup[]>(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return visibleGroups.value.slice(start, start + pageSize)
+})
+
+watch([searchQuery, sortKey, sortDir, filterKey], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, (value) => {
+  if (currentPage.value > value) currentPage.value = value
+})
+
+watch(pagedGroups, (groups) => {
+  if (groups.length === 0 && currentPage.value > 1 && visibleGroups.value.length > 0) {
+    currentPage.value = Math.min(currentPage.value - 1, totalPages.value)
+  }
+})
+
+function setSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+    return
+  }
+  sortKey.value = key
+  sortDir.value = key === 'code' ? 'asc' : 'desc'
+}
+
+function sortArrow(key: SortKey) {
+  if (sortKey.value !== key) return ''
+  return sortDir.value === 'asc' ? '↑' : '↓'
+}
+
+function issueBadgeColor(group: HardlinkGroup) {
+  if ((group.orphan_count || 0) > 0) return 'error'
+  if (group.issues?.includes('unparsed_code')) return 'warning'
+  return 'secondary'
+}
+
+function groupSourceCount(group: HardlinkGroup) {
+  return group.entries.filter((entry) => !!entry.source_path).length
+}
+
+function groupHardlinkCount(group: HardlinkGroup) {
+  return group.entries.reduce((sum, entry) => sum + entry.hardlink_paths.length, 0)
+}
+
+function groupSourceSize(group: HardlinkGroup) {
+  return group.entries.reduce((max, entry) => Math.max(max, entry.source_size || 0), 0)
+}
+
+function formatBytes(value?: number | null) {
+  if (value == null || Number.isNaN(value)) return ''
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = value
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  const digits = size >= 100 || unitIndex === 0 ? 0 : size >= 10 ? 1 : 2
+  return `${size.toFixed(digits)} ${units[unitIndex]}`
+}
+
+async function handleScan() {
+  const result = await mediaStore.scanHardlinks()
+  if (result.ok) {
+    toast.success(t('hardlinks.scanSuccess', { count: result.count, entryCount: result.totalEntries }))
+  } else {
+    toast.error(result.error || t('hardlinks.scanFailed'))
+  }
+}
+
+async function refreshGroupsAfterDelete(resultPayload?: DeleteResultPayload) {
+  if (resultPayload && mediaStore.applyHardlinkDeleteResult(resultPayload)) {
+    return
+  }
+
+  const result = await mediaStore.scanHardlinks()
+  if (!result.ok) {
+    toast.error(result.error || t('hardlinks.scanFailed'))
+  }
+}
+
+function openVideoPreview(path: string) {
+  if (!path) return
+  previewVideoPath.value = path
+}
+
+function closeVideoPreview() {
+  previewVideoPath.value = ''
+}
+
+function applySummaryFilter(key: FilterKey) {
+  if (key !== 'all' && filterCounts.value[key] === 0) return
+  filterKey.value = key
+  searchQuery.value = ''
+  currentPage.value = 1
+}
+
+
+---JAVDB---
+function el(tag, cls = '', text = '') {
+  const n = document.createElement(tag)
+  if (cls) n.className = cls
+  if (text) n.textContent = text
+  return n
+}
+
+function fmtMin(v) {
+  const n = Number(v || 0)
+  return n ? `${n} 分钟` : ''
+}
+
+function titleOf(item) {
+  const code = String(item?.number || item?.code || '').trim()
+  const title = String(item?.title || item?.origin_title || '').trim()
+  return code ? `[${code}] ${title}` : title
+}
+
+function titleCandidates(item) {
+  const code = String(item?.number || item?.code || '').trim()
+  const main = String(item?.title || '').trim()
+  const smart = String(item?.display_title || item?.smart_title || (code ? `[${code}] ${main}` : main)).trim()
+  return [
+    { key: 'smart', label: '智能优选', value: smart, hint: '优先使用番号+标题。' },
+    { key: 'main', label: '主标题', value: main, hint: '作品原始主标题。' },
+    { key: 'code', label: '编号', value: code, hint: '仅使用番号。' },
+  ].filter(opt => opt.value)
+}
+
+function classifyCategory(item) {
+  const code = String(item?.number || item?.code || '').toUpperCase()
+  const title = String(item?.title || '').toUpperCase()
+  const uncensoredPrefixes = ['HEYZO', 'CARIB', 'CARIBBEAN', '1PONDO', '10MUSUME', 'PACOPACOMAMA', 'FC2-PPV', 'FC2PPV']
+  if (code.startsWith('FC2') || title.includes('FC2')) return 'FC2'
+  if (uncensoredPrefixes.some(prefix => code.startsWith(prefix) || title.includes(prefix))) return '无码'
+  if (code.includes('TUSHY') || code.includes('BRAZZERS') || code.includes('VIXEN') || code.includes('BLACKED') || code.includes('NUBILE') || code.includes('MOFOS')) return '欧美'
+  return '有码'
+}
+
+function magnetLabel(item) {
+  const count = Number(item?.magnets_count || 0)
+  return count > 0 ? `${count} 磁链` : ''
+}
+
+function textHasKeywords(value, keywords) {
+  if (value == null) return false
+  if (typeof value === 'string') {
+    const text = value.toLowerCase()
+    return keywords.some(keyword => text.includes(keyword))
+  }
+  if (Array.isArray(value)) return value.some(entry => textHasKeywords(entry, keywords))
+  if (typeof value === 'object') return Object.values(value).some(entry => textHasKeywords(entry, keywords))
+  return textHasKeywords(String(value), keywords)
+}
+
+function detectCnsub(detail) {
+  const keywords = ['中字', '字幕', '中文', '中文字幕', 'chs', 'cht']
+  return textHasKeywords(detail?.categories, keywords)
+    || textHasKeywords(detail?.magnets, keywords)
+    || textHasKeywords(detail?.title, keywords)
+}
+
+function detectCracked(detail) {
+  const keywords = ['破解', '破解版', '无码破解', 'uncensored leak']
+  return textHasKeywords(detail?.categories, keywords)
+    || textHasKeywords(detail?.magnets, keywords)
+    || textHasKeywords(detail?.title, keywords)
+}
+
+export async function mount(root, sdk) {
+  const state = {
+    tab: 'latest',
+    latestSelectedFilters: [],
+    latestType: 'all',
+    videosFilter: '',
+    videosActorId: '',
+    videosCategoryId: '',
+    videosMinScore: '',
+    videosSort: 'created',
+    videosOrder: 'desc',
+    videoCategories: [],
+    videoActors: [],
+    videoActorsLoaded: false,
+    videoActorsLoading: false,
+    videoCategoriesLoaded: false,
+    videoCategoriesLoading: false,
+    rankingMode: 'top250',
+    rankingType: 0,
+    rankingPeriod: 'daily',
+    top250Year: '',
+    relation: null,
+    relationActorSelectedFilters: [],
+    relationActorSingleFilter: false,
+    relationActorYear: '',
+    relationActorSort: 'release_desc',
+    page: 1,
+    limit: 48,
+    total: 0,
+    items: [],
+    loading: false,
+    activePanel: null,
+  }
+
+  let tabControl = null
+  let resizeTimer = null
+  let loadSeq = 0
+  const initialCode = new URLSearchParams(window.location.search).get('code')?.trim() || ''
+  let initialCodeOpened = false
+
+  root.innerHTML = ''
+  const page = el('div', 'javdb-page')
+  const header = el('div', 'javdb-header-wrap')
+  const tabsWrap = el('div', 'javdb-tabs-wrap')
+  const filtersWrap = el('div', 'javdb-filters-wrap')
+  const grid = el('div', 'javdb-grid')
+  const pager = el('div', 'javdb-pager')
+  header.append(tabsWrap, filtersWrap)
+  page.append(header, grid, pager)
+  root.appendChild(page)
+
+  const tabDefs = [
+    { value: 'latest', label: '最近更新' },
+    { value: 'rankings', label: '榜单' },
+    { value: 'videos', label: '查看记录' },
+  ]
+
+  const latestFilters = [
+    ['magnets', '有磁链'],
+    ['cnsub', '中字'],
+    ['cracked', '破解'],
+  ]
+  const latestTypes = [
+    ['all', '全部'],
+    ['censored', '有码'],
+    ['uncensored', '无码'],
+    ['western', '欧美'],
+    ['fc2', 'FC2'],
+    ['anime', '动漫'],
+  ]
+  const rankingModes = [
+    ['top250', 'TOP250'],
+    ['daily', '日榜'],
+    ['weekly', '周榜'],
+    ['monthly', '月榜'],
+    ['actors', '演员榜'],
+  ]
+  const rankingTypes = [
+    [0, '有码'],
+    [1, '无码'],
+    [2, '欧美'],
+    [3, 'FC2'],
+  ]
+  const rankingPeriods = [
+    ['daily', '日榜'],
+    ['weekly', '周榜'],
+    ['monthly', '月榜'],
+  ]
+  const relationActorBadgeFilters = [
+    ['magnets', '有磁链'],
+    ['cnsub', '字幕'],
+    ['cracked', '破解'],
+  ]
+  const relationActorSortOptions = [
+    { label: '最新优先', value: 'release_desc' },
+    { label: '最早优先', value: 'release_asc' },
+    { label: '磁链数', value: 'magnets_desc' },
+    { label: '标题', value: 'title_asc' },
+  ]
+  const videosMinScoreOptions = [
+    { label: '全部评分', value: '' },
+    { label: '4 分及以上', value: '4' },
+    { label: '5 分及以上', value: '5' },
+    { label: '6 分及以上', value: '6' },
+    { label: '7 分及以上', value: '7' },
+    { label: '8 分及以上', value: '8' },
+    { label: '9 分及以上', value: '9' },
+  ]
+  const videosOrderOptions = [
+    { label: '从新到旧', value: 'desc' },
+    { label: '从旧到新', value: 'asc' },
+  ]
+  const videosSortOptions = [
+    { label: '入库时间', value: 'created' },
+    { label: '上映时间', value: 'date' },
+    { label: '更新时间', value: 'updated' },
+  ]
+  const videosFilterOptions = [
+    ['all', '全部'],
+    ['m', '可下载'],
+    ['c', '字幕'],
+    ['n', '无资源'],
+  ]
+
+  function isActorRankingFrame() {
+    return state.tab === 'rankings' && state.rankingMode === 'actors' && !state.relation
+  }
+
+  function rerenderCurrentList() {
+    renderFilters()
+    renderGrid()
+    renderPager()
+  }
+
+  function usesRemotePaging() {
+    if (state.relation) return state.relation.relType !== 'actor'
+    if (state.tab === 'latest') return state.latestSelectedFilters.length > 0
+    if (state.tab === 'videos') return true
+    if (state.tab === 'rankings') return state.rankingMode === 'top250'
+    return false
+  }
+
+  function latestRemoteFilter() {
+    if (state.latestSelectedFilters.includes('cracked')) return 'cracked'
+    if (state.latestSelectedFilters.includes('cnsub')) return 'cnsub'
+    if (state.latestSelectedFilters.includes('magnets')) return 'magnets'
+    return 'all'
+  }
+
+  function isLatestRemoteBuffered() {
+    return state.tab === 'latest' && state.latestSelectedFilters.length > 0
+  }
+
+  function estimatePageSize() {
+    if (isActorRankingFrame()) {
+      const width = grid.clientWidth || root.clientWidth || window.innerWidth
+      const top = grid.getBoundingClientRect?.().top || 240
+      const height = Math.max(360, window.innerHeight - top - 84)
+      const cardWidth = 236
+      const cardHeight = 280
+      const cols = Math.max(1, Math.floor((width + 16) / cardWidth))
+      const rows = Math.max(1, Math.floor((height + 16) / cardHeight))
+      state.limit = Math.max(cols, cols * rows)
+      return
+    }
+    state.limit = 48
+  }
+
+  function setTab(next) {
+    if (state.tab === next) return
+    state.tab = next
+    state.page = 1
+    state.latestSelectedFilters = []
+    state.latestType = 'all'
+    state.videosFilter = ''
+    state.videosActorId = ''
+    state.videosCategoryId = ''
+    state.videosMinScore = ''
+    state.videosSort = 'created'
+    state.videosOrder = 'desc'
+    state.rankingMode = 'top250'
+    state.rankingType = 0
+    state.rankingPeriod = 'daily'
+    state.top250Year = ''
+    state.relation = null
+    if (next === 'videos') void ensureVideoCategories()
+    if (next === 'videos') void ensureVideoActors()
+    loadData()
+  }
+
+  function setRelation(relType, relId, label) {
+
+---MTEAM---
+export async function mount(el, sdk = {}) {
+  const pluginId = sdk.pluginId || 'mteam-plugin'
+  const apiPlugin = (path, init) => sdk.api?.plugin ? sdk.api.plugin(path, init) : fetch(`/api/plugins/${pluginId}${path}`, init)
+  const state = {
+    activeTab: 'rss',
+    rssItems: [],
+    albums: [],
+    activeAlbumId: '',
+    category: '',
+    page: 1,
+    pageSize: 12,
+    loading: false,
+    hasLoadedOnce: false,
+    loadError: '',
+    notice: '',
+    noticeType: 'info',
+    refreshing: false,
+    imageLoading: false,
+    imageProgress: 0,
+    pushing: new Set(),
+    pushProgress: {},
+    addOpen: false,
+    addValue: '',
+    adding: false,
+    editingAlbumId: '',
+    editAlbumValue: '',
+    clearCacheOpen: false,
+    clearingCache: false,
+    destroyed: false,
+    imageLoadSeq: 0,
+  }
+
+  el.innerHTML = `
+    <div class="mteam-page">
+      <div class="noor-plugin-topbar mteam-toolbar">
+        <div data-role="tabs" class="noor-plugin-topbar__tabs"></div>
+        <div class="noor-plugin-topbar__actions mteam-actions"><span data-role="cacheDays" style="display:none"></span><span data-role="cacheCount" style="display:none"></span><span data-role="refreshHost"></span></div>
+      </div>
+      <div data-role="albumBar" class="mteam-album-bar" style="display:none"></div>
+      <div data-role="categoryBar" class="mteam-category-bar"></div>
+      <div data-role="notice" class="mteam-notice" style="display:none"></div><div data-role="state" class="mteam-state" style="display:none"></div><div data-role="imageProgress" class="mteam-image-progress" style="display:none"><i></i></div>
+      <div data-role="grid" class="mteam-grid"></div>
+      <div data-role="pager" class="mteam-pager"></div>
+      <div data-role="modalRoot"></div>
+    </div>
+  `
+
+  const $ = role => el.querySelector(`[data-role="${role}"]`)
+  let grid = $('grid'), stateBox = $('state'), pager = $('pager'), refreshHost = $('refreshHost'), refreshBtn = null, albumBar = $('albumBar'), categoryBar = $('categoryBar'), modalRoot = $('modalRoot'), noticeBox = $('notice'), imageProgress = $('imageProgress'), cacheDays = $('cacheDays'), cacheCount = $('cacheCount'), tabsHost = $('tabs')
+  const fmtDate = v => { if (!v) return ''; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString('zh-CN', { hour12: false }) }
+  const fmtSize = n => { n = Number(n || 0); if (!n) return ''; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ } return `${n.toFixed(i >= 3 ? 2 : 1)} ${u[i]}` }
+  const keyOf = it => String(it.guid || it.download_url || it.enclosure_url || it.link || it.title || '')
+  const escapeHtml = s => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
+  const notify = (type, msg) => sdk.toast?.[type]?.(msg)
+  let activeAlbumModal = null
+
+  function initUiKitTopbar() {
+    const btn = sdk.ui?.button
+      ? sdk.ui.button({ label: '刷新', tone: 'primary', className: 'mteam-btn mteam-btn--primary' })
+      : Object.assign(document.createElement('button'), { type: 'button', className: 'mteam-btn mteam-btn--primary', textContent: '刷新' })
+    btn.dataset.role = 'refresh'
+    refreshHost.replaceWith(btn)
+    refreshBtn = btn
+  }
+  initUiKitTopbar()
+
+  function currentItems() {
+    if (state.activeTab === 'rss') return state.rssItems
+    const album = state.albums.find(x => x.id === state.activeAlbumId) || state.albums[0]
+    return album?.items || []
+  }
+
+  function filteredItems() {
+    const items = currentItems()
+    if (!state.category) return items
+    return items.filter(it => String(it.category || it.image_source || '未分类') === state.category)
+  }
+
+  function categories() {
+    const counts = new Map()
+    for (const it of currentItems()) {
+      const key = String(it.category || it.image_source || '未分类')
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
+  }
+
+  function currentAlbum() {
+    return state.albums.find(x => x.id === state.activeAlbumId) || state.albums[0] || null
+  }
+
+  function estimate() {
+    const w = grid.clientWidth || el.clientWidth || innerWidth
+    const top = grid.getBoundingClientRect().top
+    const h = Math.max(360, innerHeight - top - 76)
+    const gap = 12
+    const min = w >= 1800 ? 360 : w >= 1280 ? 330 : w >= 760 ? 300 : 240
+    const cols = Math.max(1, Math.floor((w + gap) / (min + gap)))
+    const rows = Math.max(1, Math.floor((h + gap) / (min * 9 / 16 + 90 + gap)))
+    state.pageSize = Math.max(cols, cols * rows)
+    if (state.page > pages()) state.page = pages()
+  }
+
+  function pages() { return Math.max(1, Math.ceil(filteredItems().length / state.pageSize)) }
+  function button(text, fn, disabled) { return sdk.ui?.button ? sdk.ui.button({ label: text, onClick: fn, disabled, className: 'mteam-btn' }) : (() => { const b = document.createElement('button'); b.className = 'mteam-btn'; b.textContent = text; b.disabled = disabled; b.onclick = fn; return b })() }
+  function setNotice(msg, type = 'info') { state.notice = msg || ''; state.noticeType = type; renderNotice() }
+  function renderNotice() {
+    noticeBox.style.display = state.notice ? 'block' : 'none'
+    noticeBox.innerHTML = ''
+    if (!state.notice) return
+    if (sdk.ui?.notice) {
+      noticeBox.appendChild(sdk.ui.notice({ text: state.notice, tone: state.noticeType }))
+      return
+    }
+    noticeBox.className = `mteam-notice ${state.noticeType === 'error' ? 'is-error' : state.noticeType === 'success' ? 'mteam-success-state' : ''}`
+    noticeBox.textContent = state.notice
+  }
+
+  function renderTabs() {
+    const tabs = [{ key: 'rss', label: 'RSS' }, { key: 'albums', label: '片单' }]
+    const tabsKey = tabs.map(t => `${t.key}:${t.label}`).join('|')
+    if (sdk.ui?.tabs) {
+      const existing = tabsHost.firstElementChild
+      if (existing && tabsHost.dataset.tabsKey === tabsKey) {
+        if (typeof existing.__noorSetValue === 'function') existing.__noorSetValue(state.activeTab)
+        return
+      }
+      const oldDispose = tabsHost.__noorDispose
+      if (typeof oldDispose === 'function') oldDispose()
+      tabsHost.innerHTML = ''
+      const uiTabs = sdk.ui.tabs({
+        value: state.activeTab,
+        tabs,
+        onChange: key => switchTab(key),
+      })
+      tabsHost.dataset.tabsKey = tabsKey
+      tabsHost.__noorDispose = uiTabs.dispose || uiTabs.__noorDispose
+      tabsHost.appendChild(uiTabs)
+      return
+    }
+    tabsHost.innerHTML = ''
+    const wrap = document.createElement('div')
+    wrap.className = 'noor-plugin-tabs'
+    for (const tab of tabs) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.dataset.tab = tab.key
+      btn.className = 'noor-plugin-tab'
+      btn.textContent = tab.label
+      btn.classList.toggle('is-active', btn.dataset.tab === state.activeTab)
+      btn.onclick = () => switchTab(btn.dataset.tab)
+      wrap.appendChild(btn)
+    }
+    tabsHost.appendChild(wrap)
+  }
+
+  function switchTab(key) {
+    state.activeTab = key
+    state.page = 1
+    state.category = ''
+    state.activeTab === 'albums' && !state.albums.length ? loadAlbums() : render()
+  }
+
+  function renderAlbumBar() {
+    albumBar.style.display = state.activeTab === 'albums' ? 'flex' : 'none'
+    albumBar.innerHTML = ''
+    if (state.activeTab !== 'albums') return
+    for (const album of state.albums) {
+      const wrap = document.createElement('span')
+      wrap.className = 'mteam-album-pill' + (album.id === currentAlbum()?.id ? ' is-active' : '')
+      if (state.editingAlbumId === album.id) {
+        const input = document.createElement('input')
+        input.className = 'mteam-album-input'
+        input.value = state.editAlbumValue || ''
+        input.setAttribute('aria-label', '编辑片单名称')
+        let remove = document.createElement('button')
+        remove.type = 'button'
+        remove.className = 'mteam-album-remove'
+        remove.title = '删除片单'
+        remove.textContent = '-'
+        if (sdk.ui?.button && remove) {
+          const upgraded = sdk.ui.button({ label: '-', tone: 'danger', className: 'mteam-album-remove', title: '删除片单' })
+          remove = upgraded
+        }
+        wrap.append(input, remove)
+        input.oninput = e => { state.editAlbumValue = e.target.value }
+        input.onkeydown = e => { if (e.key === 'Enter') renameAlbum(album.id); if (e.key === 'Escape') { state.editingAlbumId = ''; render() } }
+        input.onblur = e => { if (!e.relatedTarget || !e.relatedTarget.classList?.contains('mteam-album-remove')) renameAlbum(album.id) }
+        remove.onclick = e => { e.preventDefault(); e.stopPropagation(); removeAlbum(album.id) }
+        setTimeout(() => { input.focus(); input.select() }, 0)
+      } else {
+        let main = document.createElement('button')
+        main.type = 'button'
+        main.className = 'mteam-album-main'
+        main.title = '双击编辑片单名称'
+        main.innerHTML = `<span>${escapeHtml(album.title || `片单 ${album.id}`)}</span><em>· ${escapeHtml(album.count ?? album.items?.length ?? 0)}</em>`
+        if (sdk.ui?.button && main) {
+          const upgraded = sdk.ui.button({ label: `${album.title || `片单 ${album.id}`} · ${album.count ?? album.items?.length ?? 0}`, className: 'mteam-album-main', title: '双击编辑片单名称' })
+          main = upgraded
+        }
+        wrap.appendChild(main)
+        main.onclick = () => { state.activeAlbumId = album.id; state.page = 1; render() }
+        main.ondblclick = e => { e.preventDefault(); state.editingAlbumId = album.id; state.editAlbumValue = album.alias || album.title || ''; render() }
+      }
+      albumBar.appendChild(wrap)
+    }
+    const add = sdk.ui?.button
+      ? sdk.ui.button({ label: '+', className: 'mteam-add', title: '添加片单' })
+      : document.createElement('button')
+    if (!sdk.ui?.button) {
+      add.className = 'mteam-add'
+      add.textContent = '+'
+      add.title = '添加片单'
+    }
+    add.onclick = () => { state.addOpen = true; state.addValue = ''; render() }
+    albumBar.appendChild(add)
+  }
+
+  function renderCategoryBar() {
+    const cats = categories()
+    categoryBar.innerHTML = ''
+    categoryBar.style.display = cats.length ? 'flex' : 'none'
+    if (!cats.length) {
+      state.category = ''
+      return
+    }
+    if (state.category && !cats.some(([name]) => name === state.category)) state.category = ''
+    const all = sdk.ui?.chip ? sdk.ui.chip({ label: `全部 · ${currentItems().length}`, active: !state.category, onClick: () => { state.category = ''; state.page = 1; render() } }) : document.createElement('button')
+    if (!sdk.ui?.chip) { all.className = 'mteam-filter-chip' + (!state.category ? ' is-active' : ''); all.textContent = `全部 · ${currentItems().length}`; all.onclick = () => { state.category = ''; state.page = 1; render() } }
+    categoryBar.appendChild(all)
+    for (const [name, count] of cats) {
+      const b = sdk.ui?.chip ? sdk.ui.chip({ label: `${name} · ${count}`, active: state.category === name, onClick: () => { state.category = name; state.page = 1; render() } }) : document.createElement('button')
+      if (!sdk.ui?.chip) { b.className = 'mteam-filter-chip' + (state.category === name ? ' is-active' : ''); b.textContent = `${name} · ${count}`; b.onclick = () => { state.category = name; state.page = 1; render() } }
+      categoryBar.appendChild(b)
+    }
+  }
+
+  function updatePushButtonDom(key) {
+    const ps = state.pushProgress[key] || { status: state.pushing.has(key) ? 'running' : 'idle', pct: 0 }
+    const normalized = ps.status === 'running' ? 'running' : ps.status || 'idle'
+    const label = normalized === 'success' ? '推送成功' : normalized === 'error' ? '推送失败' : normalized === 'running' ? `${Math.round(ps.pct || 0)}%` : '推送'
+    const buttons = el.querySelectorAll('.mteam-push')
+    buttons.forEach(btn => {
+      if (btn.dataset.key !== key) return
+      btn.classList.toggle('mteam-running', normalized === 'running')
+      btn.classList.toggle('mteam-success', normalized === 'success')
+      btn.classList.toggle('is-error', normalized === 'error')
+      btn.disabled = state.pushing.has(key) || normalized === 'success'
+      if (typeof btn.__setState === 'function') btn.__setState(normalized, ps.pct || 0, label)
+      else {
+        const bar = btn.querySelector('i')
+        const text = btn.querySelector('span')
+        if (bar) bar.style.width = `${Math.max(0, Math.min(100, normalized === 'success' ? 100 : ps.pct || 0))}%`
+        if (text) text.textContent = label
+        else btn.textContent = label
+      }
+    })
+  }
+
+  function renderModal() {
+    modalRoot.innerHTML = ''
+    if (state.clearCacheOpen) {
+      if (sdk.ui?.modal && sdk.ui?.button) {
+        if (activeAlbumModal) { try { activeAlbumModal.close() } catch {}; activeAlbumModal = null }
+        const body = document.createElement('div')
+        body.className = 'mteam-modal-hint'
+        body.textContent = '将删除 M-Team 已缓存封面。删除后页面会重新从远端图片源拉取，可能短时间出现空封面。'
+        let modalApi
+        const cancel = sdk.ui.button({ label: '取消', disabled: state.clearingCache, onClick: () => { if (!state.clearingCache) { state.clearCacheOpen = false; modalApi.close(); render() } } })
+        const ok = sdk.ui.button({ label: state.clearingCache ? '清除中' : '确认清除', tone: 'danger', disabled: state.clearingCache, onClick: () => clearImageCache() })
+        modalApi = sdk.ui.modal({
+          title: '清除图片缓存',
+          content: body,
+          width: 'md',
+          footer: [cancel, ok],
+          onClose: () => { if (!state.clearingCache) { state.clearCacheOpen = false; render() } },
+        })
+        activeAlbumModal = modalApi
+        return
+      }
+      const mask = document.createElement('div')
+      mask.className = 'mteam-modal-mask'
+      const panel = document.createElement('div')
+      panel.className = 'mteam-modal'
+      const title = document.createElement('div')
+      title.className = 'mteam-modal-title'
+      title.textContent = '清除图片缓存'
+      const hint = document.createElement('div')
+      hint.className = 'mteam-modal-hint'
+      hint.textContent = '将删除 M-Team 已缓存封面。删除后页面会重新从远端图片源拉取，可能短时间出现空封面。'
+      const actions = document.createElement('div')
+      actions.className = 'mteam-modal-actions'
+      const cancel = document.createElement('button')
+      cancel.type = 'button'
+      cancel.className = 'mteam-btn'
+      cancel.textContent = '取消'
+      const ok = document.createElement('button')
+      ok.type = 'button'
+      ok.className = 'mteam-btn mteam-btn--danger'
+      ok.textContent = state.clearingCache ? '清除中' : '确认清除'
+      actions.append(cancel, ok)
+      panel.append(title, hint, actions)
+      mask.appendChild(panel)
+      modalRoot.appendChild(mask)
+      cancel.onclick = () => { if (!state.clearingCache) { state.clearCacheOpen = false; render() } }
+      ok.onclick = () => clearImageCache()
+      ok.disabled = state.clearingCache
+      return
+    }
+    if (!state.addOpen) {
+      if (activeAlbumModal) { try { activeAlbumModal.close() } catch {}; activeAlbumModal = null }
+      return
+    }
+    if (sdk.ui?.modal && sdk.ui?.field && sdk.ui?.input && sdk.ui?.button) {
+      if (activeAlbumModal) return
+      const body = document.createElement('div')
+      body.className = 'mteam-album-form'
+      const hint = document.createElement('div')
+      hint.className = 'mteam-modal-hint'
+      hint.textContent = '推荐粘贴片单 RSS 地址，且地址中包含 dl=1，这样作品卡片可以直接推送种子。只填 albumId 或普通片单页时只能展示内容，通常没有推送链接。'

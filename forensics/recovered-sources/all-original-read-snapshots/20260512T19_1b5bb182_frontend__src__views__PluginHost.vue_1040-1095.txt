@@ -1,0 +1,56 @@
+      controlPanelRow: makeControlPanelRow,
+      actionRow: makeActionRow,
+      statCard: makeStatCard,
+      statGrid: makeStatGrid,
+      mediaCard: makeMediaCard,
+      loadingState: makeLoadingState,
+      badge: (o: any) => { const b = document.createElement(o.onClick ? 'button' : 'span'); b.className = ['noor-plugin-badge', o.tone ? `noor-plugin-badge--${o.tone}` : '', o.className || ''].filter(Boolean).join(' '); b.textContent = o.label || ''; if (o.onClick) (b as HTMLButtonElement).onclick = o.onClick; return b },
+      chip: makeChip,
+      notice: (o: any) => { const d = document.createElement('div'); d.className = `noor-plugin-notice noor-plugin-notice--${o.tone || 'info'}`; d.textContent = o.text || ''; return d },
+      emptyState: (o: any) => { const d = document.createElement('div'); d.className = 'noor-plugin-state'; d.textContent = o.text || '暂无内容'; return d },
+      errorState: (o: any) => { const d = document.createElement('div'); d.className = 'noor-plugin-state noor-plugin-state--error'; d.textContent = o.text || '加载失败'; return d },
+      skeletonCard: (o: any) => { const d = document.createElement('div'); d.className = `noor-plugin-skeleton ${o.className || ''}`; return d },
+      card: (o: any) => { const a = document.createElement(o.href ? 'a' : 'div'); a.className = `noor-plugin-card ${o.className || ''}`; if (o.href) { (a as HTMLAnchorElement).href = o.href; (a as HTMLAnchorElement).target = o.target || '_self' }; return a },
+      confirm: (o: any) => confirm.confirm({ title: o.title || '确认操作', message: o.message || '', confirmText: o.confirmText || '确认', danger: !!o.danger }),
+    },
+  }
+}
+
+async function mountPlugin() {
+  clearMounted()
+  if (!pluginId.value || !host.value) return
+  loading.value = true
+  error.value = ''
+  try {
+    const info = await api.get(`/plugins/${pluginId.value}/config`).then(r => r.data)
+    const style = info?.plugin?.frontend?.style
+    if (style) {
+      const bust = Date.now()
+      styleEl = document.createElement('link')
+      styleEl.rel = 'stylesheet'
+      styleEl.href = `/api/plugins/${pluginId.value}/assets/${style.replace(/^frontend\//, '')}?t=${bust}`
+      document.head.appendChild(styleEl)
+    }
+    const entry = info?.plugin?.frontend?.entry || 'frontend/page.js'
+    const mod = await import(/* @vite-ignore */ `/api/plugins/${pluginId.value}/assets/${entry.replace(/^frontend\//, '')}?t=${Date.now()}`)
+    await nextTick()
+    const ret = await mod.mount(host.value, sdkFor(pluginId.value))
+    if (typeof ret === 'function') dispose = ret
+  } catch (e: any) {
+    error.value = e?.response?.data?.detail || e?.message || '插件加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(mountPlugin)
+watch(pluginId, mountPlugin)
+onBeforeUnmount(clearMounted)
+</script>
+
+<template>
+  <div class="plugin-host-page">
+    <div v-if="loading" class="plugin-host-state">插件加载中</div>
+    <div v-if="error" class="plugin-host-state plugin-host-state--error">{{ error }}</div>
+    <div ref="host" class="plugin-host-mount" :class="{ 'is-loading': loading }" />
+  </div>

@@ -1,0 +1,260 @@
+from __future__ import annotations
+
+import asyncio
+
+import httpx
+import pytest
+from sqlalchemy import select
+
+from app.core.models import Job, JobCreate, JobSettings
+from app.tasks.manager import JobManager
+
+from conftest import wait_until
+
+
+def make_job(name: str) -> JobCreate:
+    return JobCreate(
+        emby_item_id=name,
+        emby_item_name=name,
+        input_path=f"/tmp/{name}.mp4",
+        settings=JobSettings(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_enqueue_reuses_single_worker(temp_db):
+    manager = JobManager()
+    first_job_started = asyncio.Event()
+    release_first_job = asyncio.Event()
+
+    async def fake_run_lada(job_id: str, job_data: JobCreate):
+        first_job_started.set()
+        await release_first_job.wait()
+
+    manager._run_lada = fake_run_lada  # type: ignore[method-assign]
+
+    await manager.enqueue(make_job("one"))
+    worker = manager._worker_task
+    await manager.enqueue(make_job("two"))
+    await manager.enqueue(make_job("three"))
+
+    assert worker is not None
+    assert manager._worker_task is worker
+
+    await asyncio.wait_for(first_job_started.wait(), timeout=2)
+    release_first_job.set()
+    await asyncio.wait_for(manager.queue.join(), timeout=2)
+
+    assert manager._worker_task is worker
+    assert not worker.done()
+    worker.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await worker
+
+
+@pytest.mark.asyncio
+async def test_cancel_queued_job_marks_cancelled_immediately_and_skips_execution(temp_db):
+    manager = JobManager()
+    run_started = asyncio.Event()
+    original_ensure_worker = manager._ensure_worker
+    manager._ensure_worker = lambda: None  # type: ignore[method-assign]
+
+    async def fake_run_lada(job_id: str, job_data: JobCreate):
+        run_started.set()
+
+    manager._run_lada = fake_run_lada  # type: ignore[method-assign]
+
+    queued = await manager.enqueue(make_job("queued"))
+
+    assert await manager.cancel_job(queued.id) is True
+
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == queued.id))
+        db_job = result.scalar_one()
+        assert db_job.status == "cancelled"
+        assert db_job.completed_at is not None
+
+    cancel_event = await asyncio.wait_for(manager.get_event_queue(queued.id).get(), timeout=2)
+    assert cancel_event == {
+        "type": "queued",
+        "job_id": queued.id,
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+        "phase_progress": 0,
+    }
+    terminal_event = await asyncio.wait_for(manager.get_event_queue(queued.id).get(), timeout=2)
+    assert terminal_event == {
+        "type": "cancelled",
+        "success": False,
+        "progress": 0,
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+        "phase_progress": 0,
+        "detail": None,
+    }
+
+    original_ensure_worker()
+    await asyncio.wait_for(manager.queue.join(), timeout=2)
+    assert not run_started.is_set()
+
+    manager._worker_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await manager._worker_task
+
+
+@pytest.mark.asyncio
+async def test_cancel_running_job_does_not_start_next_until_current_exits(temp_db):
+    manager = JobManager()
+    first_can_exit = asyncio.Event()
+    second_started = asyncio.Event()
+    second_can_exit = asyncio.Event()
+    started: list[str] = []
+
+    async def fake_run_lada(job_id: str, job_data: JobCreate):
+        started.append(job_id)
+        if len(started) == 1:
+            await manager._cancel_event_for(job_id).wait()
+            await first_can_exit.wait()
+            await manager._finish_cancelled_job(
+                job_id,
+                event_queue=manager.get_event_queue(job_id),
+                log_message="Lada 任务已取消",
+            )
+        else:
+            second_started.set()
+            await second_can_exit.wait()
+            await manager._finalize_job(job_id, status="completed", progress=100)
+
+    manager._run_lada = fake_run_lada  # type: ignore[method-assign]
+
+    first = await manager.enqueue(make_job("first"))
+    second = await manager.enqueue(make_job("second"))
+
+    await wait_until(lambda: manager.running_job_id == first.id)
+    assert await manager.cancel_job(first.id) is True
+
+    # Cancellation must not clear running_job_id while the underlying work is still cleaning up.
+    assert manager.running_job_id == first.id
+    assert not second_started.is_set()
+
+    async with temp_db() as session:
+        first_result = await session.execute(select(Job).where(Job.id == first.id))
+        db_first = first_result.scalar_one()
+        assert db_first.status == "running"
+        assert db_first.completed_at is None
+
+        result = await session.execute(select(Job).where(Job.id == second.id))
+        db_second = result.scalar_one()
+        assert db_second.status == "queued"
+
+    first_can_exit.set()
+    await asyncio.wait_for(second_started.wait(), timeout=2)
+    assert manager.running_job_id == second.id
+
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == first.id))
+        db_first = result.scalar_one()
+        assert db_first.status == "cancelled"
+        assert db_first.completed_at is not None
+
+    second_can_exit.set()
+    await asyncio.wait_for(manager.queue.join(), timeout=2)
+    manager._worker_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await manager._worker_task
+
+
+@pytest.mark.asyncio
+async def test_run_lada_does_not_overwrite_cancelled_status(temp_db, monkeypatch):
+    import app.tasks.manager as manager_module
+
+    manager = JobManager()
+    job_id = "cancelled-job"
+    job_data = make_job("cancelled")
+
+    async with temp_db() as session:
+        session.add(Job(
+            id=job_id,
+            job_type="lada",
+            emby_item_id=job_data.emby_item_id,
+            emby_item_name=job_data.emby_item_name,
+            input_path=job_data.input_path,
+            status="cancelled",
+            settings=job_data.settings.model_dump(),
+        ))
+        await session.commit()
+
+    async def fake_run_lada_restoration(**kwargs):
+        return True
+
+    monkeypatch.setattr(manager_module, "run_lada_restoration", fake_run_lada_restoration)
+
+    await manager._run_lada(job_id, job_data)
+
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == job_id))
+        db_job = result.scalar_one()
+        assert db_job.status == "cancelled"
+        assert db_job.output_path is None
+
+
+@pytest.mark.asyncio
+async def test_run_lada_persists_structured_progress_fields(temp_db, monkeypatch):
+    import app.tasks.manager as manager_module
+
+    manager = JobManager()
+    job_id = "lada-progress-job"
+    job_data = make_job("lada-progress")
+
+    async with temp_db() as session:
+        session.add(Job(
+            id=job_id,
+            job_type="lada",
+            emby_item_id=job_data.emby_item_id,
+            emby_item_name=job_data.emby_item_name,
+            input_path=job_data.input_path,
+            status="running",
+            settings=job_data.settings.model_dump(),
+        ))
+        await session.commit()
+
+    async def fake_run_lada_restoration(**kwargs):
+        progress_queue = kwargs["progress_queue"]
+        await progress_queue.put({
+            "type": "progress",
+            "progress": 62,
+            "phase_key": "restore",
+            "phase_label": "修复视频",
+            "phase_progress": 72,
+            "detail": "修复第 72% 帧段",
+        })
+        await asyncio.sleep(0.2)
+        return True
+
+    monkeypatch.setattr(manager_module, "run_lada_restoration", fake_run_lada_restoration)
+
+    await manager._run_lada(job_id, job_data)
+
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == job_id))
+        db_job = result.scalar_one()
+        assert db_job.status == "completed"
+        assert db_job.progress == 100
+        assert db_job.phase_key == "restore"
+        assert db_job.phase_label == "修复视频"
+        assert db_job.phase_progress == 100
+        assert db_job.detail == "修复第 72% 帧段"
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (ConnectionError("无法连接到服务"), True),
+        (TimeoutError("request timed out"), True),
+        (RuntimeError("翻译失败: 无法连接到 https://example.com"), True),
+        (RuntimeError("普通错误"), False),
+    ],
+)
+def test_is_connection_error_prefers_exception_type_and_stable_fallback(error, expected):
+    assert JobManager._is_connection_error(error) is expected
+

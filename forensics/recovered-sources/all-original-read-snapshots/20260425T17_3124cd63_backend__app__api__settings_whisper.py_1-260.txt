@@ -1,0 +1,513 @@
+from __future__ import annotations
+
+import json
+from typing import Any, Callable
+
+from app.pipeline.whisper.strategy import apply_whisper_strategy
+
+
+TRANSFORMERS_MODEL_KEYS = {
+    "anime-whisper": "anime_whisper",
+    "kotoba-whisper-v2.2": "kotoba-whisper-v2.2",
+}
+
+SPECIAL_MODEL_KEYS = {
+    "reazonspeech-nemo-v2": "reazon_nemo",
+}
+
+
+DEFAULT_CUSTOM_PIPELINE_CONFIG = {
+    "model": "large-v3",
+    "vad_method": "semantic",
+    "scene_detector": "semantic",
+    "enhancers": [],
+    "segmenter": "silero-v6.2",
+    "timestamp_mode": "aligner_interpolation",
+    "aligner_backend": "qwen3",
+    "framer_backend": "vad-grouped",
+}
+
+DEFAULT_AUDIO_PREPROCESS_MODE = "none"
+DEFAULT_AUDIO_PREPROCESS_MODEL = "vocal_balanced"
+
+
+def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
+    payload = config.model_dump() if hasattr(config, "model_dump") else dict(config)
+    payload = apply_whisper_strategy(payload, payload.get("strategy"))
+
+    raw_custom_config = payload.get("custom_config") or {}
+    if hasattr(raw_custom_config, "model_dump"):
+        raw_custom_config = raw_custom_config.model_dump()
+
+    custom_config = {
+        **DEFAULT_CUSTOM_PIPELINE_CONFIG,
+        **raw_custom_config,
+    }
+    custom_config["timestamp_mode"] = payload.get("timestamp_mode", custom_config["timestamp_mode"])
+    custom_config["aligner_backend"] = payload.get("aligner_backend", custom_config["aligner_backend"])
+    custom_config["framer_backend"] = payload.get("framer_backend", custom_config["framer_backend"])
+
+    payload["custom_config"] = custom_config
+    payload["timestamp_mode"] = custom_config["timestamp_mode"]
+    payload["aligner_backend"] = custom_config["aligner_backend"]
+    payload["framer_backend"] = custom_config["framer_backend"]
+    payload["audio_preprocess_mode"] = payload.get("audio_preprocess_mode", DEFAULT_AUDIO_PREPROCESS_MODE)
+    payload["audio_preprocess_model"] = payload.get("audio_preprocess_model", DEFAULT_AUDIO_PREPROCESS_MODEL)
+    return payload
+
+
+def apply_whisper_config_updates(config: Any, update_env_value_fn: Callable[[str, str], None]) -> None:
+    payload = normalize_whisper_config_payload(config)
+    update_env_value_fn("WHISPER_STRATEGY", payload["strategy"])
+    update_env_value_fn("WHISPER_MODEL", payload["model"])
+    update_env_value_fn("WHISPER_PIPELINE_MODE", payload["pipeline_mode"])
+    update_env_value_fn("WHISPER_MERGE_STRATEGY", payload["merge_strategy"])
+    update_env_value_fn("WHISPER_LANGUAGE", payload["language"])
+    update_env_value_fn("WHISPER_SENSITIVITY", payload["sensitivity"])
+    update_env_value_fn("WHISPER_VAD_METHOD", payload["vad_method"])
+    update_env_value_fn("WHISPER_AUDIO_PREPROCESS_MODE", payload["audio_preprocess_mode"])
+    update_env_value_fn("WHISPER_AUDIO_PREPROCESS_MODEL", payload["audio_preprocess_model"])
+    update_env_value_fn("WHISPER_TRANSLATE_TO", payload["translate_to"])
+    update_env_value_fn("WHISPER_TRANSLATE_MODEL", payload["translate_model"])
+    update_env_value_fn("WHISPER_TRANSLATE_STYLE", payload["translate_style"])
+    update_env_value_fn("WHISPER_TRANSLATE_BASE_URL", payload["translate_base_url"])
+    update_env_value_fn("WHISPER_TRANSLATE_API_KEY", payload["translate_api_key"])
+    update_env_value_fn("WHISPER_PASS1_PIPELINE", payload["pass1_pipeline"])
+    update_env_value_fn("WHISPER_PASS2_PIPELINE", payload["pass2_pipeline"])
+    update_env_value_fn("WHISPER_CUSTOM_CONFIG", json.dumps(payload["custom_config"]))
+
+
+def sanitize_download_status(download_status: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": download_status.get("status", "idle"),
+        "progress": download_status.get("progress", 0),
+        "message": download_status.get("message", ""),
+        "model": download_status.get("model", ""),
+    }
+
+
+def build_whisper_models_payload(
+    *,
+    check_result: dict[str, Any],
+    whisper_models: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    models = []
+    available_models = check_result.get("models", {})
+
+    for key, info in whisper_models.items():
+        if info["type"] == "transformers":
+            check_key = TRANSFORMERS_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        elif info["type"] == "reazon-nemo":
+            check_key = SPECIAL_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        else:
+            downloaded = available_models.get(f"faster_{key}", {}).get("downloaded", False)
+
+        models.append(
+            {
+                "id": key,
+                "name": info["name"],
+                "size": info["size"],
+                "type": info["type"],
+                "downloaded": downloaded,
+                "description": info.get("description", ""),
+                "managed_externally": info.get("type") == "reazon-nemo",
+            }
+        )
+
+    return models
+
+--- settings_response ---
+from __future__ import annotations
+
+from typing import Any
+
+from app.core.config import DEFAULT_REAZON_MODEL_DIR, DEFAULT_REAZON_NEMO_MODEL_PATH
+from app.pipeline.whisper.strategy import apply_whisper_strategy, normalize_whisper_strategy
+
+
+def split_enabled_library_ids(raw_value: str) -> list[str]:
+    return raw_value.split(",") if raw_value else []
+
+
+def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str, Any], lada_model_weights_dir: str, whisper_features: dict[str, Any], custom_whisper_config: dict[str, Any]) -> dict[str, Any]:
+    whisper_strategy = normalize_whisper_strategy(env_data.get("WHISPER_STRATEGY", "recommended"))
+    whisper_payload = {
+        "strategy": whisper_strategy,
+        "model": env_data.get("WHISPER_MODEL", "anime-whisper"),
+        "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "ensemble"),
+        "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
+        "language": env_data.get("WHISPER_LANGUAGE", "ja"),
+        "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
+        "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
+        "audio_preprocess_mode": env_data.get("WHISPER_AUDIO_PREPROCESS_MODE", "none"),
+        "audio_preprocess_model": env_data.get("WHISPER_AUDIO_PREPROCESS_MODEL", "vocal_balanced"),
+        "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
+        "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+        "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),
+        "translate_base_url": env_data.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1"),
+        "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
+        "pass1_pipeline": env_data.get("WHISPER_PASS1_PIPELINE", "anime"),
+        "pass2_pipeline": env_data.get("WHISPER_PASS2_PIPELINE", ""),
+        "timestamp_mode": custom_whisper_config.get("timestamp_mode", "aligner_interpolation"),
+        "aligner_backend": custom_whisper_config.get("aligner_backend", "qwen3"),
+        "framer_backend": custom_whisper_config.get("framer_backend", "vad-grouped"),
+        "custom_config": custom_whisper_config,
+    }
+    if whisper_strategy in {"recommended", "baseline", "reazon_nemo"}:
+        whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
+        whisper_payload["custom_config"] = {
+            **custom_whisper_config,
+            "timestamp_mode": whisper_payload.get("timestamp_mode", "aligner_interpolation"),
+            "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
+            "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
+        }
+    return {
+        "emby": {
+            "server": env_data.get("EMBY_SERVER", ""),
+            "api_key": env_data.get("EMBY_API_KEY", ""),
+            "user_id": env_data.get("EMBY_USER_ID", ""),
+            "enabled_library_ids": split_enabled_library_ids(env_data.get("EMBY_ENABLED_LIBRARY_IDS", "")),
+        },
+        "storage": {
+            "source_dir": env_data.get("SOURCE_DIR", ""),
+            "output_dir": env_data.get("OUTPUT_DIR", ""),
+            "whisper_model_dir": env_data.get("WHISPER_MODEL_DIR", ""),
+            "audio_separator_model_dir": env_data.get("AUDIO_SEPARATOR_MODEL_DIR", "/volume1/models/audio-separator"),
+            "reazon_model_dir": env_data.get("REAZON_MODEL_DIR", DEFAULT_REAZON_MODEL_DIR),
+            "reazon_nemo_model_path": env_data.get("REAZON_NEMO_MODEL_PATH", DEFAULT_REAZON_NEMO_MODEL_PATH),
+            "lada_model_dir": lada_model_weights_dir,
+            "lada_model_weights_dir": lada_model_weights_dir,
+        },
+        "lada": {
+            "cli_path": env_data.get("LADA_CLI_PATH", "python3 -m lada.cli.main"),
+            "version": version_info["version"],
+            "is_docker": version_info["is_docker"],
+            "is_submodule": version_info["is_submodule"],
+            "install_mode": version_info["install_mode"],
+            "can_self_upgrade": version_info["can_self_upgrade"],
+            "upgrade_strategy": version_info["upgrade_strategy"],
+            "upgrade_hint": version_info["upgrade_hint"],
+            "repo_path": version_info["repo_path"],
+        },
+        "lada_defaults": {
+            "device": env_data.get("LADA_DEVICE", "cuda:0"),
+            "fp16": env_data.get("LADA_FP16", "true").lower() == "true",
+            "detection_model": env_data.get("LADA_DETECTION_MODEL", "v4-fast"),
+            "restoration_model": env_data.get("LADA_RESTORATION_MODEL", "basicvsrpp-v1.2"),
+            "encoding_preset": env_data.get("LADA_ENCODING_PRESET", "hevc-nvidia-gpu-hq"),
+            "max_clip_length": int(env_data.get("LADA_MAX_CLIP_LENGTH", "180")),
+            "detect_face_mosaics": env_data.get("LADA_DETECT_FACE_MOSAICS", "false").lower() == "true",
+        },
+        "whisper": {
+            **whisper_payload,
+            "features": whisper_features,
+        },
+        "network": {
+            "acceleration_mode": env_data.get("ACCELERATION_MODE", "mirror"),
+            "http_proxy": env_data.get("HTTP_PROXY", ""),
+            "github_mirror": env_data.get("GITHUB_MIRROR", "https://ghproxy.com"),
+            "hf_mirror": env_data.get("HF_MIRROR", "https://hf-mirror.com"),
+            "pip_mirror": env_data.get("PIP_MIRROR", "https://pypi.tuna.tsinghua.edu.cn/simple"),
+            "hf_token": env_data.get("HF_TOKEN", ""),
+        },
+    }
+
+--- tests settings_response ---
+from __future__ import annotations
+
+from app.api.settings_response import build_settings_payload, split_enabled_library_ids
+
+
+def test_split_enabled_library_ids_handles_empty_and_multiple_values():
+    assert split_enabled_library_ids('') == []
+    assert split_enabled_library_ids('a,b') == ['a', 'b']
+
+
+def test_build_settings_payload_maps_env_and_defaults():
+    payload = build_settings_payload(
+        env_data={
+            'EMBY_SERVER': 'http://emby',
+            'EMBY_ENABLED_LIBRARY_IDS': '1,2',
+            'LADA_FP16': 'false',
+            'LADA_MAX_CLIP_LENGTH': '240',
+            'WHISPER_STRATEGY': 'advanced',
+            'WHISPER_MODEL': 'kotoba-whisper-v2.2',
+            'ACCELERATION_MODE': 'proxy',
+        },
+        version_info={
+            'version': '1.2.3',
+            'is_docker': False,
+            'is_submodule': True,
+            'install_mode': 'editable-repo',
+            'can_self_upgrade': True,
+            'upgrade_strategy': 'git-pull-reinstall',
+            'upgrade_hint': 'hint',
+            'repo_path': '/tmp/lada',
+        },
+        lada_model_weights_dir='/models/lada',
+        whisper_features={'custom_pipeline': {'available': False}},
+        custom_whisper_config={'model': 'large-v3', 'timestamp_mode': 'aligner_interpolation', 'aligner_backend': 'qwen3', 'framer_backend': 'vad-grouped'},
+    )
+
+    assert payload['emby']['server'] == 'http://emby'
+    assert payload['emby']['enabled_library_ids'] == ['1', '2']
+    assert payload['storage']['reazon_model_dir'] == '/volume1/models/reazon'
+    assert payload['storage']['reazon_nemo_model_path'] == '/volume1/models/reazon/reazonspeech-nemo-v2.nemo'
+    assert payload['storage']['lada_model_dir'] == '/models/lada'
+    assert payload['lada']['version'] == '1.2.3'
+    assert payload['lada_defaults']['fp16'] is False
+    assert payload['lada_defaults']['max_clip_length'] == 240
+    assert payload['whisper']['strategy'] == 'advanced'
+    assert payload['whisper']['model'] == 'kotoba-whisper-v2.2'
+    assert payload['whisper']['custom_config'] == {'model': 'large-v3', 'timestamp_mode': 'aligner_interpolation', 'aligner_backend': 'qwen3', 'framer_backend': 'vad-grouped'}
+    assert payload['whisper']['timestamp_mode'] == 'aligner_interpolation'
+    assert payload['whisper']['aligner_backend'] == 'qwen3'
+    assert payload['whisper']['framer_backend'] == 'vad-grouped'
+    assert payload['network']['acceleration_mode'] == 'proxy'
+
+
+def test_build_settings_payload_normalizes_best_strategy_alias():
+    payload = build_settings_payload(
+        env_data={'WHISPER_STRATEGY': 'best'},
+        version_info={
+            'version': '0.0.0',
+            'is_docker': False,
+            'is_submodule': False,
+            'install_mode': 'editable-repo',
+            'can_self_upgrade': False,
+            'upgrade_strategy': 'manual',
+            'upgrade_hint': '',
+            'repo_path': '',
+        },
+        lada_model_weights_dir='',
+        whisper_features={},
+        custom_whisper_config={},
+    )
+
+    assert payload['whisper']['strategy'] == 'recommended'
+
+
+def test_build_settings_payload_normalizes_recommended_strategy_shape_from_env():
+    payload = build_settings_payload(
+        env_data={
+            'WHISPER_STRATEGY': 'recommended',
+            'WHISPER_MODEL': 'large-v3',
+            'WHISPER_PIPELINE_MODE': 'qwen',
+            'WHISPER_PASS1_PIPELINE': 'custom',
+            'WHISPER_PASS2_PIPELINE': '',
+        },
+        version_info={
+            'version': '0.0.0',
+            'is_docker': False,
+            'is_submodule': False,
+            'install_mode': 'editable-repo',
+            'can_self_upgrade': False,
+            'upgrade_strategy': 'manual',
+            'upgrade_hint': '',
+            'repo_path': '',
+        },
+        lada_model_weights_dir='',
+        whisper_features={},
+        custom_whisper_config={'timestamp_mode': 'vad_only', 'aligner_backend': 'none', 'framer_backend': 'full-scene'},
+    )
+
+    assert payload['whisper']['strategy'] == 'recommended'
+    assert payload['whisper']['model'] == 'anime-whisper'
+    assert payload['whisper']['pipeline_mode'] == 'ensemble'
+    assert payload['whisper']['pass1_pipeline'] == 'anime'
+    assert payload['whisper']['pass2_pipeline'] == 'qwen'
+    assert payload['whisper']['timestamp_mode'] == 'aligner_interpolation'
+    assert payload['whisper']['aligner_backend'] == 'qwen3'
+    assert payload['whisper']['framer_backend'] == 'vad-grouped'
+
+
+def test_build_settings_payload_normalizes_reazon_nemo_strategy_shape_from_env():
+    payload = build_settings_payload(
+        env_data={
+            'WHISPER_STRATEGY': 'reazon_nemo',
+            'WHISPER_MODEL': 'anime-whisper',
+            'WHISPER_PIPELINE_MODE': 'ensemble',
+            'WHISPER_PASS1_PIPELINE': 'anime',
+            'WHISPER_PASS2_PIPELINE': 'qwen',
+        },
+        version_info={
+            'version': '0.0.0',
+            'is_docker': False,
+            'is_submodule': False,
+            'install_mode': 'editable-repo',
+            'can_self_upgrade': False,
+            'upgrade_strategy': 'manual',
+            'upgrade_hint': '',
+            'repo_path': '',
+        },
+        lada_model_weights_dir='/models/lada',
+        whisper_features={'custom_pipeline': {'available': False, 'reason': 'x'}},
+        custom_whisper_config={},
+    )
+
+    assert payload['whisper']['strategy'] == 'reazon_nemo'
+    assert payload['whisper']['model'] == 'reazonspeech-nemo-v2'
+    assert payload['whisper']['pipeline_mode'] == 'reazon'
+    assert payload['whisper']['pass1_pipeline'] == 'reazon'
+    assert payload['whisper']['pass2_pipeline'] == ''
+
+--- tests settings helpers ---
+from __future__ import annotations
+
+from app.api.settings import CustomPipelineConfig, WhisperConfig
+from app.api.settings_whisper import (
+    apply_whisper_config_updates,
+    build_whisper_models_payload,
+    normalize_whisper_config_payload,
+    sanitize_download_status,
+)
+
+
+def test_apply_whisper_config_updates_writes_expected_env_values():
+    calls: list[tuple[str, str]] = []
+    config = WhisperConfig(
+        strategy="advanced",
+        model="kotoba-whisper-v2.2",
+        pipeline_mode="ensemble",
+        merge_strategy="smart_merge",
+        language="ja",
+        sensitivity="balanced",
+        vad_method="semantic",
+        translate_to="zh",
+        translate_model="gpt-4o-mini",
+        translate_style="adult_explicit",
+        translate_base_url="https://api.openai.com/v1",
+        translate_api_key="secret",
+        pass1_pipeline="anime",
+        pass2_pipeline="custom",
+        custom_config=CustomPipelineConfig(model="large-v3", enhancers=["demucs"]),
+    )
+
+    apply_whisper_config_updates(config, lambda key, value: calls.append((key, value)))
+
+    assert dict(calls)["WHISPER_MODEL"] == "kotoba-whisper-v2.2"
+    assert dict(calls)["WHISPER_PASS2_PIPELINE"] == "custom"
+    assert '"enhancers": ["demucs"]' in dict(calls)["WHISPER_CUSTOM_CONFIG"]
+
+
+def test_build_whisper_models_payload_resolves_transformers_and_faster_whisper_download_flags():
+    result = build_whisper_models_payload(
+        check_result={
+            "models": {
+                "anime_whisper": {"downloaded": True},
+                "reazon_nemo": {"downloaded": True},
+                "faster_large-v3": {"downloaded": False},
+            }
+        },
+        whisper_models={
+            "anime-whisper": {
+                "name": "Anime-Whisper",
+                "size": "~3GB",
+                "type": "transformers",
+                "description": "anime",
+            },
+            "large-v3": {
+                "name": "Large V3",
+                "size": "~3GB",
+                "type": "faster-whisper",
+                "description": "general",
+            },
+            "reazonspeech-nemo-v2": {
+                "name": "ReazonSpeech NeMo v2",
+                "size": "~2.4GB",
+                "type": "reazon-nemo",
+                "description": "reserved",
+            },
+        },
+    )
+
+    assert result == [
+        {
+            "id": "anime-whisper",
+            "name": "Anime-Whisper",
+            "size": "~3GB",
+            "type": "transformers",
+            "downloaded": True,
+            "description": "anime",
+            "managed_externally": False,
+        },
+        {
+            "id": "large-v3",
+            "name": "Large V3",
+            "size": "~3GB",
+            "type": "faster-whisper",
+            "downloaded": False,
+            "description": "general",
+            "managed_externally": False,
+        },
+        {
+            "id": "reazonspeech-nemo-v2",
+            "name": "ReazonSpeech NeMo v2",
+            "size": "~2.4GB",
+            "type": "reazon-nemo",
+            "downloaded": True,
+            "description": "reserved",
+            "managed_externally": True,
+        },
+    ]
+
+
+def test_sanitize_download_status_applies_defaults():
+    assert sanitize_download_status({"status": "running", "message": "Downloading"}) == {
+        "status": "running",
+        "progress": 0,
+        "message": "Downloading",
+        "model": "",
+    }
+
+
+def test_normalize_whisper_config_payload_applies_recommended_defaults_and_runtime_fields():
+    config = WhisperConfig(
+        strategy="recommended",
+        model="large-v3",
+        pipeline_mode="qwen",
+        pass1_pipeline="custom",
+        pass2_pipeline="",
+        custom_config=CustomPipelineConfig(
+            model="large-v3",
+            timestamp_mode="vad_only",
+            aligner_backend="none",
+            framer_backend="full-scene",
+        ),
+    )
+
+    payload = normalize_whisper_config_payload(config)
+
+    assert payload["strategy"] == "recommended"
+    assert payload["model"] == "anime-whisper"
+    assert payload["pipeline_mode"] == "ensemble"
+    assert payload["pass1_pipeline"] == "anime"
+    assert payload["pass2_pipeline"] == "qwen"
+    assert payload["timestamp_mode"] == "aligner_interpolation"
+    assert payload["aligner_backend"] == "qwen3"
+    assert payload["framer_backend"] == "vad-grouped"
+    assert payload["custom_config"]["timestamp_mode"] == "aligner_interpolation"
+
+
+def test_apply_whisper_config_updates_recommended_persists_normalized_strategy_shape():
+    calls: list[tuple[str, str]] = []
+    config = WhisperConfig(
+        strategy="recommended",
+        model="large-v3",
+        pipeline_mode="qwen",
+        pass1_pipeline="custom",
+        pass2_pipeline="",
+        custom_config=CustomPipelineConfig(timestamp_mode="vad_only", aligner_backend="none"),
+    )
+
+    apply_whisper_config_updates(config, lambda key, value: calls.append((key, value)))
+
+    payload = dict(calls)
+    assert payload["WHISPER_STRATEGY"] == "recommended"
+    assert payload["WHISPER_MODEL"] == "anime-whisper"
+    assert payload["WHISPER_PIPELINE_MODE"] == "ensemble"
+    assert payload["WHISPER_PASS1_PIPELINE"] == "anime"
+    assert payload["WHISPER_PASS2_PIPELINE"] == "qwen"
+    assert '"timestamp_mode": "aligner_interpolation"' in payload["WHISPER_CUSTOM_CONFIG"]

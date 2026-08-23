@@ -1,0 +1,346 @@
+    async def get_logs(self, job_id: str) -> list[str]:
+        # 优先从内存获取实时日志
+        if job_id in self._logs and self._logs[job_id]:
+            return self._logs[job_id]
+        # 从文件读取
+        return read_log_lines(job_id)
+
+    async def add_log(self, job_id: str, log: str):
+        if job_id not in self._logs:
+            self._logs[job_id] = []
+        self._logs[job_id].append(log)
+        # 持久化到文件
+        try:
+            append_log_line(job_id, log)
+        except Exception as e:
+            logger.warning("Failed to save log to file for job %s: %s", job_id, e)
+
+    async def remove_event_queue(self, job_id: str):
+        if job_id in self._event_queues:
+            del self._event_queues[job_id]
+
+    def _build_job_create_from_row(self, job: Job) -> JobCreate:
+        return JobCreate(
+            emby_item_id=job.emby_item_id,
+            emby_item_name=job.emby_item_name,
+            input_path=job.input_path,
+            settings=job.settings or {},
+            chain_id=job.chain_id,
+            depends_on_task_id=job.depends_on_task_id,
+            parent_task_id=job.parent_task_id,
+        )
+
+    async def _activate_blocked_dependents(self, parent_job_id: str) -> list[str]:
+        activated_ids: list[str] = []
+        pending_jobs: list[tuple[str, JobCreate, str]] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status == "blocked",
+                    ).order_by(Job.created_at)
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "queued"
+                    job.error_message = None
+                    pending_jobs.append((job.id, self._build_job_create_from_row(job), job.job_type))
+                    activated_ids.append(job.id)
+                await session.commit()
+        for job_id, job_data, job_type in pending_jobs:
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put({"type": "queued", "job_id": job_id})
+        if pending_jobs:
+            self._ensure_worker()
+        return activated_ids
+
+    async def _skip_blocked_dependents(self, parent_job_id: str, reason: str) -> list[str]:
+        skipped_ids: list[str] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status.in_(["blocked", "pending"]),
+                    )
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "skipped"
+                    job.error_message = reason
+                    job.completed_at = utcnow_naive()
+                    skipped_ids.append(job.id)
+                await session.commit()
+        for job_id in skipped_ids:
+            await self.get_event_queue(job_id).put({"type": "failed", "success": False, "error": reason})
+        return skipped_ids
+
+    async def create_job(
+        self,
+        job_data: JobCreate,
+        *,
+        job_type: str = "lada",
+        status: str = "queued",
+        enqueue_now: bool = True,
+    ) -> JobResponse:
+        job_id = str(uuid.uuid4())
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                job = Job(
+                    id=job_id,
+                    job_type=job_type,
+                    emby_item_id=job_data.emby_item_id,
+                    emby_item_name=job_data.emby_item_name,
+                    input_path=job_data.input_path,
+                    status=status,
+                    chain_id=job_data.chain_id,
+                    depends_on_task_id=job_data.depends_on_task_id,
+                    parent_task_id=job_data.parent_task_id,
+                    settings=job_data.settings.model_dump() if hasattr(job_data, 'settings') else {},
+                )
+                session.add(job)
+                await session.commit()
+                await session.refresh(job)
+                response = JobResponse.model_validate(job)
+
+        if enqueue_now and status == "queued":
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put({"type": "queued", "job_id": job_id})
+            self._ensure_worker()
+        elif status == "blocked":
+            await self.get_event_queue(job_id).put({"type": "blocked", "job_id": job_id})
+
+        return response
+
+    async def enqueue(self, job_data: JobCreate, job_type: str = "lada") -> JobResponse:
+        """入队 Lada 或 Whisper 任务"""
+        return await self.create_job(job_data, job_type=job_type, status="queued", enqueue_now=True)
+
+    async def enqueue_whisper(self, job_data: JobCreate) -> JobResponse:
+        """入队 Whisper 任务"""
+        return await self.enqueue(job_data, job_type="whisper")
+
+    async def enqueue_translate_srt(self, job_data: JobCreate) -> JobResponse:
+        """入队 SRT 翻译任务"""
+        return await self.enqueue(job_data, job_type="translate-srt")
+
+    def set_max_concurrent(self, max_concurrent: int):
+
+---models---
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+from sqlalchemy import String, Integer, DateTime, Text, JSON, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.core.database import Base
+
+
+def utcnow():
+    """返回当前 UTC 时间（naive datetime，格式为 UTC，不带时区标记）。
+
+    Note: naive UTC datetime is stored in SQLite. When reading back, we must
+    interpret naive datetime as UTC to correctly compare with time.time() (UTC seconds).
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_type: Mapped[str] = mapped_column(String(32), default="lada")
+    emby_item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    emby_item_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    input_path: Mapped[str] = mapped_column(Text, nullable=False)
+    output_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    phase_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    phase_label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    phase_progress: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    chain_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    depends_on_task_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('jobs.id'), nullable=True)
+    parent_task_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('jobs.id'), nullable=True)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    logs: Mapped[list] = mapped_column(JSON, default=list)  # 持久化日志
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class EmbyItemCache(Base):
+    """Persistent SQLite cache for Emby library items.
+
+    Survives process restarts unlike in-memory dict.
+    """
+    __tablename__ = "emby_item_cache"
+
+    library_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    cached_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    items_json: Mapped[str] = mapped_column(Text, nullable=False)  # Serialized JSON list
+
+
+class InstallStatus(Base):
+    """Singleton table to track background installation status."""
+    __tablename__ = "install_status"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    status: Mapped[str] = mapped_column(String(32), default="idle")  # idle/running/completed/failed
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+# Pydantic models
+class JobSettings(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    detection_model: str = "v4-fast"
+    restoration_model: str = "basicvsrpp-v1.2"
+    encoding_preset: str = "hevc-nvidia-gpu-hq"
+
+
+class JobCreate(BaseModel):
+    emby_item_id: str
+    emby_item_name: str
+    input_path: str
+    settings: JobSettings = Field(default_factory=JobSettings)
+    chain_id: Optional[str] = None
+    depends_on_task_id: Optional[str] = None
+    parent_task_id: Optional[str] = None
+
+
+class JobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    job_type: str = "lada"
+    emby_item_id: str
+    emby_item_name: str
+    input_path: str
+    output_path: Optional[str] = None
+    status: str
+    progress: int = 0
+    phase_key: Optional[str] = None
+    phase_label: Optional[str] = None
+    phase_progress: Optional[int] = None
+    detail: Optional[str] = None
+    error_message: Optional[str] = None
+    chain_id: Optional[str] = None
+    depends_on_task_id: Optional[str] = None
+    parent_task_id: Optional[str] = None
+    settings: dict = {}
+    logs: list = []
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+    @field_validator('created_at', 'completed_at', mode='before')
+    @classmethod
+    def ensure_utc(cls, v):
+        """将 naive datetime（被当作 UTC）附加 UTC 时区标记，前端收到 +00:00 正确解析。"""
+        if v is None:
+            return None
+        if isinstance(v, datetime) and v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v
+
+
+class JobListResponse(BaseModel):
+    jobs: list[JobResponse]
+    total: int
+
+
+# Emby models
+class EmbyNFO(BaseModel):
+    """NFO metadata model."""
+    title: Optional[str] = None
+    originaltitle: Optional[str] = None
+    sorttitle: Optional[str] = None
+    year: Optional[str] = None
+    premiered: Optional[str] = None
+    studio: Optional[str] = None
+    plot: Optional[str] = None
+    outline: Optional[str] = None
+    genres: list[str] = []
+    actors: list[dict] = []
+    director: Optional[str] = None
+    rating: Optional[str] = None
+    set: Optional[str] = None
+    id: Optional[str] = None
+    # Additional fields from AV刮削 NFO
+    tag: Optional[str] = None        # <tag> — usually studio slug
+    maker: Optional[str] = None      # <maker> — 片商
+    publisher: Optional[str] = None  # <publisher> — 发行商
+    label: Optional[str] = None      # <label> — 标签/系列
+    num: Optional[str] = None        # <num> — 番号 (e.g. CAWD-030)
+
+
+class FileTags(BaseModel):
+    """File tag information parsed from filename."""
+    is_uncensored: bool = False  # -u 流出
+    has_chinese: bool = False    # -c 中文
+    is_cracked: bool = False     # 破解 (same as uncensored)
+    is_leaked: bool = False      # 流出
+    release_type: Optional[str] = None  # 流出 / 无码
+    release_type_key: Optional[str] = None  # leaked / uncensored
+
+
+class EmbyLibrary(BaseModel):
+    id: str
+    name: str
+    type: str
+    poster_path: Optional[str] = None
+
+
+class EmbyItem(BaseModel):
+    id: str
+    name: str
+    type: str
+    media_type: Optional[str] = None
+    poster_path: Optional[str] = None
+    date_created: Optional[str] = None
+    path: Optional[str] = None
+    nfo: Optional[EmbyNFO] = None
+    tags: FileTags = Field(default_factory=FileTags)
+    subtitle_count: int = 0  # Number of subtitle files found locally
+
+
+class SiblingItem(BaseModel):
+    """A sibling video file in the same folder (CD1/CD2, etc.)."""
+    label: str = ""          # e.g. "CD1", "CD2", "碟1"
+    file_path: Optional[str] = None
+    # Optional Emby data (present for Emby-indexed siblings)
+    id: Optional[str] = None
+    name: Optional[str] = None
+    poster_path: Optional[str] = None
+
+
+class EmbyItemDetail(BaseModel):
+    id: str
+    name: str
+    media_type: str
+    file_path: Optional[str] = None
+    stream_url: Optional[str] = None
+    date_created: Optional[str] = None
+    premiered: Optional[str] = None
+    studios: list[str] = []
+    genres: list[str] = []
+    poster_path: Optional[str] = None
+    backdrop_path: Optional[str] = None
+    nfo: Optional[EmbyNFO] = None
+    siblings: list[SiblingItem] = []
+
+
+class EmbyLibraryResponse(BaseModel):
+    libraries: list[EmbyLibrary]
+
+
+class EmbyItemListResponse(BaseModel):
+    items: list[EmbyItem]
+    total: int

@@ -1,0 +1,21 @@
+    if action in {"rankings", "latest", "videos", "top250", "recommend"}:
+        return await _list_action(config, action, payload)
+    if action == "search":
+        return {"ok": True, **await _search(config, str(payload.get("q") or payload.get("keyword") or ""), int(payload.get("page") or 1), int(payload.get("limit") or 24))}
+    if action == "video":
+        code = str(payload.get("code") or "")
+        expected_magnets_count = int(payload.get("expected_magnets_count") or 0)
+        refresh = bool(payload.get("refresh"))
+        data = await _video(config, code, refresh=refresh)
+        if expected_magnets_count > 0 and len(data.get("magnets") or []) < expected_magnets_count:
+            data = await _video(config, code, refresh=True)
+        return {"ok": True, "data": data}
+    if action == "related_movies":
+        return await _related_movies(config, payload)
+    if action == "actors":
+        try:
+{
+  "code": null,
+  "cover_url": null,
+  "data": null
+}

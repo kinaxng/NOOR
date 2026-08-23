@@ -1,0 +1,260 @@
+        <span class="summary-card__label">{{ issueCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.issue_groups }}</span>
+      </div>
+    </div>
+
+    <div v-if="mediaStore.hardlinkScanning" class="flex items-center justify-center py-24">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[var(--color-brand)] border-t-transparent"></div>
+    </div>
+
+    <template v-else>
+      <div v-if="hasGroups" class="toolbar-card">
+        <div class="toolbar-main">
+          <input
+            v-model="searchQuery"
+            type="text"
+            :placeholder="searchPlaceholder"
+            class="hardlinks-search"
+          />
+          <div class="sort-controls">
+            <span class="sort-label">{{ t('hardlinks.sortBy') }}:</span>
+            <button class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'code' }" @click="setSort('code')">
+              {{ codeLabel }} {{ sortArrow('code') }}
+            </button>
+            <button class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'entryCount' }" @click="setSort('entryCount')">
+              {{ entryCountLabel }} {{ sortArrow('entryCount') }}
+            </button>
+            <button class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'hardlinkCount' }" @click="setSort('hardlinkCount')">
+              {{ hardlinkCountLabel }} {{ sortArrow('hardlinkCount') }}
+            </button>
+          </div>
+        </div>
+        <div class="filter-controls">
+          <button
+            v-for="tab in filterTabs"
+            :key="tab.key"
+            class="filter-btn"
+            :class="{ 'filter-btn--active': filterKey === tab.key }"
+            @click="filterKey = tab.key"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!hasGroups" class="empty-state">
+        <BaseIcon name="hardlink" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ noGroupsLabel }}</p>
+        <p class="empty-state__desc">{{ emptyDescLabel }}</p>
+        <VuiButton variant="text" color="secondary" size="small" @click="openSettings">
+          {{ goSettingsLabel }}
+        </VuiButton>
+      </div>
+
+      <div v-else-if="visibleGroups.length === 0" class="empty-state">
+        <BaseIcon name="search" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ emptyFilteredLabel }}</p>
+      </div>
+
+      <div v-else class="groups-list">
+        <div
+          v-for="group in visibleGroups"
+          :key="group.code"
+          class="hl-group"
+          :class="{ 'hl-group--issue': group.status === 'issue' }"
+        >
+          <button class="hl-group__header" @click="toggleExpanded(group.code)">
+            <div class="hl-group__summary">
+              <span class="hl-group__chevron">{{ isExpanded(group.code) ? '▾' : '▸' }}</span>
+              <span class="hl-group__code font-mono">{{ group.code }}</span>
+              <span class="hl-group__meta">
+                {{ group.entry_count || 0 }} src · {{ group.hardlink_count || 0 }} hl
+              </span>
+            </div>
+            <div class="hl-group__badges">
+              <VuiBadge variant="gradient" :color="groupStatusColor(group)" size="xs">
+                {{ group.status === 'issue' ? abnormalLabel : healthyLabel }}
+              </VuiBadge>
+              <VuiBadge v-if="(group.orphan_count || 0) > 0" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ orphanLabel }} × {{ group.orphan_count }}
+              </VuiBadge>
+              <VuiBadge v-if="group.issues?.includes('unparsed_code')" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ unparsedLabel }}
+              </VuiBadge>
+            </div>
+          </button>
+
+          <div v-if="isExpanded(group.code)" class="hl-group__entries">
+            <div
+              v-for="(entry, index) in group.entries"
+              :key="`${group.code}-${entry.source_path || 'orphan'}-${index}`"
+              class="hl-entry"
+              :class="{ 'hl-entry--issue': entry.status === 'issue' }"
+            >
+              <div class="hl-entry__topline">
+                <VuiBadge v-if="entry.issues?.includes('orphan_source')" variant="gradient" color="error" size="xs">
+                  {{ orphanLabel }}
+                </VuiBadge>
+                <span class="hl-entry__count">{{ entry.hardlink_count || entry.hardlink_paths.length }} {{ hardlinkCountLabel }}</span>
+              </div>
+              <div class="hl-entry__cols">
+                <div class="hl-col hl-col--source">
+                  <div class="hl-col__label">{{ t('hardlinks.mainFile') }}</div>
+                  <div class="hl-row" :class="{ 'hl-row--missing': entry.issues?.includes('orphan_source') }">
+                    <span
+                      v-if="entry.source_path"
+                      class="hl-row__path font-mono text-xs"
+                      :title="t('hardlinks.copyPath')"
+                      @click="copyPath(entry.source_path)"
+                    >{{ entry.source_path }}</span>
+                    <span v-else class="hl-row__empty font-mono text-xs">{{ t('hardlinks.missingSource') }}</span>
+                  </div>
+                </div>
+                <div class="hl-col hl-col--hardlinks">
+                  <div class="hl-col__label">{{ t('hardlinks.hardlinks') }}</div>
+                  <div
+                    v-for="hl in entry.hardlink_paths"
+                    :key="hl"
+                    class="hl-row hl-row--hardlink"
+                    :title="t('hardlinks.copyPath')"
+                    @click="copyPath(hl)"
+                  >
+                    <span class="hl-row__hl-arrow">→</span>
+                    <span class="hl-row__path font-mono text-xs">{{ hl }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-header__right,
+.page-header__left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.summary-card--warn {
+  border-color: rgba(255, 181, 71, 0.24);
+}
+
+.summary-card__label {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.summary-card__value {
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.toolbar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+}
+
+.toolbar-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.hardlinks-search {
+  flex: 1;
+  min-width: 14rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 0.875rem;
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+
+.hardlinks-search:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.1);
+}
+
+.sort-controls,
+.filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.sort-label {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.sort-btn,
+.filter-btn {
+  border-radius: var(--radius-button);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  transition: all var(--transition-fast);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.sort-btn:hover,

@@ -1,0 +1,153 @@
+from __future__ import annotations
+
+import asyncio
+import os
+from pathlib import Path
+
+import pytest
+
+from app.pipeline.lada.runner import run_lada_restoration
+
+
+@pytest.mark.asyncio
+async def test_lada_runner_cancel_terminates_process_and_cleans_temp(tmp_path: Path):
+    fake_cli = tmp_path / "fake_lada.py"
+    pid_file = tmp_path / "fake.pid"
+    fake_cli.write_text(
+        """
+import argparse
+import os
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--input')
+parser.add_argument('--output')
+parser.add_argument('--device')
+parser.add_argument('--mosaic-detection-model')
+parser.add_argument('--mosaic-restoration-model')
+parser.add_argument('--encoding-preset')
+parser.add_argument('--max-clip-length')
+parser.add_argument('--fp16', action='store_true')
+parser.add_argument('--no-fp16', action='store_true')
+parser.add_argument('--detect-face-mosaics', action='store_true')
+args = parser.parse_args()
+open(r'%s', 'w').write(str(os.getpid()))
+open(args.output + '.tmp.mp4', 'wb').write(b'x' * 1024)
+print('Progress: 1%%', flush=True)
+time.sleep(60)
+""" % str(pid_file),
+        encoding="utf-8",
+    )
+
+    input_path = tmp_path / "input.mp4"
+    output_path = tmp_path / "output.mp4"
+    input_path.write_bytes(b"x" * 2048)
+
+    progress_queue: asyncio.Queue = asyncio.Queue()
+    cancel_event = asyncio.Event()
+
+    task = asyncio.create_task(
+        run_lada_restoration(
+            job_id="fake-job",
+            input_path=str(input_path),
+            output_path=str(output_path),
+            job_settings={
+                "lada_cli_path": f"python3 {fake_cli}",
+                "device": "cpu",
+                "fp16": False,
+            },
+            progress_queue=progress_queue,
+            cancel_event=cancel_event,
+        )
+    )
+
+    await asyncio.sleep(1.0)
+    cancel_event.set()
+    success = await asyncio.wait_for(task, timeout=25)
+
+    assert success is False
+    assert not output_path.exists()
+    assert not Path(str(output_path) + ".tmp.mp4").exists()
+
+    pid = int(pid_file.read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+    events = []
+    while not progress_queue.empty():
+        events.append(await progress_queue.get())
+    assert any("Cancellation requested" in e.get("line", "") for e in events)
+    assert any("Process cancelled" in e.get("line", "") for e in events)
+
+---
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == first.id))
+        db_first = result.scalar_one()
+        assert db_first.status == "cancelled"
+        assert db_first.completed_at is not None
+
+    second_can_exit.set()
+    await asyncio.wait_for(manager.queue.join(), timeout=2)
+    manager._worker_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await manager._worker_task
+
+
+@pytest.mark.asyncio
+async def test_run_lada_does_not_overwrite_cancelled_status(temp_db, monkeypatch):
+    import app.tasks.manager as manager_module
+
+    manager = JobManager()
+    job_id = "cancelled-job"
+    job_data = make_job("cancelled")
+
+    async with temp_db() as session:
+        session.add(Job(
+            id=job_id,
+            job_type="lada",
+            emby_item_id=job_data.emby_item_id,
+            emby_item_name=job_data.emby_item_name,
+            input_path=job_data.input_path,
+            status="cancelled",
+            settings=job_data.settings.model_dump(),
+        ))
+        await session.commit()
+
+    async def fake_run_lada_restoration(**kwargs):
+        return True
+
+    monkeypatch.setattr(manager_module, "run_lada_restoration", fake_run_lada_restoration)
+
+    await manager._run_lada(job_id, job_data)
+
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == job_id))
+        db_job = result.scalar_one()
+        assert db_job.status == "cancelled"
+        assert db_job.output_path is None
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (ConnectionError("无法连接到服务"), True),
+        (TimeoutError("request timed out"), True),
+        (RuntimeError("翻译失败: 无法连接到 https://example.com"), True),
+        (RuntimeError("普通错误"), False),
+    ],
+)
+def test_is_connection_error_prefers_exception_type_and_stable_fallback(error, expected):
+    assert JobManager._is_connection_error(error) is expected
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (httpx.HTTPStatusError("too many", request=httpx.Request("GET", "https://example.com"), response=httpx.Response(429)), True),
+        (RuntimeError("翻译失败: 429 Too Many Requests"), True),
+        (RuntimeError("翻译失败: rate limit exceeded"), True),
+        (RuntimeError("翻译失败: unauthorized"), False),
+    ],
+)
+def test_is_rate_limit_error_detects_http_status_and_wrapped_messages(error, expected):
+    assert JobManager._is_rate_limit_error(error) is expected

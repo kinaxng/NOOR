@@ -1,0 +1,242 @@
+429:    async def process(
+
+        # Phase: 场景检测
+        all_segments: list[tuple[str, float, float]] = []  # (audio_path, start, end)
+        if duration > 60.0:
+            self.log("=" * 50)
+            self.log("场景检测: semantic MFCC")
+            self.log("=" * 50)
+            try:
+                self._raise_if_cancelled()
+                detector = AudioSceneDetector(
+                    mode="semantic",
+                    min_silence_duration=1.0,
+                    min_segment_duration=15.0,
+                )
+                scenes = detector.detect(str(audio_path))
+                self.log(f"检测到 {len(scenes)} 个场景段落")
+                if len(scenes) > 1:
+                    all_segments = [(str(audio_path), s.start, s.end) for s in scenes]
+                else:
+                    all_segments = [(str(audio_path), 0.0, duration)]
+            except Exception as e:
+                self.log(f"场景检测失败（跳过）: {e}")
+                all_segments = [(str(audio_path), 0.0, duration)]
+        else:
+            all_segments = [(str(audio_path), 0.0, duration)]
+
+        # Phase: 转写
+        if (
+            getattr(self.config, "executor_key", "advanced") == "recommended"
+            and self.config.pipeline_mode == PipelineMode.ENSEMBLE
+        ):
+            if qwen3_aligner_available():
+                all_results = await self._process_anime_qwen3_chain_segments(all_segments)
+            else:
+                self.log("[Recommended] qwen-asr 未安装，回退到旧推荐链路", 28)
+                all_results = await self._process_recommended_phase_based_segments(all_segments)
+        else:
+            all_results = []
+            for idx, (audio_file, seg_start, seg_end) in enumerate(all_segments):
+                self._raise_if_cancelled()
+                seg_duration = seg_end - seg_start
+                seg_weight = 1.0 / len(all_segments)
+                seg_start_pct = int(28 + idx * seg_weight * 57)
+                seg_end_pct = int(28 + (idx + 1) * seg_weight * 57)
+                self.log(
+                    f"处理段落 {idx + 1}/{len(all_segments)}: {seg_start:.1f}s - {seg_end:.1f}s ({seg_duration:.1f}s)",
+                    seg_start_pct
+                )
+
+                if self.config.pipeline_mode == PipelineMode.ENSEMBLE:
+                    seg_result = await self._process_ensemble_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.FASTER:
+                    seg_result = await self._process_faster_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.BALANCED:
+                    seg_result = await self._process_balanced_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.TRANSFORMERS:
+                    seg_result = await self._process_transformers_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.ANIME:
+                    seg_result = await self._process_anime_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.QWEN:
+                    seg_result = await self._process_qwen_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.CUSTOM:
+                    seg_result = await self._process_single_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                else:
+                    seg_result = await self._process_single_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+
+                self.log(f"段落 {idx + 1} 完成: {len(seg_result.segments)} 片段", seg_end_pct)
+
+                for seg in seg_result.segments:
+                    seg.start_time += seg_start
+                    seg.end_time += seg_start
+
+                all_results.append(seg_result)
+
+        # 合并所有段落结果
+        self._raise_if_cancelled()
+        recommended_segment_diagnostics = None
+        if getattr(self.config, "executor_key", "advanced") == "recommended":
+            recommended_segment_diagnostics = self._collect_recommended_segment_diagnostics(all_results)
+            self.log(
+                "[Recommended] 诊断: "
+                f"对齐 {recommended_segment_diagnostics['aligned_segments']}/{recommended_segment_diagnostics['segment_count']} · "
+                f"Qwen fallback {recommended_segment_diagnostics['qwen_retry_segments']} · "
+                f"step-down {recommended_segment_diagnostics['stepdown_segments']}",
+            )
+        if len(all_results) == 1:
+            result = all_results[0]
+        else:
+            result = self._merge_all_results(all_results)
+            self.log(f"段落合并完成: {len(result.segments)} 片段", 90)
+        if recommended_segment_diagnostics is not None:
+            result.metadata = {
+                **result.metadata,
+                "recommended_segment_diagnostics": recommended_segment_diagnostics,
+            }
+
+        # Phase: 日语后处理
+        self.log("=" * 50)
+        self.log("日语后处理: 断句优化 & 格式整理", 92)
+        self.log("=" * 50)
+        try:
+            self._raise_if_cancelled()
+            if getattr(self.config, "executor_key", "advanced") == "recommended":
+                post_processor = RecommendedSubtitlePostProcessor()
+                self.log("后处理策略: recommended-cleanup")
+            else:
+                post_processor = JapanesePostProcessor(
+                    min_segment_duration=0.8,
+                    max_segment_duration=8.0,
+                    min_gap_threshold=0.3,
+                    merge_below=1.2,
+                )
+            result = post_processor.process(result)
+            if result.metadata.get("recommended_strategy_post_processed"):
+                before_count = result.metadata.get("recommended_cleanup_before_segments", len(result.segments))
+                after_count = result.metadata.get("recommended_cleanup_after_segments", len(result.segments))
+                deduped_count = result.metadata.get("recommended_cleanup_deduped_segments", 0)
+                diagnostics = result.metadata.get("recommended_segment_diagnostics") or {}
+                cleanup_summary = {
+                    "before_segments": before_count,
+                    "after_segments": after_count,
+                    "deduped_segments": deduped_count,
+                    "noise_only_segments": result.metadata.get("recommended_cleanup_noise_only_segments", 0),
+                    "trimmed_noise_chars": result.metadata.get("recommended_cleanup_trimmed_noise_chars", 0),
+                    "particle_merged_segments": result.metadata.get("recommended_cleanup_particle_merged_segments", 0),
+                    "window_echo_segments": result.metadata.get("recommended_cleanup_window_echo_segments", 0),
+                }
+                result.metadata["recommended_diagnostics"] = {
+                    **diagnostics,
+                    "cleanup": cleanup_summary,
+                }
+                self.log(
+                    f"recommended-cleanup 统计: {before_count} → {after_count} 片段，去重 {deduped_count} 条"
+                )
+            self.log(f"后处理完成: {len(result.segments)} 片段", 95)
+        except Exception as e:
+            self.log(f"后处理失败（跳过）: {e}")
+
+        # Phase: 生成 SRT
+        self.log("=" * 50)
+        self.log("生成 SRT 文件", 97)
+        self.log("=" * 50)
+
+        # 清理视频名用于字幕文件
+        self._raise_if_cancelled()
+        clean_name = self._clean_video_name(video_name)
+
+        # 生成原始字幕 SRT
+        srt_path = output_dir / f"{clean_name}.ja.srt"
+        generate_srt(result.segments, str(srt_path))
+        self.log(f"原始字幕已保存: {srt_path}", 97)
+
+        # 翻译由 manager 统一调用 translate_srt 任务处理（不在 pipeline 内 inline 翻译）
+        self.log(f"SRT 已保存: {srt_path}", 97)
+
+        # 清理临时音频
+        try:
+            os.remove(audio_path)
+        except:
+            pass
+
+        return result, str(srt_path)
+
+    async def _process_single(self, audio_path: str, duration: float) -> TranscriptionResult:
+        """单遍处理"""
+        self._raise_if_cancelled()
+        if self.config.model.value == "anime-whisper":
+            if self._anime_processor is None:
+                self._anime_processor = AnimeWhisperProcessor(self.config, self.progress_callback, self.cancel_callback)
+            return await asyncio.to_thread(self._anime_processor.process, audio_path, "")
+        else:
+            if self._faster_processor is None:
+                self._faster_processor = FasterWhisperProcessor(self.config, self.progress_callback, self.cancel_callback)
+            return await asyncio.to_thread(self._faster_processor.process, audio_path, "")
+
+    async def _process_ensemble(
+        self,
+        audio_path: str,
+        duration: float
+    ) -> TranscriptionResult:
+        """两遍处理 + 合并"""
+
+        # ========== Pass 1: Anime-Whisper ==========
+        self._raise_if_cancelled()
+        self.log("=" * 50)
+        self.log("Pass 1: Anime-Whisper (快速，广覆盖)")
+        self.log("=" * 50)
+
+        pass1_config = WhisperConfig(
+            model=self.config.pass1_model,
+            device=self.config.device,
+            language=self.config.language
+        )
+
+        try:
+            if self._anime_processor is None:
+                self._anime_processor = AnimeWhisperProcessor(pass1_config, self.progress_callback, self.cancel_callback)
+            pass1_result = await asyncio.to_thread(self._anime_processor.process, audio_path, "")
+            self.log(f"Pass 1 完成: {len(pass1_result.segments)} 片段")
+        except Exception as e:
+            self.log(f"Pass 1 失败: {e}，跳过...")
+            pass1_result = TranscriptionResult(
+                segments=[],
+                language="ja",
+                duration=duration,
+                source="anime-whisper-failed",
+                metadata={"error": str(e)}
+            )
+
+        # ========== Pass 2: Faster-Whisper ==========
+        self._raise_if_cancelled()
+        self.log("=" * 50)
+        self.log("Pass 2: Faster-Whisper (高质量)")
+        self.log("=" * 50)
+
+        try:
+            if self._faster_processor is None:
+                self._faster_processor = FasterWhisperProcessor(self.config, self.progress_callback, self.cancel_callback)
+            pass2_result = await asyncio.to_thread(self._faster_processor.process, audio_path, "")
+            self.log(f"Pass 2 完成: {len(pass2_result.segments)} 片段")
+        except Exception as e:
+            self.log(f"Pass 2 失败: {e}")
+            return pass1_result
+
+        # ========== 合并 ==========

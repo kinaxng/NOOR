@@ -1,0 +1,241 @@
+"""Whisper 处理管线编排器"""
+import asyncio
+import logging
+import os
+import re
+import uuid
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Callable
+import subprocess
+
+from .types import (
+    WhisperConfig,
+    WhisperTask,
+    TranscriptionResult,
+    PipelineMode,
+    WhisperModel,
+    VADMethod,
+    WhisperCancellationRequested,
+)
+from .engine import (
+    AudioExtractor, AnimeWhisperProcessor, FasterWhisperProcessor,
+    KotobaWhisperProcessor, ReazonNemoProcessor, generate_srt
+)
+from .enhancer import AudioEnhancer
+from .merge import MergeEngine
+from .japanese_post import JapanesePostProcessor, RecommendedSubtitlePostProcessor
+from .scene_detector import AudioSceneDetector
+from .runtime import raise_if_cancelled
+from .preprocess import AudioPreprocessError, preprocess_audio
+from .decoupled import AnimeQwen3ChainProcessor, qwen3_aligner_available
+from app.api.settings_whisper_models import resolve_model_cache_candidates
+from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+
+logger = logging.getLogger(__name__)
+
+
+def _get_whisper_runtime_paths() -> tuple[str, str, str]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    model_dir = ensure_directory(settings.whisper_model_dir)
+    cache_dir = ensure_directory(getattr(settings, "whisper_cache_dir", str(Path(model_dir) / ".cache")))
+    temp_dir = ensure_directory(getattr(settings, "whisper_temp_dir", str(Path(model_dir) / ".temp")))
+    apply_whisper_cache_env(model_dir, cache_dir)
+    return model_dir, cache_dir, temp_dir
+
+
+# 各预设 pipeline 的推荐增强器组合（仅用于 balanced/faster 等旧架构 pipeline）
+# anime / transformers / qwen(large-v3 baseline) / custom 走新架构，enhancers 从 self.config.enhancers 获取
+# 设计原则：
+#   - ffmpeg-dsp: 仅 loudnorm 响度标准化（CPU快）
+#   - clearvoice: WebRTC VAD 静音移除 + 轻降噪（CPU）
+#   - silero-vad: Silero VAD 静音检测（不增强）
+#   - demucs: GPU 神经人声分离（最强）
+PIPELINE_ENHANCERS: dict[PipelineMode, list[str]] = {
+    PipelineMode.ANIME:        ['ffmpeg-dsp', 'clearvoice'],    # 响度标准化 + 人声提取
+    PipelineMode.FASTER:        ['ffmpeg-dsp'],                   # 清洁音频，仅响度标准化
+    PipelineMode.BALANCED:     ['ffmpeg-dsp', 'clearvoice'],    # 嘈杂对话均衡
+    PipelineMode.TRANSFORMERS: ['ffmpeg-dsp', 'demucs'],        # 响度标准化 + GPU 人声分离
+    PipelineMode.QWEN:         ['demucs'],                      # GPU 人声分离，对齐优化
+    PipelineMode.REAZON:       ['ffmpeg-dsp'],                   # Reazon / NeMo 实验路径
+    PipelineMode.SINGLE:        ['ffmpeg-dsp'],                   # 仅响度标准化
+}
+
+
+@dataclass
+class _PreparedSegment:
+    index: int
+    audio_path: str
+    start: float
+    end: float
+    duration: float
+    pass1_result: Optional[TranscriptionResult] = None
+    pass2_result: Optional[TranscriptionResult] = None
+
+
+
+class WhisperPipeline:
+from __future__ import annotations
+
+import json
+from typing import Any, Callable
+
+from app.pipeline.whisper.strategy import apply_whisper_strategy
+
+
+TRANSFORMERS_MODEL_KEYS = {
+    "anime-whisper": "anime_whisper",
+    "kotoba-whisper-v2.2": "kotoba-whisper-v2.2",
+}
+
+SPECIAL_MODEL_KEYS = {
+    "reazonspeech-nemo-v2": "reazon_nemo",
+}
+
+
+DEFAULT_CUSTOM_PIPELINE_CONFIG = {
+    "model": "large-v3",
+    "vad_method": "semantic",
+    "scene_detector": "semantic",
+    "enhancers": [],
+    "segmenter": "silero-v6.2",
+    "timestamp_mode": "aligner_interpolation",
+    "aligner_backend": "qwen3",
+    "framer_backend": "vad-grouped",
+}
+
+DEFAULT_AUDIO_PREPROCESS_MODE = "none"
+DEFAULT_AUDIO_PREPROCESS_MODEL = "vocal_balanced"
+
+
+def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
+    payload = config.model_dump() if hasattr(config, "model_dump") else dict(config)
+    payload = apply_whisper_strategy(payload, payload.get("strategy"))
+
+    raw_custom_config = payload.get("custom_config") or {}
+    if hasattr(raw_custom_config, "model_dump"):
+        raw_custom_config = raw_custom_config.model_dump()
+
+    custom_config = {
+        **DEFAULT_CUSTOM_PIPELINE_CONFIG,
+        **raw_custom_config,
+    }
+    custom_config["timestamp_mode"] = payload.get("timestamp_mode", custom_config["timestamp_mode"])
+    custom_config["aligner_backend"] = payload.get("aligner_backend", custom_config["aligner_backend"])
+    custom_config["framer_backend"] = payload.get("framer_backend", custom_config["framer_backend"])
+
+    payload["custom_config"] = custom_config
+    payload["timestamp_mode"] = custom_config["timestamp_mode"]
+    payload["aligner_backend"] = custom_config["aligner_backend"]
+    payload["framer_backend"] = custom_config["framer_backend"]
+    payload["audio_preprocess_mode"] = payload.get("audio_preprocess_mode", DEFAULT_AUDIO_PREPROCESS_MODE)
+    payload["audio_preprocess_model"] = payload.get("audio_preprocess_model", DEFAULT_AUDIO_PREPROCESS_MODEL)
+    payload["subtitle_profile"] = payload.get("subtitle_profile", "standard")
+    payload["model_backend"] = payload.get("model_backend") or payload.get("model") or "chickenrice-zh"
+    payload["whisper_task"] = payload.get("whisper_task") or ("translate" if payload["model_backend"] == "chickenrice-zh" else "transcribe")
+    payload["vad_backend"] = payload.get("vad_backend", "energy")
+    payload["chunker"] = payload.get("chunker", "smart_vad_chunk")
+    payload["target_chunk_duration_s"] = payload.get("target_chunk_duration_s", 30.0)
+    payload["max_chunk_duration_s"] = payload.get("max_chunk_duration_s", 30.0)
+    return payload
+
+
+def apply_whisper_config_updates(config: Any, update_env_value_fn: Callable[[str, str], None]) -> None:
+    payload = normalize_whisper_config_payload(config)
+    update_env_value_fn("WHISPER_STRATEGY", payload["strategy"])
+    update_env_value_fn("WHISPER_SUBTITLE_PROFILE", payload["subtitle_profile"])
+    update_env_value_fn("WHISPER_MODEL_BACKEND", payload["model_backend"])
+    update_env_value_fn("WHISPER_TASK", payload["whisper_task"])
+    update_env_value_fn("WHISPER_VAD_BACKEND", payload["vad_backend"])
+    update_env_value_fn("WHISPER_CHUNKER", payload["chunker"])
+    update_env_value_fn("WHISPER_TARGET_CHUNK_DURATION_S", str(payload["target_chunk_duration_s"]))
+    update_env_value_fn("WHISPER_MAX_CHUNK_DURATION_S", str(payload["max_chunk_duration_s"]))
+    update_env_value_fn("WHISPER_MODEL", payload["model"])
+    update_env_value_fn("WHISPER_PIPELINE_MODE", payload["pipeline_mode"])
+    update_env_value_fn("WHISPER_MERGE_STRATEGY", payload["merge_strategy"])
+    update_env_value_fn("WHISPER_LANGUAGE", payload["language"])
+    update_env_value_fn("WHISPER_SENSITIVITY", payload["sensitivity"])
+    update_env_value_fn("WHISPER_VAD_METHOD", payload["vad_method"])
+    update_env_value_fn("WHISPER_AUDIO_PREPROCESS_MODE", payload["audio_preprocess_mode"])
+    update_env_value_fn("WHISPER_AUDIO_PREPROCESS_MODEL", payload["audio_preprocess_model"])
+    update_env_value_fn("WHISPER_TRANSLATE_TO", payload["translate_to"])
+    update_env_value_fn("WHISPER_TRANSLATE_MODEL", payload["translate_model"])
+    update_env_value_fn("WHISPER_TRANSLATE_STYLE", payload["translate_style"])
+    update_env_value_fn("WHISPER_TRANSLATE_BASE_URL", payload["translate_base_url"])
+    update_env_value_fn("WHISPER_TRANSLATE_API_KEY", payload["translate_api_key"])
+    update_env_value_fn("WHISPER_PASS1_PIPELINE", payload["pass1_pipeline"])
+    update_env_value_fn("WHISPER_PASS2_PIPELINE", payload["pass2_pipeline"])
+    update_env_value_fn("WHISPER_CUSTOM_CONFIG", json.dumps(payload["custom_config"]))
+
+
+def sanitize_download_status(download_status: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": download_status.get("status", "idle"),
+        "progress": download_status.get("progress", 0),
+        "message": download_status.get("message", ""),
+        "model": download_status.get("model", ""),
+    }
+
+
+def build_whisper_models_payload(
+    *,
+    check_result: dict[str, Any],
+    whisper_models: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    models = []
+    available_models = check_result.get("models", {})
+
+    for key, info in whisper_models.items():
+        if info["type"] == "transformers":
+            check_key = TRANSFORMERS_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        elif info["type"] == "reazon-nemo":
+            check_key = SPECIAL_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        else:
+            downloaded = available_models.get(f"faster_{key}", {}).get("downloaded", False)
+
+        models.append(
+            {
+                "id": key,
+                "name": info["name"],
+                "size": info["size"],
+                "type": info["type"],
+                "downloaded": downloaded,
+                "description": info.get("description", ""),
+                "managed_externally": info.get("type") == "reazon-nemo",
+            }
+        return str(whisper_cache.parent.parent)
+    return str(Path(settings.noor_data_dir) / "runtime")
+
+
+def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str, Any], lada_model_weights_dir: str, whisper_features: dict[str, Any], custom_whisper_config: dict[str, Any]) -> dict[str, Any]:
+    media_library_config = load_media_library_config()
+    settings = get_settings()
+    whisper_strategy = normalize_whisper_strategy(env_data.get("WHISPER_STRATEGY", "chickenrice"))
+    env_model_backend = env_data.get("WHISPER_MODEL_BACKEND", "").strip()
+    default_model_backend = env_model_backend or ("chickenrice-zh" if whisper_strategy == "chickenrice" else env_data.get("WHISPER_MODEL", "anime-whisper"))
+    default_model = default_model_backend if whisper_strategy == "chickenrice" else env_data.get("WHISPER_MODEL", default_model_backend)
+    whisper_payload = {
+        "strategy": whisper_strategy,
+        "subtitle_profile": env_data.get("WHISPER_SUBTITLE_PROFILE", "standard"),
+        "model_backend": default_model_backend,
+        "whisper_task": env_data.get("WHISPER_TASK", "translate"),
+        "vad_backend": env_data.get("WHISPER_VAD_BACKEND", "energy"),
+        "chunker": env_data.get("WHISPER_CHUNKER", "smart_vad_chunk"),
+        "target_chunk_duration_s": float(env_data.get("WHISPER_TARGET_CHUNK_DURATION_S", "30") or 30),
+        "max_chunk_duration_s": float(env_data.get("WHISPER_MAX_CHUNK_DURATION_S", "30") or 30),
+        "model": default_model,
+        "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "faster"),
+        "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
+        "language": env_data.get("WHISPER_LANGUAGE", "ja"),
+        "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
+        "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
+        "audio_preprocess_mode": env_data.get("WHISPER_AUDIO_PREPROCESS_MODE", "none"),
+        "audio_preprocess_model": env_data.get("WHISPER_AUDIO_PREPROCESS_MODEL", "vocal_balanced"),
+        "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
+        "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+        "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),

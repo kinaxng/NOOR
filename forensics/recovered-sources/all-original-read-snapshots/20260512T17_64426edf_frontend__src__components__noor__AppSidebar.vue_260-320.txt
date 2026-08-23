@@ -1,0 +1,104 @@
+.app-sidebar__nav {
+  flex: 1;
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-y: auto;
+}
+
+.app-sidebar__nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.app-sidebar__nav-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.app-sidebar__nav-item--active {
+  background: rgba(0, 117, 255, 0.15);
+  color: #FFFFFF;
+}
+
+.app-sidebar__divider {
+  height: 1px;
+  margin: 0.5rem 0.25rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-sidebar__nav-item--plugin {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+
+.app-sidebar__active-bar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 1.5rem;
+  border-radius: 0 4px 4px 0;
+  background: var(--color-brand);
+}
+
+.app-sidebar__nav-icon {
+  display: flex;
+  align-items: center;
+
+---
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.noor-control-panel .noor-plugin-chip {
+  background: rgba(255,255,255,.035);
+  border-color: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.72);
+}
+.noor-control-panel .noor-plugin-chip:hover:not(:disabled) {
+  background: rgba(255,255,255,.07);
+  color: #fff;
+}
+.noor-control-panel .noor-plugin-chip.is-active,
+.noor-control-panel .noor-plugin-chip--soft.is-active {
+  background: rgba(0,117,255,.12);
+  border-color: rgba(0,117,255,.22);
+  color: #fff;
+  box-shadow: none;
+}
+.noor-control-panel .noor-plugin-chip--accent.is-active {
+  background: rgba(0,117,255,.14);
+  border-color: rgba(0,117,255,.28);
+  color: #fff;
+}
+.noor-control-panel__picker-btn {
+  min-width: 9rem;
+  justify-content: flex-start;
+  text-align: left;
+}
+.noor-control-panel__picker-btn.is-empty {
+  color: rgba(255,255,255,.58);
+}
+.noor-control-panel__picker-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: min(60vh, 36rem);
+}
+.noor-control-panel__picker-search {
+  position: sticky;
+  top: 0;

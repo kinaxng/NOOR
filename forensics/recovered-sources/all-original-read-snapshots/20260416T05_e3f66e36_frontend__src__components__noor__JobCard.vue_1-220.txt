@@ -1,0 +1,66 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { Job } from '../../api/types'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import VuiProgress from '../ui/Progress/VuiProgress.vue'
+import { useI18n } from '../../composables/useI18n'
+
+const { t, i18nVersion } = useI18n()
+
+const props = defineProps<{
+  job: Job
+  selected?: boolean
+  statusLabel?: string
+  progress?: number
+}>()
+
+defineEmits<{
+  click: [job: Job]
+  cancel: [jobId: string]
+}>()
+
+const jobTypeLabel = computed(() => {
+  void i18nVersion.value
+  if (props.job.job_type === 'whisper') return t('jobs.type.whisper')
+  if (props.job.job_type === 'translate-srt') return t('jobs.translateTag')
+  return t('jobs.type.lada')
+})
+</script>
+
+<template>
+  <div
+    class="job-card bg-surface border border-border-subtle rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-border-default"
+    :class="selected ? 'ring-2 ring-accent-cyan glow-cyan' : ''"
+    @click="$emit('click', job)"
+  >
+    <div class="flex justify-between items-start mb-3">
+      <div class="flex-1 min-w-0">
+        <!-- Job type badge -->
+        <VuiBadge :color="job.job_type === 'whisper' ? 'magenta' : 'cyan'" class="mb-1">
+          {{ jobTypeLabel }}
+        </VuiBadge>
+        <h3 class="font-medium text-sm text-text-primary truncate">{{ job.emby_item_name }}</h3>
+        <p class="text-xs text-text-secondary mt-0.5">{{ statusLabel || job.status }}</p>
+      </div>
+
+      <!-- Cancel button -->
+      <button
+        v-if="job.status === 'running' || job.status === 'queued'"
+        @click.stop="$emit('cancel', job.id)"
+        class="text-text-muted hover:text-status-error transition-colors p-1"
+        :title="t('common.cancel')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Progress bar -->
+    <VuiProgress
+      :value="progress ?? job.progress ?? 0"
+      :color="job.job_type === 'whisper' ? 'magenta' : 'cyan'"
+      shimmer
+    />
+  </div>
+</template>

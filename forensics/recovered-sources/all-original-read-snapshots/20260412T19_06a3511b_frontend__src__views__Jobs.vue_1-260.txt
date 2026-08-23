@@ -1,0 +1,260 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useJobsStore } from '../stores/jobs'
+import type { SSEEvent } from '../api/types'
+import api from '../api'
+import LogViewer from '../components/noor/LogViewer.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import VuiProgress from '../components/ui/Progress/VuiProgress.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import { useI18n } from '../composables/useI18n'
+import { useToast } from '../composables/useToast'
+
+const { t, i18nVersion } = useI18n()
+const jobsStore = useJobsStore()
+const toast = useToast()
+
+const logs = ref<{ time: string; line: string }[]>([])
+const jobStatuses = ref<Record<string, { status: string; progress: number }>>({})
+const selectedJobId = ref<string | null>(null)
+const sseConnected = ref<Set<string>>(new Set())
+
+onMounted(async () => {
+  await jobsStore.fetchJobs()
+  for (const job of jobsStore.jobs) {
+    if (job.status === 'running' || job.status === 'queued') {
+      jobStatuses.value[job.id] = {
+        status: job.status === 'running' ? connectingLabel.value : queuedStatusLabel.value,
+        progress: job.progress || 0
+      }
+      watchJob(job.id)
+    }
+  }
+})
+
+onUnmounted(() => {
+  jobsStore.disconnectFromEvents()
+})
+
+async function watchJob(jobId: string) {
+  const job = jobsStore.jobs.find(j => j.id === jobId)
+  if (job) {
+    jobStatuses.value[jobId] = {
+      status: connectingLabel.value,
+      progress: job.progress || 0
+    }
+  }
+
+  jobsStore.connectToEvents(jobId, (event: SSEEvent) => {
+    const time = new Date().toLocaleTimeString()
+
+    if (!jobStatuses.value[jobId]) {
+      jobStatuses.value[jobId] = { status: '', progress: 0 }
+    }
+
+    if (event.type === 'progress') {
+      jobStatuses.value[jobId].progress = event.progress || 0
+      jobStatuses.value[jobId].status = runningStatusLabel.value(event.progress || 0)
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, event.progress || 0)
+    } else if (event.type === 'log' && event.line) {
+      if (selectedJobId.value === jobId || selectedJobId.value === null) {
+        logs.value.push({ time, line: event.line })
+      }
+      if (event.progress !== undefined && event.progress !== null) {
+        jobStatuses.value[jobId].progress = event.progress
+        jobStatuses.value[jobId].status = runningStatusLabel.value(event.progress || 0)
+        sseConnected.value.add(jobId)
+        jobsStore.updateJobProgress(jobId, event.progress)
+      }
+    } else if (event.type === 'completed') {
+      jobStatuses.value[jobId].status = completedStatusLabel.value
+      jobStatuses.value[jobId].progress = 100
+      sseConnected.value.add(jobId)
+      jobsStore.updateJobProgress(jobId, 100, 'completed')
+    } else if (event.type === 'failed') {
+      jobStatuses.value[jobId].status = failedStatusLabel.value
+      jobsStore.updateJobProgress(jobId, jobStatuses.value[jobId]?.progress || 0, 'failed')
+      // Re-fetch to get error_message from backend
+      jobsStore.fetchJobs()
+    } else if (event.type === 'queued') {
+      jobStatuses.value[jobId].status = queuedStatusLabel.value
+      sseConnected.value.add(jobId)
+    }
+  })
+
+  setTimeout(() => {
+    if (!sseConnected.value.has(jobId)) {
+      const dbJob = jobsStore.jobs.find(j => j.id === jobId)
+      if (dbJob && jobStatuses.value[jobId]) {
+        jobStatuses.value[jobId].status = dbJob.status === 'running'
+          ? runningStatusLabel.value(dbJob.progress || 0)
+          : fallbackJobStatusLabel.value(dbJob.status)
+      }
+    }
+  }, 10000)
+}
+
+async function selectJob(job: any) {
+  selectedJobId.value = job.id
+  logs.value = []
+
+  try {
+    const resp = await api.get(`/jobs/${job.id}/logs`)
+    const historicalLogs = Array.isArray(resp.data) ? resp.data :
+                           Array.isArray(resp.data?.logs) ? resp.data.logs : []
+    for (const line of historicalLogs) {
+      logs.value.push({ time: '', line: line })
+    }
+  } catch (e) {
+    console.error('Failed to load job logs:', e)
+  }
+
+  if (job.status === 'running' || job.status === 'queued') {
+    jobsStore.connectToEvents(job.id, (event: SSEEvent) => {
+      const time = new Date().toLocaleTimeString()
+      if (event.type === 'log' && event.line) {
+        logs.value.push({ time, line: event.line })
+      } else if (event.type === 'progress') {
+        if (!jobStatuses.value[job.id]) {
+          jobStatuses.value[job.id] = { status: '', progress: 0 }
+        }
+        jobStatuses.value[job.id].progress = event.progress || 0
+        jobStatuses.value[job.id].status = runningStatusLabel.value(event.progress || 0)
+      } else if (event.type === 'completed') {
+        jobStatuses.value[job.id].status = completedStatusLabel.value
+        jobStatuses.value[job.id].progress = 100
+      } else if (event.type === 'failed') {
+        jobStatuses.value[job.id].status = failedStatusLabel.value
+        jobsStore.fetchJobs()
+      }
+    })
+  }
+}
+
+async function cancelJob(jobId: string) {
+  try {
+    await api.post(`/jobs/${jobId}/cancel`)
+    jobStatuses.value[jobId] = { status: cancelledStatusLabel.value, progress: 0 }
+    toast.success(t('jobs.cancelSuccess'))
+  } catch (e: any) {
+    console.error('Cancel failed:', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message }))
+  }
+}
+
+async function cleanupOrphanedJobs() {
+  try {
+    const resp = await api.post('/jobs/cleanup')
+    const cleaned = resp.data.cleaned
+    if (cleaned > 0) {
+      toast.success(t('jobs.cleanup.done', { n: cleaned }))
+      await jobsStore.fetchJobs()
+      for (const job of jobsStore.jobs) {
+        if (job.status === 'failed' && job.error_message?.includes('清理')) {
+          delete jobStatuses.value[job.id]
+        }
+      }
+    } else {
+      toast.info(t('jobs.cleanup.none'))
+    }
+  } catch (e: any) {
+    console.error('Cleanup failed:', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message }))
+  }
+}
+
+// Tab: running / completed / failed (includes cancelled)
+const activeTab = ref<'running' | 'completed' | 'failed'>('running')
+const filterTabs = computed(() => [
+  { key: 'running', label: tabRunningLabel.value },
+  { key: 'completed', label: tabCompletedLabel.value },
+  { key: 'failed', label: tabFailedLabel.value },
+])
+
+const runningTabJobs = computed(() => jobsStore.jobs.filter(j => j.status === 'running' || j.status === 'queued'))
+const completedTabJobs = computed(() => jobsStore.jobs.filter(j => j.status === 'completed'))
+const failedTabJobs = computed(() => jobsStore.jobs.filter(j => j.status === 'failed' || j.status === 'cancelled'))
+
+const currentTabJobs = computed(() => {
+  if (activeTab.value === 'running') return runningTabJobs.value
+  if (activeTab.value === 'completed') return completedTabJobs.value
+  return failedTabJobs.value
+})
+
+const showRunning = computed(() => activeTab.value === 'running')
+const showCompleted = computed(() => activeTab.value === 'completed')
+const showFailed = computed(() => activeTab.value === 'failed')
+
+const currentTabTitle = computed(() => {
+  if (activeTab.value === 'running') return tabRunningLabel.value
+  if (activeTab.value === 'completed') return tabCompletedLabel.value
+  return tabFailedLabel.value
+})
+const currentEmptyLabel = computed(() => {
+  if (activeTab.value === 'running') return emptyRunningLabel.value
+  if (activeTab.value === 'completed') return emptyCompletedLabel.value
+  return emptyFailedLabel.value
+})
+
+function getJobProgress(jobId: string) {
+  return jobStatuses.value[jobId]?.progress ?? jobsStore.jobs.find(j => j.id === jobId)?.progress ?? 0
+}
+
+function getJobStatus(jobId: string) {
+  return jobStatuses.value[jobId]?.status ?? ''
+}
+
+// Reactive labels
+const queuedLabel = computed(() => { void i18nVersion.value; return t('jobs.queued') })
+const cancelTaskLabel = computed(() => { void i18nVersion.value; return t('jobs.cancelTask') })
+const cleanupLabel = computed(() => { void i18nVersion.value; return t('jobs.cleanup') })
+const logsTitleLabel = computed(() => { void i18nVersion.value; return t('jobs.logsTitle') })
+const tabRunningLabel = computed(() => { void i18nVersion.value; return t('jobs.running') })
+const tabCompletedLabel = computed(() => { void i18nVersion.value; return t('history.filter.completed') })
+const tabFailedLabel = computed(() => { void i18nVersion.value; return t('history.filter.failed') })
+const emptyRunningLabel = computed(() => { void i18nVersion.value; return t('jobs.noRunning') })
+const emptyCompletedLabel = computed(() => { void i18nVersion.value; return t('history.noHistory') })
+const emptyFailedLabel = computed(() => { void i18nVersion.value; return t('history.noHistory') })
+const connectingLabel = computed(() => { void i18nVersion.value; return t('jobs.status.connecting') })
+const queuedStatusLabel = computed(() => { void i18nVersion.value; return t('jobs.status.queued') })
+const completedStatusLabel = computed(() => { void i18nVersion.value; return t('jobs.status.completed') })
+const failedStatusLabel = computed(() => { void i18nVersion.value; return t('jobs.status.failed') })
+const cancelledStatusLabel = computed(() => { void i18nVersion.value; return t('jobs.status.cancelled') })
+const runningStatusLabel = computed(() => { void i18nVersion.value; return (progress: number) => t('jobs.status.runningProgress', { progress }) })
+const fallbackJobStatusLabel = computed(() => {
+  void i18nVersion.value
+  return (status: string) => {
+    if (status === 'running') return runningStatusLabel.value(0)
+    if (status === 'queued') return queuedStatusLabel.value
+    if (status === 'completed') return completedStatusLabel.value
+    if (status === 'failed') return failedStatusLabel.value
+    if (status === 'cancelled') return cancelledStatusLabel.value
+    return status
+  }
+})
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <VisionTabs v-model="activeTab" :tabs="filterTabs" />
+      <VuiButton variant="contained" color="secondary" size="small" @click="cleanupOrphanedJobs">
+        {{ cleanupLabel }}
+      </VuiButton>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Jobs List -->
+      <div class="lg:col-span-2 space-y-4">
+
+        <!-- Running/Queued jobs -->
+        <div v-if="showRunning && runningTabJobs.length > 0" class="space-y-3">
+          <div
+            v-for="job in runningTabJobs"
+            :key="job.id"
+            class="job-card ui-card p-4 cursor-pointer"
+            :class="selectedJobId === job.id ? 'job-card--selected' : ''"

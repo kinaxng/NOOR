@@ -1,0 +1,51 @@
+  return t('whisper.start')
+})
+const whisperModelLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.model')
+})
+const whisperVadLabel = computed(() => {
+  void i18nVersion.value
+  return t('settings.whisper.vadMethod') || 'VAD'
+})
+const whisperVadOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'semantic', label: t('whisper.vad.semantic') },
+    { value: 'silero', label: t('whisper.vad.silero') },
+    { value: 'auditok', label: t('whisper.vad.auditok') },
+    { value: 'ten', label: t('whisper.vad.ten') },
+    { value: 'none', label: t('whisper.vad.none') },
+  ]
+})
+const whisperGeneratorOptions = [
+  { value: 'anime-whisper', label: 'Anime-Whisper' },
+  { value: 'qwen3', label: 'Qwen3' },
+]
+
+const whisperAlignerOptions = [
+  { value: 'qwen3', label: 'Qwen3' },
+  { value: 'none', label: 'None' },
+]
+
+const whisperFramerOptions = [
+  { value: 'vad-grouped', label: 'VAD Grouped' },
+  { value: 'full-scene', label: 'Full Scene' },
+]
+
+const whisperTimestampModeOptions = [
+  { value: 'aligner_interpolation', label: 'Aligner Interpolation' },
+  { value: 'vad_only', label: 'VAD Only' },
+]
+
+const whisperTranslateRunningLabel = computed(() => t('subtitle.translateRunning'))
+const whisperTranslateActionLabel = computed(() => t('subtitle.aiTranslate'))
+const whisperPipelineHint = computed(() => t('settings.whisper.pipelineHint'))
+const whisperSpeechEnhancerLabel = computed(() => t('settings.whisper.speechEnhancer'))
+const whisperCustomPipelineTitle = computed(() => t('settings.whisper.customPipelineTitle'))
+const whisperGeneratorLabel = computed(() => t('subtitle.whisperGenerator'))
+const whisperAlignerLabel = computed(() => t('subtitle.whisperAligner'))
+const whisperFramerLabel = computed(() => t('subtitle.whisperFramer'))
+const whisperTimestampLabel = computed(() => t('subtitle.whisperTimestamp'))
+
+const whisperMergeOptions = computed(() => {

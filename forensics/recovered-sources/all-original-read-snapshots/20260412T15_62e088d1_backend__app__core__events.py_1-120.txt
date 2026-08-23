@@ -1,0 +1,120 @@
+"""
+NOOR Event System
+
+Inspired by MoviePilot's EventManager.
+Two types of events:
+
+1. Broadcast Events (异步, fire-and-forget):
+   - All listeners receive the event simultaneously
+   - Used for notifications, logging, analytics
+
+2. Chain Events (同步, 按优先级顺序):
+   - Each handler receives the output of the previous handler
+   - Can intercept, modify, and short-circuit the chain
+   - Used for search aggregation, media processing pipelines
+"""
+import asyncio
+import inspect
+import logging
+from enum import Enum
+from typing import Any, Callable, Optional
+
+logger = logging.getLogger(__name__)
+
+
+# ─── Event Types ────────────────────────────────────────────────────────────────
+
+class BroadcastEventType(str, Enum):
+    """Fire-and-forget broadcast events."""
+    PLUGIN_LOADED = "plugin.loaded"
+    PLUGIN_STATE_CHANGED = "plugin.state_changed"
+    JOB_CREATED = "job.created"
+    JOB_COMPLETED = "job.completed"
+    JOB_FAILED = "job.failed"
+    SUBTITLE_SEARCH_COMPLETE = "subtitle.search.complete"
+    MEDIA_RESTORED = "media.restored"
+
+
+class ChainEventType(str, Enum):
+    """Synchronous chain events (ordered, can modify flow)."""
+    SUBTITLE_SEARCH = "subtitle.search"       # 字幕搜索聚合
+    MEDIA_SCAN = "media.scan"                   # 媒体库扫描
+    FILE_RENAME = "file.rename"                # 文件重命名
+
+
+# ─── Event Payload ─────────────────────────────────────────────────────────────
+
+class Event:
+    """Base event object."""
+    def __init__(self, event_type: str, data: Any = None):
+        self.event_type = event_type
+        self.data = data
+
+
+class ChainEvent(Event):
+    """
+    Chain event that flows through handlers sequentially.
+    Each handler receives (data, event) and returns modified data.
+    """
+    def __init__(self, event_type: str, data: Any = None, chain_id: Optional[str] = None):
+        super().__init__(event_type, data)
+        self.chain_id = chain_id or id(self)
+        self._stopped = False
+
+    def stop(self):
+        """Stop the chain — subsequent handlers will not be called."""
+        self._stopped = True
+
+    @property
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+
+# ─── Event Handler ─────────────────────────────────────────────────────────────
+
+HandlerFunc = Callable[..., Any]  # sync or async function
+HandlerSync = Callable[[Any, Event], Any]
+HandlerAsync = Callable[[Any, Event], Any]
+
+
+# ─── Event Manager ────────────────────────────────────────────────────────────
+
+class EventManager:
+    """
+    Central event bus. Singleton.
+    Handles both broadcast and chain events.
+    """
+
+    def __init__(self):
+        # event_type -> list[(priority, handler_func)]
+        self._broadcast_handlers: dict[str, list[tuple[int, HandlerFunc]]] = {}
+        # event_type -> list[(priority, handler_func)] sorted by priority
+        self._chain_handlers: dict[str, list[tuple[int, HandlerAsync]]] = {}
+
+    # ── 注册 ──────────────────────────────────────────────────────────────
+
+    def on(self, event_type: str | Enum, handler: HandlerFunc, priority: int = 100) -> None:
+        """
+        Register a broadcast event handler.
+
+        Args:
+            event_type: Event name (string or Enum value)
+            handler: Function to call. Can be sync or async.
+                     For broadcast: receives (event: Event)
+                     For chain: receives (data: Any, event: ChainEvent) -> modified data
+            priority: Lower = called first (for chain events)
+        """
+        name = event_type.value if isinstance(event_type, Enum) else event_type
+        if name not in self._broadcast_handlers:
+            self._broadcast_handlers[name] = []
+        self._broadcast_handlers[name].append((priority, handler))
+        # Sort by priority
+        self._broadcast_handlers[name].sort(key=lambda x: x[0])
+
+    def on_chain(
+        self, event_type: str | Enum, handler: HandlerAsync, priority: int = 100
+    ) -> None:
+        """
+        Register a chain event handler.
+
+        Chain handlers are called sequentially. Each receives

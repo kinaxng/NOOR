@@ -1,0 +1,498 @@
+import os
+from pathlib import Path
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from functools import lru_cache
+
+# Determine project root: backend/app/core/config.py -> 4 parents = project root
+# Or use PROJECT_ROOT env var (useful for Docker)
+if "PROJECT_ROOT" in os.environ:
+    PROJECT_ROOT = Path(os.environ["PROJECT_ROOT"])
+else:
+    PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+
+# Whisper model cache directory (default: ~/.cache/huggingface, faster-whisper's default cache)
+WHISPER_MODEL_DIR = Path.home() / ".cache" / "huggingface"
+DEFAULT_LADA_MODEL_WEIGHTS_DIR = "/volume1/models/lada_model_weights"
+
+
+class Settings(BaseSettings):
+    # Lada CLI
+    lada_cli_path: str = "python3 -m lada.cli.main"
+
+    # Emby
+    emby_server: str = "http://localhost:8096"
+    emby_api_key: str = ""
+    emby_user_id: str = ""  # Emby user ID for API requests
+    emby_enabled_library_ids: str = ""  # comma-separated list of library IDs
+
+    # Storage
+    source_dir: str = ""  # Emby media source directory (for hardlinks)
+    output_dir: str = ""  # Lada output directory
+    whisper_model_dir: str = ""  # Whisper model storage directory (default: ~/.cache/whisper)
+    lada_model_dir: str = Field(default=DEFAULT_LADA_MODEL_WEIGHTS_DIR, validation_alias="LADA_MODEL_WEIGHTS_DIR")  # Lada model weights directory
+    enable_dev_endpoints: bool = Field(default=False, validation_alias=AliasChoices("NOOR_ENABLE_DEV_ENDPOINTS", "ENABLE_DEV_ENDPOINTS"))
+
+    # Network (for China acceleration)
+    # Acceleration mode: "none" / "proxy" / "mirror"
+    # - none: no acceleration, direct connection
+    # - proxy: use HTTP_PROXY for all downloads
+    # - mirror: use mirrors for GitHub, HF, pip
+    acceleration_mode: str = "mirror"
+    http_proxy: str = ""  # HTTP proxy, e.g., http://127.0.0.1:7890
+    github_mirror: str = "https://ghproxy.com"  # GitHub clone mirror
+    hf_mirror: str = "https://hf-mirror.com"  # HuggingFace mirror
+    pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"  # pip mirror
+    hf_token: str = ""  # HuggingFace token for gated repos (e.g. Kotoba v2)
+
+    # Whisper defaults
+    whisper_strategy: str = "recommended"
+    whisper_model: str = "anime-whisper"
+    whisper_pipeline_mode: str = "ensemble"
+    whisper_merge_strategy: str = "smart_merge"
+    whisper_language: str = "ja"
+    whisper_sensitivity: str = "balanced"
+
+    # Lada defaults
+    lada_device: str = "cuda:0"
+    lada_fp16: bool = True
+    lada_detection_model: str = "v4-fast"
+    lada_restoration_model: str = "basicvsrpp-v1.2"
+    lada_encoding_preset: str = "hevc-nvidia-gpu-hq"
+    lada_max_clip_length: int = 180
+    lada_detect_face_mosaics: bool = False
+
+    # Server
+    host: str = "0.0.0.0"
+    port: int = 9898
+
+    # Database
+    database_url: str = "sqlite+aiosqlite:///./noor.db"
+
+    @property
+    def emby_headers(self) -> dict:
+        return {"X-Emby-Token": self.emby_api_key}
+
+    def apply_network_env(self):
+        """Apply network settings to environment variables and git config based on acceleration mode."""
+        import subprocess
+
+        # Reset all
+        for k in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "HF_ENDPOINT", "HF_TOKEN"]:
+            os.environ.pop(k, None)
+
+        # Always set HF token when configured (needed for gated repos in any mode)
+        if self.hf_token:
+            os.environ["HF_TOKEN"] = self.hf_token
+            # hf-mirror.com does not mirror gated repos; use real HuggingFace Hub when token is set
+            os.environ["HF_ENDPOINT"] = "https://huggingface.co"
+        elif self.acceleration_mode == "mirror":
+            os.environ["HF_ENDPOINT"] = self.hf_mirror or "https://hf-mirror.com"
+
+        if self.acceleration_mode == "proxy" and self.http_proxy:
+            os.environ["HTTP_PROXY"] = self.http_proxy
+            os.environ["HTTPS_PROXY"] = self.http_proxy
+            os.environ["http_proxy"] = self.http_proxy
+            os.environ["https_proxy"] = self.http_proxy
+            # Reset git mirror config
+            subprocess.run(
+                ["git", "config", "--global", "--unset", "url.https://ghproxy.com/.insteadOf"],
+                capture_output=True
+            )
+        elif self.acceleration_mode == "mirror":
+            # Configure git to use GitHub mirror
+            github_mirror = self.github_mirror or "https://ghproxy.com"
+            subprocess.run(
+                ["git", "config", "--global", f"url.https://{github_mirror.replace('https://', '')}/.insteadOf", "https://github.com/"],
+                capture_output=True
+            )
+        else:
+            # Reset git mirror config
+            subprocess.run(
+                ["git", "config", "--global", "--unset", "url.https://ghproxy.com/.insteadOf"],
+                capture_output=True
+            )
+
+    model_config = SettingsConfigDict(
+        env_file=str(PROJECT_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+def clear_settings_cache():
+    """Clear settings cache to force reload from .env file."""
+    get_settings.cache_clear()
+
+--- settings_whisper.py ---
+from __future__ import annotations
+
+import json
+from typing import Any, Callable
+
+from app.pipeline.whisper.strategy import apply_whisper_strategy
+
+
+TRANSFORMERS_MODEL_KEYS = {
+    "anime-whisper": "anime_whisper",
+    "kotoba-whisper-v2.2": "kotoba-whisper-v2.2",
+}
+
+
+DEFAULT_CUSTOM_PIPELINE_CONFIG = {
+    "model": "large-v3",
+    "vad_method": "semantic",
+    "scene_detector": "semantic",
+    "enhancers": [],
+    "segmenter": "silero-v6.2",
+    "timestamp_mode": "aligner_interpolation",
+    "aligner_backend": "qwen3",
+    "framer_backend": "vad-grouped",
+}
+
+
+def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
+    payload = config.model_dump() if hasattr(config, "model_dump") else dict(config)
+    payload = apply_whisper_strategy(payload, payload.get("strategy"))
+
+    raw_custom_config = payload.get("custom_config") or {}
+    if hasattr(raw_custom_config, "model_dump"):
+        raw_custom_config = raw_custom_config.model_dump()
+
+    custom_config = {
+        **DEFAULT_CUSTOM_PIPELINE_CONFIG,
+        **raw_custom_config,
+    }
+    custom_config["timestamp_mode"] = payload.get("timestamp_mode", custom_config["timestamp_mode"])
+    custom_config["aligner_backend"] = payload.get("aligner_backend", custom_config["aligner_backend"])
+    custom_config["framer_backend"] = payload.get("framer_backend", custom_config["framer_backend"])
+
+    payload["custom_config"] = custom_config
+    payload["timestamp_mode"] = custom_config["timestamp_mode"]
+    payload["aligner_backend"] = custom_config["aligner_backend"]
+    payload["framer_backend"] = custom_config["framer_backend"]
+    return payload
+
+
+def apply_whisper_config_updates(config: Any, update_env_value_fn: Callable[[str, str], None]) -> None:
+    payload = normalize_whisper_config_payload(config)
+    update_env_value_fn("WHISPER_STRATEGY", payload["strategy"])
+    update_env_value_fn("WHISPER_MODEL", payload["model"])
+    update_env_value_fn("WHISPER_PIPELINE_MODE", payload["pipeline_mode"])
+    update_env_value_fn("WHISPER_MERGE_STRATEGY", payload["merge_strategy"])
+    update_env_value_fn("WHISPER_LANGUAGE", payload["language"])
+    update_env_value_fn("WHISPER_SENSITIVITY", payload["sensitivity"])
+    update_env_value_fn("WHISPER_VAD_METHOD", payload["vad_method"])
+    update_env_value_fn("WHISPER_TRANSLATE_TO", payload["translate_to"])
+    update_env_value_fn("WHISPER_TRANSLATE_MODEL", payload["translate_model"])
+    update_env_value_fn("WHISPER_TRANSLATE_STYLE", payload["translate_style"])
+    update_env_value_fn("WHISPER_TRANSLATE_BASE_URL", payload["translate_base_url"])
+    update_env_value_fn("WHISPER_TRANSLATE_API_KEY", payload["translate_api_key"])
+    update_env_value_fn("WHISPER_PASS1_PIPELINE", payload["pass1_pipeline"])
+    update_env_value_fn("WHISPER_PASS2_PIPELINE", payload["pass2_pipeline"])
+    update_env_value_fn("WHISPER_CUSTOM_CONFIG", json.dumps(payload["custom_config"]))
+
+
+def sanitize_download_status(download_status: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": download_status.get("status", "idle"),
+        "progress": download_status.get("progress", 0),
+        "message": download_status.get("message", ""),
+        "model": download_status.get("model", ""),
+    }
+
+
+def build_whisper_models_payload(
+    *,
+    check_result: dict[str, Any],
+    whisper_models: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    models = []
+    available_models = check_result.get("models", {})
+
+    for key, info in whisper_models.items():
+        if info["type"] == "transformers":
+            check_key = TRANSFORMERS_MODEL_KEYS.get(key, key)
+            downloaded = available_models.get(check_key, {}).get("downloaded", False)
+        else:
+            downloaded = available_models.get(f"faster_{key}", {}).get("downloaded", False)
+
+        models.append(
+            {
+                "id": key,
+                "name": info["name"],
+                "size": info["size"],
+                "type": info["type"],
+                "downloaded": downloaded,
+                "description": info.get("description", ""),
+            }
+        )
+
+    return models
+
+--- runtime.py ---
+"""Shared runtime helpers for cooperative Whisper cancellation."""
+
+from __future__ import annotations
+
+import asyncio
+import multiprocessing
+import subprocess
+import time
+from dataclasses import dataclass
+from typing import Any
+from typing import Callable, Optional
+
+import httpx
+
+from .types import WhisperCancellationRequested
+
+
+def cancellation_requested(cancel_callback: Optional[Callable[[], bool]]) -> bool:
+    if cancel_callback is None:
+        return False
+    try:
+        return bool(cancel_callback())
+    except Exception:
+        return False
+
+
+def raise_if_cancelled(cancel_callback: Optional[Callable[[], bool]]) -> None:
+    if cancellation_requested(cancel_callback):
+        raise WhisperCancellationRequested("Whisper pipeline cancelled")
+
+
+def run_cancellable_subprocess(
+    cmd: list[str],
+    *,
+    cancel_callback: Optional[Callable[[], bool]] = None,
+    poll_interval: float = 0.1,
+    **popen_kwargs,
+) -> subprocess.CompletedProcess[str]:
+    raise_if_cancelled(cancel_callback)
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **popen_kwargs,
+    )
+
+    try:
+        while True:
+            if cancellation_requested(cancel_callback):
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
+                raise WhisperCancellationRequested("Whisper subprocess cancelled")
+
+            try:
+                stdout, stderr = process.communicate(timeout=poll_interval)
+                return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
+            except subprocess.TimeoutExpired:
+                continue
+    except Exception:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=2)
+        raise
+
+
+@dataclass
+class WhisperProcessHandle:
+    process: Any
+    message_queue: Any
+    cancel_event: Any
+
+
+def _whisper_process_entry(
+    config,
+    input_path: str,
+    video_name: str,
+    message_queue,
+    cancel_event,
+) -> None:
+    from .orchestrator import WhisperPipeline
+
+    def progress_callback(msg: str, progress: int | None = None):
+        message_queue.put({
+            "type": "log",
+            "line": msg,
+            "progress": progress,
+        })
+
+    try:
+        pipeline = WhisperPipeline(
+            config,
+            progress_callback=progress_callback,
+            cancel_callback=cancel_event.is_set,
+        )
+        result, srt_path = asyncio.run(pipeline.process(input_path, video_name))
+        message_queue.put({
+            "type": "result",
+            "srt_path": srt_path,
+            "result_metadata": getattr(result, "metadata", None) or {},
+        })
+    except WhisperCancellationRequested as exc:
+        message_queue.put({"type": "cancelled", "error": str(exc)})
+    except Exception as exc:
+        message_queue.put({"type": "error", "error": str(exc)})
+
+
+def launch_whisper_process(
+    config,
+    input_path: str,
+    video_name: str,
+    *,
+    start_method: str = "spawn",
+) -> WhisperProcessHandle:
+    ctx = multiprocessing.get_context(start_method)
+    message_queue = ctx.Queue()
+    cancel_event = ctx.Event()
+    process = ctx.Process(
+        target=_whisper_process_entry,
+        args=(config, input_path, video_name, message_queue, cancel_event),
+        daemon=True,
+    )
+    process.start()
+    return WhisperProcessHandle(
+        process=process,
+        message_queue=message_queue,
+        cancel_event=cancel_event,
+    )
+
+
+def launch_recommended_whisper_process(
+    config,
+    input_path: str,
+    video_name: str,
+    *,
+    start_method: str = "spawn",
+) -> WhisperProcessHandle:
+    """Dedicated launcher for the product default subtitle strategy.
+
+    Kept separate from launch_whisper_process so the recommended-strategy execution
+    path can evolve independently without rewriting task-manager dispatch.
+    """
+    return launch_whisper_process(
+        config,
+        input_path,
+        video_name,
+        start_method=start_method,
+    )
+
+
+def launch_advanced_whisper_process(
+    config,
+    input_path: str,
+    video_name: str,
+    *,
+    start_method: str = "spawn",
+) -> WhisperProcessHandle:
+    """Dedicated launcher for advanced / experimental Whisper configurations."""
+    return launch_whisper_process(
+        config,
+        input_path,
+        video_name,
+        start_method=start_method,
+    )
+
+
+@dataclass
+class TranslationProcessHandle:
+    process: Any
+    message_queue: Any
+    cancel_event: Any
+
+
+def _translation_is_rate_limit_error(exc: BaseException) -> bool:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, httpx.HTTPStatusError) and current.response is not None:
+            if current.response.status_code == 429:
+                return True
+        err_str = str(current).lower()
+        if '429' in err_str or 'too many requests' in err_str or 'rate limit' in err_str:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _translation_is_connection_error(exc: BaseException) -> bool:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (ConnectionError, TimeoutError, OSError, httpx.RequestError)):
+            return True
+        err_str = str(current).lower()
+        if any(token in err_str for token in ('连接失败', '无法连接', 'connecterror', 'connection refused', 'timed out', 'timeout')):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _parse_srt_subtitles(srt_content: str) -> list[dict[str, str]]:
+    import re
+
+    subtitles = []
+    normalized = srt_content.replace("\r\n", "\n").replace("\r", "\n")
+    blocks = re.split(r"\n\n+", normalized.strip())
+    for block in blocks:
+        lines = block.strip().split("\n")
+        if not lines:
+            continue
+        match = re.match(r"(\d+)\s+(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})", lines[0])
+        if match:
+            subtitles.append({
+                "index": match.group(1),
+                "start": match.group(2),
+                "end": match.group(3),
+                "text": "\n".join(lines[1:]) if len(lines) > 1 else "",
+            })
+            continue
+        if len(lines) >= 2:
+            match2 = re.match(
+                r"(\d+)\n(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})",
+                lines[0] + "\n" + lines[1],
+            )
+            if match2:
+                subtitles.append({
+                    "index": match2.group(1),
+                    "start": match2.group(2),
+                    "end": match2.group(3),
+                    "text": "\n".join(lines[2:]) if len(lines) > 2 else "",
+                })
+    return subtitles
+
+
+def _build_translation_batches(
+    subtitles: list[dict[str, str]],
+    *,
+    min_chars: int = 40,
+    max_chars: int = 120,
+    max_items: int = 6,
+) -> list[tuple[int, int]]:
+    """Build adaptive translation batches.
+
+    Goal:
+    - avoid tiny 1~3 line batches that are easy for adult-content models to refuse
+    - still keep batches bounded so alignment and retries remain predictable
+    """
+    if not subtitles:
+        return []
+
+    batches: list[tuple[int, int]] = []
+    start = 0
+    current_chars = 0

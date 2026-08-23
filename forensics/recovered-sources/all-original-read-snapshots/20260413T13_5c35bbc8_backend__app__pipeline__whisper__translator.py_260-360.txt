@@ -1,0 +1,102 @@
+281:def get_translator(
+                translations.append("")
+
+        # 如果提取到了有效翻译，重新构建为 [1] 翻译 格式
+        if any(translations):
+            return "\n".join([f"[{i+1}] {t}" for i, t in enumerate(translations)])
+
+        # 完全解析失败，返回原始 reasoning 供 _parse_translations 兜底
+        return reasoning.strip()
+
+    @staticmethod
+    def _get_lang_display(lang_code: str) -> str:
+        lang_map = {
+            "zh": "中文",
+            "en": "英文",
+            "ko": "韩文",
+            "zh-CN": "简体中文",
+            "zh-TW": "繁体中文",
+        }
+        return lang_map.get(lang_code, lang_code)
+
+
+def get_translator(
+    model: Optional[str] = None,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    translate_style: str = "adult_explicit",
+    timeout: Optional[int] = None,
+) -> OpenAILikeTranslator:
+    """
+    获取翻译器实例（统一 OpenAI-Compatible）。
+    所有兼容 OpenAI API 格式的接口均可使用。
+    本地模型（Ollama）自动使用 300s 超时，云端 API 使用默认 120s。
+    """
+    settings_base_url = os.environ.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1")
+    settings_api_key = os.environ.get("WHISPER_TRANSLATE_API_KEY", "")
+    resolved_base_url = base_url or settings_base_url
+
+    # 本地模型自动使用更长超时（首请求需要加载模型）
+    if timeout is None:
+        timeout = 300 if _is_ollama_url(resolved_base_url) else 120
+
+    return OpenAILikeTranslator(
+        model=model or os.environ.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+        base_url=resolved_base_url,
+        api_key=api_key or settings_api_key,
+        translate_style=translate_style,
+        timeout=timeout,
+    )
+
+
+def check_translator_health(base_url: str, api_key: Optional[str] = None, model: str = "gpt-4o-mini") -> dict:
+    """
+    检查翻译服务健康状态。
+    base_url: 填到 /v1 即可，例如 http://localhost:11434 或 https://api.openai.com/v1
+    """
+    result = {"available": False, "message": "", "models": []}
+
+    base_url = base_url.rstrip("/")
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        # 先尝试获取模型列表
+        with httpx.Client(timeout=10) as client:
+            models_resp = client.get(
+                f"{base_url}/v1/models",
+                headers=headers,
+            )
+            if models_resp.status_code == 200:
+                models_data = models_resp.json()
+                available_models = [
+                    m["id"] for m in models_data.get("data", [])
+                    if not model or m["id"] == model or m["id"].startswith(model.split("-")[0])
+                ]
+                result["models"] = available_models[:10]
+    except Exception:
+        pass
+
+    # 用实际翻译请求验证连通性
+    try:
+        # Ollama 本地模型首次加载耗时长，使用 300s 超时
+        test_timeout = 300 if _is_ollama_url(base_url) else 30
+        test_translator = OpenAILikeTranslator(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            translate_style="standard",
+            timeout=test_timeout,
+        )
+        test_texts = ["テスト"]
+        result_texts = test_translator.translate_batch(test_texts, "zh")
+        if result_texts and result_texts[0]:
+            result["available"] = True
+            result["message"] = "连接成功，翻译功能正常"
+        else:
+            result["message"] = "连接成功但翻译返回为空"
+    except ConnectionError as e:
+        result["message"] = f"连接失败: {str(e)}"
+    except TimeoutError as e:
+        result["message"] = f"请求超时: {str(e)}"

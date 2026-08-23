@@ -1,0 +1,161 @@
+    def __init__(
+        self,
+        config: WhisperConfig,
+        progress_callback: Optional[Callable] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ):
+        self.config = config
+        self.progress_callback = progress_callback
+        self.cancel_callback = cancel_callback
+        self._log_lines = []
+        self._max_end_time = 0.0
+        self._model = None
+        self._model_signature: tuple[str, str, str, str] | None = None
+
+    def log(self, msg: str, progress: int = None):
+        self._log_lines.append(msg)
+        if self.progress_callback:
+            try:
+                self.progress_callback(msg, progress)
+            except TypeError:
+                self.progress_callback(msg)
+
+    def _report_duration_progress(self, current_time: float, total_duration: float):
+        """基于音频时长覆盖率报告进度"""
+        if total_duration <= 0:
+            return
+        coverage = min(1.0, current_time / total_duration)
+        # Pass2 阶段映射: 28-85%
+        pct = int(28 + coverage * 57)
+        pct = min(84, pct)
+        self.log(f"[Pass2] 音频覆盖 {current_time:.0f}s / {total_duration:.0f}s", pct)
+
+    def _get_sensitivity_params(self) -> dict:
+        """获取敏感度参数"""
+        if self.config.sensitivity.value == "conservative":
+            return {
+                "beam_size": 1,
+                "best_of": 1,
+                "no_speech_threshold": 0.7,
+                "repetition_penalty": 1.8,
+            }
+        elif self.config.sensitivity.value == "aggressive":
+            return {
+                "beam_size": 3,
+                "best_of": 3,
+                "no_speech_threshold": 0.22,
+            }
+        else:  # balanced
+            return {
+                "beam_size": 2,
+                "best_of": 2,
+                "no_speech_threshold": 0.4,
+                "repetition_penalty": 1.5,
+            }
+
+    def _get_model_runtime(self) -> tuple[object, str]:
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            self.log("[Pass2] 错误: 需要安装 faster-whisper")
+            raise RuntimeError("faster-whisper 库未安装")
+
+        model_size = self.config.pass2_model.value
+
+        whisper_model_dir, _, _ = _resolve_whisper_storage()
+
+        device = "cuda" if self.config.device == "auto" else self.config.device
+        compute_type = self.config.compute_type if self.config.compute_type != "default" else "float16"
+        signature = (model_size, device, compute_type, whisper_model_dir)
+
+        if self._model is None or self._model_signature != signature:
+            self.log(f"[Pass2] 加载模型: {model_size} (dir: {whisper_model_dir})")
+            self.log(f"[Pass2] 使用设备: {device}, compute: {compute_type}")
+            load_source, load_kwargs = _resolve_faster_whisper_model_source(whisper_model_dir, model_size)
+            if not load_kwargs:
+                self.log(f"[Pass2] 检测到本地 CTranslate2 缓存，离线加载: {load_source}")
+            self._model = WhisperModel(
+                load_source,
+                device=device,
+                compute_type=compute_type,
+                **load_kwargs,
+            )
+            self._model_signature = signature
+
+            import torch
+            if device == "cuda" and torch.cuda.is_available():
+                self.log(f"[Pass2] GPU 已激活: {torch.cuda.get_device_name(0)}")
+            else:
+                self.log("[Pass2] 警告: 使用 CPU 计算")
+            self.log("[Pass2] 模型加载完成")
+        else:
+            self.log(f"[Pass2] 复用已加载模型: {model_size}")
+
+        return self._model, model_size
+
+    def process(self, audio_path: str, output_srt: str) -> TranscriptionResult:
+        """处理音频文件"""
+        raise_if_cancelled(self.cancel_callback)
+        self._max_end_time = 0.0
+        model, model_size = self._get_model_runtime()
+
+        # 获取敏感度参数
+        params = self._get_sensitivity_params()
+
+        self.log("[Pass2] 开始转写...")
+
+        # 转写 - 边收片段边处理，不等全部完成
+        raise_if_cancelled(self.cancel_callback)
+        segments, info = model.transcribe(
+            audio_path,
+            language=self.config.language if self.config.language != "auto" else None,
+            beam_size=params.get("beam_size", self.config.beam_size),
+            best_of=params.get("best_of", self.config.best_of),
+            vad_filter=self.config.vad_filter,
+            vad_parameters=dict(
+                min_silence_duration_ms=self.config.vad_min_silence_ms,
+                min_speech_duration_ms=self.config.vad_min_speech_ms,
+            ),
+            word_timestamps=True,  # 启用词级时间戳用于 REGROUP_JAV
+        )
+
+        self.log(f"[Pass2] 检测语言: {info.language}，时长: {info.duration:.1f}s")
+
+        # 流式收集片段并实时报告进度
+        result_segments = []
+        import itertools
+        seg_iter = iter(segments)
+        last_progress_time = 0.0
+        for i, seg in enumerate(itertools.chain(seg_iter, [None]), start=1):
+            raise_if_cancelled(self.cancel_callback)
+            if seg is None:
+                break
+            result_segments.append(SubtitleSegment(
+                index=i,
+                start_time=seg.start,
+                end_time=seg.end,
+                text=seg.text.strip(),
+            ))
+            # 更新最大时间
+            if seg.end > self._max_end_time:
+                self._max_end_time = seg.end
+            # 每 2 秒音频覆盖报告一次进度
+            if self._max_end_time - last_progress_time >= 2.0:
+                self._report_duration_progress(self._max_end_time, info.duration)
+                last_progress_time = self._max_end_time
+
+        total_segments = len(result_segments)
+        self.log(f"[Pass2] 转写完成，共 {total_segments} 个片段", 84)
+
+        return TranscriptionResult(
+            segments=result_segments,
+            language=info.language,
+            duration=info.duration,
+            source="faster-whisper",
+            metadata={"model": model_size}
+        )
+
+
+def generate_srt(segments: list[SubtitleSegment], output_path: str):
+    """生成 SRT 文件"""
+    with open(output_path, "w", encoding="utf-8") as f:

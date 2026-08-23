@@ -1,0 +1,6 @@
+kinax    3901022 3900997  0 04:05 pts/8    00:00:00 sh -c nuxt dev --host 127.0.0.1 --port 5180
+kinax    3901023 3901022  6 04:05 pts/8    00:00:48 node /home/kinax/noor/frontend_rewrite/node_modules/.bin/nuxt dev --host 127.0.0.1 --port 5180
+kinax    3904418 3901023  0 04:08 pts/8    00:00:02 /home/kinax/noor/frontend_rewrite/node_modules/@nuxt/vite-builder/node_modules/@esbuild/linux-x64/bin/esbuild --service=0.27.7 --ping
+kinax    3904509 3901023  0 04:08 pts/8    00:00:00 /usr/bin/node --enable-source-maps /home/kinax/noor/frontend_rewrite/node_modules/@nuxt/cli/dist/dev/index.mjs --host 127.0.0.1 --port 5180
+kinax    3904510 3901023  0 04:08 pts/8    00:00:00 /usr/bin/node --enable-source-maps /home/kinax/noor/frontend_rewrite/node_modules/@nuxt/cli/dist/dev/index.mjs --host 127.0.0.1 --port 5180
+?? frontend_rewrite/

@@ -1,0 +1,201 @@
+  } else {
+    toast.error(result.error || t('hardlinks.scanFailed'))
+  }
+}
+
+function formatGroupLines(group: HardlinkGroup) {
+  const lines = [
+    `${codeLabel.value}: ${group.code}`,
+    `${entryCountLabel.value}: ${group.entry_count || group.entries.length}`,
+    `${hardlinkCountLabel.value}: ${group.hardlink_count || 0}`,
+  ]
+
+  if (group.issues?.length) {
+    lines.push(`${issueCountLabel.value}: ${group.issues.join(', ')}`)
+  }
+
+  group.entries.forEach((entry, index) => {
+    lines.push('')
+    lines.push(`[${index + 1}] ${mainFileLabel.value}`)
+    lines.push(entry.source_path || missingSourceLabel.value)
+    if (entry.hardlink_paths.length > 0) {
+      lines.push(hardlinksLabel.value)
+      entry.hardlink_paths.forEach((path) => lines.push(`- ${path}`))
+    }
+  })
+
+  return lines.join('\n')
+}
+
+function formatVisibleGroups() {
+  return visibleGroups.value.map((group) => formatGroupLines(group)).join('\n\n====================\n\n')
+}
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.success(t('common.copied'))
+  } catch (error: any) {
+    toast.error(error?.message || t('common.copyFailed'))
+  }
+}
+
+async function copyPath(path: string) {
+  await copyText(path)
+}
+
+async function copyGroup(group: HardlinkGroup) {
+  await copyText(formatGroupLines(group))
+}
+
+async function copyVisibleGroups() {
+  if (!visibleGroups.value.length) return
+  await copyText(formatVisibleGroups())
+}
+
+function exportVisibleGroups() {
+  if (!visibleGroups.value.length) return
+
+  const blob = new Blob([formatVisibleGroups()], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  anchor.href = url
+  anchor.download = `hardlinks-${stamp}.txt`
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+const mainFileLabel = computed(() => { void i18nVersion.value; return t('hardlinks.mainFile') })
+const hardlinksLabel = computed(() => { void i18nVersion.value; return t('hardlinks.hardlinks') })
+const missingSourceLabel = computed(() => { void i18nVersion.value; return t('hardlinks.missingSource') })
+
+function stopClick(event: MouseEvent) {
+  event.stopPropagation()
+}
+
+function goPrevPage() {
+  if (currentPage.value > 1) currentPage.value -= 1
+}
+
+function goNextPage() {
+  if (currentPage.value < totalPages.value) currentPage.value += 1
+}
+
+function openSettings() {
+  router.push('/settings')
+}
+
+onMounted(async () => {
+  await mediaStore.loadHardlinkGroups()
+})
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <div class="page-header">
+      <div class="page-header__left">
+        <div>
+          <h1 class="page-title">{{ pageTitle }}</h1>
+          <div class="page-meta">
+            <span v-if="hasGroups">{{ totalLabel }}: {{ summary.total_groups }}</span>
+            <span>{{ lastScannedLabel }}: {{ lastScannedText }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="page-header__right header-actions">
+        <VuiButton
+          v-if="pagedGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="copyVisibleGroups"
+        >
+          {{ copyVisibleLabel }}
+        </VuiButton>
+        <VuiButton
+          v-if="pagedGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="exportVisibleGroups"
+        >
+          {{ exportVisibleLabel }}
+        </VuiButton>
+        <VuiButton
+          v-if="visibleGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="expandAll"
+        >
+          {{ expandAllLabel }}
+        </VuiButton>
+        <VuiButton
+          v-if="visibleGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="collapseAll"
+        >
+          {{ collapseAllLabel }}
+        </VuiButton>
+        <VuiButton
+          variant="gradient"
+          color="info"
+          size="small"
+          :loading="mediaStore.hardlinkScanning"
+          @click="handleScan"
+        >
+          <BaseIcon name="refresh" class="w-4 h-4" />
+          {{ scanBtnLabel }}
+        </VuiButton>
+      </div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="summary-card__label">{{ totalLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_groups }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-card__label">{{ entryCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_entries }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-card__label">{{ hardlinkCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_hardlinks }}</span>
+      </div>
+      <div class="summary-card" :class="{ 'summary-card--warn': summary.issue_groups > 0 }">
+        <span class="summary-card__label">{{ issueCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.issue_groups }}</span>
+      </div>
+    </div>
+
+    <template>
+      <div v-if="hasGroups" class="toolbar-card">
+        <div class="toolbar-main">
+          <div class="toolbar-block toolbar-block--search">
+            <input
+              v-model="searchQuery"
+              type="text"
+              :placeholder="searchPlaceholder"
+              class="hardlinks-search"
+            />
+          </div>
+          <div class="toolbar-block toolbar-block--controls">
+            <div class="sort-controls">
+              <span class="sort-label">{{ t('hardlinks.sortBy') }}:</span>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'code' }" @click="setSort('code')">
+                {{ codeLabel }} {{ sortArrow('code') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'entryCount' }" @click="setSort('entryCount')">
+                {{ entryCountLabel }} {{ sortArrow('entryCount') }}
+              </button>
+              <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'hardlinkCount' }" @click="setSort('hardlinkCount')">
+                {{ hardlinkCountLabel }} {{ sortArrow('hardlinkCount') }}
+              </button>
+            </div>
+            <div class="filter-controls">
+              <button
+                v-for="tab in filterTabs"

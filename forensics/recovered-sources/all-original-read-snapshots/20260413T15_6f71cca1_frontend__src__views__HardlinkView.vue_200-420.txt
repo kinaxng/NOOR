@@ -1,0 +1,221 @@
+})
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <div class="page-header">
+      <div class="page-header__left">
+        <div>
+          <h1 class="page-title">{{ pageTitle }}</h1>
+          <div class="page-meta">
+            <span v-if="hasGroups">{{ totalLabel }}: {{ summary.total_groups }}</span>
+            <span>{{ lastScannedLabel }}: {{ lastScannedText }}</span>
+          </div>
+            </div>
+          </div>
+        </div>
+      <div class="page-header__right header-actions">
+        <VuiButton
+          v-if="visibleGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="expandAll"
+        >
+          {{ expandAllLabel }}
+        </VuiButton>
+        <VuiButton
+          v-if="visibleGroups.length"
+          variant="text"
+          color="secondary"
+          size="small"
+          @click="collapseAll"
+        >
+          {{ collapseAllLabel }}
+        </VuiButton>
+        <VuiButton
+          variant="gradient"
+          color="info"
+          size="small"
+          :loading="mediaStore.hardlinkScanning"
+          @click="handleScan"
+        >
+          <BaseIcon name="refresh" class="w-4 h-4" />
+          {{ scanBtnLabel }}
+        </VuiButton>
+      </div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="summary-card__label">{{ totalLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_groups }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-card__label">{{ entryCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_entries }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-card__label">{{ hardlinkCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.total_hardlinks }}</span>
+      </div>
+      <div class="summary-card" :class="{ 'summary-card--warn': summary.issue_groups > 0 }">
+        <span class="summary-card__label">{{ issueCountLabel }}</span>
+        <span class="summary-card__value">{{ summary.issue_groups }}</span>
+      </div>
+    </div>
+
+    <div v-if="mediaStore.hardlinkScanning" class="flex items-center justify-center py-24">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[var(--color-brand)] border-t-transparent"></div>
+    </div>
+
+    <template v-else>
+      <div v-if="hasGroups" class="toolbar-card">
+        <div class="toolbar-main">
+          <div class="toolbar-block toolbar-block--search">
+            <input
+            v-model="searchQuery"
+            type="text"
+            :placeholder="searchPlaceholder"
+            class="hardlinks-search"
+          />
+          </div>
+          <div class="toolbar-block toolbar-block--controls">
+            <div class="sort-controls">
+            <span class="sort-label">{{ t('hardlinks.sortBy') }}:</span>
+            <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'code' }" @click="setSort('code')">
+              {{ codeLabel }} {{ sortArrow('code') }}
+            </button>
+            <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'entryCount' }" @click="setSort('entryCount')">
+              {{ entryCountLabel }} {{ sortArrow('entryCount') }}
+            </button>
+            <button type="button" class="sort-btn" :class="{ 'sort-btn--active': sortKey === 'hardlinkCount' }" @click="setSort('hardlinkCount')">
+              {{ hardlinkCountLabel }} {{ sortArrow('hardlinkCount') }}
+            </button>
+            </div>
+            <div class="filter-controls">
+          <button
+            v-for="tab in filterTabs"
+            type="button"
+            :key="tab.key"
+            class="filter-btn"
+            :class="{ 'filter-btn--active': filterKey === tab.key }"
+            @click="filterKey = tab.key"
+          >
+            {{ tab.label }}
+          </button>
+            </div>
+          </div>
+        </div>
+
+      <div v-if="!hasGroups" class="empty-state">
+        <BaseIcon name="hardlink" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ noGroupsLabel }}</p>
+        <p class="empty-state__desc">{{ emptyDescLabel }}</p>
+        <VuiButton variant="text" color="secondary" size="small" @click="openSettings">
+          {{ goSettingsLabel }}
+        </VuiButton>
+      </div>
+
+      <div v-else-if="visibleGroups.length === 0" class="empty-state">
+        <BaseIcon name="search" class="w-16 h-16 text-white/10 mb-4" />
+        <p class="empty-state__title">{{ emptyFilteredLabel }}</p>
+      </div>
+
+      <div v-else class="groups-list">
+        <div
+          v-for="group in visibleGroups"
+          :key="group.code"
+          class="hl-group"
+          :class="{ 'hl-group--issue': group.status === 'issue' }"
+        >
+          <button type="button" class="hl-group__header" @click="toggleExpanded(group.code)">
+            <div class="hl-group__summary">
+              <span class="hl-group__chevron">{{ isExpanded(group.code) ? '▾' : '▸' }}</span>
+              <span class="hl-group__code font-mono">{{ group.code }}</span>
+              <span class="hl-group__meta">
+                {{ group.entry_count || 0 }} src · {{ group.hardlink_count || 0 }} hl
+              </span>
+            </div>
+            <div class="hl-group__badges">
+              <VuiBadge variant="gradient" :color="groupStatusColor(group)" size="xs">
+                {{ group.status === 'issue' ? abnormalLabel : healthyLabel }}
+              </VuiBadge>
+              <VuiBadge v-if="(group.orphan_count || 0) > 0" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ orphanLabel }} × {{ group.orphan_count }}
+              </VuiBadge>
+              <VuiBadge v-if="group.issues?.includes('unparsed_code')" variant="gradient" :color="issueBadgeColor(group)" size="xs">
+                {{ unparsedLabel }}
+              </VuiBadge>
+            </div>
+          </button>
+
+          <div v-if="isExpanded(group.code)" class="hl-group__entries">
+            <div
+              v-for="(entry, index) in group.entries"
+              :key="`${group.code}-${entry.source_path || 'orphan'}-${index}`"
+              class="hl-entry"
+              :class="{ 'hl-entry--issue': entry.status === 'issue' }"
+            >
+              <div class="hl-entry__topline">
+                <VuiBadge v-if="entry.issues?.includes('orphan_source')" variant="gradient" color="error" size="xs">
+                  {{ orphanLabel }}
+                </VuiBadge>
+                <span class="hl-entry__count">{{ entry.hardlink_count || entry.hardlink_paths.length }} {{ hardlinkCountLabel }}</span>
+              </div>
+              <div class="hl-entry__cols">
+                <div class="hl-col hl-col--source">
+                  <div class="hl-col__label">{{ t('hardlinks.mainFile') }}</div>
+                  <div class="hl-row" :class="{ 'hl-row--missing': entry.issues?.includes('orphan_source') }">
+                    <span
+                      v-if="entry.source_path"
+                      class="hl-row__path font-mono text-xs"
+                      :title="t('hardlinks.copyPath')"
+                      @click="copyPath(entry.source_path)"
+                    >{{ entry.source_path }}</span>
+                    <span v-else class="hl-row__empty font-mono text-xs">{{ t('hardlinks.missingSource') }}</span>
+                  </div>
+                </div>
+                <div class="hl-col hl-col--hardlinks">
+                  <div class="hl-col__label">{{ t('hardlinks.hardlinks') }}</div>
+                  <div
+                    v-for="hl in entry.hardlink_paths"
+                    :key="hl"
+                    class="hl-row hl-row--hardlink"
+                    :title="t('hardlinks.copyPath')"
+                    @click="copyPath(hl)"
+                  >
+                    <span class="hl-row__hl-arrow">→</span>
+                    <span class="hl-row__path font-mono text-xs">{{ hl }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+            </div>
+          </div>
+        </div>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-header__right,
+.page-header__left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+

@@ -1,0 +1,194 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+RUNTIME_PRESENTATION_FILE = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobRuntimePresentation.ts'
+JOB_PRESENTATION_FILE = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobPresentation.ts'
+
+
+def test_selected_job_status_label_falls_back_to_persisted_job_status():
+    source = RUNTIME_PRESENTATION_FILE.read_text()
+
+    assert "return getJobStatus(selectedJob.value.id) || fallbackStatusLabel.value(selectedJob.value.status)" in source
+
+
+def test_chain_progress_text_only_shows_for_running_jobs():
+    source = JOB_PRESENTATION_FILE.read_text()
+
+    assert "mode: 'hidden' | 'running'" in source
+    assert "const phaseLabel = status === 'running'" in source
+    assert "const detailLine = getDisplayPhaseLine.value(job, runtime)" in source
+    assert "type JobDisplayState = {" in source
+    assert "if (status === 'running' && phaseProgress > 0) return { progress, text: `${progress}% · ${phaseProgress}%` }" in source
+    assert "if (status === 'running') return { progress, text: progress > 0 ? `${progress}%` : '' }" in source
+    assert "return { progress, text: '' }" in source
+
+
+def test_running_tab_phase_label_is_hidden_for_non_running_jobs():
+    source = RUNTIME_PRESENTATION_FILE.read_text()
+
+    assert "...cardView," in source
+    assert "phaseLabel: progressView.phaseLabel" in source
+
+
+def test_jobs_route_chain_focus_prefers_sorted_primary_job():
+    source = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'views' / 'Jobs.vue').read_text()
+
+    assert "findJobByChainId: (chainId: string) => allJobs().filter(job => job.chain_id === chainId).sort(sortChainJobs)[0] || null" in source
+
+
+def test_blocked_jobs_keep_cancel_action_available():
+    source = RUNTIME_PRESENTATION_FILE.read_text()
+
+    assert "canCancel: job.status === 'running' || job.status === 'queued' || job.status === 'blocked' || job.status === 'pending'" in source
+
+
+def test_jobs_watch_pending_state_like_queue():
+    source = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'views' / 'Jobs.vue').read_text()
+
+    assert "return job.status === 'running' || job.status === 'queued' || job.status === 'blocked' || job.status === 'pending'" in source
+
+
+def test_jobs_tabs_keep_pending_in_running_bucket():
+    source = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobsTabs.ts').read_text()
+
+    assert "j.status === 'running' || j.status === 'queued' || j.status === 'blocked' || j.status === 'pending'" in source
+
+
+def test_frontend_runtime_prefers_backend_phase_group_when_present():
+    presentation = JOB_PRESENTATION_FILE.read_text()
+    runtime = RUNTIME_PRESENTATION_FILE.read_text()
+    events = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobEventState.ts').read_text()
+    sse = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useSSE.ts').read_text()
+
+    assert "phaseGroup?: string" in runtime
+    assert "phaseGroup: runtime?.phaseGroup ?? job.phase_group" in runtime
+    assert "const phaseGroup = runtime.phaseGroup || job.phase_group || phaseKey" in presentation
+    assert "phaseGroup: event.phase_group ?? current.phaseGroup" in events
+    assert "phase_group: data.phase_group" in sse
+
+
+def test_frontend_sse_contract_keeps_backend_job_id_for_all_event_shapes():
+    sse = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useSSE.ts').read_text()
+    types = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'api' / 'types.ts').read_text()
+    store = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'stores' / 'jobs.ts').read_text()
+
+    assert "job_id?: string" in types
+    assert "job_id: data.job_id" in sse
+    assert "type: 'log', job_id: data.job_id, line: data.line" in sse
+    assert "function emitStructuredEvent(onMessage: (event: SSEEvent) => void, type: SSEEvent['type'], data: any)" in store
+    assert "job_id: data.job_id" in store
+    assert "emitStructuredEvent(onMessage, 'progress', data)" in store
+    assert "emitStructuredEvent(onMessage, 'log', data)" in store
+
+
+def test_frontend_runtime_uses_shared_runtime_status_and_phase_patch_helpers():
+    runtime = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobEventState.ts').read_text()
+    presentation = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobRuntimePresentation.ts').read_text()
+    store = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'stores' / 'jobs.ts').read_text()
+    manager = (Path(__file__).resolve().parents[2] / 'backend' / 'app' / 'tasks' / 'manager.py').read_text()
+    jobs = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'views' / 'Jobs.vue').read_text()
+
+    assert "function createRuntimeStatus(job: Job, overrides: Partial<JobRuntimeStatus> = {}): JobRuntimeStatus" in runtime
+    assert "jobStatuses.value[job.id] = createRuntimeStatus(job, { status: fallbackStatus })" in runtime
+    assert "phaseGroup: ''" in runtime
+    assert "function clampPhaseProgress(" in runtime
+    assert "options.keepPhaseProgressMonotonic ?? false" in runtime
+    assert "function toJobPatch(event?: SSEEvent, phaseLabelOverride?: string): Partial<Job>" in runtime
+    assert "phaseProgress: event.phase_progress ?? defaultPhaseProgress" in runtime
+    assert "jobsStore.updateJobProgress(jobId, progress, status, toJobPatch(event, phaseLabelOverride))" in runtime
+    assert "function getJobRuntimeBundle(job: Job) {" in presentation
+    assert "return getJobRuntimeBundle(job).view" in presentation
+    assert "const runtimeBundle = getJobRuntimeBundle(job)" in presentation
+    assert "function createPhasePatch(data: any): Partial<Job>" in store
+    assert "job.progress = max(current_progress, next_progress)" in manager
+    assert "job.phase_progress = max(current_phase_progress, next_phase_progress)" in manager
+    assert "keepPhaseProgressMonotonic: true" in jobs
+
+
+def test_jobs_tabs_running_sort_prefers_status_then_phase_group_then_chain_order():
+    source = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobsTabs.ts').read_text()
+    ordering = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'jobOrdering.ts').read_text()
+
+    assert "const RUNNING_PHASE_ORDER: Record<string, number> = {" in ordering
+    assert "prepare: 10" in ordering
+    assert "output: 90" in ordering
+    assert "const RUNNING_STATUS_ORDER: Record<Job['status'], number> = {" in ordering
+    assert "running: 0" in ordering
+    assert "pending: 3" in ordering
+    assert "return RUNNING_PHASE_ORDER[job.phase_group || job.phase_key || ''] ?? 999" in ordering
+    assert "const statusDiff = getRunningStatusSortOrder(a) - getRunningStatusSortOrder(b)" in ordering
+    assert "const phaseDiff = getRunningPhaseSortOrder(a) - getRunningPhaseSortOrder(b)" in ordering
+    assert "const chainDiff = getChainSortOrder(a) - getChainSortOrder(b)" in ordering
+    assert "const runningTabJobs = computed(() => sortRunningJobsForList(allJobs().filter(j => j.status === 'running' || j.status === 'queued' || j.status === 'blocked' || j.status === 'pending')))" in source
+
+
+def test_jobs_tabs_reuse_shared_job_ordering_helpers():
+    source = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobsTabs.ts').read_text()
+    ordering = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'jobOrdering.ts').read_text()
+
+    assert "import { sortChainJobs, sortJobsForList, sortRunningJobsForList } from './jobOrdering'" in source
+    assert "export const RUNNING_PHASE_ORDER: Record<string, number> = {" in ordering
+    assert "export function sortRunningJobsForList(jobs: Job[]) {" in ordering
+    assert "export function sortJobsForList(jobs: Job[]) {" in ordering
+    assert "export function sortChainJobs(a: Job, b: Job) {" in ordering
+
+
+def test_selected_job_activity_line_uses_runtime_description_view():
+    source = RUNTIME_PRESENTATION_FILE.read_text()
+
+    assert "const selectedJobActivityLine = computed(() => {" in source
+    assert "return getJobDisplayBundle(selectedJob.value).descriptionView.summaryLine" in source
+
+
+def test_jobs_terminal_events_force_terminal_phase_progress_defaults():
+    source = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'views' / 'Jobs.vue').read_text()
+
+    assert "applyTerminalEvent(jobId, event, 'cancelled', cancelledStatusLabel.value, 0, 0)" in source
+    assert "applyTerminalEvent(jobId, event, 'failed', failedStatusLabel.value, 0, 0)" in source
+    assert "applyTerminalEvent(jobId, event, 'skipped', t('jobs.status.skipped'), 0, 0)" in source
+
+
+def test_whisper_progress_ranges_are_declared_as_explicit_contract():
+    source = (Path(__file__).resolve().parents[2] / 'backend' / 'app' / 'pipeline' / 'whisper' / 'progress.py').read_text()
+    runtime = (Path(__file__).resolve().parents[2] / 'backend' / 'app' / 'pipeline' / 'whisper' / 'runtime.py').read_text()
+    lada = (Path(__file__).resolve().parents[2] / 'backend' / 'app' / 'pipeline' / 'lada' / 'runner.py').read_text()
+
+    assert 'WHISPER_PROGRESS_PHASE_ORDER = (' in source
+    assert '"prepare"' in source
+    assert '"write_output"' in source
+    assert 'TRANSLATE_PROGRESS_PHASE_ORDER = (' in runtime
+    assert '"load_subtitle"' in runtime
+    assert '"write_output"' in runtime
+    assert 'LADA_PROGRESS_PHASE_ORDER = (' in lada
+    assert '"prepare"' in lada
+    assert '"finalize"' in lada
+
+
+def test_jobs_selection_extracts_route_focus_and_selection_helpers():
+    source = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useJobSelection.ts').read_text()
+    jobs = (Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'views' / 'Jobs.vue').read_text()
+
+    assert "function resolveFocusedJob() {" in source
+    assert "async function clearConsumedRouteFocus() {" in source
+    assert "async function selectJobById(jobId: string) {" in source
+    assert "const target = resolveFocusedJob()" in source
+    assert "await clearConsumedRouteFocus()" in source
+    assert "const selectedJob = computed(() => selectedJobId.value ? getJobById(selectedJobId.value) : null)" in jobs
+    assert "void selectJobById(jobId)" in jobs
+
+
+def test_runtime_presentation_centralizes_final_display_bundle_mapping():
+    source = RUNTIME_PRESENTATION_FILE.read_text()
+    presentation = JOB_PRESENTATION_FILE.read_text()
+
+    assert "const getDisplayState = computed(() => {" in presentation
+    assert "function getJobDisplayBundle(job: Job) {" in source
+    assert "const displayState = getDisplayState.value(job, {" in source
+    assert "cardView: getCardView.value(job, runtimeBundle.view)" in source
+    assert "displayState," in source
+    assert "summaryLine: displayState.summaryLine" in source
+    assert "metaLine: displayState.metaLine" in source
+    assert "return getJobDisplayBundle(job).cardView" in source
+    assert "return getJobDisplayBundle(job).progressView" in source

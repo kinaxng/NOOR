@@ -1,0 +1,140 @@
+<script setup lang="ts">
+import { ref, onMounted, watch, computed, defineAsyncComponent } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useI18n } from '../composables/useI18n'
+import MediaCard from '../components/noor/MediaCard.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+
+// Lazy-load panels that are only shown on demand
+const AsyncMediaDetailPanel = defineAsyncComponent(() => import('../components/noor/MediaDetailPanel.vue'))
+const AsyncLadaPanel = defineAsyncComponent(() => import('../components/noor/LadaPanel.vue'))
+const AsyncSubtitlePanel = defineAsyncComponent(() => import('../components/noor/SubtitlePanel.vue'))
+import type { MediaItem } from '../api/types'
+
+const { t, i18nVersion } = useI18n()
+const mediaLibraryStore = useMediaLibraryStore()
+const route = useRoute()
+const router = useRouter()
+
+const activeFilter = ref((route.query.filter as string) || '')
+const filters = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: '', label: t('library.filter.all') },
+    { key: 'cracked', label: t('library.filter.cracked') },
+    { key: 'chinese', label: t('library.filter.chinese') },
+    { key: 'leaked', label: t('library.filter.leaked') },
+    { key: 'uncensored', label: t('library.filter.uncensored') },
+  ]
+})
+
+const activeFilterStr = computed({
+  get: () => activeFilter.value,
+  set: (v: string) => { activeFilter.value = v },
+})
+
+const searchQuery = ref('')
+const searchPlaceholder = computed(() => {
+  void i18nVersion.value
+  return t('library.search.placeholder')
+})
+
+const visibleItems = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  const items = mediaLibraryStore.filteredItems
+  if (!query) return items
+
+  return items.filter((item) => {
+    const fields = [
+      item.name,
+      item.path,
+      item.nfo?.title,
+      item.nfo?.originaltitle,
+      item.nfo?.num,
+    ]
+      .filter(Boolean)
+      .join('\n')
+      .toLowerCase()
+    return fields.includes(query)
+  })
+})
+
+const showDetailPanel = ref(false)
+const showLadaPanel = ref(false)
+const selectedVideo = ref<MediaItem | null>(null)
+const videoDetail = ref<any>(null)
+const loadingDetail = ref(false)
+const detailError = ref<string | null>(null)
+
+const showSubtitlePanel = ref(false)
+const subtitleVideoPath = ref('')
+const subtitleVideoId = ref('')
+const subtitleFolderPaths = ref<string[]>([])
+
+onMounted(async () => {
+  await mediaLibraryStore.fetchLibraries()
+  // Sync filterTag from URL before initial fetch to avoid double-loading
+  mediaLibraryStore.filterTag = activeFilter.value || null
+  autoSelectLibrary(activeFilter.value || null)
+})
+
+watch(activeFilter, (key) => {
+  mediaLibraryStore.setFilter(key || null)
+  router.replace({ query: key ? { filter: key } : {} })
+}, { flush: 'post' })
+
+function autoSelectLibrary(_filter: string | null) {
+  const preferredId = mediaLibraryStore.enabledLibraryIds[0]
+  const lib = (preferredId
+    ? mediaLibraryStore.allLibraries.find(l => l.id === preferredId)
+    : null) || mediaLibraryStore.libraries[0] || null
+  if (!lib) {
+    mediaLibraryStore.selectLibrary(null)
+    return
+  }
+  mediaLibraryStore.selectLibrary(lib)
+}
+
+watch(() => mediaLibraryStore.selectedLibrary, (lib) => {
+  if (lib) mediaLibraryStore.fetchItems(lib.id, 1, activeFilter.value || null)
+})
+
+
+// Sync filter from URL changes (e.g., browser back/forward)
+watch(() => route.query.filter, (f) => {
+  const filter = (f as string) || ''
+  if (filter !== activeFilter.value) {
+    activeFilter.value = filter
+  }
+})
+
+function handleSelectVideo(item: MediaItem) {
+  selectedVideo.value = item
+  showDetailPanel.value = true
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  mediaLibraryStore.fetchItemDetail(item.id)
+    .then(() => { videoDetail.value = mediaLibraryStore.selectedItem })
+    .catch((e: any) => { detailError.value = e?.message || t('common.loadFailed') })
+    .finally(() => { loadingDetail.value = false })
+}
+
+function handleQuickAction(item: MediaItem) {
+  selectedVideo.value = item
+  showLadaPanel.value = true
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  mediaLibraryStore.fetchItemDetail(item.id)
+    .then(() => { videoDetail.value = mediaLibraryStore.selectedItem })
+    .catch((e: any) => { detailError.value = e?.message || t('common.loadFailed') })
+    .finally(() => { loadingDetail.value = false })
+}
+
+function handleSubtitleAction(item: MediaItem) {
+  selectedVideo.value = item
+  subtitleVideoId.value = item.id

@@ -1,0 +1,36 @@
+                <div class="flex items-center justify-between">
+                  <span class="dep-row__name">{{ t('settings.whisper.cuda') }}</span>
+                  <VuiBadge v-if="checkingDepsResult.torch?.cuda" color="success" variant="gradient" size="xs">
+                    {{ checkingDepsResult.torch.cuda_info?.device_name || t('settings.whisper.gpuAvailable') }}
+                  </VuiBadge>
+                  <VuiBadge v-else color="warning" variant="gradient" size="xs">{{ t('settings.whisper.cpuOnly') }}</VuiBadge>
+                </div>
+              </div>
+
+              <!-- torch GPU/CPU variant selector -->
+              <div class="dep-row">
+                <div class="flex items-center justify-between">
+                  <span class="dep-row__name">{{ t('settings.whisper.torchVariant') }}</span>
+                  <div class="flex gap-1">
+                    <button
+                      class="filter-btn"
+                      :class="{ 'filter-btn--active': torchVariant === 'gpu' }"
+                      @click="torchVariant = 'gpu'"
+                    >GPU</button>
+                    <button
+                      class="filter-btn"
+                      :class="{ 'filter-btn--active': torchVariant === 'cpu' }"
+                      @click="torchVariant = 'cpu'"
+                    >CPU</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <p v-if="installStatus.status === 'running'" class="settings-note mt-3">
+              {{ installStatus.message }}
+            </p>
+
+            <div v-if="hasMissingRuntimeDeps" class="mt-4">
+              <VuiButton variant="gradient" color="success" size="small" :loading="installingDeps" @click="installDeps">

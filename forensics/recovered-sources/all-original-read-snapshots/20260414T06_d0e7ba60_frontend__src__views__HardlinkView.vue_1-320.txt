@@ -1,0 +1,320 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import api from '../api'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
+import { useI18n } from '../composables/useI18n'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import type { HardlinkEntry, HardlinkGroup } from '../api/types'
+
+type SortKey = 'code' | 'entryCount' | 'hardlinkCount'
+type SortDir = 'asc' | 'desc'
+type FilterKey = 'all' | 'sourceOnly' | 'multiSource' | 'orphanOnly'
+
+const mediaStore = useMediaLibraryStore()
+const toast = useToast()
+const router = useRouter()
+const { confirm } = useConfirm()
+const { t, i18nVersion } = useI18n()
+
+const searchQuery = ref('')
+const sortKey = ref<SortKey>('hardlinkCount')
+const sortDir = ref<SortDir>('desc')
+const filterKey = ref<FilterKey>('all')
+const currentPage = ref(1)
+const pageSize = 20
+const deletingHardlinkPaths = ref<Set<string>>(new Set())
+const deletingSourcePaths = ref<Set<string>>(new Set())
+const deletingGroupCodes = ref<Set<string>>(new Set())
+
+const pageTitle = computed(() => { void i18nVersion.value; return t('hardlinks.title') })
+const scanBtnLabel = computed(() => { void i18nVersion.value; return t('hardlinks.scan') })
+const noGroupsLabel = computed(() => { void i18nVersion.value; return t('hardlinks.empty') })
+const emptyDescLabel = computed(() => { void i18nVersion.value; return t('hardlinks.emptyDesc') })
+const totalLabel = computed(() => { void i18nVersion.value; return t('hardlinks.total') })
+const codeLabel = computed(() => { void i18nVersion.value; return t('hardlinks.code') })
+const entryCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.entryCount') })
+const hardlinkCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.hardlinkCount') })
+const issueCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.issueCount') })
+const visibleCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.visibleCount') })
+const visibleEntryCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.visibleEntryCount') })
+const visibleHardlinkCountLabel = computed(() => { void i18nVersion.value; return t('hardlinks.visibleHardlinkCount') })
+const searchPlaceholder = computed(() => { void i18nVersion.value; return t('hardlinks.searchPlaceholder') })
+const lastScannedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.lastScanned') })
+const emptyFilteredLabel = computed(() => { void i18nVersion.value; return t('hardlinks.emptyFiltered') })
+const clearFiltersLabel = computed(() => { void i18nVersion.value; return t('hardlinks.clearFilters') })
+const sortDirectionLabel = computed(() => { void i18nVersion.value; return t(sortDir.value === 'asc' ? 'hardlinks.sortAsc' : 'hardlinks.sortDesc') })
+const deleteHardlinkLabel = computed(() => { void i18nVersion.value; return t('hardlinks.deleteHardlink') })
+const deleteSourceChainLabel = computed(() => { void i18nVersion.value; return t('hardlinks.deleteSourceChain') })
+const previewDeleteLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewDelete') })
+const deleteGroupLabel = computed(() => { void i18nVersion.value; return t('hardlinks.deleteGroup') })
+const orphanSkippedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.orphanSkipped') })
+const copyVisibleLabel = computed(() => { void i18nVersion.value; return t('hardlinks.copyVisible') })
+const exportVisibleLabel = computed(() => { void i18nVersion.value; return t('hardlinks.exportVisible') })
+const prevPageLabel = computed(() => { void i18nVersion.value; return t('common.prevPage') })
+const nextPageLabel = computed(() => { void i18nVersion.value; return t('common.nextPage') })
+const abnormalLabel = computed(() => { void i18nVersion.value; return t('hardlinks.status.issue') })
+const orphanLabel = computed(() => { void i18nVersion.value; return t('hardlinks.status.orphan') })
+const unparsedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.status.unparsed') })
+const goSettingsLabel = computed(() => { void i18nVersion.value; return t('library.goToSettings') })
+
+const filterTabs = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: 'all' as FilterKey, label: t('hardlinks.filter.all') },
+    { key: 'sourceOnly' as FilterKey, label: t('hardlinks.filter.sourceOnly') },
+    { key: 'multiSource' as FilterKey, label: t('hardlinks.filter.multiSource') },
+    { key: 'orphanOnly' as FilterKey, label: t('hardlinks.filter.orphanOnly') },
+  ]
+})
+
+const hasGroups = computed(() => mediaStore.hardlinkGroups.length > 0)
+
+const summary = computed(() => {
+  const backendSummary = mediaStore.hardlinkSummary
+  const groups = mediaStore.hardlinkGroups
+  const fallback = {
+    total_groups: groups.length,
+    total_entries: groups.reduce((sum, group) => sum + (group.entry_count || group.entries.length), 0),
+    total_hardlinks: groups.reduce((sum, group) => sum + (group.hardlink_count || group.entries.reduce((s, entry) => s + (entry.hardlink_count || entry.hardlink_paths.length), 0)), 0),
+    issue_groups: groups.filter((group) => group.status === 'issue' || (group.issue_count || 0) > 0).length,
+    orphan_entries: groups.reduce((sum, group) => sum + (group.orphan_count || 0), 0),
+  }
+
+  if (!backendSummary || backendSummary.total_groups === 0 && groups.length > 0) {
+    return fallback
+  }
+
+  return {
+    total_groups: backendSummary.total_groups ?? fallback.total_groups,
+    total_entries: backendSummary.total_entries ?? fallback.total_entries,
+    total_hardlinks: backendSummary.total_hardlinks ?? fallback.total_hardlinks,
+    issue_groups: backendSummary.issue_groups ?? fallback.issue_groups,
+    orphan_entries: backendSummary.orphan_entries ?? fallback.orphan_entries,
+  }
+})
+
+const lastScannedText = computed(() => {
+  const value = mediaStore.hardlinkLastScannedAt
+  if (!value) return t('common.notAvailable')
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return t('common.notAvailable')
+  return date.toLocaleString()
+})
+
+const searchedGroups = computed<HardlinkGroup[]>(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  return mediaStore.hardlinkGroups.filter((group) => {
+    const matchesSearch = !query || group.code.toLowerCase().includes(query) || group.entries.some((entry) => {
+      const source = entry.source_path || ''
+      return source.toLowerCase().includes(query) || entry.hardlink_paths.some((path) => path.toLowerCase().includes(query))
+    })
+    return matchesSearch
+  })
+})
+
+const filterCounts = computed(() => {
+  const groups = searchedGroups.value
+  return {
+    all: groups.length,
+    sourceOnly: groups.filter((group) => (group.orphan_count || 0) < (group.entry_count || group.entries.length)).length,
+    multiSource: groups.filter((group) => (group.entry_count || group.entries.length) > 1).length,
+    orphanOnly: groups.filter((group) => {
+      const entryCount = group.entry_count || group.entries.length
+      return entryCount > 0 && (group.orphan_count || 0) >= entryCount
+    }).length,
+  }
+})
+
+const visibleGroups = computed<HardlinkGroup[]>(() => {
+  const dir = sortDir.value === 'asc' ? 1 : -1
+
+  const filtered = searchedGroups.value.filter((group) => {
+    
+    switch (filterKey.value) {
+      case 'sourceOnly':
+        return (group.orphan_count || 0) < (group.entry_count || group.entries.length)
+      case 'multiSource':
+        return (group.entry_count || group.entries.length) > 1
+      case 'orphanOnly': {
+        const entryCount = group.entry_count || group.entries.length
+        return entryCount > 0 && (group.orphan_count || 0) >= entryCount
+      }
+      default:
+        return true
+    }
+  })
+
+  filtered.sort((a, b) => {
+    if (sortKey.value === 'code') return dir * a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
+    if (sortKey.value === 'entryCount') return dir * ((a.entry_count || 0) - (b.entry_count || 0))
+    return dir * ((a.hardlink_count || 0) - (b.hardlink_count || 0))
+  })
+
+  return filtered
+})
+
+const visibleSummary = computed(() => ({
+  groups: visibleGroups.value.length,
+  entries: visibleGroups.value.reduce((sum, group) => sum + (group.entry_count || group.entries.length), 0),
+  hardlinks: visibleGroups.value.reduce((sum, group) => sum + (group.hardlink_count || group.entries.reduce((entrySum, entry) => entrySum + (entry.hardlink_count || entry.hardlink_paths.length), 0)), 0),
+}))
+
+const totalPages = computed(() => Math.max(1, Math.ceil(visibleGroups.value.length / pageSize)))
+
+const pageCounterLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.pageCounter', { current: currentPage.value, total: totalPages.value })
+})
+
+const pagedGroups = computed<HardlinkGroup[]>(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return visibleGroups.value.slice(start, start + pageSize)
+})
+
+watch([searchQuery, sortKey, sortDir, filterKey], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, (value) => {
+  if (currentPage.value > value) currentPage.value = value
+})
+
+function setSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+    return
+  }
+  sortKey.value = key
+  sortDir.value = key === 'code' ? 'asc' : 'desc'
+}
+
+function toggleSortDirection() {
+  sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+}
+
+function sortArrow(key: SortKey) {
+  if (sortKey.value !== key) return ''
+  return sortDir.value === 'asc' ? '↑' : '↓'
+}
+
+function issueBadgeColor(group: HardlinkGroup) {
+  if ((group.orphan_count || 0) > 0) return 'error'
+  if (group.issues?.includes('unparsed_code')) return 'warning'
+  return 'secondary'
+}
+
+function groupSourceCount(group: HardlinkGroup) {
+  return group.entries.filter((entry) => !!entry.source_path).length
+}
+
+function groupHardlinkCount(group: HardlinkGroup) {
+  return group.entries.reduce((sum, entry) => sum + entry.hardlink_paths.length, 0)
+}
+
+async function handleScan() {
+  const result = await mediaStore.scanHardlinks()
+  if (result.ok) {
+    toast.success(t('hardlinks.scanSuccess', { count: result.count, entryCount: result.totalEntries }))
+  } else {
+    toast.error(result.error || t('hardlinks.scanFailed'))
+  }
+}
+
+function formatGroupLines(group: HardlinkGroup) {
+  const lines = [
+    `${codeLabel.value}: ${group.code}`,
+    `${entryCountLabel.value}: ${group.entry_count || group.entries.length}`,
+    `${hardlinkCountLabel.value}: ${group.hardlink_count || 0}`,
+  ]
+
+  if (group.issues?.length) {
+    lines.push(`${issueCountLabel.value}: ${group.issues.join(', ')}`)
+  }
+
+  group.entries.forEach((entry, index) => {
+    lines.push('')
+    lines.push(`[${index + 1}] ${mainFileLabel.value}`)
+    lines.push(entry.source_path || missingSourceLabel.value)
+    if (entry.hardlink_paths.length > 0) {
+      lines.push(hardlinksLabel.value)
+      entry.hardlink_paths.forEach((path) => lines.push(`- ${path}`))
+    }
+  })
+
+  return lines.join('\n')
+}
+
+function formatVisibleGroups() {
+  return visibleGroups.value.map((group) => formatGroupLines(group)).join('\n\n====================\n\n')
+}
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.success(t('common.copied'))
+  } catch (error: any) {
+    toast.error(error?.message || t('common.copyFailed'))
+  }
+}
+
+async function copyPath(path: string) {
+  await copyText(path)
+}
+
+async function copyVisibleGroups() {
+  if (!visibleGroups.value.length) return
+  await copyText(formatVisibleGroups())
+}
+
+function exportVisibleGroups() {
+  if (!visibleGroups.value.length) return
+
+  const blob = new Blob([formatVisibleGroups()], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  anchor.href = url
+  anchor.download = `hardlinks-${stamp}.txt`
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+const mainFileLabel = computed(() => { void i18nVersion.value; return t('hardlinks.mainFile') })
+const hardlinksLabel = computed(() => { void i18nVersion.value; return t('hardlinks.hardlinks') })
+const missingSourceLabel = computed(() => { void i18nVersion.value; return t('hardlinks.missingSource') })
+
+function clearFilters() {
+  searchQuery.value = ''
+  filterKey.value = 'all'
+  sortKey.value = 'hardlinkCount'
+  sortDir.value = 'desc'
+  currentPage.value = 1
+}
+
+function isDeletingHardlink(path: string) {
+  return deletingHardlinkPaths.value.has(path)
+}
+
+function isDeletingSource(path: string | null) {
+  return !!path && deletingSourcePaths.value.has(path)
+}
+
+function isDeletingGroup(code: string) {
+  return deletingGroupCodes.value.has(code)
+}
+
+function withDeletingState(setRef: typeof deletingHardlinkPaths, key: string, active: boolean) {
+  const next = new Set(setRef.value)
+  if (active) next.add(key)
+  else next.delete(key)
+  setRef.value = next
+}
+
+async function deleteHardlink(path: string) {
+  if (!path || isDeletingHardlink(path)) return
+  const ok = await confirm({

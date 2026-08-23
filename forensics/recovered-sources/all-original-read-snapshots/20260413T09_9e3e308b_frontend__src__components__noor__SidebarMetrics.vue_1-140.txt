@@ -1,0 +1,140 @@
+<script setup lang="ts">
+import { onMounted } from 'vue'
+import { useSidebarMetrics } from '../../composables/useSidebarMetrics'
+
+const { sysMetrics, start } = useSidebarMetrics()
+
+onMounted(() => {
+  start()
+})
+
+function gpuMemPercent() {
+  const { mem_used, mem_total } = sysMetrics.value.gpu
+  if (!mem_total) return 0
+  return Math.round((mem_used / mem_total) * 100)
+}
+
+function ramMemPercent() {
+  const { mem_used, mem_total } = sysMetrics.value.cpu_mem
+  if (!mem_total) return 0
+  return Math.round((mem_used / mem_total) * 100)
+}
+</script>
+
+<template>
+  <div class="sidebar-metrics">
+    <!-- GPU -->
+    <div class="sidebar-metrics__row">
+      <div class="sidebar-metrics__label">
+        <span class="sidebar-metrics__name">GPU</span>
+        <span class="sidebar-metrics__value">{{ sysMetrics.gpu.gpu_util }}%</span>
+      </div>
+      <div class="sidebar-metrics__bar">
+        <div
+          class="sidebar-metrics__fill sidebar-metrics__fill--gpu"
+          :style="{ width: sysMetrics.gpu.gpu_util + '%' }"
+        />
+      </div>
+    </div>
+
+    <!-- VRAM -->
+    <div class="sidebar-metrics__row">
+      <div class="sidebar-metrics__label">
+        <span class="sidebar-metrics__name">VRAM</span>
+        <span class="sidebar-metrics__value">
+          {{ sysMetrics.gpu.mem_used.toFixed(0) }} / {{ sysMetrics.gpu.mem_total.toFixed(0) }} GB
+        </span>
+      </div>
+      <div class="sidebar-metrics__bar">
+        <div
+          class="sidebar-metrics__fill sidebar-metrics__fill--vram"
+          :style="{ width: gpuMemPercent() + '%' }"
+        />
+      </div>
+    </div>
+
+    <!-- CPU -->
+    <div class="sidebar-metrics__row">
+      <div class="sidebar-metrics__label">
+        <span class="sidebar-metrics__name">CPU</span>
+        <span class="sidebar-metrics__value">{{ sysMetrics.cpu_mem.cpu_util }}%</span>
+      </div>
+      <div class="sidebar-metrics__bar">
+        <div
+          class="sidebar-metrics__fill sidebar-metrics__fill--cpu"
+          :style="{ width: sysMetrics.cpu_mem.cpu_util + '%' }"
+        />
+      </div>
+    </div>
+
+    <!-- RAM -->
+    <div class="sidebar-metrics__row">
+      <div class="sidebar-metrics__label">
+        <span class="sidebar-metrics__name">RAM</span>
+        <span class="sidebar-metrics__value">
+          {{ sysMetrics.cpu_mem.mem_used.toFixed(0) }} / {{ sysMetrics.cpu_mem.mem_total.toFixed(0) }} GB
+        </span>
+      </div>
+      <div class="sidebar-metrics__bar">
+        <div
+          class="sidebar-metrics__fill sidebar-metrics__fill--ram"
+          :style="{ width: ramMemPercent() + '%' }"
+        />
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.sidebar-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  margin: 0 0.75rem;
+}
+
+.sidebar-metrics__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebar-metrics__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar-metrics__name {
+  font-family: var(--font-display);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.sidebar-metrics__value {
+  font-family: var(--font-display);
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.sidebar-metrics__bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.sidebar-metrics__fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+

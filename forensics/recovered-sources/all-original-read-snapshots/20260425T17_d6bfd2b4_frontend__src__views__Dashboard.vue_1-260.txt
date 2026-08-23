@@ -1,0 +1,1090 @@
+?? docker-compose.deploy.yml
+?? models
+
+--- Dashboard ---
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useJobsStore } from '../stores/jobs'
+import { RouterLink } from 'vue-router'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
+import SystemMetricsCard from '../components/ui/SystemMetricsCard.vue'
+import WelcomeMark from '../components/ui/WelcomeMark.vue'
+import ActivityCard from '../components/ui/ActivityCard.vue'
+import api from '../api'
+import { useI18n } from '../composables/useI18n'
+import { useJobPresentation } from '../composables/useJobPresentation'
+import { sortRunningJobsForList, sortJobsForList } from '../composables/jobOrdering'
+
+const { t, i18nVersion } = useI18n()
+const { getActivityDetailLine, getRunningBadgeLabel, getJobDisplayName, getDashboardJobMetaTokens, getDashboardJobChips, getDashboardStatusTone, getDashboardIconName } = useJobPresentation(() => jobsStore.jobs)
+const mediaLibraryStore = useMediaLibraryStore()
+const jobsStore = useJobsStore()
+
+const DASHBOARD_COUNTS_CACHE_TTL = 60_000
+const dashboardCountsCache = {
+  key: '',
+  fetchedAt: 0,
+  data: null as null | { total: number; cracked: number; chinese: number; leaked: number; uncensored: number },
+  promise: null as null | Promise<{ total: number; cracked: number; chinese: number; leaked: number; uncensored: number }>,
+}
+
+// System metrics
+const sysMetrics = ref({
+  gpu: { gpu_util: 0, mem_used: 0, mem_total: 0, temp: 0, power: 0 },
+  cpu_mem: { cpu_util: 0, mem_used: 0, mem_total: 0, cpu_temp: 0, disk_read: 0 },
+})
+let metricsInterval: ReturnType<typeof setInterval> | null = null
+
+async function fetchMetrics() {
+  try {
+    const resp = await api.get('/system/metrics')
+    sysMetrics.value = resp.data
+  } catch (e) {
+    // ignore
+  }
+}
+
+const formatCount = computed(() => {
+  void i18nVersion.value
+  const formatter = new Intl.NumberFormat('zh-CN')
+  return (value: number) => formatter.format(value)
+})
+
+// Full library tag counts (fetched separately to get accurate totals)
+const fullTagCounts = ref({ total: 0, cracked: 0, chinese: 0, leaked: 0, uncensored: 0 })
+const countsLoaded = ref(false)
+
+async function fetchDashboardCounts() {
+  const libraryKey = mediaLibraryStore.enabledLibraryIds.length > 0 ? mediaLibraryStore.enabledLibraryIds[0] : 'all'
+  const cacheKey = `counts:${libraryKey}`
+  const now = Date.now()
+
+  if (dashboardCountsCache.data && dashboardCountsCache.key === cacheKey && now - dashboardCountsCache.fetchedAt < DASHBOARD_COUNTS_CACHE_TTL) {
+    return dashboardCountsCache.data
+  }
+
+  if (dashboardCountsCache.promise && dashboardCountsCache.key === cacheKey) {
+    return await dashboardCountsCache.promise
+  }
+
+  const params: any = { limit: 200, offset: 0 }
+  if (mediaLibraryStore.enabledLibraryIds.length > 0) {
+    params.library_id = mediaLibraryStore.enabledLibraryIds[0]
+  }
+
+  dashboardCountsCache.key = cacheKey
+  dashboardCountsCache.promise = (async () => {
+    const allItems: any[] = []
+    let fetched = 0
+    let total = 0
+    do {
+      const resp = await api.get('/media-library/items', { params: { ...params, offset: fetched } })
+      const items: any[] = resp.data.items
+      allItems.push(...items)
+      total = resp.data.total
+      fetched += items.length
+    } while (fetched < total && fetched < 2000)
+
+    const data = {
+      total: allItems.length,
+      cracked: allItems.filter(i => i.tags?.is_cracked).length,
+      chinese: allItems.filter(i => i.tags?.has_chinese).length,
+      leaked: allItems.filter(i => i.tags?.release_type_key === 'leaked').length,
+      uncensored: allItems.filter(i => i.tags?.release_type_key === 'uncensored').length,
+    }
+
+    dashboardCountsCache.data = data
+    dashboardCountsCache.fetchedAt = Date.now()
+    return data
+  })()
+
+  try {
+    return await dashboardCountsCache.promise
+  } finally {
+    dashboardCountsCache.promise = null
+  }
+}
+
+onMounted(async () => {
+  await mediaLibraryStore.fetchLibraries()
+  await jobsStore.fetchJobs()
+  await fetchMetrics()
+  metricsInterval = setInterval(fetchMetrics, 5000)
+
+  try {
+    fullTagCounts.value = await fetchDashboardCounts()
+  } catch (e) {
+    // ignore counting errors
+  } finally {
+    countsLoaded.value = true
+  }
+})
+
+onUnmounted(() => {
+  if (metricsInterval) clearInterval(metricsInterval)
+})
+
+
+// Recent jobs
+const recentJobs = computed(() => {
+  const seen = new Set<string>()
+  const runningJobs = jobsStore.jobs.filter(job => job.status === 'running' || job.status === 'queued' || job.status === 'blocked' || job.status === 'pending')
+  const terminalJobs = jobsStore.jobs.filter(job => job.status !== 'running' && job.status !== 'queued' && job.status !== 'blocked' && job.status !== 'pending')
+
+  return [...sortRunningJobsForList(runningJobs), ...sortJobsForList(terminalJobs)]
+    .filter((job) => {
+      const dateKey = (job.created_at || '').slice(0, 10)
+      const itemKey = job.emby_item_name || job.input_path?.split('/').pop() || job.id
+      const key = `${itemKey}::${job.job_type}::${job.status}::${dateKey}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, 6)
+})
+
+const getJobBadgeLabel = computed(() => {
+  void i18nVersion.value
+  return (job: any) => getRunningBadgeLabel.value(job)
+})
+
+// Format time (reactive to language)
+const formatTime = computed(() => {
+  void i18nVersion.value
+  return (dateStr?: string) => {
+    if (!dateStr) return t('dashboard.unknown')
+    const d = new Date(dateStr)
+    const now = new Date()
+    const diff = now.getTime() - d.getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return t('dashboard.justNow')
+    if (mins < 60) return t('dashboard.minsAgo', { n: mins })
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return t('dashboard.hoursAgo', { n: hours })
+    return d.toLocaleDateString('zh-CN')
+  }
+})
+const getDashboardJobMetaLine = computed(() => {
+  void i18nVersion.value
+  return (job: any) => getDashboardJobMetaTokens.value(job, formatTime.value(job.created_at)).join(' · ')
+})
+
+const statsCards = computed(() => {
+  void i18nVersion.value
+  const total = Math.max(fullTagCounts.value.total, 1)
+  return [
+    {
+      label: t('dashboard.stats.cracked'),
+      subtitle: `${Math.round((fullTagCounts.value.cracked / total) * 100)}% ${t('dashboard.stats.total')}`,
+      displayValue: formatCount.value(fullTagCounts.value.cracked),
+      value: fullTagCounts.value.cracked,
+      filter: 'cracked',
+      group: 1,
+      tone: 'brand',
+      ratio: Math.round((fullTagCounts.value.cracked / total) * 100),
+    },
+    {
+      label: t('dashboard.stats.chinese'),
+      subtitle: `${Math.round((fullTagCounts.value.chinese / total) * 100)}% ${t('dashboard.stats.total')}`,
+      displayValue: formatCount.value(fullTagCounts.value.chinese),
+      value: fullTagCounts.value.chinese,
+      filter: 'chinese',
+      group: 2,
+      tone: 'success',
+      ratio: Math.round((fullTagCounts.value.chinese / total) * 100),
+    },
+    {
+      label: t('dashboard.stats.leaked'),
+      subtitle: `${Math.round((fullTagCounts.value.leaked / total) * 100)}% ${t('dashboard.stats.total')}`,
+      displayValue: formatCount.value(fullTagCounts.value.leaked),
+      value: fullTagCounts.value.leaked,
+      filter: 'leaked',
+      group: 3,
+      tone: 'warning',
+      ratio: Math.round((fullTagCounts.value.leaked / total) * 100),
+    },
+    {
+      label: t('dashboard.stats.uncensored'),
+      subtitle: `${Math.round((fullTagCounts.value.uncensored / total) * 100)}% ${t('dashboard.stats.total')}`,
+      displayValue: formatCount.value(fullTagCounts.value.uncensored),
+      value: fullTagCounts.value.uncensored,
+      filter: 'uncensored',
+      group: 4,
+      tone: 'neutral',
+      ratio: Math.round((fullTagCounts.value.uncensored / total) * 100),
+    },
+  ]
+})
+
+// GPU metrics (reactive)
+const gpuMetrics = computed(() => {
+  void i18nVersion.value
+  return [
+    { label: t('dashboard.gpu.util'), value: String(sysMetrics.value.gpu.gpu_util), unit: '%' },
+    { label: t('dashboard.gpu.memory'), value: sysMetrics.value.gpu.mem_used.toFixed(1), unit: 'GB / ' + sysMetrics.value.gpu.mem_total.toFixed(0) + ' GB' },
+    { label: t('dashboard.gpu.temp'), value: String(sysMetrics.value.gpu.temp), unit: '°C' },
+    { label: t('dashboard.gpu.power'), value: sysMetrics.value.gpu.power.toFixed(0), unit: 'W' },
+  ]
+})
+
+// CPU metrics (reactive)
+const cpuMetrics = computed(() => {
+  void i18nVersion.value
+  return [
+    { label: t('dashboard.cpu.util'), value: String(sysMetrics.value.cpu_mem.cpu_util), unit: '%' },
+    { label: t('dashboard.cpu.memory'), value: sysMetrics.value.cpu_mem.mem_used.toFixed(1), unit: 'GB / ' + sysMetrics.value.cpu_mem.mem_total.toFixed(0) + ' GB' },
+    { label: t('dashboard.cpu.temp'), value: String(sysMetrics.value.cpu_mem.cpu_temp), unit: '°C' },
+    { label: t('dashboard.cpu.disk'), value: String(sysMetrics.value.cpu_mem.disk_read), unit: 'MB/s' },
+  ]
+})
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+
+    <!-- Welcome + Stats Row -->
+    <div class="dashboard-top-grid grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <!-- Welcome Card -->
+      <div class="lg:col-span-2 dashboard-top-grid__panel">
+        <WelcomeMark :greeting="t('dashboard.welcome.greeting')" :username="t('dashboard.user')" :message="t('dashboard.welcome.message')" />
+      </div>
+
+      <!-- Stats Card -->
+      <div class="lg:col-span-2 dashboard-stats-card dashboard-top-grid__panel">
+        <div class="dashboard-stats-card__hero">
+          <div class="dashboard-stats-card__hero-copy">
+            <p class="dashboard-stats-card__eyebrow">{{ t('dashboard.stats.total') }}</p>
+            <div class="dashboard-stats-card__value" :class="{ 'dashboard-stats-card__value--pending': !countsLoaded }">
+              <span class="dashboard-stats-card__number">{{ formatCount(fullTagCounts.total) }}</span>
+            </div>
+            <div class="dashboard-stats-card__summary-row">
+              <p class="dashboard-stats-card__summary">关键分布</p>
+              <span class="dashboard-stats-card__summary-dot" />
+
+--- History ---
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import { useJobsStore } from '../stores/jobs'
+import { useI18n } from '../composables/useI18n'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+import VuiProgress from '../components/ui/Progress/VuiProgress.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import { useJobPresentation } from '../composables/useJobPresentation'
+import { sortJobsForList } from '../composables/jobOrdering'
+
+const { t, i18nVersion, currentLang } = useI18n()
+const { getStatusTone, getTerminalBadgeVariant, getTerminalBadgeLabel, getHistoryProgressValue, getHistoryProgressTone, getActivityDetailLine, getJobDisplayName } = useJobPresentation(() => jobsStore.jobs)
+const jobsStore = useJobsStore()
+const toast = useToast()
+const { confirm } = useConfirm()
+
+const filter = ref<'all' | 'completed' | 'failed'>('all')
+
+const filterTabs = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: 'all', label: t('history.filter.all') },
+    { key: 'completed', label: t('history.filter.completed') },
+    { key: 'failed', label: t('history.filter.failed') },
+  ]
+})
+
+onMounted(() => {
+  jobsStore.fetchJobs()
+})
+
+const failedStatuses = ['failed', 'cancelled', 'skipped'] as const
+
+const filteredJobs = computed(() => {
+  const jobs = filter.value === 'all'
+    ? jobsStore.jobs.filter(j => j.status === 'completed' || failedStatuses.includes(j.status as any))
+    : filter.value === 'failed'
+      ? jobsStore.jobs.filter(j => failedStatuses.includes(j.status as any))
+      : jobsStore.jobs.filter(j => j.status === filter.value)
+
+  return sortJobsForList(jobs)
+})
+
+const historyTitle = computed(() => {
+  void i18nVersion.value
+  return t('history.title')
+})
+const colName = computed(() => { void i18nVersion.value; return t('history.col.name') })
+const colStatus = computed(() => { void i18nVersion.value; return t('history.col.status') })
+const colCreated = computed(() => { void i18nVersion.value; return t('history.col.created') })
+const colCompleted = computed(() => { void i18nVersion.value; return t('history.col.completed') })
+const colActions = computed(() => { void i18nVersion.value; return t('history.col.actions') })
+function getStatusLabel(job: any) {
+  return getTerminalBadgeLabel.value(job)
+}
+
+function formatDate(dateStr?: string) {
+  if (!dateStr) return t('common.notAvailable')
+  return new Date(dateStr).toLocaleString(currentLang.value === 'zh' ? 'zh-CN' : 'en-US')
+}
+
+function downloadOutput(job: any) {
+  if (job.output_path) {
+    window.open(`/api/jobs/${job.id}/download`, '_blank')
+  }
+}
+
+async function deleteJob(jobId: string) {
+  if (!await confirm({ message: t('history.deleteConfirm'), danger: true })) return
+  try {
+    await jobsStore.deleteJob(jobId)
+  } catch (e: any) {
+    console.error('Delete failed:', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message }))
+  }
+}
+
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <VisionTabs v-model="filter" :tabs="filterTabs" />
+    </div>
+
+    <!-- Loading -->
+    <div v-if="jobsStore.loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <!-- Empty State -->
+    <div v-else-if="filteredJobs.length === 0" class="empty-state-card flex flex-col items-center justify-center py-24 text-center">
+      <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 empty-state-icon">
+        <BaseIcon name="history" class="w-7 h-7 text-white/20" />
+      </div>
+      <h3 class="text-base font-medium mb-1 text-white font-display">{{ t('history.noHistory') }}</h3>
+      <p class="text-sm text-white/30">{{ t('history.noHistoryDesc') }}</p>
+    </div>
+
+    <!-- Table Card -->
+    <div v-else class="table-card ui-card">
+      <!-- Table Header -->
+      <div class="table-card__header">
+        <div>
+          <h2 class="table-card__title">{{ historyTitle }}</h2>
+          <p class="table-card__subtitle">{{ t('history.recordCount', { n: filteredJobs.length }) }}</p>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrapper">
+        <table class="w-full">
+          <thead>
+            <tr class="table-head-row">
+              <th class="table-th">{{ colName }}</th>
+              <th class="table-th">{{ colStatus }}</th>
+              <th class="table-th">{{ colCreated }}</th>
+              <th class="table-th">{{ colCompleted }}</th>
+              <th class="table-th">{{ t('history.col.progress') }}</th>
+              <th class="table-th text-right">{{ colActions }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="job in filteredJobs"
+              :key="job.id"
+              class="table-row"
+            >
+              <td class="table-td">
+                <div class="table-name-cell">
+                  <div class="table-avatar">
+                    <BaseIcon name="jobs" class="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p class="table-name">{{ getJobDisplayName(job) }}</p>
+                    <p class="table-path">{{ job.input_path }}</p>
+                    <p v-if="getActivityDetailLine(job)" class="table-detail">{{ getActivityDetailLine(job) }}</p>
+                  </div>
+                </div>
+              </td>
+              <td class="table-td">
+                <VuiBadge
+                  :color="getStatusTone(job)"
+                  :variant="getTerminalBadgeVariant(job.status)"
+                  size="sm"
+                >
+                  {{ getStatusLabel(job) }}
+                </VuiBadge>
+              </td>
+              <td class="table-td text-sm text-white/50">{{ formatDate(job.created_at) }}</td>
+              <td class="table-td text-sm text-white/50">{{ formatDate(job.completed_at) }}</td>
+              <td class="table-td">
+                <div class="table-progress">
+                  <VuiProgress
+                    :value="getHistoryProgressValue(job)"
+                    :color="getHistoryProgressTone(job)"
+                    variant="gradient"
+                    class="table-progress__bar"
+                  />
+                  <span class="table-progress__text">{{ getHistoryProgressValue(job) }}%</span>
+                </div>
+              </td>
+              <td class="table-td text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <VuiButton
+                    v-if="job.output_path"
+                    variant="outlined"
+                    color="secondary"
+                    size="small"
+                    @click="downloadOutput(job)"
+                  >
+                    {{ t('common.download') }}
+                  </VuiButton>
+                  <VuiButton
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    @click="deleteJob(job.id)"
+                  >
+                    {{ t('common.delete') }}
+                  </VuiButton>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.table-card {
+  overflow: hidden;
+}
+
+.table-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.table-card__title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin-bottom: 0.25rem;
+}
+
+.table-card__subtitle {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table-head-row {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.table-th {
+  text-align: left;
+  padding: 1rem 1.5rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
+.table-th.text-right {
+  text-align: right;
+}
+
+.table-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background var(--transition-fast);
+}
+
+.table-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+
+--- useJobPresentation ---
+import { computed } from 'vue'
+import { useI18n } from './useI18n'
+import type { Job } from '../api/types'
+
+export function resolveWhisperStrategyKey(job: Partial<Job>) {
+  const execution = (job as Job).result_metadata?.whisper_execution as { strategy?: string } | undefined
+  const raw = String(execution?.strategy || (job as Job).settings?.strategy || '').trim().toLowerCase()
+  if (raw === 'recommended' || raw === 'best') return 'recommended'
+  if (['baseline', 'compat', 'compatibility', 'experimental', 'experiment', 'fast', 'faster', 'compare', 'contrast'].includes(raw)) {
+    return 'baseline'
+  }
+  if (['reazon_nemo', 'reazon', 'nemo', 'reazonspeech', 'reazonspeech-nemo-v2'].includes(raw)) {
+    return 'reazon_nemo'
+  }
+  return raw ? 'advanced' : ''
+}
+
+type JobRuntimeView = {
+  status?: string
+  phaseKey?: string
+  phaseGroup?: string
+  phaseLabel?: string
+  detail?: string
+}
+
+type JobCardView = {
+  badgeLabel: string
+  badgeTone: string
+  iconName: string
+  iconClass: string
+}
+
+type JobProgressView = {
+  mode: 'hidden' | 'running'
+  phaseLabel: string
+  detailLine: string
+  showOverall: boolean
+  overallValue: number
+  overallText: string
+  showPhase: boolean
+  phaseValue: number
+  phaseText: string
+}
+
+type JobDescriptionView = {
+  summaryLine: string
+  metaLine: string
+}
+
+type JobDisplayState = {
+  phaseLine: string
+  detailLine: string
+  summaryLine: string
+  metaLine: string
+}
+
+type JobChainProgressView = {
+  progress: number
+  text: string
+}
+
+function sortChainJobs(a: Job, b: Job) {
+  const order = (job: Job) => {
+    if (job.depends_on_task_id) return 1
+    if (job.parent_task_id) return 1
+    return 0
+  }
+  const diff = order(a) - order(b)
+  if (diff !== 0) return diff
+  return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+}
+
+const PHASE_GROUP_MAP: Record<string, string> = {
+  prepare: 'prepare',
+  extract_audio: 'prepare',
+  load_subtitle: 'prepare',
+  analyze: 'analyze',
+  detect: 'analyze',
+  segment: 'analyze',
+  segment_text: 'analyze',
+  transcribe: 'transcribe',
+  transcribe_primary: 'transcribe',
+  retry: 'retry',
+  align: 'align',
+  translate: 'translate',
+  process: 'process',
+  restore: 'process',
+  postprocess: 'process',
+  merge_output: 'process',
+  encode: 'encode',
+  output: 'output',
+  write_output: 'output',
+  finalize: 'output',
+}
+
+export function useJobPresentation(allJobs?: () => Job[]) {
+  const { t, i18nVersion } = useI18n()
+
+  const runningLabel = computed(() => { void i18nVersion.value; return t('jobs.running') })
+  const connectingLabel = computed(() => { void i18nVersion.value; return t('jobs.status.connecting') })
+  const queuedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.queued') })
+  const blockedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.blocked') })
+  const completedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.completed') })
+  const failedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.failed') })
+  const cancelledLabel = computed(() => { void i18nVersion.value; return t('jobs.status.cancelled') })
+  const skippedLabel = computed(() => { void i18nVersion.value; return t('jobs.status.skipped') })
+
+  const phaseGroupLabel = computed(() => {
+    void i18nVersion.value
+    return (phaseKey?: string, phaseLabel?: string) => {
+      const group = phaseKey ? PHASE_GROUP_MAP[phaseKey] : ''
+      if (group === 'prepare') return t('jobs.phase.prepare')
+      if (group === 'analyze') return t('jobs.phase.analyze')
+      if (group === 'transcribe') return t('jobs.phase.transcribe')
+      if (group === 'retry') return t('jobs.phase.retry')
+      if (group === 'align') return t('jobs.phase.align')
+      if (group === 'translate') return t('jobs.phase.translate')
+      if (group === 'process') return t('jobs.phase.process')
+      if (group === 'encode') return t('jobs.phase.encode')
+      if (group === 'output') return t('jobs.phase.output')
+      return phaseLabel || ''
+    }
+  })
+
+  const fallbackStatusLabel = computed(() => {
+    void i18nVersion.value
+    return (status: string) => {
+      if (status === 'running') return runningLabel.value
+      if (status === 'blocked') return blockedLabel.value
+      if (status === 'queued' || status === 'pending') return queuedLabel.value
+      if (status === 'completed') return completedLabel.value
+      if (status === 'failed') return failedLabel.value
+      if (status === 'cancelled') return cancelledLabel.value
+      if (status === 'skipped') return skippedLabel.value
+      return status
+    }
+  })
+
+  const getJobTypeLabel = computed(() => {
+    void i18nVersion.value
+    return (jobType?: string) => {
+      if (jobType === 'whisper' || jobType === 'whisper_transcribe') return t('jobs.type.whisper')
+      if (jobType === 'translate-srt' || jobType === 'subtitle_translate') return t('jobs.translateTag')
+      if (jobType === 'lada' || jobType === 'lada_restore') return t('jobs.type.lada')
+      return t('dashboard.unknown')
+    }
+  })
+
+  const getWhisperStrategyLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (!(job.job_type === 'whisper' || job.job_type === 'whisper_transcribe')) return ''
+      const strategy = resolveWhisperStrategyKey(job)
+      if (strategy === 'recommended') return t('jobs.strategy.recommended')
+      if (strategy === 'baseline') return t('jobs.strategy.baseline')
+      if (strategy === 'reazon_nemo') return t('jobs.strategy.experimental')
+      if (strategy) return t('jobs.strategy.advanced')
+      return ''
+    }
+  })
+
+  const getWhisperStrategyHint = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (!(job.job_type === 'whisper' || job.job_type === 'whisper_transcribe')) return ''
+      const strategy = resolveWhisperStrategyKey(job)
+      if (strategy === 'baseline') return t('jobs.strategyHint.legacy')
+      if (strategy === 'reazon_nemo') return t('jobs.strategyHint.experimental')
+      return ''
+    }
+  })
+
+  const getJobHeaderMetaTokens = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const execution = (job as Job).result_metadata?.whisper_execution as { summary?: string } | undefined
+      return [
+        getJobTypeLabel.value(job.job_type),
+        getWhisperStrategyLabel.value(job),
+        execution?.summary || '',
+        job.chain_id ? getChainStepLabel.value(job) : '',
+        getChainPositionLabel.value(job),
+        getChainStatusSummary.value(job),
+        getJobChainHint.value(job),
+      ].filter(Boolean)
+    }
+  })
+
+  const getDashboardJobMetaTokens = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>, createdLabel?: string) => {
+      return [
+        getJobTypeLabel.value(job.job_type),
+        createdLabel || '',
+      ].filter(Boolean)
+    }
+  })
+
+  const getDashboardJobChips = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const chips = [] as string[]
+      if (job.chain_id) {
+        const stepLabel = getChainStepLabel.value(job)
+        if (stepLabel) chips.push(stepLabel)
+      }
+      const positionLabel = getChainPositionLabel.value(job)
+      if (positionLabel) chips.push(positionLabel)
+      const chainSummary = getChainStatusSummary.value(job)
+      if (chainSummary) chips.push(chainSummary)
+      const chainHint = getJobChainHint.value(job)
+      if (chainHint) chips.push(chainHint)
+      return chips
+    }
+  })
+
+
+  const getJobTypeChipClass = computed(() => {
+    void i18nVersion.value
+    return (jobType?: string) => {
+      if (jobType === 'translate-srt' || jobType === 'subtitle_translate') {
+        return 'bg-accent-cyan/20 text-accent-cyan border-accent-cyan/30'
+      }
+      return 'bg-accent-magenta/20 text-accent-magenta border-accent-magenta/30'
+    }
+  })
+
+  const getWhisperStrategyChipClass = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const strategy = resolveWhisperStrategyKey(job)
+      if (strategy === 'recommended') {
+        return 'bg-accent-blue/18 text-accent-blue border-accent-blue/28'
+      }
+      if (strategy === 'baseline') {
+        return 'bg-accent-cyan/18 text-accent-cyan border-accent-cyan/28'
+      }
+      if (strategy === 'reazon_nemo') {
+        return 'bg-amber-400/16 text-amber-200 border-amber-300/24'
+      }
+      return 'bg-white/6 text-white/55 border-white/10'
+    }
+  })
+
+  const getJobDisplayName = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => job.emby_item_name || job.input_path?.split('/')?.pop() || job.id || ''
+  })
+
+  const getChainMembers = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (!job.chain_id || !allJobs) return [] as Job[]
+      return allJobs().filter(candidate => candidate.chain_id === job.chain_id).sort(sortChainJobs)
+    }
+  })
+
+  const getChainStepLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (job.job_type === 'whisper' || job.job_type === 'whisper_transcribe') return t('jobs.chain.stepTranscribe')
+      if (job.job_type === 'translate-srt' || job.job_type === 'subtitle_translate') return t('jobs.chain.stepTranslate')
+      if (job.job_type === 'lada' || job.job_type === 'lada_restore') return t('jobs.chain.stepProcess')
+      return t('jobs.chain.stepTask')
+    }
+  })
+
+
+  const getChainRoleLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      if (!job.chain_id) return ''
+      if (job.depends_on_task_id) return t('jobs.chain.roleFollowup')
+      if (job.id && allJobs && allJobs().some(candidate => candidate.depends_on_task_id === job.id)) {
+        return t('jobs.chain.rolePrimary')
+      }
+      return ''
+    }
+  })
+
+  const getChainWaitingLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const isTranslate = job.job_type === 'translate-srt' || job.job_type === 'subtitle_translate'
+      if (job.status === 'blocked' && isTranslate && job.depends_on_task_id) {
+        return t('jobs.chain.waitingPrimaryDone')
+      }
+      return ''
+    }
+  })
+
+  const getChainPositionLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const members = getChainMembers.value(job)
+      if (members.length <= 1 || !job.id) return ''
+      const index = members.findIndex(member => member.id === job.id)
+      if (index < 0) return ''
+      return t('jobs.chain.position', { current: index + 1, total: members.length })
+    }
+  })
+
+  const getChainStatusSummary = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const members = getChainMembers.value(job)
+      if (members.length <= 1) return ''
+      const completed = members.filter(member => member.status === 'completed').length
+      return t('jobs.chain.summary', { done: completed, total: members.length })
+    }
+  })
+
+  const getChainFlowLabel = computed(() => {
+    void i18nVersion.value
+    return (job: Partial<Job>) => {
+      const members = getChainMembers.value(job)
+      if (members.length <= 1) return ''
+      const labels = members
+        .map(member => getChainStepLabel.value(member))
+        .filter((label, index, arr) => !!label && arr.indexOf(label) === index)
+
+--- SystemSettings ---
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useBlurCover } from '../../composables/useBlurCover'
+import { useI18n } from '../../composables/useI18n'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import BaseIcon from '../../components/noor/BaseIcon.vue'
+import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+
+const toast = useToast()
+const { blurEnabled, setBlur } = useBlurCover()
+const { t, currentLang } = useI18n()
+
+const loading = ref(false)
+const embySaving = ref(false)
+const localSaving = ref(false)
+const networkSaving = ref(false)
+const testing = ref(false)
+const connectionStatus = ref<{ ok: boolean; message: string } | null>(null)
+
+// Emby / media library settings
+const serverUrl = ref('')
+const apiKey = ref('')
+const userId = ref('')
+const enabledLibraryIds = ref<string[]>([])
+const availableLibraries = ref<{ id: string; name: string }[]>([])
+const librariesLoaded = ref(false)
+
+// Local library settings
+const localConfig = ref<Record<string, unknown>>({})
+const indexStatus = ref<{
+  index_exists: boolean
+  indexed_count: number
+  index_updated_at: number | null
+  configured_paths: string[]
+  index_enabled: boolean
+} | null>(null)
+const rebuilding = ref(false)
+const rebuildResult = ref<{ indexed_files: number; elapsed_seconds: number } | null>(null)
+
+// Network settings
+const accelerationMode = ref('mirror')
+const httpProxy = ref('')
+const githubMirror = ref('https://ghproxy.com')
+const hfMirror = ref('https://hf-mirror.com')
+const pipMirror = ref('https://pypi.tuna.tsinghua.edu.cn/simple')
+const hfToken = ref('')
+
+onMounted(async () => {
+  await loadSettings()
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    // Load media library config
+    try {
+      const mlRes = await fetch('/api/media-library/config')
+      if (mlRes.ok) {
+        const mlData = await mlRes.json()
+        const cfg = mlData.config || {}
+        serverUrl.value = cfg.server_url || ''
+        apiKey.value = cfg.api_key || ''
+        userId.value = cfg.user_id || ''
+        const ids = cfg.enabled_library_ids || ''
+        enabledLibraryIds.value = ids ? ids.split(',').map((s: string) => s.trim()).filter(Boolean) : []
+
+        // Auto-fetch libraries if credentials exist
+        if (serverUrl.value && apiKey.value) {
+          await fetchLibraries()
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load media library config:', e)
+    }
+
+    // Load local library config
+    try {
+      const llRes = await fetch('/api/local-library/config')
+      if (llRes.ok) {
+        const llData = await llRes.json()
+        localConfig.value = llData.config || {}
+      }
+    } catch (e) {
+      console.error('Failed to load local library config:', e)
+    }
+
+    await fetchIndexStatus()
+
+    // Load network settings
+    try {
+      const resp = await api.get('/settings')
+      const data = resp.data
+      if (data.network) {
+        accelerationMode.value = data.network.acceleration_mode || 'mirror'
+        httpProxy.value = data.network.http_proxy || ''
+        githubMirror.value = data.network.github_mirror || 'https://ghproxy.com'
+        hfMirror.value = data.network.hf_mirror || 'https://hf-mirror.com'
+        pipMirror.value = data.network.pip_mirror || 'https://pypi.tuna.tsinghua.edu.cn/simple'
+        hfToken.value = data.network.hf_token || ''
+      }
+    } catch (e) {
+      console.error('Failed to load network settings:', e)
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchIndexStatus() {
+  try {
+    const res = await fetch('/api/local-library/index/status')
+    if (res.ok) {
+      indexStatus.value = await res.json()
+    }
+  } catch {}
+}
+
+async function fetchLibraries() {
+  loadingLibraries.value = true
+  try {
+    const res = await fetch('/api/media-library/libraries')
+    if (res.ok) {
+      const data = await res.json()
+      availableLibraries.value = (data.libraries || []).map((lib: any) => ({
+        id: lib.id,
+        name: lib.name,
+      }))
+      librariesLoaded.value = true
+    } else {
+      console.error('fetchLibraries failed:', res.status, await res.text())
+    }
+  } catch (e) {
+    console.error('fetchLibraries error:', e)
+  } finally {
+    loadingLibraries.value = false
+  }
+}
+
+const loadingLibraries = ref(false)
+
+async function testConnection() {
+  testing.value = true
+  connectionStatus.value = null
+  availableLibraries.value = []
+  librariesLoaded.value = false
+  try {
+    const res = await fetch('/api/media-library/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_url: serverUrl.value,
+        api_key: apiKey.value,
+        user_id: userId.value,
+      })
+    })
+    const data = await res.json()
+    connectionStatus.value = { ok: data.ok, message: data.message }
+
+    if (data.ok) {
+      toast.success(t('settings.system.connectionSuccess'))
+      if (data.libraries && data.libraries.length > 0) {
+        availableLibraries.value = data.libraries
+      }
+      await fetchLibraries()
+    } else {
+      toast.error(data.message || t('settings.system.connectionFailed'))
+    }
+  } catch (e) {
+    connectionStatus.value = { ok: false, message: t('settings.system.connectionFailed') }
+    toast.error(t('settings.system.connectionFailed'))
+  } finally {
+    testing.value = false
+  }
+}
+
+async function saveEmby() {
+  embySaving.value = true
+  try {
+    const res = await fetch('/api/media-library/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_url: serverUrl.value,
+        api_key: apiKey.value,
+        user_id: userId.value,
+        enabled_library_ids: enabledLibraryIds.value.join(','),
+      })
+    })
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(errText || `HTTP ${res.status}`)
+    }
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed', { error: e.message }))
+  } finally {
+    embySaving.value = false
+  }
+}
+
+async function saveLocalLibrary(config: Record<string, unknown>) {
+  try {
+    await fetch('/api/local-library/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config }),
+    })
+  } catch {}
+}
+
+async function saveNetwork() {
+  networkSaving.value = true
+  try {
+    await api.put('/settings/network', {
+      acceleration_mode: accelerationMode.value,
+      http_proxy: httpProxy.value,
+      github_mirror: githubMirror.value,
+      hf_mirror: hfMirror.value,
+      pip_mirror: pipMirror.value,
+      hf_token: hfToken.value,
+    })
+    toast.success(t('settings.saveNetwork'))
+  } catch {
+    toast.error(t('settings.saveNetworkFailed'))
+  } finally {
+    networkSaving.value = false
+  }
+}
+
+function toggleLibrary(libId: string) {
+  enabledLibraryIds.value = enabledLibraryIds.value[0] === libId ? [] : [libId]
+}
+
+function toggleLocalSwitch(key: string) {
+  const newVal = !localConfig.value[key]
+  localConfig.value = { ...localConfig.value, [key]: newVal }

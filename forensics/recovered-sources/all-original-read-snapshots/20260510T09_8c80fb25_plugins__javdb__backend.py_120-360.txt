@@ -1,0 +1,241 @@
+        return True
+    if _contains_any_text(detail.get("categories"), subtitle_keywords):
+        return True
+    magnets = detail.get("magnets") if isinstance(detail.get("magnets"), list) else []
+    return any(_contains_any_text(magnet.get("tags"), subtitle_keywords) or _contains_any_text(magnet.get("name"), subtitle_keywords) for magnet in magnets if isinstance(magnet, dict))
+
+
+def _detail_is_cracked(detail: dict[str, Any]) -> bool:
+    cracked_keywords = ("破解", "破解版", "无码破解", "uncensored leak")
+    if _contains_any_text(detail.get("title"), cracked_keywords):
+        return True
+    if _contains_any_text(detail.get("origin_title"), cracked_keywords):
+        return True
+    if _contains_any_text(detail.get("tags"), cracked_keywords):
+        return True
+    if _contains_any_text(detail.get("categories"), cracked_keywords):
+        return True
+    magnets = detail.get("magnets") if isinstance(detail.get("magnets"), list) else []
+    return any(_contains_any_text(magnet.get("tags"), cracked_keywords) or _contains_any_text(magnet.get("name"), cracked_keywords) for magnet in magnets if isinstance(magnet, dict))
+
+
+def _merge_latest_detail(config: dict[str, Any], item: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(item)
+    raw = dict(item.get("raw") or {})
+    raw["detail_enriched"] = True
+    merged["raw"] = raw
+    merged["has_cnsub"] = bool(merged.get("has_cnsub") or _detail_has_cnsub(detail))
+    merged["is_cracked"] = bool(merged.get("is_cracked") or _detail_is_cracked(detail))
+    merged["can_play"] = bool(merged.get("can_play") or detail.get("can_play"))
+    play_subtitle = int(detail.get("play_subtitle") or 0)
+    if play_subtitle:
+        merged["play_subtitle"] = max(int(merged.get("play_subtitle") or 0), play_subtitle)
+    if not merged.get("cover_url"):
+        merged["cover_url"] = _abs(config, detail.get("cover_url"))
+    if not merged.get("thumb_url"):
+        merged["thumb_url"] = _abs(config, detail.get("thumb_url"))
+    if isinstance(detail.get("library"), dict):
+        merged["library"] = detail.get("library") or merged.get("library") or {}
+    magnets = detail.get("magnets") if isinstance(detail.get("magnets"), list) else []
+    if magnets and not int(merged.get("magnets_count") or 0):
+        merged["magnets_count"] = len(magnets)
+    return merged
+
+
+async def _enrich_latest_item(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
+    if raw.get("detail_enriched"):
+        return item
+    code = str(item.get("code") or item.get("number") or "").strip()
+    if not code:
+        raw["detail_enriched"] = True
+        enriched = dict(item)
+        enriched["raw"] = raw
+        return enriched
+    try:
+        detail = await _video(config, code)
+    except Exception:
+        raw["detail_enriched"] = True
+        raw["detail_enrich_error"] = True
+        enriched = dict(item)
+        enriched["raw"] = raw
+        return enriched
+    return _merge_latest_detail(config, item, detail if isinstance(detail, dict) else {})
+
+
+def _normalize_movie(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    number = _code(item.get("number") or item.get("code"))
+    title = str(item.get("title") or item.get("origin_title") or number or item.get("id") or "").strip()
+    magnets_count = item.get("magnets_count")
+    if magnets_count is None:
+        magnets_count = item.get("magnet_count")
+    return {
+        "id": str(item.get("id") or item.get("video_id") or number or title),
+        "number": number,
+        "code": number,
+        "title": title,
+        "origin_title": item.get("origin_title") or "",
+        "display_title": f"{number} {title}".strip(),
+        "cover_url": _abs(config, item.get("cover_url")),
+        "thumb_url": _abs(config, item.get("thumb_url")),
+        "release_date": item.get("release_date") or item.get("date") or "",
+        "duration": item.get("duration") or 0,
+        "score": item.get("score") or item.get("ranking") or 0,
+        "ranking": item.get("ranking") or 0,
+        "magnets_count": magnets_count or 0,
+        "has_cnsub": bool(item.get("has_cnsub") or item.get("has_subtitle") or item.get("has_magnet_subtitle") or item.get("play_subtitle")),
+        "play_subtitle": int(item.get("play_subtitle") or 0),
+        "can_play": bool(item.get("can_play")),
+        "is_cracked": _is_cracked_movie(item),
+        "library": item.get("library") if isinstance(item.get("library"), dict) else {},
+        "raw": item,
+    }
+
+
+def _in_library(item: dict[str, Any]) -> bool:
+    library = item.get("library")
+    return bool(library.get("in_library")) if isinstance(library, dict) else False
+
+
+def _matches_latest_filter(item: dict[str, Any], requested_filter: str) -> bool:
+    if requested_filter in {"", "all"}:
+        return True
+    if requested_filter == "magnets":
+        return int(item.get("magnets_count") or 0) > 0
+    if requested_filter == "cnsub":
+        return bool(item.get("has_cnsub") or item.get("play_subtitle"))
+    if requested_filter == "cracked":
+        return bool(item.get("is_cracked"))
+    if requested_filter == "playable":
+        return bool(item.get("can_play"))
+    if requested_filter == "library":
+        return _in_library(item)
+    if requested_filter == "not_library":
+        return not _in_library(item)
+    return True
+
+
+async def _collect_latest_items(config: dict[str, Any], latest_type: str, sort_by: str, *, scan_limit: int = 80, max_scan_pages: int = 24) -> list[dict[str, Any]]:
+    cache_key = (str(latest_type), str(sort_by))
+    cached = LATEST_CACHE.get(cache_key)
+    now = time.time()
+    if cached and now - float(cached.get("ts") or 0) < LATEST_CACHE_TTL:
+        return list(cached.get("items") or [])
+    items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_page_signatures: set[tuple[str, ...]] = set()
+    for scan_page in range(1, max_scan_pages + 1):
+        batch = _data(await _request(config, "GET", "/latest", params={"page": scan_page, "limit": scan_limit, "type": latest_type, "sort_by": sort_by, "filter_by": "all"}))
+        movies = [x for x in _movie_list(batch) if isinstance(x, dict)]
+        if not movies:
+            break
+        page_items = [_normalize_movie(config, movie) for movie in movies]
+        signature = tuple(str(item.get("id") or item.get("code") or item.get("number") or "") for item in page_items)
+        if signature and signature in seen_page_signatures:
+            break
+        seen_page_signatures.add(signature)
+        added = 0
+        for item in page_items:
+            item_id = str(item.get("id") or item.get("code") or item.get("number") or "")
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
+            items.append(item)
+            added += 1
+        if added == 0:
+            break
+    LATEST_CACHE[cache_key] = {"ts": now, "items": items}
+    return list(items)
+
+
+def _normalize_actor(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(item.get("id") or item.get("external_id") or item.get("name") or ""),
+        "name": str(item.get("name") or ""),
+        "name_zht": str(item.get("name_zht") or ""),
+        "other_name": str(item.get("other_name") or ""),
+        "avatar_url": _abs(config, item.get("avatar_url")),
+        "uncensored": bool(item.get("uncensored")),
+        "raw": item,
+    }
+
+
+def _normalize_magnet(magnet: dict[str, Any], code: str) -> dict[str, Any]:
+    tags = magnet.get("tags") if isinstance(magnet.get("tags"), list) else []
+    size_mb = float(magnet.get("size_mb") or 0)
+    return {
+        "name": magnet.get("name") or code,
+        "magnet": magnet.get("magnet") or "",
+        "size_mb": size_mb,
+        "size_bytes": int(size_mb * 1024 * 1024),
+        "file_count": magnet.get("file_count") or 0,
+        "date": magnet.get("date") or "",
+        "tags": tags,
+        "site": magnet.get("site") or "JavDB",
+        "source_key": magnet.get("source_key") or PLUGIN_ID,
+        "chinese": any("字幕" in str(x) or "中字" in str(x) for x in tags),
+        "hd": any("高清" in str(x).upper() or "HD" in str(x).upper() for x in tags),
+    }
+
+
+async def test(config: dict[str, Any]) -> PluginTestResult:
+    try:
+        payload = await _request(config, "GET", "/stats")
+        data = _data(payload) or {}
+        return PluginTestResult(ok=True, message="JavDB connected", details=data if isinstance(data, dict) else {})
+    except Exception as e:
+        return PluginTestResult(ok=False, message=str(e), details={})
+
+
+async def fetch_rss_items(manifest: PluginManifest, config: dict[str, Any], limit: int = 30, force_refresh: bool = False) -> dict[str, Any]:
+    data = _data(await _request(config, "GET", "/latest", params={"page": 1, "limit": limit, "type": "all", "sort_by": "update", "filter_by": "magnets"}))
+    items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
+    return {"items": items, "total": len(items), "source": manifest.id}
+
+
+async def _search(config: dict[str, Any], q: str, page: int = 1, limit: int = 24) -> dict[str, Any]:
+    if not str(q or "").strip():
+        return {"items": [], "total": 0}
+    data = _data(await _request(config, "GET", "/search", params={"q": q, "page": page, "limit": limit}))
+    items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
+    return {"items": items, "total": int(data.get("total") or len(items)) if isinstance(data, dict) else len(items), "raw": data}
+
+
+async def _video(config: dict[str, Any], code: str) -> dict[str, Any]:
+    data = _data(await _request(config, "GET", f"/video/{code}"))
+    if not isinstance(data, dict):
+        return {}
+    out = dict(data)
+    out["cover_url"] = _abs(config, out.get("cover_url"))
+    out["thumb_url"] = _abs(config, out.get("thumb_url"))
+    out["previews"] = [_abs(config, x) for x in (out.get("previews") or [])]
+    return out
+
+
+async def _related_movies(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    rel_type = str(payload.get("rel_type") or "").strip()
+    rel_id = str(payload.get("rel_id") or payload.get("id") or "").strip()
+    page = max(1, int(payload.get("page") or 1))
+    limit = max(1, min(int(payload.get("limit") or 24), 80))
+    sort_by = payload.get("sort_by") or "release"
+    order_by = payload.get("order_by") or "desc"
+    path_map = {
+        "actor": "/actors/{id}/movies",
+        "series": "/series/{id}/movies",
+        "maker": "/makers/{id}/movies",
+        "publisher": "/publishers/{id}/movies",
+        "director": "/directors/{id}/movies",
+        "list": "/lists/{id}/movies",
+    }
+    if rel_type == "category":
+        data = _data(await _request(config, "GET", "/videos/filter", params={"category_id": rel_id, "page": page, "limit": limit}))
+    elif rel_type in path_map:
+        data = _data(await _request(config, "GET", path_map[rel_type].format(id=rel_id), params={"page": page, "limit": limit, "sort_by": sort_by, "order_by": order_by, "filter": payload.get("filter") or ""}))
+    else:
+        raise ValueError(f"unsupported relation type: {rel_type}")
+    items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
+    total = int(data.get("total") or data.get("total_count") or len(items)) if isinstance(data, dict) else len(items)
+    return {"ok": True, "items": items, "total": total, "raw": data}
+
+

@@ -1,0 +1,217 @@
+    if play_subtitle:
+        merged["play_subtitle"] = max(int(merged.get("play_subtitle") or 0), play_subtitle)
+    if not merged.get("cover_url"):
+        merged["cover_url"] = _abs(config, detail.get("cover_url"))
+    if not merged.get("thumb_url"):
+        merged["thumb_url"] = _abs(config, detail.get("thumb_url"))
+    if isinstance(detail.get("library"), dict):
+        merged["library"] = detail.get("library") or merged.get("library") or {}
+    magnets = detail.get("magnets") if isinstance(detail.get("magnets"), list) else []
+    if magnets and not int(merged.get("magnets_count") or 0):
+        merged["magnets_count"] = len(magnets)
+    return merged
+
+
+async def _enrich_latest_item(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
+    if raw.get("detail_enriched"):
+        return item
+    code = str(item.get("code") or item.get("number") or "").strip()
+    if not code:
+        raw["detail_enriched"] = True
+        enriched = dict(item)
+        enriched["raw"] = raw
+        return enriched
+    try:
+        detail = await _video(config, code)
+    except Exception:
+        raw["detail_enriched"] = True
+        raw["detail_enrich_error"] = True
+        enriched = dict(item)
+        enriched["raw"] = raw
+        return enriched
+    return _merge_latest_detail(config, item, detail if isinstance(detail, dict) else {})
+
+
+def _normalize_movie(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    number = _code(item.get("number") or item.get("code"))
+    title = str(item.get("title") or item.get("origin_title") or number or item.get("id") or "").strip()
+    magnets_count = item.get("magnets_count")
+    if magnets_count is None:
+        magnets_count = item.get("magnet_count")
+    return {
+        "id": str(item.get("id") or item.get("video_id") or number or title),
+        "number": number,
+        "code": number,
+        "title": title,
+        "origin_title": item.get("origin_title") or "",
+        "display_title": f"{number} {title}".strip(),
+        "cover_url": _abs(config, item.get("cover_url")),
+        "thumb_url": _abs(config, item.get("thumb_url")),
+        "release_date": item.get("release_date") or item.get("date") or "",
+        "duration": item.get("duration") or 0,
+        "score": item.get("score") or item.get("ranking") or 0,
+        "ranking": item.get("ranking") or 0,
+        "magnets_count": magnets_count or 0,
+        "has_cnsub": bool(item.get("has_cnsub") or item.get("has_subtitle") or item.get("has_magnet_subtitle") or item.get("play_subtitle")),
+        "play_subtitle": int(item.get("play_subtitle") or 0),
+        "can_play": bool(item.get("can_play")),
+        "is_cracked": _is_cracked_movie(item),
+        "library": item.get("library") if isinstance(item.get("library"), dict) else {},
+        "raw": item,
+    }
+
+
+def _in_library(item: dict[str, Any]) -> bool:
+    library = item.get("library")
+    return bool(library.get("in_library")) if isinstance(library, dict) else False
+
+
+def _matches_latest_filter(item: dict[str, Any], requested_filter: str) -> bool:
+    if requested_filter in {"", "all"}:
+        return True
+    if requested_filter == "magnets":
+        return int(item.get("magnets_count") or 0) > 0
+    if requested_filter == "cnsub":
+        return bool(item.get("has_cnsub") or item.get("play_subtitle"))
+    if requested_filter == "cracked":
+        return bool(item.get("is_cracked"))
+    if requested_filter == "playable":
+        return bool(item.get("can_play"))
+    if requested_filter == "library":
+        return _in_library(item)
+    if requested_filter == "not_library":
+        return not _in_library(item)
+    return True
+
+
+async def _collect_latest_items(config: dict[str, Any], latest_type: str, sort_by: str, *, scan_limit: int = 80, max_scan_pages: int = 24) -> list[dict[str, Any]]:
+    cache_key = (str(latest_type), str(sort_by))
+    cached = LATEST_CACHE.get(cache_key)
+    now = time.time()
+    if cached and now - float(cached.get("ts") or 0) < LATEST_CACHE_TTL:
+        return list(cached.get("items") or [])
+    items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_page_signatures: set[tuple[str, ...]] = set()
+    for scan_page in range(1, max_scan_pages + 1):
+        batch = _data(await _request(config, "GET", "/latest", params={"page": scan_page, "limit": scan_limit, "type": latest_type, "sort_by": sort_by, "filter_by": "all"}))
+        movies = [x for x in _movie_list(batch) if isinstance(x, dict)]
+        if not movies:
+            break
+        page_items = [_normalize_movie(config, movie) for movie in movies]
+        signature = tuple(str(item.get("id") or item.get("code") or item.get("number") or "") for item in page_items)
+        if signature and signature in seen_page_signatures:
+            break
+        seen_page_signatures.add(signature)
+        added = 0
+        for item in page_items:
+            item_id = str(item.get("id") or item.get("code") or item.get("number") or "")
+            if item_id and item_id in seen_ids:
+                continue
+
+==== FRONTEND DETAIL ====
+      else if (state.tab === 'rankings' && state.rankMode === 'top250') {
+        const topType = ['0', '1', '2', '3'].includes(String(state.topValue)) ? 'video_type' : String(state.topValue || '').match(/^\d{4}$/) ? 'year' : 'all'
+        const res = await apiList('top250', { type: topType, type_value: state.topValue, start_rank: state.topStart })
+        state.items = res.items; state.total = res.total
+      } else if (state.tab === 'rankings') {
+        const res = await apiList('rankings', { period: state.rankMode, type: state.rankType })
+        state.items = res.items; state.total = res.total
+      } else if (state.tab === 'updated') {
+        const res = await apiList('latest', { type: state.latestType, sort_by: 'update', filter_by: state.latestFilter })
+        state.items = res.items; state.total = res.total
+      } else if (state.tab === 'records') {
+        const res = await apiList('videos', { sort: 'update', order: 'desc', filter: state.recordFilter })
+        state.items = res.items; state.total = res.total
+      } else {
+        const res = await apiList(state.tab)
+        state.items = res.items; state.total = res.total
+      }
+    } catch (e) { state.error = e?.response?.data?.detail || e?.message || '加载失败' }
+    state.loading = false; render()
+  }
+  async function loadActors(type = 0, withRender = true) {
+    if (withRender) { state.loading = true; state.error = ''; render() }
+    try { const r = await sdk.api.post('/plugins/javdb/actions/actors', { payload: { type } }); state.actors = r.data.items || []; state.total = state.actors.length } catch(e) { state.error = e?.response?.data?.detail || e?.message || '演员加载失败' }
+    if (withRender) { state.loading = false; render() }
+  }
+  function closeModal() { modalRoot.innerHTML = '' }
+  async function openVideo(code) {
+    if (!code) return
+    modalRoot.innerHTML = ''
+    const mask = el('div', 'javdb-modal-mask'); const modal = el('div', 'javdb-modal javdb-modal--wide')
+    modal.innerHTML = `<div class="javdb-modal-head"><strong>${code}</strong><button class="javdb-modal-close">×</button></div><div class="javdb-modal-body">加载中…</div>`
+    mask.appendChild(modal); modalRoot.appendChild(mask); mask.onclick = e => { if (e.target === mask) closeModal() }; modal.querySelector('button').onclick = closeModal
+    const body = modal.querySelector('.javdb-modal-body')
+    try {
+      const r = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code } }); const v = r.data.data || {}
+      body.innerHTML = ''
+      const hero = el('div','javdb-detail')
+      const cover = el('img','javdb-detail-cover'); cover.src = v.cover_url || v.thumb_url || ''
+      const info = el('div','javdb-detail-info')
+      info.append(el('h3','',`${v.code || code} ${v.title || ''}`), el('p','',`发行 ${fmtDate(v.date)} · ${fmtMin(v.duration)} · 评分 ${v.score || '-'}`))
+      const rel = el('div','javdb-detail-rel')
+      function addRel(kind, obj, label) {
+        if (!obj?.name || !obj?.external_id) return
+        const b = el('button', 'javdb-rel-btn', `${label}：${obj.name}`)
+        b.type = 'button'; b.onclick = () => openRelation(kind, obj.external_id, `${label} · ${obj.name}`)
+        rel.appendChild(b)
+      }
+      addRel('director', v.director, '导演')
+      addRel('maker', v.maker, '片商')
+      addRel('publisher', v.publisher, '发行')
+      addRel('series', v.series, '系列')
+      ;(v.actors || []).forEach(a => addRel('actor', a, '演员'))
+      ;(v.categories || []).forEach(c => addRel('category', c, '分类'))
+      info.appendChild(rel); hero.append(cover, info); body.appendChild(hero)
+      if (Array.isArray(v.previews) && v.previews.length) { const previews = el('div','javdb-previews'); v.previews.slice(0,8).forEach(u => { const img=el('img'); img.src=u; img.loading='lazy'; previews.appendChild(img) }); body.appendChild(previews) }
+      if (Array.isArray(v.magnets) && v.magnets.length) {
+        const mags = el('div','javdb-magnets'); mags.append(el('h4','','磁链'))
+        v.magnets.forEach((m, idx) => { const row=el('div','javdb-magnet'); row.append(el('span','',m.name || v.code), el('span','',(m.tags||[]).join(' / ')), el('span','',fmtSizeMb(m.size_mb))); const key=`${v.code || code}:${idx}`; const ps=state.push[key] || {status:'idle', pct:0}; const b=sdk.ui.submitButton ? sdk.ui.submitButton({ idleLabel:'推送', successLabel:'已推送', errorLabel:'重试', status:ps.status, progress:ps.pct || 0, className:'javdb-push', disabled:ps.status==='running'||ps.status==='success', onClick:()=>pushDownload(v,m,idx) }) : el('button','javdb-push','推送'); b.dataset.key=key; if (!sdk.ui.submitButton) b.onclick=()=>pushDownload(v,m,idx); state.pushButtons[key]=b; row.appendChild(b); mags.appendChild(row) })
+        body.appendChild(mags)
+      }
+    } catch(e) { body.textContent = e?.response?.data?.detail || e?.message || '详情加载失败' }
+  }
+  function openActor(actor) {
+    openRelation('actor', actor.id, actor.name || '演员')
+  }
+  function openRelation(relType, id, label) {
+    if (!relType || !id) return
+    closeModal()
+    state.relation = { relType, id, label }
+    state.page = 1
+    state.items = []
+    state.actors = []
+    loadCurrent()
+  }
+  function setPushState(key, status, pct, label = '') {
+    state.push[key] = { status, pct }
+    state.pushButtons[key]?.__setState?.(status, pct, label)
+  }
+  async function pushDownload(v, m, idx) {
+    const key = `${v.code || v.number || ''}:${idx}`
+    if (state.push[key]?.status === 'running') return
+    setPushState(key, 'running', 8, '8%')
+    const timer = setInterval(() => {
+      const ps = state.push[key]
+      if (!ps || ps.status !== 'running') return
+      const next = Math.min(92, Number(ps.pct || 0) + 9)
+      setPushState(key, 'running', next, `${Math.round(next)}%`)
+    }, 180)
+    try {
+      const opts = await sdk.api.post('/plugins/javdb/actions/download_options', { payload: {} }); const downloader = opts.data.downloader_binding || 'none'
+      if (!downloader || downloader === 'none') throw new Error('JavDB 未绑定下载器')
+      const url = m.magnet; if (!url) throw new Error('缺少磁力链接')
+      const res = await sdk.api.post(`/plugins/${downloader}/downloads`, { payload: { url, urls: url, title: `${v.code} ${v.title || ''}`.trim(), name: m.name || v.code, source_plugin: 'javdb' } })
+      if (!res.data?.ok) throw new Error(res.data?.message || '推送失败')
+      setPushState(key, 'success', 100, '已推送')
+      sdk.toast.success('已推送到下载器')
+    } catch(e) {
+      setPushState(key, 'error', 100, '重试')
+      sdk.toast.error(e?.response?.data?.detail || e?.message || '推送失败')
+    } finally { clearInterval(timer) }
+  }
+  await loadStats(); await loadCurrent()
+  return () => { disposed = true; tabControl?.__noorDispose?.(); pagerControl?.__noorDispose?.(); root.innerHTML = '' }
+}

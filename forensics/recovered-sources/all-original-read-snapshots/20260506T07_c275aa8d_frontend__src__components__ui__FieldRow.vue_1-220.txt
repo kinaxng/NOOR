@@ -1,0 +1,123 @@
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:7:import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:11:import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:53:  await loadSettings()
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:56:async function loadSettings() {
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:297:          <FieldRow :label="t('settings.emby.server')" :description="t('settings.emby.serverDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:299:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:301:          <FieldRow :label="t('settings.emby.apiKey')" :description="t('settings.emby.apiKeyDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:303:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:305:          <FieldRow :label="t('settings.emby.userId')" :description="t('settings.emby.userIdDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:307:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:310:          <FieldRow :label="t('settings.emby.connectionTest')" :description="t('settings.emby.connectionTestDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:324:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:362:          <FieldRow :label="t('settings.ui.blur')" :description="t('settings.ui.blurDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:364:              <SettingsSwitch :model-value="blurEnabled" @update:model-value="setBlur" />
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:369:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:421:          <FieldRow :label="t('settings.system.paths')" :description="t('settings.system.pathsDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:429:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:432:          <FieldRow :label="t('settings.system.indexToggleLabel')" :description="t('settings.system.indexToggleDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:434:              <SettingsSwitch :model-value="!!localConfig['index_enabled']" @update:model-value="toggleLocalSwitch('index_enabled')" />
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:437:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:439:          <FieldRow :label="t('settings.system.fuzzyMatchLabel')" :description="t('settings.system.fuzzyMatchDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:441:              <SettingsSwitch :model-value="!!localConfig['match_fuzzy']" @update:model-value="toggleLocalSwitch('match_fuzzy')" />
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:444:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:459:          <FieldRow :label="t('settings.network.mode')" :description="accelerationMode === 'none' ? t('settings.network.noneHint') : accelerationMode === 'proxy' ? t('settings.network.proxyHint2') : t('settings.network.mirrorHint')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:465:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:468:            <FieldRow :label="t('settings.network.proxy')" :description="t('settings.network.proxyDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:470:            </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:471:            <FieldRow :label="t('settings.network.hfToken')" :description="t('settings.network.hfTokenDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:473:            </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:477:            <FieldRow :label="t('settings.network.githubMirror')" :description="t('settings.network.githubMirrorDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:479:            </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:480:            <FieldRow :label="t('settings.network.hfMirror')" :description="t('settings.network.hfMirrorDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:482:            </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:483:            <FieldRow :label="t('settings.network.pipMirror')" :description="t('settings.network.pipMirrorDesc')">
+/home/kinax/noor/frontend/src/views/settings/SystemSettings.vue:485:            </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:11:import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:12:import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:66:  await loadSettings()
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:70:async function loadSettings() {
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:135:function buildWhisperSettingsPayload() {
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:151:    await api.put('/settings/whisper', buildWhisperSettingsPayload())
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:152:    toast.success(t('settings.whisper.whisperSettingsSaved'))
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:306:      <!-- 1. Default Settings -->
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:356:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.audioPreprocessLabel')" :description="t('settings.whisper.audioPreprocessDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:361:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:363:          <FieldRow
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:372:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:388:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateEnable')" :description="t('settings.whisper.translateEnableDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:390:              <SettingsSwitch v-model="translateEnabled" />
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:393:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:395:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateTargetLabel')" :description="t('settings.whisper.translateTargetDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:399:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:401:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateModelLabel')" :description="t('settings.whisper.translateModelDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:403:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:405:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateBaseUrlLabel')" :description="t('settings.whisper.translateBaseUrlDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:407:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:409:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateApiKeyLabel')" :description="t('settings.whisper.translateApiKeyDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:411:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:413:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateStyleLabel')" :description="t('settings.whisper.translateStyleDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:417:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:419:          <FieldRow customClass="whisper-field-row" :label="t('settings.emby.connectionTest')" :description="t('settings.whisper.translateConnectionDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:435:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:9:import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:10:import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:60:  await loadSettings()
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:63:async function loadSettings() {
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:213:          <FieldRow :label="t('settings.lada.cliPath')" :description="t('settings.lada.cliPathDesc')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:215:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:242:      <!-- Default Settings -->
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:244:        <h2 class="settings-card__title">{{ t('settings.lada.defaultSettings') }}</h2>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:245:        <p class="settings-card__desc">{{ t('settings.lada.defaultSettingsHint') }}</p>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:248:          <FieldRow :label="t('settings.lada.device')" :description="t('settings.lada.deviceDesc')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:254:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:256:          <FieldRow :label="t('settings.lada.fp16')" :description="t('settings.lada.fp16Desc')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:261:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:263:          <FieldRow :label="t('settings.lada.detectionModel')" :description="t('settings.lada.detectionModelDesc')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:269:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:271:          <FieldRow :label="t('settings.lada.restorationModel')" :description="t('settings.lada.restorationModelDesc')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:277:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:279:          <FieldRow :label="t('settings.lada.encodingPreset')" :description="t('settings.lada.encodingPresetDesc')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:285:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:287:          <FieldRow :label="t('settings.lada.maxClipLength')" :description="t('settings.lada.maxClipLengthDesc')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:289:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:291:          <FieldRow :label="t('settings.lada.detectFaceMosaics')" :description="t('settings.lada.detectFaceMosaicsHint')">
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:293:              <SettingsSwitch v-model="ladaDetectFaceMosaics" />
+/home/kinax/noor/frontend/src/views/settings/LadaSettings.vue:296:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:8:import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:44:  await loadSettings()
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:59:async function loadSettings() {
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:207:          <FieldRow :label="t('settings.storage.output')" :description="t('settings.storage.outputHint')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:214:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:222:          <FieldRow :label="t('settings.storage.whisperModelDir')" :description="t('settings.storage.whisperModelDirHint')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:229:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:230:          <FieldRow :label="t('settings.storage.ladaModelDir')" :description="t('settings.storage.ladaModelDirHint')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:237:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:248:          <FieldRow :label="t('settings.storage.embyPrefix')" :description="t('settings.storage.embyPrefixHint')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:250:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:251:          <FieldRow :label="t('settings.storage.mediaRoot')" :description="t('settings.storage.mediaRootHint')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:258:          </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:275:              <FieldRow :label="t('settings.storage.groupName')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:277:              </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:278:              <FieldRow :label="t('settings.storage.sourceDir')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:285:              </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:286:              <FieldRow :label="t('settings.storage.hardlinkDir')">
+/home/kinax/noor/frontend/src/views/settings/StorageSettings.vue:293:              </FieldRow>
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:9:const SystemSettings = defineAsyncComponent(() => import('./SystemSettings.vue'))
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:10:const StorageSettings = defineAsyncComponent(() => import('./StorageSettings.vue'))
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:11:const LadaSettings = defineAsyncComponent(() => import('./LadaSettings.vue'))
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:12:const WhisperSettings = defineAsyncComponent(() => import('./WhisperSettings.vue'))
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:20:    import('./StorageSettings.vue')
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:21:    import('./LadaSettings.vue')
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:22:    import('./WhisperSettings.vue')
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:30:    { key: 'system' as const, label: t('settings.tab.system'), component: SystemSettings },
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:31:    { key: 'storage' as const, label: t('settings.tab.storage'), component: StorageSettings },
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:32:    { key: 'lada' as const, label: t('settings.tab.lada'), component: LadaSettings },
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:33:    { key: 'whisper' as const, label: t('settings.tab.whisper'), component: WhisperSettings },
+/home/kinax/noor/frontend/src/views/settings/SettingsIndex.vue:39:  return tabs.value.find(t => t.key === activeTab.value)?.component || SystemSettings
+/home/kinax/noor/frontend/src/views/Home.vue:336:        {{ t('library.goToSettings') }} →
+/home/kinax/noor/frontend/src/views/HardlinkView.vue:62:const goSettingsLabel = computed(() => { void i18nVersion.value; return t('library.goToSettings') })
+/home/kinax/noor/frontend/src/views/HardlinkView.vue:509:function openSettings() {
+
+---FIELDROW---
+sed: can't read /home/kinax/noor/frontend/src/components/ui/FieldRow.vue: No such file or directory

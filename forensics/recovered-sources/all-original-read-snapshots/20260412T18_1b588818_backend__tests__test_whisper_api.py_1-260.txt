@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+
+from app.api import whisper as whisper_api
+from app.core.models import JobResponse
+
+
+@pytest.mark.asyncio
+async def test_get_whisper_task_returns_last_50_log_lines(monkeypatch: pytest.MonkeyPatch):
+    job = JobResponse(
+        id='job-1',
+        job_type='whisper',
+        emby_item_id='item-1',
+        emby_item_name='Test Item',
+        input_path='/tmp/test.mp4',
+        status='running',
+        progress=42,
+        error_message=None,
+        settings={},
+        logs=[],
+        created_at='2026-04-13T00:00:00Z',
+        completed_at=None,
+    )
+    log_lines = [f'line-{i}' for i in range(60)]
+
+    async def fake_get_job(task_id: str):
+        assert task_id == 'job-1'
+        return job
+
+    async def fake_get_logs(task_id: str):
+        assert task_id == 'job-1'
+        return log_lines
+
+    monkeypatch.setattr(whisper_api.job_manager, 'get_job', fake_get_job)
+    monkeypatch.setattr(whisper_api.job_manager, 'get_logs', fake_get_logs)
+
+    result = await whisper_api.get_whisper_task('job-1')
+
+    assert result['task_id'] == 'job-1'
+    assert result['status'] == 'running'
+    assert result['progress'] == 42
+    assert result['log_lines'] == log_lines[-50:]
+    assert result['error'] is None
+
+
+@pytest.mark.asyncio
+async def test_get_whisper_task_raises_404_when_missing(monkeypatch: pytest.MonkeyPatch):
+    async def fake_get_job(task_id: str):
+        assert task_id == 'missing'
+        return None
+
+    monkeypatch.setattr(whisper_api.job_manager, 'get_job', fake_get_job)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await whisper_api.get_whisper_task('missing')
+
+    assert exc_info.value.status_code == 404

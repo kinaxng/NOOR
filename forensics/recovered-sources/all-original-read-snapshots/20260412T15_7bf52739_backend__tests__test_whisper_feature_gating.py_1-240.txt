@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+
+from app.api import settings as settings_api
+from app.api import whisper as whisper_api
+from app.api.settings import WhisperConfig
+from app.api.whisper import WhisperRequest
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("factory", "patches_video_exists"),
+    [
+        (
+            lambda: settings_api.update_whisper_config(
+                WhisperConfig(
+                    pipeline_mode="ensemble",
+                    pass1_pipeline="custom",
+                    pass2_pipeline="",
+                )
+            ),
+            False,
+        ),
+        (
+            lambda: whisper_api.create_whisper_task(
+                WhisperRequest(
+                    video_path="/tmp/test.mp4",
+                    pipeline_mode="ensemble",
+                    pass1_pipeline="custom",
+                    pass2_pipeline="",
+                )
+            ),
+            True,
+        ),
+    ],
+)
+async def test_custom_pipeline_is_rejected_when_feature_flag_unavailable(monkeypatch: pytest.MonkeyPatch, factory, patches_video_exists: bool):
+    monkeypatch.setattr(
+        settings_api,
+        "_get_whisper_feature_flags",
+        lambda: {
+            "custom_pipeline": {
+                "available": False,
+                "reason": "当前构建默认关闭该实验功能；缺少依赖: whisperjav",
+            }
+        },
+    )
+
+    enqueue_called = False
+
+    async def fake_enqueue_whisper(job_data):
+        nonlocal enqueue_called
+        enqueue_called = True
+        raise AssertionError("enqueue_whisper should not be called when custom pipeline is unavailable")
+
+    monkeypatch.setattr(whisper_api.job_manager, "enqueue_whisper", fake_enqueue_whisper)
+
+    if patches_video_exists:
+        monkeypatch.setattr(whisper_api.os.path, "exists", lambda path: True)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await factory()
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Custom Whisper pipeline 当前不可用：当前构建默认关闭该实验功能；缺少依赖: whisperjav"
+    assert enqueue_called is False

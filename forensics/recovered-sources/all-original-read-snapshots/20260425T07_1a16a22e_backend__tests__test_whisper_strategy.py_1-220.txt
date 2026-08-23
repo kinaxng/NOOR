@@ -1,0 +1,359 @@
+from __future__ import annotations
+
+from app.pipeline.whisper.strategy import (
+    apply_whisper_strategy,
+    build_whisper_execution_plan,
+    is_recommended_whisper_strategy,
+)
+
+
+def test_apply_whisper_strategy_recommended_overrides_advanced_fields():
+    payload = apply_whisper_strategy(
+        {
+            "strategy": "advanced",
+            "model": "large-v3",
+            "pipeline_mode": "ensemble",
+            "merge_strategy": "full_merge",
+            "language": "auto",
+            "sensitivity": "aggressive",
+            "pass1_pipeline": "custom",
+            "pass2_pipeline": "qwen",
+        },
+        "recommended",
+    )
+
+    assert payload["strategy"] == "recommended"
+    assert payload["model"] == "anime-whisper"
+    assert payload["pipeline_mode"] == "ensemble"
+    assert payload["merge_strategy"] == "smart_merge"
+    assert payload["language"] == "ja"
+    assert payload["sensitivity"] == "balanced"
+    assert payload["pass1_pipeline"] == "anime"
+    assert payload["pass2_pipeline"] == "qwen"
+
+
+def test_apply_whisper_strategy_advanced_is_passthrough():
+    payload = apply_whisper_strategy({"model": "large-v3"}, "advanced")
+
+    assert payload["strategy"] == "advanced"
+    assert payload["model"] == "large-v3"
+    assert is_recommended_whisper_strategy("advanced") is False
+    assert is_recommended_whisper_strategy("best") is True
+
+
+def test_build_whisper_execution_plan_recommended_has_dedicated_summary():
+    plan = build_whisper_execution_plan({"model": "large-v3"}, "recommended")
+
+    assert plan.strategy == "recommended"
+    assert plan.executor_key == "recommended"
+    assert plan.summary == "推荐字幕策略"
+    assert plan.runtime_settings["pipeline_mode"] == "ensemble"
+    assert "执行分支: recommended" in plan.detail_lines
+
+
+def test_apply_whisper_strategy_recommended_resets_decoupled_runtime_fields():
+    payload = apply_whisper_strategy(
+        {
+            "strategy": "advanced",
+            "timestamp_mode": "word",
+            "aligner_backend": "none",
+            "framer_backend": "full-scene",
+            "custom_config": {"foo": "bar"},
+        },
+        "recommended",
+    )
+
+    assert payload["timestamp_mode"] == "aligner_interpolation"
+    assert payload["aligner_backend"] == "qwen3"
+    assert payload["framer_backend"] == "vad-grouped"
+    assert payload["custom_config"] is None
+
+
+def test_build_whisper_execution_plan_advanced_surfaces_experimental_preprocess():
+    plan = build_whisper_execution_plan(
+        {
+            "strategy": "advanced",
+            "audio_preprocess_mode": "vocal_isolation",
+            "audio_preprocess_model": "vocal_clean",
+        },
+        "advanced",
+    )
+
+    assert "实验前处理: vocal_isolation / vocal_clean" in plan.detail_lines
+    assert "注意: 音频前处理当前仅建议手动实验，不进入默认推荐链路" in plan.detail_lines
+
+
+def test_build_whisper_execution_plan_recommended_keeps_preprocess_disabled():
+    plan = build_whisper_execution_plan(
+        {
+            "strategy": "recommended",
+            "audio_preprocess_mode": "vocal_isolation",
+            "audio_preprocess_model": "vocal_clean",
+        },
+        "recommended",
+    )
+
+    assert plan.runtime_settings["audio_preprocess_mode"] == "none"
+    assert not any("实验前处理:" in line for line in plan.detail_lines)
+---
+from __future__ import annotations
+
+from pathlib import Path
+
+from app.pipeline.whisper.strategy import RECOMMENDED_WHISPER_STRATEGY
+
+
+FRONTEND_PROFILE_FILE = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'composables' / 'useWhisperProfiles.ts'
+
+
+def test_frontend_recommended_profile_matches_backend_recommended_strategy_shape():
+    source = FRONTEND_PROFILE_FILE.read_text()
+
+    assert "strategy: isRecommended ? 'recommended' : 'advanced'" in source
+    assert f"pipeline_mode: isRecommended ? '{RECOMMENDED_WHISPER_STRATEGY['pipeline_mode']}' : 'qwen'" in source
+    assert f"pass1_pipeline: isRecommended ? '{RECOMMENDED_WHISPER_STRATEGY['pass1_pipeline']}' : 'qwen'" in source
+    assert f"pass2_pipeline: isRecommended ? '{RECOMMENDED_WHISPER_STRATEGY['pass2_pipeline']}' : ''" in source
+---settings mid---
+
+
+// Translation target language options — derived from available i18n dictionaries
+const translateLangOptions = computed(() => {
+  return Object.keys(dictionaries).map(lang => ({
+    value: lang,
+    label: t(`settings.whisper.translateLang.${lang}`) || lang.toUpperCase(),
+  }))
+})
+
+// Translation style options
+const translateStyleOptions = computed(() => [
+  { value: 'adult_explicit', label: t('settings.whisper.translateStyle.adultExplicit') },
+  { value: 'standard', label: t('settings.whisper.translateStyle.standard') },
+])
+
+const activeStrategyMeta = computed(() => getWhisperStrategyMeta(activeStrategy.value))
+const activeTranslateSummary = computed(() => {
+  if (!translateEnabled.value) return t('settings.whisper.translationOff')
+  return `${translateTo.value || 'zh'} · ${translateModel.value || 'gpt-4o-mini'}`
+})
+const activeAudioPreprocessSummary = computed(() => {
+  if (audioPreprocessMode.value === 'none') return t('settings.whisper.audioPreprocessOff')
+  const modelLabel = audioPreprocessModel.value === 'vocal_clean'
+    ? t('settings.whisper.audioPreprocessModel.vocalClean')
+    : t('settings.whisper.audioPreprocessModel.vocalBalanced')
+  return `${t('settings.whisper.audioPreprocessMode.vocalIsolation')} · ${modelLabel}`
+})
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">
+      <!-- 1. Default Settings -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.whisper.defaultSettings') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.defaultSettingsHint') }}</p>
+
+        <div class="settings-form mt-4">
+          <div class="whisper-current-profile">
+            <div>
+              <p class="whisper-current-profile__label">{{ t('settings.whisper.currentProfileTitle') }}</p>
+              <div class="whisper-current-profile__headline">
+                <span>{{ t(activeStrategyMeta.titleKey) }}</span>
+                <VuiBadge :color="activeStrategy === 'recommended' ? 'info' : 'warning'" variant="gradient" size="xs">{{ t(activeStrategyMeta.badgeKey) }}</VuiBadge>
+              </div>
+              <p class="whisper-current-profile__desc">{{ t('settings.whisper.currentProfileDesc') }}</p>
+            </div>
+            <div class="whisper-current-profile__meta">
+              <span class="whisper-current-profile__chip">{{ activeStrategyMeta.stackText }}</span>
+              <span class="whisper-current-profile__chip">{{ activeAudioPreprocessSummary }}</span>
+              <span class="whisper-current-profile__chip">{{ activeTranslateSummary }}</span>
+            </div>
+          </div>
+          <div class="whisper-strategy-grid whisper-strategy-grid--duo">
+          <div class="whisper-strategy-card whisper-strategy-card--primary" :class="{ 'whisper-strategy-card--active': activeStrategy === 'recommended' }">
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t('whisper.recommended.title') }}</div>
+                <p class="whisper-strategy-card__desc">{{ t('whisper.recommended.desc') }}</p>
+              </div>
+              <VuiBadge color="info" variant="gradient" size="sm">{{ t('whisper.recommended.badge') }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">Anime-Whisper · Qwen3-ASR fallback · Qwen3 ForcedAligner</p>
+            <p class="whisper-strategy-card__stack">{{ t('whisper.recommended.stack') }}</p>
+            <div class="whisper-strategy-card__actions">
+              <VuiButton
+                v-if="activeStrategy !== 'recommended'"
+                variant="gradient"
+                color="info"
+                size="small"
+                customClass="settings-primary-btn"
+                :loading="saving"
+                @click="saveRecommendedDefaults"
+              >
+                {{ saving ? t('settings.whisper.saving') : t('settings.whisper.setAsDefault') }}
+              </VuiButton>
+            </div>
+          </div>
+
+          <div class="whisper-strategy-card whisper-strategy-card--muted" :class="{ 'whisper-strategy-card--active': activeStrategy === 'compat' }">
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t('whisper.presets.compat.title') }}</div>
+                <p class="whisper-strategy-card__desc">{{ t('whisper.presets.compat.desc') }}</p>
+              </div>
+              <VuiBadge color="warning" variant="gradient" size="sm">{{ t('whisper.presets.compat.badge') }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">large-v3 baseline · legacy compatibility</p>
+            <p class="whisper-strategy-card__stack">{{ t('whisper.presets.compat.stack') }}</p>
+            <div class="whisper-strategy-card__actions">
+              <VuiButton
+                v-if="activeStrategy !== 'compat'"
+                variant="gradient"
+                color="info"
+                size="small"
+                customClass="settings-primary-btn"
+                :loading="saving"
+                @click="saveCompatDefaults"
+              >
+                {{ saving ? t('settings.whisper.saving') : t('settings.whisper.setAsDefault') }}
+              </VuiButton>
+            </div>
+          </div>
+          </div>
+
+          <FieldRow :label="t('settings.whisper.audioPreprocessLabel')" :description="t('settings.whisper.audioPreprocessDesc')">
+            <select v-model="audioPreprocessMode" class="settings-input">
+              <option value="none">{{ t('settings.whisper.audioPreprocessMode.none') }}</option>
+              <option value="vocal_isolation">{{ t('settings.whisper.audioPreprocessMode.vocalIsolation') }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow
+            :label="t('settings.whisper.audioPreprocessModelLabel')"
+            :description="t('settings.whisper.audioPreprocessModelDesc')"
+          >
+            <select v-model="audioPreprocessModel" class="settings-input" :disabled="audioPreprocessMode === 'none'">
+              <option value="vocal_clean">{{ t('settings.whisper.audioPreprocessModel.vocalClean') }}</option>
+              <option value="vocal_balanced">{{ t('settings.whisper.audioPreprocessModel.vocalBalanced') }}</option>
+            </select>
+          </FieldRow>
+        </div>
+      </div>
+
+      <!-- 2. OpenAI Translation Card -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.whisper.translationTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.translationDesc') }}</p>
+
+        <div class="settings-form mt-4">
+          <FieldRow :label="t('settings.whisper.translateEnable')" :description="t('settings.whisper.translateEnableDesc')">
+            <div class="flex items-center gap-3">
+              <SettingsSwitch v-model="translateEnabled" />
+              <span class="text-sm text-text-secondary">{{ translateEnabled ? t('common.enabled') : t('common.disabled') }}</span>
+            </div>
+          </FieldRow>
+
+---subtitle mid---
+
+async function handlePreviewLocal(path: string, filename: string) {
+  await previewLocalSubtitle(path, filename)
+}
+
+function isLocalLibrarySubtitle(sub: { source?: string; source_type?: string }) {
+  return sub.source_type === 'local_library'
+}
+
+async function handleTranslateLocal(path: string, filename: string) {
+  translatingSubtitle.value = filename
+  try {
+    const resp = await api.post<TranslateSrtTaskCreateResponse>('/whisper/translate/srt', {
+      srt_path: path,
+      target_lang: whisperTranslateTo.value || 'zh',
+      model: whisperTranslateModel.value || 'gpt-4o-mini',
+      style: whisperTranslateStyle.value || 'adult_explicit',
+      base_url: whisperTranslateBaseUrl.value || 'https://api.openai.com/v1',
+      api_key: whisperTranslateApiKey.value || '',
+    })
+    await jobsStore.fetchJobs()
+    toast.success(t('subtitle.translateTaskCreated'))
+    await openJobsFocus({ jobId: resp.data?.task_id })
+    emit('refreshLocal')
+  } catch (e: any) {
+    console.error('Translation failed', e)
+    toast.error(t('common.errorWithDetail', { detail: e?.response?.data?.detail || e.message || t('common.error') }))
+  } finally {
+    translatingSubtitle.value = ''
+  }
+}
+
+async function handleDeleteSubtitle(path: string, filename: string) {
+  await deleteSubtitle(path, filename)
+}
+
+async function handleStartWhisper(mode: 'recommended' | 'compat' = 'recommended') {
+  const payload = buildWhisperProfileWithTranslation(mode, {
+    audio_preprocess_mode: whisperAudioPreprocessMode.value,
+    audio_preprocess_model: whisperAudioPreprocessModel.value,
+    translate_to: whisperTranslateEnabled.value ? whisperTranslateTo.value : '',
+    translate_base_url: whisperTranslateBaseUrl.value,
+    translate_api_key: whisperTranslateApiKey.value,
+    translate_model: whisperTranslateModel.value,
+    translate_style: whisperTranslateStyle.value,
+  })
+
+  if (mode === 'recommended' && whisperAudioPreprocessMode.value !== 'none') {
+    delete (payload as any).strategy
+  }
+
+  await startWhisperTask({
+    video_path: selectedPath.value,
+    ...payload,
+  })
+  emit('refreshLocal')
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <Transition name="panel">
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex justify-end"
+      >
+        <!-- Backdrop -->
+        <div
+          class="absolute inset-0 bg-bg-void/80 backdrop-blur-sm"
+          @click="handleClose"
+        ></div>
+
+        <!-- Panel -->
+        <div class="relative bg-bg-surface border-l border-border-default flex flex-col overflow-hidden shadow-2xl h-full w-full max-w-md">
+          <!-- Loading overlay -->
+          <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-bg-surface/80 backdrop-blur-sm">
+            <div class="animate-spin w-8 h-8 border-2 border-accent-cyan border-t-transparent rounded-full"></div>
+          </div>
+
+          <!-- Scrollable wrapper -->
+          <div class="flex-1 overflow-y-auto p-4 space-y-4 relative">
+
+            <!-- Shared Header: backdrop + title + tagline + actors -->
+            <PanelHeader :detail="detail" />
+
+            <!-- Video Path / Folder Selector -->
+            <FilePathSelector
+              :file-path="props.detail?.file_path"
+              :sibling-paths="siblingPaths"
+              v-model="selectedPath"
+            />
+
+            <!-- Tabs -->
+            <VisionTabs v-model="subtitleTab" :tabs="[
+              { key: 'local', label: tabLabels.local },
+              { key: 'search', label: tabLabels.search },
+              { key: 'whisper', label: tabLabels.whisper },
+            ]" :compact="true" />
+
+            <!-- Content -->
+            <div class="subtitle-panel-content pb-16">

@@ -1,0 +1,229 @@
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useI18n } from '../../composables/useI18n'
+import BaseIcon from '../../components/noor/BaseIcon.vue'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+
+const toast = useToast()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+
+const sourceDir = ref('')
+const outputDir = ref('')
+const outputDirManuallyEdited = ref(false)
+const whisperModelDir = ref('')
+const ladaModelDir = ref('')
+
+// Emby path mapping
+const embyPathPrefix = ref('')
+
+// Scan groups
+interface ScanGroup {
+  name: string
+  source_dir: string
+  hardlink_dir: string
+}
+const scanGroups = ref<ScanGroup[]>([])
+
+// Directory picker
+const showDirPicker = ref(false)
+const dirPickerTarget = ref<'sourceDir' | 'outputDir' | 'whisperModelDir' | 'ladaModelDir' | 'scanGroupSource' | 'scanGroupHardlink'>('sourceDir')
+const dirPickerGroupIndex = ref<number | null>(null)
+const dirPickerPath = ref('')
+const dirPickerParent = ref<string | null>(null)
+const dirPickerEntries = ref<{ name: string; path: string; is_dir: boolean }[]>([])
+const dirPickerLoading = ref(false)
+const dirPickerError = ref('')
+
+onMounted(async () => {
+  await loadSettings()
+})
+
+watch(sourceDir, (newVal) => {
+  if (!outputDirManuallyEdited.value) {
+    outputDir.value = newVal
+  }
+})
+
+function onSourceDirInput() {
+  if (!outputDirManuallyEdited.value) {
+    outputDir.value = sourceDir.value
+  }
+}
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    const data = resp.data
+
+    sourceDir.value = data.storage?.source_dir || ''
+    outputDir.value = data.storage?.output_dir || data.storage?.source_dir || ''
+    whisperModelDir.value = data.storage?.whisper_model_dir || ''
+    ladaModelDir.value = data.storage?.lada_model_weights_dir || data.storage?.lada_model_dir || ''
+
+    // Also load Emby path prefix config
+    try {
+      const mlResp = await api.get('/media-library/config')
+      const mlCfg = mlResp.data.config || {}
+      embyPathPrefix.value = mlCfg.path_prefix || '/data/media'
+    scanGroups.value = mlCfg.scan_groups || []
+    } catch {
+      // ignore
+    }
+  } catch (e: any) {
+    toast.error(t('settings.storage.loadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveStorage() {
+  saving.value = true
+  try {
+    await api.put('/settings/storage', {
+      source_dir: sourceDir.value,
+      output_dir: outputDir.value,
+      whisper_model_dir: whisperModelDir.value,
+      lada_model_weights_dir: ladaModelDir.value,
+    })
+    // Also save Emby path prefix and scan_groups to media-library config
+    await api.post('/media-library/config', {
+      path_prefix: embyPathPrefix.value,
+      scan_groups: scanGroups.value,
+    })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+// Scan group management
+function addScanGroup() {
+  scanGroups.value.push({ name: '', source_dir: '', hardlink_dir: '' })
+}
+
+function removeScanGroup(index: number) {
+  scanGroups.value.splice(index, 1)
+}
+
+// Directory picker
+async function openDirPicker(target: 'sourceDir' | 'outputDir' | 'whisperModelDir' | 'ladaModelDir') {
+  dirPickerTarget.value = target
+  dirPickerGroupIndex.value = null
+  dirPickerError.value = ''
+  const currentPath = target === 'sourceDir' ? sourceDir.value
+    : target === 'outputDir' ? outputDir.value
+    : target === 'whisperModelDir' ? whisperModelDir.value
+    : ladaModelDir.value
+  await loadDirPicker(currentPath)
+  showDirPicker.value = true
+}
+
+async function openScanGroupDirPicker(target: 'scanGroupSource' | 'scanGroupHardlink', groupIndex: number) {
+  dirPickerTarget.value = target
+  dirPickerGroupIndex.value = groupIndex
+  dirPickerError.value = ''
+  const currentPath = target === 'scanGroupSource'
+    ? scanGroups.value[groupIndex].source_dir
+    : scanGroups.value[groupIndex].hardlink_dir
+  await loadDirPicker(currentPath)
+  showDirPicker.value = true
+}
+
+async function loadDirPicker(path: string) {
+  dirPickerLoading.value = true
+  dirPickerError.value = ''
+  try {
+    const resp = await api.get(`/settings/directories?path=${encodeURIComponent(path)}`)
+    dirPickerPath.value = resp.data.path
+    dirPickerParent.value = resp.data.parent
+    dirPickerEntries.value = resp.data.entries
+  } catch (e: any) {
+    dirPickerError.value = e?.response?.data?.detail || t('settings.dirPicker.loadDirFailed')
+    dirPickerEntries.value = []
+  } finally {
+    dirPickerLoading.value = false
+  }
+}
+
+async function onDirEntryClick(entry: { name: string; path: string; is_dir: boolean }) {
+  if (entry.is_dir) {
+    await loadDirPicker(entry.path)
+  }
+}
+
+async function onDirPickerGoUp() {
+  if (dirPickerParent.value) {
+    await loadDirPicker(dirPickerParent.value)
+  }
+}
+
+function confirmDirPicker() {
+  const path = dirPickerPath.value
+  if (dirPickerTarget.value === 'sourceDir') {
+    sourceDir.value = path
+    if (!outputDirManuallyEdited.value) outputDir.value = path
+  } else if (dirPickerTarget.value === 'outputDir') {
+    outputDir.value = path
+    outputDirManuallyEdited.value = true
+  } else if (dirPickerTarget.value === 'whisperModelDir') {
+    whisperModelDir.value = path
+  } else if (dirPickerTarget.value === 'ladaModelDir') {
+    ladaModelDir.value = path
+  } else if (dirPickerTarget.value === 'scanGroupSource' && dirPickerGroupIndex.value !== null) {
+    scanGroups.value[dirPickerGroupIndex.value].source_dir = path
+  } else if (dirPickerTarget.value === 'scanGroupHardlink' && dirPickerGroupIndex.value !== null) {
+    scanGroups.value[dirPickerGroupIndex.value].hardlink_dir = path
+  }
+  showDirPicker.value = false
+}
+
+function closeDirPicker() {
+  showDirPicker.value = false
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <div v-else class="flex flex-col gap-6">
+
+      <!-- 媒体库路径 -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.storage.section.mediaPaths') }}</h2>
+        <div class="settings-form">
+          <FieldRow :label="t('settings.storage.mediaRoot')" :description="t('settings.storage.mediaRootHint')">
+            <div class="dir-input-row">
+              <input v-model="sourceDir" type="text" placeholder="/home/kinax/Videos" class="settings-input" @input="onSourceDirInput" />
+              <button @click="openDirPicker('sourceDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
+                <BaseIcon name="folderOpen" class="w-4 h-4" />
+              </button>
+            </div>
+          </FieldRow>
+          <FieldRow :label="t('settings.storage.output')" :description="t('settings.storage.outputHint')">
+            <div class="dir-input-row">
+              <input v-model="outputDir" @focus="outputDirManuallyEdited = true" type="text" placeholder="/path/to/output" class="settings-input" />
+              <button @click="openDirPicker('outputDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
+                <BaseIcon name="folderOpen" class="w-4 h-4" />
+              </button>
+            </div>
+
+--- backend config save points ---
+/home/kinax/noor/backend/app/api/endpoints/media_library_helpers.py:63:    return data_dir / 'media_library_config.json'
+/home/kinax/noor/backend/app/api/endpoints/media_library_helpers.py:124:    prefix = config.get('path_prefix', '/data/media')
+/home/kinax/noor/backend/app/api/endpoints/media_library.py:4:Configuration is stored in data/media_library_config.json.
+/home/kinax/noor/backend/app/api/endpoints/media_library_helpers.py:63:    return data_dir / 'media_library_config.json'
+/home/kinax/noor/backend/app/api/endpoints/media_library_helpers.py:124:    prefix = config.get('path_prefix', '/data/media')
+/home/kinax/noor/backend/app/api/endpoints/media_library.py:4:Configuration is stored in data/media_library_config.json.
+/home/kinax/noor/backend/data/media_library_config.json:6:  "path_prefix": "/data/media",

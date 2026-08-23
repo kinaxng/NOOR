@@ -1,0 +1,160 @@
+          :title="t('dashboard.gpu.title')"
+          :metrics="gpuMetrics"
+          :progress-value="sysMetrics.gpu.gpu_util"
+          progress-label="GPU"
+          class="mb-6"
+        />
+
+        <!-- CPU / Memory Metrics -->
+        <SystemMetricsCard
+          :title="t('dashboard.cpu.title')"
+          :metrics="cpuMetrics"
+          :progress-value="Math.round(sysMetrics.cpu_mem.cpu_util)"
+          progress-label="CPU"
+          progress-color="#01B574"
+        />
+      </div>
+
+      <!-- Recent Activity -->
+      <div>
+        <ActivityCard :title="t('dashboard.recentJobs')">
+          <template #action>
+            <RouterLink to="/jobs" class="text-xs font-medium text-[#0075FF]">
+              {{ t('dashboard.viewAll') }}
+            </RouterLink>
+          </template>
+
+          <div v-if="recentJobs.length === 0" class="py-8 text-center">
+            <p class="text-sm text-white/30">{{ t('dashboard.noJobs') }}</p>
+          </div>
+
+          <div
+            v-for="job in recentJobs"
+            :key="job.id"
+            class="activity-item"
+          >
+            <div class="activity-item__icon" :class="`activity-item__icon--${getStatusColor(job.status)}`">
+              <BaseIcon
+                :name="job.status === 'completed' ? 'check' : job.status === 'failed' ? 'x' : job.status === 'running' ? 'loading' : 'clock'"
+                class="w-3.5 h-3.5"
+              />
+            </div>
+            <div class="activity-item__content">
+              <p class="activity-item__name">{{ job.emby_item_name || job.input_path?.split('/').pop() || t('dashboard.unknown') }}</p>
+              <p class="activity-item__meta">{{ job.job_type || 'nfo' }} · {{ formatTime(job.created_at) }}</p>
+            </div>
+            <VuiBadge
+              color="info"
+              variant="gradient"
+              size="xs"
+            >
+              {{ getStatusLabel(job.status) }}
+            </VuiBadge>
+          </div>
+        </ActivityCard>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+</style>
+
+---JOBCARD---
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { Job } from '../../api/types'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import VuiProgress from '../ui/Progress/VuiProgress.vue'
+import { useI18n } from '../../composables/useI18n'
+
+const { t, i18nVersion } = useI18n()
+
+const props = defineProps<{
+  job: Job
+  selected?: boolean
+  statusLabel?: string
+  progress?: number
+}>()
+
+defineEmits<{
+  click: [job: Job]
+  cancel: [jobId: string]
+}>()
+
+const jobTypeLabel = computed(() => {
+  void i18nVersion.value
+  if (props.job.job_type === 'whisper') return 'Whisper'
+  if (props.job.job_type === 'translate-srt') return t('jobs.translateTag')
+  return 'LADA'
+})
+</script>
+
+<template>
+  <div
+    class="job-card bg-surface border border-border-subtle rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-border-default"
+    :class="selected ? 'ring-2 ring-accent-cyan glow-cyan' : ''"
+    @click="$emit('click', job)"
+  >
+    <div class="flex justify-between items-start mb-3">
+      <div class="flex-1 min-w-0">
+        <!-- Job type badge -->
+        <VuiBadge :color="job.job_type === 'whisper' ? 'magenta' : 'cyan'" class="mb-1">
+          {{ jobTypeLabel }}
+        </VuiBadge>
+        <h3 class="font-medium text-sm text-text-primary truncate">{{ job.emby_item_name }}</h3>
+        <p class="text-xs text-text-secondary mt-0.5">{{ statusLabel || job.status }}</p>
+      </div>
+
+      <!-- Cancel button -->
+      <button
+        v-if="job.status === 'running' || job.status === 'queued'"
+        @click.stop="$emit('cancel', job.id)"
+        class="text-text-muted hover:text-status-error transition-colors p-1"
+        :title="t('common.cancel')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Progress bar -->
+    <VuiProgress
+      :value="progress ?? job.progress ?? 0"
+      :color="job.job_type === 'whisper' ? 'magenta' : 'cyan'"
+      shimmer
+    />
+  </div>
+</template>
+
+---TYPES PY---
+18-
+19-class Job(Base):
+20-    __tablename__ = "jobs"
+21-
+22-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+23:    job_type: Mapped[str] = mapped_column(String(32), default="lada")  # 'lada' or 'whisper'
+24-    emby_item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+25-    emby_item_name: Mapped[str] = mapped_column(String(512), nullable=False)
+26-    input_path: Mapped[str] = mapped_column(Text, nullable=False)
+27-    output_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+28-    status: Mapped[str] = mapped_column(String(32), default="pending")
+29-    progress: Mapped[int] = mapped_column(Integer, default=0)
+30-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+31-    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+--
+76-
+77-class JobResponse(BaseModel):
+78-    model_config = ConfigDict(from_attributes=True)
+79-
+80-    id: str
+81:    job_type: str = "lada"
+82-    emby_item_id: str
+83-    emby_item_name: str
+84-    input_path: str
+85-    output_path: Optional[str] = None
+86-    status: str
+87-    progress: int = 0
+88-    error_message: Optional[str] = None
+89-    settings: dict = {}

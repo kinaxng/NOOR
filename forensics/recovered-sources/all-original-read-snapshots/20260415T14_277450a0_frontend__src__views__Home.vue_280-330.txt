@@ -1,0 +1,33 @@
+      </button>
+    </div>
+
+    <AsyncMediaDetailPanel
+      v-if="showDetailPanel"
+      :open="showDetailPanel"
+      :item="selectedVideo"
+      :detail="videoDetail"
+      :loading="loadingDetail"
+      :error="detailError"
+      @close="handleCloseDetail"
+    />
+
+    <AsyncLadaPanel
+      v-if="showLadaPanel"
+      :open="showLadaPanel"
+      :item="selectedVideo"
+      :detail="videoDetail"
+      :initial-selected-path="detailActionPath"
+      :initial-selected-id="detailActionId"
+      @close="handleCloseDetail"
+    />
+
+    <AsyncSubtitlePanel
+      v-if="showSubtitlePanel"
+      :open="showSubtitlePanel"
+      :detail="videoDetail"
+      :loading="loadingDetail"
+      :initial-selected-path="subtitleVideoPath"
+      @close="handleCloseSubtitle"
+    />
+  </div>
+</template>

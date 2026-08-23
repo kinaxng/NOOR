@@ -1,0 +1,220 @@
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import { useJobsStore } from '../../stores/jobs'
+import { useToast } from '../../composables/useToast'
+import api from '../../api'
+import type { MediaItem, MediaItemDetail, JobSettings } from '../../api/types'
+import PanelHeader from './panels/PanelHeader.vue'
+import FilePathSelector from './panels/FilePathSelector.vue'
+import { useI18n } from '../../composables/useI18n'
+
+const toast = useToast()
+const { t } = useI18n()
+const jobsStore = useJobsStore()
+
+const props = defineProps<{
+  open: boolean
+  item: MediaItem | null
+  detail: MediaItemDetail | null
+}>()
+
+const emit = defineEmits<{
+  close: []
+}>()
+
+const submitting = ref(false)
+
+// Hardcoded option lists (mirrors LADA_ENCODING_PRESETS in backend)
+const detectionModels = computed(() => [
+  { id: 'v4-fast', name: t('ladaPanel.detectionModelName.v4Fast') },
+  { id: 'v4-accurate', name: t('ladaPanel.detectionModelName.v4Accurate') },
+])
+
+const restorationModels = computed(() => [
+  { id: 'basicvsrpp-v1.2', name: t('ladaPanel.restorationModelName.basicvsrpp') },
+  { id: 'deepmosaics', name: t('ladaPanel.restorationModelName.deepmosaics') },
+])
+
+const encodingPresets = computed(() => [
+  { id: 'hevc-nvidia-gpu-hq', name: t('settings.lada.encodingPresetName.hevcNvidiaGpuHq') },
+  { id: 'hevc-nvidia-gpu-balanced', name: t('settings.lada.encodingPresetName.hevcNvidiaGpuBalanced') },
+  { id: 'hevc-nvidia-gpu-uhq', name: t('settings.lada.encodingPresetName.hevcNvidiaGpuUhq') },
+  { id: 'h264-nvidia-gpu-fast', name: t('settings.lada.encodingPresetName.h264NvidiaGpuFast') },
+  { id: 'h264-cpu-fast', name: t('settings.lada.encodingPresetName.h264CpuFast') },
+  { id: 'h264-cpu-uhq', name: t('settings.lada.encodingPresetName.h264CpuUhq') },
+  { id: 'av1-cpu-uhq', name: t('settings.lada.encodingPresetName.av1CpuUhq') },
+])
+
+const settings = ref<JobSettings>({
+  detection_model: 'v4-fast',
+  restoration_model: 'basicvsrpp-v1.2',
+  encoding_preset: 'hevc-nvidia-gpu-hq',
+})
+
+// Load settings from backend when panel opens
+watch(() => props.open, async (isOpen) => {
+  if (!isOpen) return
+
+  try {
+    const resp = await api.get('/settings')
+    const defaults = resp.data?.lada_defaults || {}
+
+    settings.value = {
+      detection_model: defaults.detection_model || 'v4-fast',
+      restoration_model: defaults.restoration_model || 'basicvsrpp-v1.2',
+      encoding_preset: defaults.encoding_preset || 'hevc-nvidia-gpu-hq',
+    }
+
+    // Dynamically add defaults that might not be in our hardcoded list
+  } catch (e) {
+    // Use hardcoded defaults on error
+  }
+}, { immediate: true })
+
+// Init selected path when detail changes
+const selectedSubmitPath = ref('')
+const selectedSubmitId = ref('')
+
+const allSubmitPaths = computed(() => {
+  if (!props.detail?.file_path) return []
+  const paths = [{ path: props.detail.file_path, id: props.detail.id }]
+  for (const s of (props.detail.siblings || [])) {
+    if (s.file_path && !paths.some(p => p.path === s.file_path)) {
+      paths.push({ path: s.file_path, id: s.id || props.detail.id })
+    }
+  }
+  return paths
+})
+
+watch(() => props.detail, (detail) => {
+  if (detail?.file_path) {
+    selectedSubmitPath.value = detail.file_path
+    selectedSubmitId.value = detail.id
+  }
+}, { immediate: true })
+
+const displayTitle = computed(() => {
+  if (!props.detail) return ''
+  return props.detail.nfo?.title || props.detail.nfo?.originaltitle || props.detail.name
+})
+
+const mergedDetectionModels = computed(() => {
+  const options = [...detectionModels.value]
+  if (settings.value.detection_model && !options.find(m => m.id === settings.value.detection_model)) {
+    options.push({ id: settings.value.detection_model, name: settings.value.detection_model })
+  }
+  return options
+})
+
+const mergedRestorationModels = computed(() => {
+  const options = [...restorationModels.value]
+  if (settings.value.restoration_model && !options.find(m => m.id === settings.value.restoration_model)) {
+    options.push({ id: settings.value.restoration_model, name: settings.value.restoration_model })
+  }
+  return options
+})
+
+const mergedEncodingPresets = computed(() => {
+  const options = [...encodingPresets.value]
+  if (settings.value.encoding_preset && !options.find(p => p.id === settings.value.encoding_preset)) {
+    options.push({ id: settings.value.encoding_preset, name: settings.value.encoding_preset })
+  }
+  return options
+})
+
+function handleClose() {
+  emit('close')
+}
+
+async function handleSubmitJob() {
+  if (!selectedSubmitPath.value) return
+
+  submitting.value = true
+  try {
+    const job = await jobsStore.createJob({
+      emby_item_id: selectedSubmitId.value,
+      emby_item_name: displayTitle.value,
+      input_path: selectedSubmitPath.value,
+      settings: settings.value,
+    })
+    handleClose()
+    toast.success(t('ladaPanel.submitSuccess', { jobId: job.id }))
+  } catch (e) {
+    console.error(e)
+    toast.error(t('ladaPanel.submitFailed'))
+  } finally {
+    submitting.value = false
+  }
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <Transition name="panel">
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex justify-end"
+      >
+        <!-- Backdrop -->
+        <div
+          class="absolute inset-0 bg-bg-void/80 backdrop-blur-sm"
+          @click="handleClose"
+        ></div>
+
+        <!-- Panel -->
+        <div class="relative bg-bg-surface border-l border-border-default flex flex-col overflow-hidden shadow-2xl h-full w-full max-w-md">
+          <!-- Content -->
+          <template v-if="detail">
+            <!-- Scrollable wrapper -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-4 relative">
+
+              <!-- Shared Header: backdrop + title + tagline + actors -->
+              <PanelHeader :detail="detail" />
+
+              <!-- File Selector -->
+              <FilePathSelector
+                :file-path="detail?.file_path"
+                :sibling-paths="detail?.siblings"
+                v-model="selectedSubmitPath"
+                @update:model-value="selectedSubmitId = allSubmitPaths.find(p => p.path === $event)?.id || detail?.id || ''"
+              />
+
+              <!-- Processing Settings -->
+              <div class="ui-card">
+                <span class="text-[10px] text-text-muted uppercase tracking-wider">{{ t('ladaPanel.processingSettings') }}</span>
+                <div class="space-y-3 mt-3">
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.detectionModel') }}</label>
+                    <select v-model="settings.detection_model" class="settings-input w-full">
+                      <option v-for="m in mergedDetectionModels" :key="m.id" :value="m.id">{{ m.name }} ({{ m.id }})</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.restorationModel') }}</label>
+                    <select v-model="settings.restoration_model" class="settings-input w-full">
+                      <option v-for="m in mergedRestorationModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t('ladaPanel.encodingPreset') }}</label>
+                    <select v-model="settings.encoding_preset" class="settings-input w-full">
+                      <option v-for="p in mergedEncodingPresets" :key="p.id" :value="p.id">{{ p.name }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bottom Buttons -->
+              <div class="flex gap-3 pt-2">
+                <VuiButton
+                  variant="gradient"
+                  color="info"
+                  size="large"
+                  class="flex-1"
+                  :loading="submitting"
+                  :disabled="!selectedSubmitPath"
+                  @click="handleSubmitJob"
+                >
+                  {{ t('ladaPanel.start') }}
+                </VuiButton>

@@ -1,0 +1,261 @@
+        const singleGroup = el('div', 'javdb-filter-group')
+        relationActorSingleFilters.forEach(([value, label]) => {
+          singleGroup.appendChild(sdk.ui.chip({
+            label,
+            active: state.relationActorSingleFilter === value,
+            onClick: () => {
+              state.relationActorSingleFilter = value
+              state.page = 1
+              renderGrid()
+              renderPager()
+            },
+          }))
+        })
+        const yearGroup = el('div', 'javdb-filter-group')
+        const yearOptions = [{ label: '全部年份', value: '' }, ...actorRelationYears().map(year => ({ label: year, value: year }))]
+        const yearSelect = sdk.ui.select
+          ? sdk.ui.select({
+              value: state.relationActorYear,
+              options: yearOptions,
+              className: 'javdb-year-select',
+              onChange: value => {
+                state.relationActorYear = String(value || '')
+                state.page = 1
+                renderGrid()
+                renderPager()
+              },
+            })
+          : null
+        if (yearSelect) yearGroup.appendChild(yearSelect)
+        const sortGroup = el('div', 'javdb-filter-group')
+        const sortSelect = sdk.ui.select
+          ? sdk.ui.select({
+              value: state.relationActorSort,
+              options: relationActorSortOptions,
+              className: 'javdb-year-select',
+              onChange: value => {
+                state.relationActorSort = String(value || 'release_desc')
+                state.page = 1
+                renderGrid()
+                renderPager()
+              },
+            })
+          : null
+        if (sortSelect) sortGroup.appendChild(sortSelect)
+        filtersWrap.append(
+          el('div', 'javdb-filter-divider'),
+          magnetGroup,
+          el('div', 'javdb-filter-divider'),
+          subtitleGroup,
+          el('div', 'javdb-filter-divider'),
+          singleGroup,
+          el('div', 'javdb-filter-divider'),
+          yearGroup,
+          el('div', 'javdb-filter-divider'),
+          sortGroup,
+        )
+      }
+      return
+    }
+
+    if (state.tab === 'latest') {
+      const categoryGroup = el('div', 'javdb-filter-group')
+      latestTypes.forEach(([value, label]) => {
+        categoryGroup.appendChild(sdk.ui.chip({
+          label,
+          active: state.latestType === value,
+          onClick: () => {
+            state.latestType = value
+            state.page = 1
+            loadData()
+          },
+        }))
+      })
+
+      const filterGroup = el('div', 'javdb-filter-group')
+      latestFilters.forEach(([value, label]) => {
+        filterGroup.appendChild(sdk.ui.chip({
+          label,
+          active: state.latestFilter === value,
+          onClick: () => {
+            state.latestFilter = value
+            state.page = 1
+            loadData()
+          },
+        }))
+      })
+      filtersWrap.append(categoryGroup, el('div', 'javdb-filter-divider'), filterGroup)
+      return
+    }
+
+    if (state.tab === 'rankings') {
+      const modeGroup = el('div', 'javdb-filter-group')
+      rankingModes.forEach(([value, label]) => {
+        modeGroup.appendChild(sdk.ui.chip({
+          label,
+          active: state.rankingMode === value,
+          onClick: () => {
+            state.rankingMode = value
+            state.page = 1
+              loadData()
+            },
+          }))
+      })
+      const categoryGroup = el('div', 'javdb-filter-group')
+      rankingTypes.forEach(([value, label]) => {
+        categoryGroup.appendChild(sdk.ui.chip({
+          label,
+          active: state.rankingType === value,
+          onClick: () => {
+            state.rankingType = value
+            state.page = 1
+            loadData()
+          },
+        }))
+      })
+      filtersWrap.append(modeGroup, el('div', 'javdb-filter-divider'), categoryGroup)
+      if (state.rankingMode === 'top250') {
+        filtersWrap.appendChild(el('div', 'javdb-filter-divider'))
+        const yearWrap = el('div', 'javdb-filter-group')
+        const years = [{ label: '全部年份', value: '' }]
+        const currentYear = new Date().getFullYear()
+        for (let y = currentYear; y >= 2000; y--) years.push({ label: String(y), value: String(y) })
+        const yearSelect = sdk.ui.select
+          ? sdk.ui.select({
+              value: state.top250Year,
+              options: years,
+              className: 'javdb-year-select',
+              onChange: value => {
+                state.top250Year = String(value || '')
+                state.page = 1
+                loadData()
+              },
+            })
+          : null
+        if (yearSelect) yearWrap.appendChild(yearSelect)
+        filtersWrap.appendChild(yearWrap)
+      }
+      if (['daily', 'weekly', 'monthly'].includes(state.rankingMode)) {
+        const filterGroup = el('div', 'javdb-filter-group')
+        const activeLabel = state.rankingMode === 'daily' ? '日榜'
+          : state.rankingMode === 'weekly' ? '周榜'
+          : '月榜'
+        filterGroup.appendChild(sdk.ui.chip({ label: activeLabel, active: true, onClick: () => {} }))
+        filtersWrap.append(el('div', 'javdb-filter-divider'), filterGroup)
+      }
+    }
+  }
+
+  async function loadData() {
+    estimatePageSize()
+    state.loading = true
+    renderFilters()
+    renderGrid()
+    try {
+      const action = state.relation
+        ? 'related_movies'
+        : (
+          state.tab === 'rankings'
+            ? (state.rankingMode === 'actors' ? 'actors' : state.rankingMode === 'top250' ? 'top250' : 'rankings')
+            : state.tab
+        )
+      const payload = {
+        page: state.page,
+        limit: state.limit,
+        ...(state.relation ? { rel_type: state.relation.relType, rel_id: state.relation.relId } : {}),
+        ...(state.tab === 'latest' ? { type: state.latestType, filter_by: state.latestFilter, sort_by: 'update' } : {}),
+        ...(state.tab === 'rankings' && ['daily', 'weekly', 'monthly'].includes(state.rankingMode)
+          ? { type: state.rankingType, period: state.rankingMode }
+          : {}),
+        ...(state.tab === 'rankings' && state.rankingMode === 'top250'
+          ? { type_value: state.top250Year || String(state.rankingType) }
+          : {}),
+        ...(state.tab === 'rankings' && state.rankingMode === 'actors' ? { type: state.rankingType } : {}),
+      }
+      if (state.relation?.relType === 'actor') {
+        payload.page = 1
+        payload.limit = 200
+        payload.sort_by = 'release'
+        payload.order_by = 'desc'
+      }
+      const res = await sdk.api.post(`/plugins/javdb/actions/${action}`, { payload })
+      state.items = res.data.items || []
+      state.total = Number(res.data.total || state.items.length)
+      if (state.relation?.relType === 'actor' && state.items.length) {
+        await enrichActorRelationItems(state.items, sdk)
+      }
+    } catch (e) {
+      sdk.toast.error(e.message || '数据加载失败')
+      state.items = []
+      state.total = 0
+    }
+    state.loading = false
+    renderFilters()
+    renderGrid()
+    renderPager()
+  }
+
+  function renderGrid() {
+    grid.innerHTML = ''
+    grid.classList.toggle('javdb-grid--actors', state.tab === 'rankings' && state.rankingMode === 'actors')
+    const items = filteredItems()
+
+    if (state.loading && !items.length) {
+      for (let i = 0; i < 12; i++) grid.appendChild(el('div', 'javdb-card javdb-skeleton'))
+      return
+    }
+
+    if (!items.length) {
+      grid.appendChild(sdk.ui.emptyState({ text: '暂无符合条件的作品' }))
+      return
+    }
+
+    const start = (state.page - 1) * state.limit
+    const visible = items.slice(start, start + state.limit)
+
+    visible.forEach(item => {
+      if (state.tab === 'rankings' && state.rankingMode === 'actors' && !state.relation) {
+        const actorTitle = item.name_zht || item.name || '-'
+        const actorMeta = [item.name, item.other_name].filter(Boolean).join(' · ')
+        const actorCard = el('button', 'javdb-actor-card')
+        actorCard.type = 'button'
+        actorCard.onclick = () => setRelation('actor', item.id, actorTitle)
+        const avatar = el('div', 'javdb-actor-avatar')
+        if (item.avatar_url) {
+          const img = el('img')
+          img.src = item.avatar_url
+          img.alt = actorTitle
+          avatar.appendChild(img)
+        }
+        actorCard.appendChild(avatar)
+        actorCard.appendChild(el('div', 'javdb-actor-name', actorTitle))
+        actorCard.appendChild(el('div', 'javdb-actor-meta', actorMeta || ''))
+        const badgeRow = el('div', 'javdb-actor-badges')
+        if (item.uncensored) badgeRow.appendChild(sdk.ui.badge({ label: '无码', tone: 'info' }))
+        actorCard.appendChild(badgeRow)
+        grid.appendChild(actorCard)
+        return
+      }
+      const badges = []
+      const magnetText = magnetLabel(item)
+      if (magnetText) badges.push(sdk.ui.badge({ label: magnetText, tone: 'info' }))
+      if (item.has_cnsub || item.play_subtitle) badges.push(sdk.ui.badge({ label: '中字', tone: 'success' }))
+      if (item.is_cracked) badges.push(sdk.ui.badge({ label: '破解', tone: 'danger' }))
+      if (item.library?.in_library) badges.push(sdk.ui.badge({ label: '已入库', tone: 'info' }))
+
+      const card = sdk.ui.mediaCard({
+        title: titleOf(item),
+        cover: item.cover_url || item.thumb_url,
+        sharp: true,
+        meta: [classifyCategory(item), fmtMin(item.duration)].filter(Boolean),
+        badges,
+        onClick: () => openDetail(item),
+        className: 'javdb-card',
+      })
+      grid.appendChild(card)
+    })
+  }
+
+  async function enrichActorRelationItems(items, sdk) {
+    const targets = items.filter(item => item && item.code && item.actor_count == null)
+    const limit = Math.min(targets.length, 80)

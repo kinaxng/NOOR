@@ -1,0 +1,106 @@
+    if any((item.get('tags') or {}).get('release_type_key') == 'leaked' for item in group):
+        release_type_key = 'leaked'
+    elif any((item.get('tags') or {}).get('release_type_key') == 'uncensored' for item in group):
+        release_type_key = 'uncensored'
+
+    if release_type_key == 'leaked':
+        merged_tags['release_type_key'] = 'leaked'
+        merged_tags['release_type'] = '流出'
+    elif release_type_key == 'uncensored':
+        merged_tags['release_type_key'] = 'uncensored'
+        merged_tags['release_type'] = '无码'
+
+    merged['tags'] = merged_tags
+    merged['subtitle_count'] = max((item.get('subtitle_count') or 0) for item in group)
+    merged['variant_count'] = len(group)
+    return merged
+
+
+def _pick_group_representative(group: list[dict]) -> dict:
+    def sort_key(item: dict) -> tuple:
+        path = item.get('path') or ''
+        name = item.get('name') or ''
+        return (
+            bool(path),
+            -_item_variant_penalty(item),
+            bool(item.get('poster_path')),
+            -(len(os.path.basename(path)) if path else len(name)),
+            name,
+        )
+
+    representative = dict(max(group, key=sort_key))
+    if not representative.get('poster_path'):
+        fallback = next((item.get('poster_path') for item in group if item.get('poster_path')), None)
+        if fallback:
+            representative['poster_path'] = fallback
+    return _merge_group_metadata(representative, group)
+
+
+def _deduplicate_items(items: list[dict]) -> list[dict]:
+    """Merge items in the same folder (e.g. MIDA-368.mp4 and MIDA-368.restored-u.mp4).
+    Groups by parent folder and keeps the main version (most complete metadata) for list display.
+    All versions are still available as siblings in the detail endpoint.
+    """
+    groups: dict[str, list[dict]] = {}
+    result: list[dict] = []
+
+    for item in items:
+        path = item.get("path", "")
+        if not path:
+            result.append(item)
+            continue
+        folder = os.path.dirname(path)
+        if folder not in groups:
+            groups[folder] = []
+        groups[folder].append(item)
+
+    for group in groups.values():
+        if len(group) == 1:
+            result.append(group[0])
+        else:
+            result.append(_pick_group_representative(group))
+    return result
+
+
+async def _list_items(
+    config: dict,
+    library_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    filter: str | None = None,
+    q: str | None = None,
+    force_refresh: bool = False,
+) -> tuple[list[dict], int]:
+    now = time.time()
+    cache_key = library_id
+
+    if not force_refresh and cache_key in _items_cache:
+        cached_items, cached_at = _items_cache[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return _apply_filter_and_paginate(cached_items, filter, q, offset, limit)
+
+    async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+        resp = await client.get(
+            f"{_server_url(config)}/emby/Items",
+            headers=_headers(config.get("api_key", "")),
+            params={
+                "ParentId": library_id,
+                "Fields": "PrimaryImageAspectRatio,MediaSources,DateCreated,Path,Studios,ImageTags,BackdropImageTags",
+                "Limit": 2000,
+                "StartIndex": 0,
+                "Recursive": "true",
+                "SortBy": "DateCreated",
+                "SortOrder": "Descending",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    all_items = []
+    for item in data.get("Items", []):
+        if item.get("Type") != "Movie" and item.get("MediaType") != "Video":
+            continue
+        all_items.append(_parse_item(item, config))
+
+    all_items = _deduplicate_items(all_items)
+

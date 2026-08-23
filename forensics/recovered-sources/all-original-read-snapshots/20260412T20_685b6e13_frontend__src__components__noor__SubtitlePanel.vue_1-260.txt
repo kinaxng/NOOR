@@ -1,0 +1,763 @@
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import VuiProgress from '../ui/Progress/VuiProgress.vue'
+import VisionTabs from '../ui/Tabs.vue'
+import PanelHeader from './panels/PanelHeader.vue'
+import FilePathSelector from './panels/FilePathSelector.vue'
+import { useSubtitles } from '../../composables/useSubtitles'
+import { useWhisper } from '../../composables/useWhisper'
+import { useI18n } from '../../composables/useI18n'
+import { useToast } from '../../composables/useToast'
+import SubtitlePreview from './SubtitlePreview.vue'
+import api from '../../api'
+
+const { t, i18nVersion } = useI18n()
+const toast = useToast()
+
+const props = defineProps<{
+  open: boolean
+  detail: import('../../api/types').MediaItemDetail | null
+  loading?: boolean
+}>()
+
+// Convenience ref to detail
+const detail = computed(() => props.detail)
+
+const emit = defineEmits<{
+  close: []
+  refreshLocal: []
+}>()
+
+// Subtitle composable
+const {
+  subtitles,
+  onlineSubtitles,
+  loadingSubtitles,
+  searchingOnline,
+  subtitleError,
+  subtitlePreviewContent,
+  subtitlePreviewFilename,
+  loadingSubtitlePreview,
+  fetchSubtitles,
+  searchOnlineSubtitles,
+  downloadOnlineSubtitle,
+  previewOnlineSubtitle,
+  previewLocalSubtitle,
+  deleteSubtitle,
+  clearSubtitles,
+  formatFileSize,
+  closeSubtitlePreview,
+} = useSubtitles()
+
+// Whisper composable
+const {
+  whisperStatus,
+  whisperProgress,
+  whisperRunning,
+  startWhisperTask,
+} = useWhisper()
+
+// Whisper settings
+const whisperMergeStrategy = ref('smart_merge')
+const whisperLanguage = ref('ja')
+const whisperSensitivity = ref('balanced')
+const whisperDefaultsLoaded = ref(false)
+
+// Translate settings (for local SRT translation feature)
+const whisperTranslateTo = ref('zh')
+const whisperTranslateModel = ref('gpt-4o-mini')
+const whisperTranslateStyle = ref('adult_explicit')
+const whisperTranslateBaseUrl = ref('https://api.openai.com/v1')
+const whisperTranslateApiKey = ref('')
+
+// Local SRT translation loading state
+const translatingSubtitle = ref('')
+
+// Custom pipeline config (used when 'custom' is selected)
+const whisperCustomConfig = ref({
+  model: 'large-v3',
+  vad_method: 'semantic',
+  enhancers: [] as string[],
+  segmenter: 'silero-v6.2',
+  timestamp_mode: 'aligner_interpolation',
+  aligner_backend: 'qwen3',
+  framer_backend: 'vad-grouped',
+  generator_backend: 'anime-whisper',
+})
+
+// Whisper pipeline selection (multi-select, max 2)
+const whisperSelectedPipelines = ref<string[]>([])
+const PIPELINE_PRIORITY = ['custom', 'qwen', 'faster', 'transformers', 'anime', 'balanced']
+
+const whisperPass1Pipeline = computed(() => {
+  if (whisperSelectedPipelines.value.length === 0) return 'anime'
+  return [...whisperSelectedPipelines.value].sort((a, b) => PIPELINE_PRIORITY.indexOf(a) - PIPELINE_PRIORITY.indexOf(b))[0]
+})
+
+const whisperPass2Pipeline = computed(() => {
+  if (whisperSelectedPipelines.value.length < 2) return ''
+  const sorted = [...whisperSelectedPipelines.value].sort((a, b) => PIPELINE_PRIORITY.indexOf(a) - PIPELINE_PRIORITY.indexOf(b))
+  return sorted[1]
+})
+
+// Pipeline options (mirrors Settings page)
+const whisperPipelineOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'anime', label: t('whisper.pipeline.anime'), desc: 'Anime-Whisper + TEN VAD, JAV优化, Transformers后端' },
+    { value: 'faster', label: t('whisper.pipeline.faster'), desc: 'Turbo (Tiny) + 无VAD, 清洁音频极速' },
+    { value: 'balanced', label: t('whisper.pipeline.balanced'), desc: 'Large v3 + Silero VAD, 嘈杂对话均衡' },
+    { value: 'transformers', label: t('whisper.pipeline.transformers'), desc: 'Kotoba v2.2 + Silero VAD, 日语高精度词级时间戳' },
+    { value: 'qwen', label: t('whisper.pipeline.qwen'), desc: 'Large v3 + Silero VAD, 对齐优化' },
+    { value: 'custom', label: 'Custom', desc: '完全自定义 ASR 引擎参数' },
+  ]
+})
+
+const whisperEnhancerOptions = [
+  { value: 'ffmpeg-dsp', label: 'FFmpeg响度' },
+  { value: 'clearvoice', label: 'ClearVoice降噪' },
+  { value: 'silero-vad', label: 'Silero VAD' },
+  { value: 'demucs', label: 'Demucs (GPU)' },
+]
+
+function whisperIsEnhancerActive(value: string) {
+  return whisperCustomConfig.value.enhancers.includes(value)
+}
+
+function whisperToggleEnhancer(value: string) {
+  const idx = whisperCustomConfig.value.enhancers.indexOf(value)
+  if (idx >= 0) {
+    whisperCustomConfig.value.enhancers.splice(idx, 1)
+  } else {
+    whisperCustomConfig.value.enhancers.push(value)
+  }
+}
+
+// Tabs
+const subtitleTab = ref<'local' | 'search' | 'whisper'>('local')
+
+// Translation strings as computed (reactive to currentLang)
+const tabLabels = computed(() => {
+  void i18nVersion.value
+  return {
+    local: t('subtitle.local'),
+    search: t('subtitle.search'),
+    whisper: t('subtitle.whisper'),
+  }
+})
+const noResultsLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.noResults')
+})
+const previewLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.preview')
+})
+const deleteLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.delete')
+})
+const loadingLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.loading')
+})
+const downloadLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.download')
+})
+const rescanLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.rescan')
+})
+const sourceLabel = computed(() => {
+  void i18nVersion.value
+  return t('subtitle.source')
+})
+const whisperPipelineLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.pipeline')
+})
+const whisperMergeLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.mergeStrategy')
+})
+const whisperLangLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.language')
+})
+const whisperSensitivityLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.sensitivity')
+})
+const whisperStartLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.start')
+})
+const whisperModelLabel = computed(() => {
+  void i18nVersion.value
+  return t('whisper.model')
+})
+const whisperVadLabel = computed(() => {
+  void i18nVersion.value
+  return t('settings.whisper.vadMethod') || 'VAD'
+})
+const whisperVadOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'semantic', label: t('whisper.vad.semantic') },
+    { value: 'silero', label: t('whisper.vad.silero') },
+    { value: 'auditok', label: t('whisper.vad.auditok') },
+    { value: 'ten', label: t('whisper.vad.ten') },
+    { value: 'none', label: t('whisper.vad.none') },
+  ]
+})
+const whisperGeneratorOptions = [
+  { value: 'anime-whisper', label: 'Anime-Whisper' },
+  { value: 'qwen3', label: 'Qwen3' },
+]
+
+const whisperAlignerOptions = [
+  { value: 'qwen3', label: 'Qwen3' },
+  { value: 'none', label: 'None' },
+]
+
+const whisperFramerOptions = [
+  { value: 'vad-grouped', label: 'VAD Grouped' },
+  { value: 'full-scene', label: 'Full Scene' },
+]
+
+const whisperTimestampModeOptions = [
+  { value: 'aligner_interpolation', label: 'Aligner Interpolation' },
+  { value: 'vad_only', label: 'VAD Only' },
+]
+
+const whisperMergeOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'smart_merge', label: t('whisper.merge.smartMerge') },
+    { value: 'full_merge', label: t('whisper.merge.fullMerge') },
+    { value: 'pass1_primary', label: t('whisper.merge.pass1Primary') },
+    { value: 'pass2_primary', label: t('whisper.merge.pass2Primary') },
+    { value: 'longest', label: t('whisper.merge.longest') },
+    { value: 'pass1_overlap', label: t('whisper.merge.pass1Overlap') },
+    { value: 'pass2_overlap', label: t('whisper.merge.pass2Overlap') },
+  ]
+})
+const whisperLanguageOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'ja', label: t('whisper.lang.ja') },
+    { value: 'auto', label: t('whisper.lang.auto') },
+    { value: 'en', label: t('whisper.lang.en') },
+    { value: 'zh', label: t('whisper.lang.zh') },
+  ]
+})
+const whisperSensitivityOptions = computed(() => {
+  void i18nVersion.value
+  return [
+    { value: 'conservative', label: t('whisper.sensitivity.conservative') },
+    { value: 'balanced', label: t('whisper.sensitivity.balanced') },
+
+---SPLIT---
+    { value: 'balanced', label: t('whisper.sensitivity.balanced') },
+    { value: 'aggressive', label: t('whisper.sensitivity.aggressive') },
+  ]
+})
+// whisperTranslateProviderOptions removed — unified OpenAI-compatible API, no provider concept (translate fields kept for local SRT translation feature)
+
+// Selected file path (for multi-file work: current + siblings)
+const selectedPath = ref('')
+
+// When selected path changes, re-fetch subtitles
+watch(selectedPath, async (newPath) => {
+  if (newPath && props.open) {
+    await fetchSubtitles(newPath)
+  }
+})
+
+// Sibling paths from detail
+const siblingPaths = computed(() => {
+  return props.detail?.siblings?.filter(s => s.file_path) || undefined
+})
+
+// Load whisper defaults
+async function loadWhisperDefaults() {
+  if (whisperDefaultsLoaded.value) return
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      whisperMergeStrategy.value = resp.data.whisper.merge_strategy || 'smart_merge'
+      whisperLanguage.value = resp.data.whisper.language || 'ja'
+      whisperSensitivity.value = resp.data.whisper.sensitivity || 'balanced'
+      whisperTranslateTo.value = resp.data.whisper.translate_to || 'zh'
+      whisperTranslateModel.value = resp.data.whisper.translate_model || 'gpt-4o-mini'
+      whisperTranslateStyle.value = resp.data.whisper.translate_style || 'adult_explicit'
+      whisperTranslateBaseUrl.value = resp.data.whisper.translate_base_url || 'https://api.openai.com/v1'
+      whisperTranslateApiKey.value = resp.data.whisper.translate_api_key || ''
+      // Load pipeline selection
+      whisperSelectedPipelines.value = []
+      if (resp.data.whisper.pass1_pipeline) whisperSelectedPipelines.value.push(resp.data.whisper.pass1_pipeline)
+      if (resp.data.whisper.pass2_pipeline) whisperSelectedPipelines.value.push(resp.data.whisper.pass2_pipeline)
+      // Load custom config
+      if (resp.data.whisper.custom_config) {
+        whisperCustomConfig.value = {
+          model: resp.data.whisper.custom_config.model || 'large-v3',
+          vad_method: resp.data.whisper.custom_config.vad_method || 'semantic',
+          enhancers: resp.data.whisper.custom_config.enhancers || [],
+          segmenter: resp.data.whisper.custom_config.segmenter || 'silero-v6.2',
+          timestamp_mode: resp.data.whisper.custom_config.timestamp_mode || 'aligner_interpolation',
+          aligner_backend: resp.data.whisper.custom_config.aligner_backend || 'qwen3',
+          framer_backend: resp.data.whisper.custom_config.framer_backend || 'vad-grouped',
+          generator_backend: resp.data.whisper.custom_config.generator_backend || 'anime-whisper',
+        }
+      }
+      whisperDefaultsLoaded.value = true
+    }
+  } catch (e) {
+    console.error('Failed to load Whisper defaults:', e)
+  }
+}
+
+// Watch for panel open AND detail arriving
+watch([() => props.open, () => props.detail], async ([isOpen, detail]) => {
+  if (isOpen && detail?.file_path) {
+    selectedPath.value = detail.file_path
+    await Promise.all([
+      loadWhisperDefaults(),
+      fetchSubtitles(detail.file_path),
+    ])
+    subtitleTab.value = 'local'
+  } else if (!isOpen) {
+    clearSubtitles()
+  }
+}, { immediate: true })
+
+// Trigger search when switching to search tab
+watch(subtitleTab, (tab) => {
+  if (tab === 'search') {
+    handleSearchOnline()
+  }
+})
+
+function handleClose() {
+  clearSubtitles()
+  emit('close')
+}
+
+async function handleSearchOnline() {
+  if (!selectedPath.value) return
+  await searchOnlineSubtitles(selectedPath.value)
+}
+
+async function handleDownloadSubtitle(url: string, _filename: string, source?: string) {
+  const success = await downloadOnlineSubtitle(url, selectedPath.value, source)
+  if (success) {
+    subtitleTab.value = 'local'
+    emit('refreshLocal')
+  }
+}
+
+async function handlePreviewOnline(url: string, filename: string) {
+  await previewOnlineSubtitle(url, filename)
+}
+
+async function handlePreviewLocal(path: string, filename: string) {
+  await previewLocalSubtitle(path, filename)
+}
+
+async function handleTranslateLocal(path: string, filename: string) {
+  translatingSubtitle.value = filename
+  try {
+    await api.post('/whisper/translate/srt', {
+      srt_path: path,
+      target_lang: whisperTranslateTo.value || 'zh',
+      model: whisperTranslateModel.value || 'gpt-4o-mini',
+      style: whisperTranslateStyle.value || 'adult_explicit',
+      base_url: whisperTranslateBaseUrl.value || 'https://api.openai.com/v1',
+      api_key: whisperTranslateApiKey.value || '',
+    })
+    toast.success('翻译任务已创建，请在 JOBS 页面查看进度')
+    emit('refreshLocal')
+  } catch (e: any) {
+    console.error('翻译失败', e)
+    toast.error(`翻译失败：${e?.response?.data?.detail || e.message || '未知错误'}`)
+  } finally {
+    translatingSubtitle.value = ''
+  }
+}
+
+function toggleWhisperPipeline(pipe: string) {
+  const idx = whisperSelectedPipelines.value.indexOf(pipe)
+  if (idx >= 0) {
+    whisperSelectedPipelines.value.splice(idx, 1)
+  } else {
+    if (whisperSelectedPipelines.value.length < 2) {
+      whisperSelectedPipelines.value.push(pipe)
+    } else {
+      whisperSelectedPipelines.value.splice(1, 1, pipe)
+    }
+  }
+}
+
+async function handleDeleteSubtitle(path: string, filename: string) {
+  await deleteSubtitle(path, filename)
+}
+
+async function handleStartWhisper() {
+  // Determine model: for custom pipeline use custom config model, otherwise anime-whisper default
+  const isCustom = whisperSelectedPipelines.value.includes('custom')
+  // pipeline_mode: single pipeline → that pipeline's name, two pipelines → 'ensemble'
+  const pipeline_mode = whisperSelectedPipelines.value.length >= 2
+    ? 'ensemble'
+    : whisperSelectedPipelines.value[0] || 'anime'
+  await startWhisperTask({
+    video_path: selectedPath.value,
+    model: isCustom ? whisperCustomConfig.value.model : 'anime-whisper',
+    pipeline_mode,
+    merge_strategy: whisperMergeStrategy.value,
+    language: whisperLanguage.value,
+    sensitivity: whisperSensitivity.value,
+    pass1_pipeline: whisperPass1Pipeline.value,
+    pass2_pipeline: whisperPass2Pipeline.value,
+    custom_config: isCustom ? whisperCustomConfig.value : undefined,
+    translate_to: whisperTranslateTo.value,
+    translate_base_url: whisperTranslateBaseUrl.value,
+    translate_api_key: whisperTranslateApiKey.value,
+    translate_model: whisperTranslateModel.value,
+    translate_style: whisperTranslateStyle.value,
+  })
+  emit('refreshLocal')
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <Transition name="panel">
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex justify-end"
+      >
+        <!-- Backdrop -->
+        <div
+          class="absolute inset-0 bg-bg-void/80 backdrop-blur-sm"
+          @click="handleClose"
+        ></div>
+
+        <!-- Panel -->
+        <div class="relative bg-bg-surface border-l border-border-default flex flex-col overflow-hidden shadow-2xl h-full w-full max-w-md">
+          <!-- Loading overlay -->
+          <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-bg-surface/80 backdrop-blur-sm">
+            <div class="animate-spin w-8 h-8 border-2 border-accent-cyan border-t-transparent rounded-full"></div>
+          </div>
+
+          <!-- Scrollable wrapper -->
+          <div class="flex-1 overflow-y-auto p-4 space-y-4 relative">
+
+            <!-- Shared Header: backdrop + title + tagline + actors -->
+            <PanelHeader :detail="detail" />
+
+            <!-- Video Path / Folder Selector -->
+            <FilePathSelector
+              :file-path="props.detail?.file_path"
+              :sibling-paths="siblingPaths"
+              v-model="selectedPath"
+            />
+
+            <!-- Tabs -->
+            <VisionTabs v-model="subtitleTab" :tabs="[
+              { key: 'local', label: tabLabels.local },
+              { key: 'search', label: tabLabels.search },
+              { key: 'whisper', label: tabLabels.whisper },
+            ]" />
+
+            <!-- Content -->
+            <div class="pb-16 space-y-4">
+            <!-- Local Tab -->
+            <div v-if="subtitleTab === 'local'">
+              <!-- Loading -->
+              <div v-if="loadingSubtitles" class="flex items-center justify-center py-8">
+                <div class="animate-spin w-8 h-8 border-2 border-accent-cyan border-t-transparent rounded-full"></div>
+              </div>
+
+              <!-- Error -->
+              <div v-else-if="subtitleError" class="text-status-error text-center py-4">
+                {{ subtitleError }}
+              </div>
+
+              <!-- Empty -->
+              <div v-else-if="subtitles.length === 0" class="text-text-muted text-center py-8">
+                {{ noResultsLabel }}
+              </div>
+
+              <!-- List -->
+              <div v-else class="space-y-2">
+                <div
+                  v-for="sub in subtitles"
+                  :key="sub.path"
+                  class="flex items-center justify-between bg-bg-elevated rounded-lg p-3 hover:bg-bg-hover transition-colors"
+                >
+                  <div class="flex-1 min-w-0">
+                    <p class="text-text-primary text-sm font-medium truncate">{{ sub.filename }}</p>
+                    <p class="text-text-muted text-xs truncate">{{ sub.path }}</p>
+                    <p class="text-text-muted text-xs">{{ formatFileSize(sub.size) }}</p>
+                  </div>
+                  <div class="flex gap-2 ml-4">
+                    <VuiButton size="small" variant="outlined" color="secondary" @click="handlePreviewLocal(sub.path, sub.filename)">
+                      {{ previewLabel }}
+                    </VuiButton>
+                    <VuiButton
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      :loading="translatingSubtitle === sub.filename"
+                      :disabled="translatingSubtitle === sub.filename"
+                      @click="handleTranslateLocal(sub.path, sub.filename)"
+                    >
+                      {{ translatingSubtitle === sub.filename ? '翻译中' : 'AI翻译' }}
+                    </VuiButton>
+                    <VuiButton size="small" variant="outlined" color="error" @click="handleDeleteSubtitle(sub.path, sub.filename)">
+                      {{ deleteLabel }}
+                    </VuiButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Search Tab -->
+            <div v-if="subtitleTab === 'search'">
+              <!-- Loading -->
+              <div v-if="searchingOnline" class="flex items-center justify-center py-8">
+                <div class="animate-spin w-8 h-8 border-2 border-accent-cyan border-t-transparent rounded-full"></div>
+                <span class="ml-3 text-text-secondary">{{ loadingLabel }}</span>
+              </div>
+
+              <!-- Error -->
+              <div v-else-if="subtitleError" class="text-status-error text-center py-4">
+                {{ subtitleError }}
+              </div>
+
+              <!-- Empty -->
+              <div v-else-if="onlineSubtitles.length === 0" class="text-text-muted text-center py-8">
+                <p>{{ noResultsLabel }}</p>
+                <VuiButton variant="outlined" color="secondary" size="small" @click="handleSearchOnline" class="mt-4">
+                  {{ rescanLabel }}
+                </VuiButton>
+              </div>
+
+              <!-- Results -->
+              <div v-else class="space-y-2">
+                <div
+                  v-for="(sub, index) in onlineSubtitles"
+                  :key="index"
+                  class="flex items-center justify-between bg-bg-elevated rounded-lg p-3 hover:bg-bg-hover transition-colors"
+                >
+                  <div class="flex-1 min-w-0">
+                    <p class="text-text-primary text-sm font-medium truncate">{{ sub.name }}</p>
+                    <p class="text-text-muted text-xs">{{ whisperLangLabel }}: {{ sub.language }} | {{ sourceLabel }}: {{ sub.source }}</p>
+                  </div>
+                  <div class="flex gap-2 ml-4">
+                    <VuiButton size="small" variant="outlined" color="secondary" @click="sub.source === '本地字幕库' ? handlePreviewLocal(sub.url, sub.name) : handlePreviewOnline(sub.url, sub.name)">
+                      {{ previewLabel }}
+                    </VuiButton>
+                    <VuiButton size="small" variant="gradient" color="success" @click="handleDownloadSubtitle(sub.url, sub.name, sub.source)">
+                      {{ downloadLabel }}
+                    </VuiButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Whisper Tab -->
+            <div v-if="subtitleTab === 'whisper'">
+              <div class="space-y-4">
+
+                <!-- Pipeline Selection (6 pipelines, multi-select, max 2) -->
+                <div class="ui-card">
+                  <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-2">{{ whisperPipelineLabel }}</label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button
+                      v-for="pipe in whisperPipelineOptions"
+                      :key="pipe.value"
+                      @click="toggleWhisperPipeline(pipe.value)"
+                      :disabled="whisperRunning"
+                      class="pipeline-btn"
+                      :class="{ 'pipeline-btn--active': whisperSelectedPipelines.includes(pipe.value) }"
+                    >
+                      <span class="pipeline-btn__name">
+                        {{ pipe.label }}
+                        <span v-if="whisperSelectedPipelines.includes(pipe.value)" class="pipeline-btn__check">✓</span>
+                      </span>
+                      <span class="pipeline-btn__desc">{{ pipe.desc }}</span>
+                    </button>
+                  </div>
+                  <p class="text-xs text-text-muted mt-1">最多选2个，自动按优先级排序</p>
+                </div>
+
+                <!-- Custom Pipeline Config (only when custom is selected) -->
+                <div v-if="whisperSelectedPipelines.includes('custom')" class="custom-pipeline-panel">
+                  <div class="custom-pipeline-panel__header">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    <span>Custom Pipeline</span>
+                  </div>
+                  <div class="custom-pipeline-panel__body">
+                    <div class="grid grid-cols-2 gap-3">
+                      <!-- Model -->
+                      <div>
+                        <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ whisperModelLabel }}</label>
+                        <select
+                          v-model="whisperCustomConfig.model"
+                          :disabled="whisperRunning"
+                          class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                        >
+                          <option value="large-v3">Large V3</option>
+                          <option value="large-v2">Large V2</option>
+                          <option value="turbo">Turbo</option>
+                        </select>
+                      </div>
+                      <!-- VAD Method -->
+                      <div>
+                        <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ whisperVadLabel }}</label>
+                        <select
+                          v-model="whisperCustomConfig.vad_method"
+                          :disabled="whisperRunning"
+                          class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                        >
+                          <option v-for="opt in whisperVadOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <!-- Enhancers -->
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">语音增强</label>
+                      <div class="flex gap-2 flex-wrap">
+                        <button
+                          v-for="opt in whisperEnhancerOptions"
+                          :key="opt.value"
+                          @click="whisperToggleEnhancer(opt.value)"
+                          :disabled="whisperRunning"
+                          class="enhancer-toggle"
+                          :class="{ 'enhancer-toggle--active': whisperIsEnhancerActive(opt.value) }"
+                        >
+                          <span class="enhancer-toggle__dot"></span>
+                          <span class="enhancer-toggle__label">{{ opt.label }}</span>
+                        </button>
+                      </div>
+                    </div>
+                    <!-- Generator -->
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">Generator</label>
+                      <select
+                        v-model="whisperCustomConfig.generator_backend"
+                        :disabled="whisperRunning"
+                        class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                      >
+                        <option v-for="opt in whisperGeneratorOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </div>
+                    <!-- Aligner -->
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">Aligner</label>
+                      <select
+                        v-model="whisperCustomConfig.aligner_backend"
+                        :disabled="whisperRunning"
+                        class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                      >
+                        <option v-for="opt in whisperAlignerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </div>
+                    <!-- Framer -->
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">Framer</label>
+                      <select
+                        v-model="whisperCustomConfig.framer_backend"
+                        :disabled="whisperRunning"
+                        class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                      >
+                        <option v-for="opt in whisperFramerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </div>
+                    <!-- Timestamp Mode -->
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">Timestamp</label>
+                      <select
+                        v-model="whisperCustomConfig.timestamp_mode"
+                        :disabled="whisperRunning"
+                        class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                      >
+                        <option v-for="opt in whisperTimestampModeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Merge Strategy (only when two pipelines selected) -->
+                <div v-if="whisperSelectedPipelines.length === 2" class="ui-card">
+                  <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-2">{{ whisperMergeLabel }}</label>
+                  <select
+                    v-model="whisperMergeStrategy"
+                    :disabled="whisperRunning"
+                    class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent-cyan focus:border-transparent"
+                  >
+                    <option v-for="opt in whisperMergeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+
+                <!-- Language -->
+                <div class="ui-card">
+                  <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-2">{{ whisperLangLabel }}</label>
+                  <select
+                    v-model="whisperLanguage"
+                    :disabled="whisperRunning"
+                    class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent-cyan focus:border-transparent"
+                  >
+                    <option v-for="opt in whisperLanguageOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+
+                <!-- Sensitivity -->
+                <div class="ui-card">
+                  <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-2">{{ whisperSensitivityLabel }}</label>
+                  <select
+                    v-model="whisperSensitivity"
+                    :disabled="whisperRunning"
+                    class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent-cyan focus:border-transparent"
+                  >
+                    <option v-for="opt in whisperSensitivityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+
+                <!-- Status -->
+                <div v-if="whisperStatus" class="text-center py-2 rounded" :class="{
+                  'text-accent-cyan': whisperStatus.toLowerCase().includes('submit') || whisperStatus.toLowerCase().includes('create'),
+                  'text-status-success': whisperStatus.toLowerCase().includes('complete') || whisperStatus.toLowerCase().includes('done'),
+                  'text-status-error': whisperStatus.toLowerCase().includes('fail') || whisperStatus.toLowerCase().includes('error')
+                }">
+                  {{ whisperStatus }}
+                </div>
+
+                <!-- Progress -->
+                <VuiProgress
+                  v-if="whisperRunning || whisperProgress > 0"
+                  :value="whisperProgress"
+                  color="cyan"
+                />
+
+                <!-- Start Button -->
+                <VuiButton
+                  v-if="!whisperRunning"
+                  variant="gradient"
+                  color="info"
+                  class="w-full"
+                  @click="handleStartWhisper"
+                >
+                  {{ whisperStartLabel }}
+                </VuiButton>
+              </div>
+            </div>
+          </div>
+
+            <!-- Fixed Close Button -->
+            <button
+              @click="handleClose"
+              class="absolute top-4 right-4 w-10 h-10 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-default transition-colors shadow-lg"

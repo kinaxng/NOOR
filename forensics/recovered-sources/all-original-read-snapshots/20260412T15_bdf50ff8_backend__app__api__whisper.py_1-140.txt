@@ -1,0 +1,140 @@
+"""Whisper 字幕生成 API - 集成到统一任务系统"""
+import asyncio
+import os
+import re
+import shutil
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from app.core.config import get_settings
+from app.tasks.manager import job_manager
+from app.api.system import SystemLogManager
+
+router = APIRouter(prefix="/api/whisper", tags=["whisper"])
+
+
+class WhisperRequest(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    video_path: str  # Emby path
+    model: str = "anime-whisper"
+    pipeline_mode: str = "ensemble"
+    merge_strategy: str = "smart_merge"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    # VAD 设置
+    vad_method: Optional[str] = "semantic"
+    # 语音增强
+    speech_enhancer: Optional[str] = "none"
+    # 双通独立配置
+    pass1_pipeline: Optional[str] = None
+    pass2_pipeline: Optional[str] = None
+    # 自定义配置（当 pipeline 为 custom 时使用）
+    custom_config: Optional[dict] = None
+    # Decoupled pipeline 设置
+    timestamp_mode: Optional[str] = "aligner_interpolation"
+    aligner_backend: Optional[str] = "qwen3"
+    framer_backend: Optional[str] = "vad-grouped"
+    # 翻译设置
+    translate_to: Optional[str] = None
+    translate_base_url: Optional[str] = "https://api.openai.com/v1"
+    translate_api_key: Optional[str] = ""
+    translate_model: Optional[str] = "llama3.2"
+    translate_style: Optional[str] = "adult_explicit"
+
+
+class TranslateSrtRequest(BaseModel):
+    srt_path: str
+    target_lang: str = "zh"
+    model: str = "gpt-4o-mini"
+    style: str = "adult_explicit"
+    base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    api_key: str = ""
+
+
+class WhisperResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+
+
+def map_emby_path_to_local(emby_path: str) -> str:
+    """Map Emby path to local path using source_dir setting."""
+    settings = get_settings()
+    if not settings.source_dir:
+        return emby_path
+    if emby_path.startswith('/data/media'):
+        return emby_path.replace('/data/media', settings.source_dir, 1)
+    return emby_path
+
+
+def clean_video_name(name: str) -> str:
+    """清理视频名用于字幕文件"""
+    name = re.sub(r'[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\.(mp4|mkv|avi|mov|wmv|flv|m4v)$', '', name, flags=re.IGNORECASE)
+    return name.strip()
+
+
+@router.post("/tasks", response_model=WhisperResponse)
+async def create_whisper_task(request: WhisperRequest):
+    """创建 Whisper 任务"""
+    from app.core.models import JobCreate, JobSettings
+    from app.api.settings import _get_whisper_feature_flags
+
+    # 验证视频路径
+    local_video_path = map_emby_path_to_local(request.video_path)
+    if not os.path.exists(local_video_path):
+        raise HTTPException(status_code=404, detail=f"Video not found: {local_video_path}")
+
+    if any(v == "custom" for v in (request.pipeline_mode, request.pass1_pipeline, request.pass2_pipeline) if v):
+        feature = _get_whisper_feature_flags()["custom_pipeline"]
+        if not feature["available"]:
+            raise HTTPException(status_code=400, detail=f"Custom Whisper pipeline 当前不可用：{feature['reason']}")
+
+    # 从路径提取视频名称
+    video_name = os.path.splitext(os.path.basename(local_video_path))[0]
+
+    # 构建 Whisper 配置
+    whisper_config = {
+        "model": request.model,
+        "pipeline_mode": request.pipeline_mode,
+        "merge_strategy": request.merge_strategy,
+        "language": request.language,
+        "sensitivity": request.sensitivity,
+        "vad_method": request.vad_method,
+        "speech_enhancer": request.speech_enhancer,
+        "pass1_pipeline": request.pass1_pipeline,
+        "pass2_pipeline": request.pass2_pipeline,
+        "custom_config": request.custom_config,
+        "translate_to": request.translate_to,
+        "translate_base_url": request.translate_base_url,
+        "translate_api_key": request.translate_api_key,
+        "translate_model": request.translate_model,
+        "translate_style": request.translate_style,
+    }
+
+    # 创建任务（使用 job_manager）
+    job_data = JobCreate(
+        emby_item_id=f"whisper_{os.path.basename(local_video_path)}",
+        emby_item_name=f"[Whisper] {video_name}",
+        input_path=local_video_path,
+        settings=JobSettings(**whisper_config),
+    )
+
+    # 通过 job_manager 创建（enqueue_whisper 会设置 job_type="whisper"）
+    result = await job_manager.enqueue_whisper(job_data)
+
+    return WhisperResponse(
+        task_id=result.id,
+        status=result.status,
+        message="Whisper 任务已创建"
+    )
+
+
+@router.get("/tasks/{task_id}")
+async def get_whisper_task(task_id: str):
+    """获取任务状态"""
+    job = await job_manager.get_job(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Task not found")
+

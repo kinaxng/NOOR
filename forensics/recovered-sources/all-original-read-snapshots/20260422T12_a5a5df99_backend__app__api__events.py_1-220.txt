@@ -1,0 +1,216 @@
+import asyncio
+import json
+from fastapi import APIRouter, HTTPException
+from sse_starlette.sse import EventSourceResponse
+from app.tasks.manager import job_manager
+
+router = APIRouter(prefix="/api/jobs", tags=["events"])
+
+
+@router.get("/{job_id}/events")
+async def job_events(job_id: str):
+    """SSE endpoint for job progress updates."""
+
+    async def event_generator():
+        event_queue = job_manager.get_event_queue(job_id)
+
+        # Send initial connection event
+        yield {
+            "event": "connected",
+            "data": json.dumps({"job_id": job_id}),
+        }
+
+        while True:
+            try:
+                msg = await asyncio.wait_for(event_queue.get(), timeout=60.0)
+
+                if msg.get("type") == "progress":
+                    yield {
+                        "event": "progress",
+                        "data": json.dumps({
+                            "type": "progress",
+                            "progress": msg["progress"],
+                            "phase_key": msg.get("phase_key"),
+                            "phase_label": msg.get("phase_label"),
+                            "phase_progress": msg.get("phase_progress"),
+                            "detail": msg.get("detail"),
+                        }),
+                    }
+                elif msg.get("type") == "log":
+                    yield {
+                        "event": "log",
+                        "data": json.dumps({
+                            "type": "log",
+                            "line": msg["line"],
+                        }),
+                    }
+                elif msg.get("type") in ("queued", "blocked"):
+                    yield {
+                        "event": msg["type"],
+                        "data": json.dumps({
+                            "type": msg["type"],
+                            "job_id": msg.get("job_id"),
+                            "phase_key": msg.get("phase_key"),
+                            "phase_label": msg.get("phase_label"),
+                            "phase_progress": msg.get("phase_progress"),
+                            "detail": msg.get("detail"),
+                        }),
+                    }
+                elif msg.get("type") in ("completed", "failed", "cancelled", "skipped"):
+                    yield {
+                        "event": "done",
+                        "data": json.dumps({
+                            "type": msg["type"],
+                            "success": msg.get("success", False),
+                            "progress": msg.get("progress"),
+                            "phase_key": msg.get("phase_key"),
+                            "phase_label": msg.get("phase_label"),
+                            "phase_progress": msg.get("phase_progress"),
+                            "detail": msg.get("detail"),
+                            "error": msg.get("error"),
+                        }),
+                    }
+                    await job_manager.remove_event_queue(job_id)
+                    break
+
+            except asyncio.TimeoutError:
+                # Send keepalive
+                yield {
+                    "event": "keepalive",
+                    "data": json.dumps({"time": asyncio.get_event_loop().time()}),
+                }
+
+    return EventSourceResponse(event_generator())
+
+---
+                terminate_deadline = time.time() + 1.0
+            await asyncio.sleep(0.2)
+
+        process.join(timeout=1)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=1)
+        await consume_messages()
+
+        close = getattr(message_queue, "close", None)
+        if callable(close):
+            close()
+        join_thread = getattr(message_queue, "join_thread", None)
+        if callable(join_thread):
+            join_thread()
+
+        if not cancelled and output_path is None and error_msg is None and process.exitcode not in (None, 0):
+            error_msg = f"Translation worker exited with code {process.exitcode}"
+        elif not cancelled and output_path is None and error_msg is None:
+            error_msg = "Translation worker exited without result"
+
+        return output_path, error_msg, cancelled or self._cancel_event_for(job_id).is_set()
+
+    def get_event_queue(self, job_id: str) -> asyncio.Queue:
+        if job_id not in self._event_queues:
+            self._event_queues[job_id] = asyncio.Queue()
+        return self._event_queues[job_id]
+
+    def _log_file_path(self, job_id: str) -> str:
+        return log_file_path(job_id)
+
+    async def get_logs(self, job_id: str) -> list[str]:
+        # 优先从内存获取实时日志
+        if job_id in self._logs and self._logs[job_id]:
+            return self._logs[job_id]
+        # 从文件读取
+        return read_log_lines(job_id)
+
+    async def add_log(self, job_id: str, log: str):
+        if job_id not in self._logs:
+            self._logs[job_id] = []
+        self._logs[job_id].append(log)
+        # 持久化到文件
+        try:
+            append_log_line(job_id, log)
+        except Exception as e:
+            logger.warning("Failed to save log to file for job %s: %s", job_id, e)
+
+    async def _append_job_log(self, job_id: str, line: str, *, emit_event: bool = False) -> None:
+        await self.add_log(job_id, line)
+        if emit_event:
+            await self.get_event_queue(job_id).put({"type": "log", "line": line})
+
+    async def remove_event_queue(self, job_id: str):
+        if job_id in self._event_queues:
+            del self._event_queues[job_id]
+
+    def _build_job_create_from_row(self, job: Job) -> JobCreate:
+        return JobCreate(
+            emby_item_id=job.emby_item_id,
+            emby_item_name=job.emby_item_name,
+            input_path=job.input_path,
+            settings=job.settings or {},
+            chain_id=job.chain_id,
+            depends_on_task_id=job.depends_on_task_id,
+            parent_task_id=job.parent_task_id,
+        )
+
+    def _default_followup_phase_state(self, job_type: str) -> dict[str, object]:
+        return get_followup_phase_state(job_type)
+
+    async def _activate_blocked_dependents(self, parent_job_id: str) -> list[str]:
+        activated_ids: list[str] = []
+        pending_jobs: list[tuple[str, JobCreate, str]] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status == "blocked",
+                    ).order_by(Job.created_at)
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "queued"
+                    job.error_message = None
+                    defaults = get_followup_phase_state(job.job_type, status="queued")
+                    self._apply_phase_state_to_job(job, defaults)
+                    pending_jobs.append((job.id, self._build_job_create_from_row(job), job.job_type))
+                    activated_ids.append(job.id)
+                await session.commit()
+        for job_id, job_data, job_type in pending_jobs:
+            defaults = get_followup_phase_state(job_type, status="queued")
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put(
+                self._build_state_event_payload(status="queued", job_id=job_id, phase_state=defaults)
+            )
+        if pending_jobs:
+            self._ensure_worker()
+        return activated_ids
+
+    async def _skip_blocked_dependents(self, parent_job_id: str, reason: str) -> list[str]:
+        skipped_ids: list[str] = []
+        skipped_events: list[tuple[str, dict[str, object]]] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status.in_(["blocked", "pending"]),
+                    )
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "skipped"
+                    defaults = get_followup_phase_state(job.job_type, detail=reason)
+                    self._apply_phase_state_to_job(job, defaults)
+                    job.progress = 0
+                    job.detail = get_terminal_detail(
+                        job.job_type,
+                        "skipped",
+                        error_message=reason,
+                    )
+                    if not job.phase_label:
+                        job.phase_label = get_terminal_phase_label(
+                            "skipped",
+                            phase_key=job.phase_key,
+                            fallback=job.phase_label or "skipped",
+                        )

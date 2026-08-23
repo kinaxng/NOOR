@@ -1,0 +1,97 @@
+    @property
+    def phase_group(self) -> Optional[str]:
+        return get_phase_group(self.phase_key)
+
+
+class EmbyItemCache(Base):
+    """Persistent SQLite cache for Emby library items.
+
+    Survives process restarts unlike in-memory dict.
+    """
+    __tablename__ = "emby_item_cache"
+
+    library_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    cached_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    items_json: Mapped[str] = mapped_column(Text, nullable=False)  # Serialized JSON list
+
+
+class InstallStatus(Base):
+    """Singleton table to track background installation status."""
+    __tablename__ = "install_status"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    status: Mapped[str] = mapped_column(String(32), default="idle")  # idle/running/completed/failed
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+# Pydantic models
+class JobSettings(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    detection_model: str = "v4-fast"
+    restoration_model: str = "basicvsrpp-v1.2"
+    encoding_preset: str = "hevc-nvidia-gpu-hq"
+
+
+class JobCreate(BaseModel):
+    emby_item_id: str
+    emby_item_name: str
+    rating: Optional[str] = None
+    set: Optional[str] = None
+    id: Optional[str] = None
+    # Additional fields from AV刮削 NFO
+    tag: Optional[str] = None        # <tag> — usually studio slug
+    maker: Optional[str] = None      # <maker> — 片商
+    publisher: Optional[str] = None  # <publisher> — 发行商
+    label: Optional[str] = None      # <label> — 标签/系列
+    num: Optional[str] = None        # <num> — 番号 (e.g. CAWD-030)
+
+
+class FileTags(BaseModel):
+    """File tag information parsed from filename."""
+    is_uncensored: bool = False  # -u 流出
+    has_chinese: bool = False    # -c 中文
+    is_cracked: bool = False     # 破解 (same as uncensored)
+    is_leaked: bool = False      # 流出
+    release_type: Optional[str] = None  # 流出 / 无码
+    release_type_key: Optional[str] = None  # leaked / uncensored
+
+
+class EmbyLibrary(BaseModel):
+    id: str
+    name: str
+    type: str
+    poster_path: Optional[str] = None
+
+
+class EmbyItem(BaseModel):
+    id: str
+    name: str
+    type: str
+    media_type: Optional[str] = None
+    poster_path: Optional[str] = None
+    date_created: Optional[str] = None
+    path: Optional[str] = None
+    nfo: Optional[EmbyNFO] = None
+    tags: FileTags = Field(default_factory=FileTags)
+    subtitle_count: int = 0  # Number of subtitle files found locally
+
+
+class SiblingItem(BaseModel):
+    """A sibling video file in the same folder (CD1/CD2, etc.)."""
+    label: str = ""          # e.g. "CD1", "CD2", "碟1"
+    file_path: Optional[str] = None
+    # Optional Emby data (present for Emby-indexed siblings)
+    id: Optional[str] = None
+    name: Optional[str] = None
+    poster_path: Optional[str] = None
+
+
+class EmbyItemDetail(BaseModel):
+    id: str
+    name: str
+    media_type: str
+    file_path: Optional[str] = None

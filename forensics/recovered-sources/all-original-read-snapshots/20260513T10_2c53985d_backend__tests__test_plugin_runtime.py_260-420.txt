@@ -1,0 +1,12 @@
+    plugins_dir, _, runtime_module = runtime_env
+    write_plugin(plugins_dir, "cfg-plugin", {"name": "Config Plugin", "type": "subtitle_provider"})
+
+    class ConfigHandler:
+        def persist_config(self, config: dict) -> dict:
+            return {**config, "persisted": True}
+
+    monkeypatch.setattr(runtime_module, "get_plugin_handler", lambda plugin_id: ConfigHandler())
+    rt = PluginRuntime()
+
+    assert await rt.set_config("cfg-plugin", {"a": 1}) == {"a": 1, "persisted": True}
+    assert rt.get_config("cfg-plugin") == {"a": 1, "persisted": True}

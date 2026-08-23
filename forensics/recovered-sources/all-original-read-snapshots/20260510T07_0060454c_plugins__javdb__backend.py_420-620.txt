@@ -1,0 +1,35 @@
+    if action == "video":
+        return {"ok": True, "data": await _video(config, str(payload.get("code") or ""))}
+    if action == "related_movies":
+        return await _related_movies(config, payload)
+    if action == "actors":
+        data = _data(await _request(config, "GET", "/actors", params={"type": int(payload.get("type") or 0)}))
+        actors = [_normalize_actor(config, x) for x in (data.get("actors") if isinstance(data, dict) else data or []) if isinstance(x, dict)]
+        return {"ok": True, "items": actors, "total": len(actors)}
+    if action == "actor_movies":
+        actor_id = str(payload.get("actor_id") or payload.get("id") or "")
+        page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))
+        data = _data(await _request(config, "GET", f"/actors/{actor_id}/movies", params={"page": page, "limit": limit, "sort_by": payload.get("sort_by") or "release"}))
+        return {"ok": True, "items": [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)], "raw": data}
+    if action == "stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/stats"))}
+    if action == "categories":
+        return {"ok": True, "items": _data(await _request(config, "GET", "/options/categories")) or []}
+    if action == "magnet_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/external-magnets/stats"))}
+    if action == "subtitle_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/subtitle/stats"))}
+    if action == "downloaders":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/downloaders"))}
+    if action == "download_records":
+        page = max(1, int(payload.get("page") or 1)); limit = max(1, min(int(payload.get("limit") or 24), 80))
+        return {"ok": True, "data": _data(await _request(config, "GET", "/download-records", params={"page": page, "limit": limit}))}
+    if action == "image_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/image/stats"))}
+    if action == "library_stats":
+        return {"ok": True, "data": _data(await _request(config, "GET", "/library/cache/stats"))}
+    if action == "download_options":
+        return {"ok": True, "downloader_binding": str(config.get("downloader_binding") or "none")}
+    if action == "knowledge_contributions":
+        return await build_knowledge_contributions(config, int(payload.get("limit") or 100), context=payload.get("context") or {})
+    raise ValueError(f"unsupported action: {action}")

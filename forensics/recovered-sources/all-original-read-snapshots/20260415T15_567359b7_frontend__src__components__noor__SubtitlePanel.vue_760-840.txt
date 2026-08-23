@@ -1,0 +1,81 @@
+                        class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                      >
+                        <option v-for="opt in whisperFramerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </div>
+                    <!-- Timestamp Mode -->
+                    <div>
+                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ whisperTimestampLabel }}</label>
+                      <select
+                        v-model="whisperCustomConfig.timestamp_mode"
+                        :disabled="whisperRunning"
+                        class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-accent-cyan focus:border-transparent"
+                      >
+                        <option v-for="opt in whisperTimestampModeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Merge Strategy (only when two pipelines selected) -->
+                <div v-if="whisperUseAdvanced && whisperSelectedPipelines.length === 2" class="ui-card">
+                  <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-2">{{ whisperMergeLabel }}</label>
+                  <select
+                    v-model="whisperMergeStrategy"
+                    :disabled="whisperRunning"
+                    class="w-full bg-bg-elevated border border-border-subtle text-text-primary rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent-cyan focus:border-transparent"
+                  >
+                    <option v-for="opt in whisperMergeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+
+                <div v-if="whisperFeedbackVisible" class="whisper-submit-card" :class="{
+                  'whisper-submit-card--queued': whisperFeedbackKind === 'queued',
+                  'whisper-submit-card--error': whisperFeedbackKind === 'error'
+                }">
+                  <div class="whisper-submit-card__head">
+                    <div class="whisper-submit-card__title-row">
+                      <span class="whisper-submit-card__title">{{ whisperStatus }}</span>
+                      <span v-if="whisperTaskId && whisperFeedbackKind !== 'error'" class="whisper-submit-card__jobid">#{{ whisperTaskId }}</span>
+                    </div>
+                    <button type="button" class="whisper-submit-card__dismiss" @click="hideWhisperFeedback">{{ whisperDismissLabel }}</button>
+                  </div>
+
+                  <p v-if="whisperFeedbackKind === 'queued'" class="whisper-submit-card__hint">{{ whisperQueuedHint }}</p>
+
+                  <VuiProgress
+                    v-if="whisperFeedbackKind !== 'error'"
+                    :value="whisperProgress"
+                    color="cyan"
+                  />
+
+                  <div v-if="whisperFeedbackKind === 'queued'" class="whisper-submit-card__actions">
+                    <VuiButton size="small" variant="outlined" color="secondary" @click="hideWhisperFeedback">
+                      {{ whisperDismissLabel }}
+                    </VuiButton>
+                    <VuiButton size="small" variant="gradient" color="info" @click="openJobsPage">
+                      {{ whisperViewJobsLabel }}
+                    </VuiButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+            <!-- Fixed Close Button -->
+            <button
+              @click="handleClose"
+              class="absolute top-4 right-4 w-10 h-10 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-default transition-colors shadow-lg"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- Subtitle Preview -->

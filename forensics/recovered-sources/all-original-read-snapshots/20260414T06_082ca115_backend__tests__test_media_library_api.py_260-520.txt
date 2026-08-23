@@ -1,0 +1,204 @@
+async def test_delete_source_chain_removes_source_and_hardlink_dirs(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    source_root = tmp_path / 'source'
+    hardlink_root = tmp_path / 'hardlinks'
+    source_dir = source_root / 'ABF-001'
+    hardlink_dir = hardlink_root / 'ABF-001'
+    source_dir.mkdir(parents=True)
+    hardlink_dir.mkdir(parents=True)
+    source_file = source_dir / 'ABF-001-C.mp4'
+    hardlink_file = hardlink_dir / 'ABF-001-C.mp4'
+    source_file.write_text('video')
+    hardlink_file.write_text('video')
+
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'A', 'source_dir': str(source_root), 'hardlink_dir': str(hardlink_root)}]
+    })
+
+    req = media_library.SourceChainDeleteRequest(
+        source_path=str(source_file),
+        hardlink_paths=[str(hardlink_file)],
+        code='ABF-001',
+    )
+    result = await media_library.delete_source_chain(req)
+
+    assert result['ok'] is True
+    assert str(source_dir.resolve()) in result['deleted_dirs']
+    assert str(hardlink_dir.resolve()) in result['deleted_dirs']
+    assert not source_dir.exists()
+    assert not hardlink_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_source_chain_keeps_collection_folder_when_not_code_bucket(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    source_root = tmp_path / 'source'
+    hardlink_root = tmp_path / 'hardlinks'
+    collection_dir = source_root / '波多野结衣老师无码中字小合集'
+    hardlink_dir = hardlink_root / '040415-846'
+    collection_dir.mkdir(parents=True)
+    hardlink_dir.mkdir(parents=True)
+    source_file = collection_dir / '040415-846-carib-1080p.mp4'
+    source_nfo = collection_dir / '040415-846-carib-1080p.nfo'
+    hardlink_file = hardlink_dir / '040415-846-C.mp4'
+    source_file.write_text('video')
+    source_nfo.write_text('meta')
+    hardlink_file.write_text('video')
+
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'A', 'source_dir': str(source_root), 'hardlink_dir': str(hardlink_root)}]
+    })
+
+    req = media_library.SourceChainDeleteRequest(
+        source_path=str(source_file),
+        hardlink_paths=[str(hardlink_file)],
+        code='040415-846',
+    )
+    result = await media_library.delete_source_chain(req)
+
+    assert result['ok'] is True
+    assert str(hardlink_dir.resolve()) in result['deleted_dirs']
+    assert str(source_file.resolve()) in result['deleted_files']
+    assert str(source_nfo.resolve()) in result['deleted_files']
+    assert collection_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_group_removes_all_entries(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    source_root = tmp_path / 'source'
+    hardlink_root = tmp_path / 'hardlinks'
+    source_dir = source_root / 'ABF-233'
+    hardlink_dir = hardlink_root / 'ABF-233'
+    source_dir.mkdir(parents=True)
+    hardlink_dir.mkdir(parents=True)
+    source_file = source_dir / 'ABF-233.mp4'
+    hardlink_a = hardlink_dir / 'ABF-233-C.mp4'
+    hardlink_b = hardlink_dir / 'ABF-233-无码-C.mp4'
+    source_file.write_text('video')
+    hardlink_a.write_text('video')
+    hardlink_b.write_text('video')
+
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'A', 'source_dir': str(source_root), 'hardlink_dir': str(hardlink_root)}]
+    })
+
+    req = media_library.GroupDeleteRequest(
+        code='ABF-233',
+        entries=[
+            media_library.HardlinkEntryDeletePayload(
+                source_path=str(source_file),
+                hardlink_paths=[str(hardlink_a), str(hardlink_b)],
+            )
+        ],
+    )
+    result = await media_library.delete_hardlink_group(req)
+
+    assert result['ok'] is True
+    assert str(source_dir.resolve()) in result['deleted_dirs']
+    assert str(hardlink_dir.resolve()) in result['deleted_dirs']
+    assert not source_dir.exists()
+    assert not hardlink_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_source_chain_dry_run_does_not_delete(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    source_root = tmp_path / 'source'
+    hardlink_root = tmp_path / 'hardlinks'
+    source_dir = source_root / 'ATKD-348'
+    hardlink_dir = hardlink_root / 'ATKD-348'
+    source_dir.mkdir(parents=True)
+    hardlink_dir.mkdir(parents=True)
+    source_file = source_dir / 'ATKD-348.mkv'
+    source_nfo = source_dir / 'ATKD-348.nfo'
+    hardlink_file = hardlink_dir / 'ATKD-348-C.mkv'
+    source_file.write_text('video')
+    source_nfo.write_text('meta')
+    hardlink_file.write_text('video')
+
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'A', 'source_dir': str(source_root), 'hardlink_dir': str(hardlink_root)}]
+    })
+
+    req = media_library.SourceChainDeleteRequest(
+        source_path=str(source_file),
+        hardlink_paths=[str(hardlink_file)],
+        code='ATKD-348',
+        dry_run=True,
+    )
+    result = await media_library.delete_source_chain(req)
+
+    assert result['ok'] is True
+    assert result['dry_run'] is True
+    assert str(source_dir.resolve()) in result['planned_dirs']
+    assert str(hardlink_dir.resolve()) in result['planned_dirs']
+    assert source_file.exists()
+    assert hardlink_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_group_dry_run_returns_plan(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    source_root = tmp_path / 'source'
+    hardlink_root = tmp_path / 'hardlinks'
+    source_collection = source_root / '波多野结衣合集'
+    hardlink_dir = hardlink_root / '040415-846'
+    source_collection.mkdir(parents=True)
+    hardlink_dir.mkdir(parents=True)
+    source_file = source_collection / '040415-846-carib-1080p.mp4'
+    source_nfo = source_collection / '040415-846-carib-1080p.nfo'
+    hardlink_file = hardlink_dir / '040415-846-C.mp4'
+    source_file.write_text('video')
+    source_nfo.write_text('meta')
+    hardlink_file.write_text('video')
+
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'A', 'source_dir': str(source_root), 'hardlink_dir': str(hardlink_root)}]
+    })
+
+    req = media_library.GroupDeleteRequest(
+        code='040415-846',
+        entries=[
+            media_library.HardlinkEntryDeletePayload(
+                source_path=str(source_file),
+                hardlink_paths=[str(hardlink_file)],
+            )
+        ],
+        dry_run=True,
+    )
+    result = await media_library.delete_hardlink_group(req)
+
+    assert result['ok'] is True
+    assert result['dry_run'] is True
+    assert str(hardlink_dir.resolve()) in result['planned_dirs']
+    assert str(source_file.resolve()) in result['planned_files']
+    assert str(source_nfo.resolve()) in result['planned_files']
+    assert source_collection.exists()
+
+
+@pytest.mark.asyncio
+async def test_preview_hardlink_file_returns_fileresponse(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    source_root = tmp_path / 'source'
+    source_root.mkdir(parents=True)
+    video_file = source_root / 'sample.mp4'
+    video_file.write_bytes(b'test')
+
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'A', 'source_dir': str(source_root), 'hardlink_dir': str(tmp_path / 'hardlinks')}]
+    })
+
+    resp = await media_library.preview_hardlink_file(path=str(video_file))
+    assert resp.path == str(video_file.resolve())
+
+
+@pytest.mark.asyncio
+async def test_preview_hardlink_file_rejects_outside_roots(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    source_root = tmp_path / 'source'
+    source_root.mkdir(parents=True)
+    outside_file = tmp_path / 'outside.mp4'
+    outside_file.write_bytes(b'test')
+
+    monkeypatch.setattr(media_library, '_load_config', lambda: {
+        'scan_groups': [{'name': 'A', 'source_dir': str(source_root), 'hardlink_dir': str(tmp_path / 'hardlinks')}]
+    })
+
+    with pytest.raises(HTTPException) as exc_info:
+        await media_library.preview_hardlink_file(path=str(outside_file))
+
+    assert exc_info.value.status_code == 400

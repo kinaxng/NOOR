@@ -1,0 +1,221 @@
+438 /home/kinax/noor/frontend/src/pages/library.vue
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useMediaStore } from '../stores/media'
+import { useJobsStore } from '../stores/jobs'
+import { useToast } from '../composables/useToast'
+import { useI18n } from '../composables/useI18n'
+import { useBlurCover } from '../composables/useBlurCover'
+import { api } from '../api/client'
+import type { Job, MediaItem } from '../api/types'
+import MediaGrid from '../components/library/MediaGrid.vue'
+import DetailPanel from '../components/library/DetailPanel.vue'
+import LadaPanel from '../components/library/LadaPanel.vue'
+import SubtitlePanel from '../components/library/SubtitlePanel.vue'
+
+const { t } = useI18n()
+const media = useMediaStore()
+const jobs = useJobsStore()
+const toast = useToast()
+const route = useRoute()
+const router = useRouter()
+const { blurEnabled, toggleBlur } = useBlurCover()
+
+type CoverMode = 'cover' | 'fanart'
+const COVER_MODE_KEY = 'noor.library.cover_mode'
+const coverMode = ref<CoverMode>('cover')
+const searchText = ref('')
+const subtitleTab = ref<'local' | 'online' | 'whisper'>('local')
+
+// Panel visibility
+const showDetailPanel = ref(false)
+const showLadaPanel = ref(false)
+const showSubtitlePanel = ref(false)
+const loadingDetail = ref(false)
+const detailError = ref<string | null>(null)
+let detailRequestToken = 0
+
+const activeFilter = ref((route.query.filter as string) || '')
+
+const filters = computed(() => [
+  { label: t('library.filter.all'), icon: 'i-lucide-grid', to: '/library' },
+  { label: t('library.filter.cracked'), icon: 'i-lucide-unlock', to: { query: { filter: 'cracked' } } },
+  { label: t('library.filter.chinese'), icon: 'i-lucide-languages', to: { query: { filter: 'chinese' } } },
+  { label: t('library.filter.leaked'), icon: 'i-lucide-upload', to: { query: { filter: 'leaked' } } },
+  { label: t('library.filter.uncensored'), icon: 'i-lucide-eye', to: { query: { filter: 'uncensored' } } },
+])
+
+const coverModeAriaLabel = computed(() =>
+  coverMode.value === 'cover' ? t('library.coverMode.toFanart') : t('library.coverMode.toCover'),
+)
+const blurTitle = computed(() => blurEnabled.value ? t('toolbar.blurOff') : t('toolbar.blurOn'))
+const gridMinCardWidth = computed(() => coverMode.value === 'cover' ? 160 : 360)
+
+const libraryOptions = computed(() => [
+  { label: '全部媒体库', value: '' },
+  ...media.libraries.map(l => ({ label: l.name, value: String(l.id) })),
+])
+
+// Detail helpers
+const detail = computed(() => media.selectedItem)
+const selectedItem = ref<MediaItem | null>(null)
+
+// Variant rows
+const variantRows = computed(() => {
+  if (!detail.value?.file_path) return []
+  const current = {
+    id: detail.value.id,
+    path: detail.value.file_path,
+    name: fileNameOf(detail.value.file_path, detail.value.name),
+    dir: detail.value.file_path.substring(0, detail.value.file_path.lastIndexOf('/')),
+    tags: detail.value.tags,
+  }
+  const siblings = (detail.value.siblings || [])
+    .filter(s => s.file_path)
+    .map((s, i) => ({
+      id: s.id || `${detail.value!.id}-sib-${i}`,
+      path: s.file_path!,
+      name: fileNameOf(s.file_path, s.name || s.label || `文件 ${i + 1}`),
+      dir: s.file_path!.substring(0, s.file_path!.lastIndexOf('/')),
+      tags: s.tags,
+    }))
+  return [current, ...siblings]
+})
+
+const selectedVariantPath = ref('')
+
+watch(variantRows, (rows) => {
+  if (!rows.length) { selectedVariantPath.value = ''; return }
+  if (!rows.some(v => v.path === selectedVariantPath.value)) {
+    selectedVariantPath.value = rows[0].path
+  }
+}, { immediate: true })
+
+function selectVariant(path: string) { selectedVariantPath.value = path }
+
+const ladaSelectedPath = ref('')
+const subtitleSelectedPath = ref('')
+
+watch(detail, (d) => {
+  if (d?.file_path) {
+    ladaSelectedPath.value = d.file_path
+    subtitleSelectedPath.value = d.file_path
+  }
+})
+
+// Panel state management
+function resetPanelState(options: { keepSelectedItem?: boolean } = {}) {
+  showDetailPanel.value = false
+  showLadaPanel.value = false
+  showSubtitlePanel.value = false
+  loadingDetail.value = false
+  detailError.value = null
+  subtitleSelectedPath.value = ''
+  if (!options.keepSelectedItem) {
+    selectedItem.value = null
+    media.closeDetail()
+  }
+}
+
+async function loadItemDetail(item: MediaItem) {
+  const token = ++detailRequestToken
+  loadingDetail.value = true
+  detailError.value = null
+  try {
+    await media.fetchItemDetail(item.id)
+    if (token !== detailRequestToken || selectedItem.value?.id !== item.id) return null
+    return media.selectedItem
+  } catch (e: any) {
+    if (token === detailRequestToken && selectedItem.value?.id === item.id) {
+      detailError.value = e?.message || t('common.loadFailed')
+    }
+    return null
+  } finally {
+    if (token === detailRequestToken && selectedItem.value?.id === item.id) {
+      loadingDetail.value = false
+    }
+  }
+}
+
+// Panel open handlers
+function openDetail(item: MediaItem) {
+  resetPanelState({ keepSelectedItem: true })
+  selectedItem.value = item
+  showDetailPanel.value = true
+  void loadItemDetail(item)
+}
+
+function openLada(item: MediaItem) {
+  resetPanelState({ keepSelectedItem: true })
+  selectedItem.value = item
+  showLadaPanel.value = true
+  void loadItemDetail(item)
+  loadLadaDefaults()
+}
+
+async function openSubtitle(item: MediaItem) {
+  resetPanelState({ keepSelectedItem: true })
+  selectedItem.value = item
+  subtitleSelectedPath.value = item.file_path || item.path || ''
+  const d = await loadItemDetail(item)
+  if (!d) return
+  subtitleSelectedPath.value = d.file_path || item.path || ''
+  showSubtitlePanel.value = true
+}
+
+function handleCloseDetail() {
+  detailRequestToken += 1
+  resetPanelState()
+}
+
+function handleCloseSubtitle() {
+  detailRequestToken += 1
+  resetPanelState()
+}
+
+// LADA settings
+const ladaSettings = ref({
+  detection_model: 'v4-fast',
+  restoration_model: 'basicvsrpp-v1.2',
+  encoding_preset: 'hevc-nvidia-gpu-hq',
+})
+const ladaSubmitStatus = ref<'idle' | 'submitting' | 'success' | 'error'>('idle')
+const ladaSubmitProgress = ref(0)
+let ladaProgressTimer: ReturnType<typeof setInterval> | undefined
+
+const detectionModels = [
+  { id: 'v4-fast', name: 'V4 Fast' },
+  { id: 'v4-accurate', name: 'V4 Accurate' },
+]
+const restorationModels = [
+  { id: 'basicvsrpp-v1.2', name: 'BasicVSR++' },
+  { id: 'deepmosaics', name: 'DeepMosaics' },
+]
+const encodingPresets = [
+  { id: 'hevc-nvidia-gpu-hq', name: 'HEVC NVidia GPU HQ' },
+  { id: 'hevc-nvidia-gpu-balanced', name: 'HEVC NVidia GPU Balanced' },
+  { id: 'hevc-nvidia-gpu-uhq', name: 'HEVC NVidia GPU UHQ' },
+  { id: 'h264-nvidia-gpu-fast', name: 'H264 NVidia GPU Fast' },
+  { id: 'h264-cpu-fast', name: 'H264 CPU Fast' },
+  { id: 'h264-cpu-uhq', name: 'H264 CPU UHQ' },
+  { id: 'av1-cpu-uhq', name: 'AV1 CPU UHQ' },
+]
+
+// Helpers
+function fileNameOf(path?: string | null, fallback = '-') {
+  if (!path) return fallback
+  return path.split('/').pop() || fallback
+}
+
+// Subtitle path watch
+watch(subtitleSelectedPath, async (newPath) => {
+  if (newPath && showSubtitlePanel.value) {
+    selectVariant(newPath)
+  }
+})
+
+// Cover mode
+function toggleCoverMode() {
+  coverMode.value = coverMode.value === 'cover' ? 'fanart' : 'cover'
+  if (typeof window !== 'undefined') localStorage.setItem(COVER_MODE_KEY, coverMode.value)

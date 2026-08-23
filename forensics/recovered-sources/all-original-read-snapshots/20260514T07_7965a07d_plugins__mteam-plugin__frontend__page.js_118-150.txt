@@ -1,0 +1,69 @@
+  function renderTabs() {
+    const tabs = [{ key: 'rss', label: 'RSS' }, { key: 'albums', label: '片单' }]
+    const tabsKey = tabs.map(t => `${t.key}:${t.label}`).join('|')
+    if (sdk.ui?.tabs) {
+      const existing = tabsHost.firstElementChild
+      if (existing && tabsHost.dataset.tabsKey === tabsKey) {
+        if (typeof existing.__noorSetValue === 'function') existing.__noorSetValue(state.activeTab)
+        return
+      }
+      const oldDispose = tabsHost.__noorDispose
+      if (typeof oldDispose === 'function') oldDispose()
+      tabsHost.innerHTML = ''
+      const uiTabs = sdk.ui.tabs({
+        value: state.activeTab,
+        tabs: tabs.map(tab => ({ ...tab, path: tab.key })),
+        route: {
+          mode: 'path',
+          subPath: () => sdk.route?.subPath || '',
+          push: path => sdk.route?.push?.(path),
+          replace: path => sdk.route?.replace?.(path),
+        },
+        onChange: key => switchTab(key),
+      })
+      tabsHost.dataset.tabsKey = tabsKey
+      tabsHost.__noorDispose = uiTabs.dispose || uiTabs.__noorDispose
+      tabsHost.appendChild(uiTabs)
+      return
+    }
+    tabsHost.innerHTML = ''
+    const wrap = document.createElement('div')
+    wrap.className = 'noor-plugin-tabs'
+    for (const tab of tabs) {
+
+---JAVDB tabs---
+          const detail = res.data?.data || {}
+          current.actor_count = Array.isArray(detail.actors) ? detail.actors.length : Number(current.actor_count || 0)
+          current.has_cnsub = !!(current.has_cnsub || current.play_subtitle || detectCnsub(detail))
+          current.is_cracked = !!(current.is_cracked || detectCracked(detail))
+          current.__detailEnriched = true
+        } catch {
+          current.__detailEnriched = true
+          if (current.actor_count == null) current.actor_count = 0
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+  }
+
+  function renderTabs() {
+    if (!tabControl) {
+      tabControl = sdk.ui.tabs({
+        tabs: tabDefs,
+        value: state.tab,
+        route: {
+          mode: 'path',
+          subPath: () => sdk.route?.subPath || '',
+          push: path => sdk.route?.push?.(path),
+          replace: path => sdk.route?.replace?.(path),
+        },
+        onChange: setTab,
+      })
+      tabsWrap.appendChild(tabControl)
+    }
+    tabControl.__noorSetValue?.(state.tab)
+  }
+
+  function buildPanelGroup(label, children) {
+    if (sdk.ui?.filterPanelGroup) return sdk.ui.filterPanelGroup({ label, items: children })
+    if (sdk.ui?.controlPanelGroup) return sdk.ui.controlPanelGroup({ label, items: children })

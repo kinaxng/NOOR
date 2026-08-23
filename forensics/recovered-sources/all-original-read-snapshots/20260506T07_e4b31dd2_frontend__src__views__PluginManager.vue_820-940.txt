@@ -1,0 +1,132 @@
+461:      <div v-else class="plugin-config-layout">
+462:        <div class="plugin-config-form">
+662:.plugin-config-panel__header,
+854:.plugin-config-layout {
+859:.plugin-config-panel {
+867:.plugin-config-toolbar {
+892:.plugin-config-panel--form {
+898:.plugin-config-panel--form :deep(.field-row) {
+903:.plugin-config-panel--form :deep(.field-row__label-col) {
+907:.plugin-config-panel--form :deep(.field-row__input-col) {
+992:  .plugin-config-panel--form :deep(.field-row) {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.plugin-action:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
+.plugin-action--primary {
+  color: #fff;
+  border-color: rgba(0, 117, 255, 0.35);
+  background: linear-gradient(135deg, #0075ff, #00b8ff);
+}
+
+.plugin-action--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1880ff, #28c2ff);
+  border-color: rgba(0, 117, 255, 0.45);
+}
+
+.plugin-state,
+.plugin-empty {
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 1rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.82rem;
+}
+
+.plugin-state--error {
+  color: var(--color-error);
+  border-color: rgba(255, 80, 120, 0.18);
+}
+
+.plugin-config-layout {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.plugin-config-panel {
+  min-width: 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1rem;
+}
+
+.plugin-config-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.plugin-icon-button {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.68);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.plugin-icon-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.plugin-config-panel--form {
+  display: grid;
+  align-content: start;
+  gap: 0;
+}
+
+.plugin-config-panel--form :deep(.field-row) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.plugin-config-panel--form :deep(.field-row__label-col) {
+  padding-top: 0.5rem;
+}
+
+.plugin-config-panel--form :deep(.field-row__input-col) {
+  min-width: 0;
+}
+
+.plugin-field {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.plugin-field--boolean {
+  gap: 0.55rem;
+}
+
+.plugin-field__label {
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.plugin-field__control {
+  width: 100%;
+  min-height: 2.6rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  padding: 0 0.85rem;
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.plugin-field__control:focus {
+  border-color: rgba(0, 117, 255, 0.35);

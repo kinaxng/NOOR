@@ -1,0 +1,141 @@
+    const tabs = [{ key: 'rss', label: 'RSS' }, { key: 'albums', label: '片单' }]
+    const tabsKey = tabs.map(t => `${t.key}:${t.label}`).join('|')
+    if (sdk.ui?.tabs) {
+      const existing = tabsHost.firstElementChild
+      if (existing && tabsHost.dataset.tabsKey === tabsKey) {
+        if (typeof existing.__noorSetValue === 'function') existing.__noorSetValue(state.activeTab)
+        return
+      }
+      const oldDispose = tabsHost.__noorDispose
+      if (typeof oldDispose === 'function') oldDispose()
+      tabsHost.innerHTML = ''
+      const uiTabs = sdk.ui.tabs({
+        value: state.activeTab,
+        tabs,
+        onChange: key => switchTab(key),
+      })
+      tabsHost.dataset.tabsKey = tabsKey
+      tabsHost.__noorDispose = uiTabs.dispose || uiTabs.__noorDispose
+      tabsHost.appendChild(uiTabs)
+      return
+    }
+    tabsHost.innerHTML = ''
+    const wrap = document.createElement('div')
+    wrap.className = 'noor-plugin-tabs'
+    for (const tab of tabs) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.dataset.tab = tab.key
+      btn.className = 'noor-plugin-tab'
+      btn.textContent = tab.label
+      btn.classList.toggle('is-active', btn.dataset.tab === state.activeTab)
+      btn.onclick = () => switchTab(btn.dataset.tab)
+      wrap.appendChild(btn)
+    }
+    tabsHost.appendChild(wrap)
+  }
+
+  function switchTab(key) {
+    state.activeTab = key
+    state.page = 1
+    state.category = ''
+    state.activeTab === 'albums' && !state.albums.length ? loadAlbums() : render()
+  }
+
+  function renderAlbumBar() {
+    albumBar.style.display = state.activeTab === 'albums' ? 'flex' : 'none'
+    albumBar.innerHTML = ''
+    if (state.activeTab !== 'albums') return
+    for (const album of state.albums) {
+      const wrap = document.createElement('span')
+      wrap.className = 'mteam-album-pill' + (album.id === currentAlbum()?.id ? ' is-active' : '')
+      if (state.editingAlbumId === album.id) {
+        const input = document.createElement('input')
+        input.className = 'mteam-album-input'
+        input.value = state.editAlbumValue || ''
+        input.setAttribute('aria-label', '编辑片单名称')
+        let remove = document.createElement('button')
+        remove.type = 'button'
+        remove.className = 'mteam-album-remove'
+        remove.title = '删除片单'
+        remove.textContent = '-'
+        if (sdk.ui?.button && remove) {
+          const upgraded = sdk.ui.button({ label: '-', tone: 'danger', className: 'mteam-album-remove', title: '删除片单' })
+          remove = upgraded
+        }
+        wrap.append(input, remove)
+        input.oninput = e => { state.editAlbumValue = e.target.value }
+        input.onkeydown = e => { if (e.key === 'Enter') renameAlbum(album.id); if (e.key === 'Escape') { state.editingAlbumId = ''; render() } }
+        input.onblur = e => { if (!e.relatedTarget || !e.relatedTarget.classList?.contains('mteam-album-remove')) renameAlbum(album.id) }
+        remove.onclick = e => { e.preventDefault(); e.stopPropagation(); removeAlbum(album.id) }
+        setTimeout(() => { input.focus(); input.select() }, 0)
+      } else {
+        let main = document.createElement('button')
+        main.type = 'button'
+        main.className = 'mteam-album-main'
+        main.title = '双击编辑片单名称'
+        main.innerHTML = `<span>${escapeHtml(album.title || `片单 ${album.id}`)}</span><em>· ${escapeHtml(album.count ?? album.items?.length ?? 0)}</em>`
+        if (sdk.ui?.button && main) {
+          const upgraded = sdk.ui.button({ label: `${album.title || `片单 ${album.id}`} · ${album.count ?? album.items?.length ?? 0}`, className: 'mteam-album-main', title: '双击编辑片单名称' })
+          main = upgraded
+        }
+        wrap.appendChild(main)
+        main.onclick = () => { state.activeAlbumId = album.id; state.page = 1; render() }
+        main.ondblclick = e => { e.preventDefault(); state.editingAlbumId = album.id; state.editAlbumValue = album.alias || album.title || ''; render() }
+      }
+      albumBar.appendChild(wrap)
+    }
+    const add = sdk.ui?.button
+      ? sdk.ui.button({ label: '+', className: 'mteam-add', title: '添加片单' })
+      : document.createElement('button')
+    if (!sdk.ui?.button) {
+      add.className = 'mteam-add'
+      add.textContent = '+'
+      add.title = '添加片单'
+    }
+    add.onclick = () => { state.addOpen = true; state.addValue = ''; render() }
+    albumBar.appendChild(add)
+  }
+
+  function renderCategoryBar() {
+    const cats = categories()
+    categoryBar.innerHTML = ''
+    categoryBar.style.display = cats.length ? 'flex' : 'none'
+    if (!cats.length) {
+      state.category = ''
+      return
+    }
+    if (state.category && !cats.some(([name]) => name === state.category)) state.category = ''
+    const all = sdk.ui?.chip ? sdk.ui.chip({ label: `全部 · ${currentItems().length}`, active: !state.category, onClick: () => { state.category = ''; state.page = 1; render() } }) : document.createElement('button')
+    if (!sdk.ui?.chip) { all.className = 'mteam-filter-chip' + (!state.category ? ' is-active' : ''); all.textContent = `全部 · ${currentItems().length}`; all.onclick = () => { state.category = ''; state.page = 1; render() } }
+    categoryBar.appendChild(all)
+    for (const [name, count] of cats) {
+      const b = sdk.ui?.chip ? sdk.ui.chip({ label: `${name} · ${count}`, active: state.category === name, onClick: () => { state.category = name; state.page = 1; render() } }) : document.createElement('button')
+      if (!sdk.ui?.chip) { b.className = 'mteam-filter-chip' + (state.category === name ? ' is-active' : ''); b.textContent = `${name} · ${count}`; b.onclick = () => { state.category = name; state.page = 1; render() } }
+      categoryBar.appendChild(b)
+    }
+  }
+
+  function updatePushButtonDom(key) {
+    const ps = state.pushProgress[key] || { status: state.pushing.has(key) ? 'running' : 'idle', pct: 0 }
+    const normalized = ps.status === 'running' ? 'running' : ps.status || 'idle'
+    const label = normalized === 'success' ? '推送成功' : normalized === 'error' ? '推送失败' : normalized === 'running' ? `${Math.round(ps.pct || 0)}%` : '推送'
+    const buttons = el.querySelectorAll('.mteam-push')
+    buttons.forEach(btn => {
+      if (btn.dataset.key !== key) return
+      btn.classList.toggle('mteam-running', normalized === 'running')
+      btn.classList.toggle('mteam-success', normalized === 'success')
+      btn.classList.toggle('is-error', normalized === 'error')
+      btn.disabled = state.pushing.has(key) || normalized === 'success'
+      if (typeof btn.__setState === 'function') btn.__setState(normalized, ps.pct || 0, label)
+      else {
+        const bar = btn.querySelector('i')
+        const text = btn.querySelector('span')
+        if (bar) bar.style.width = `${Math.max(0, Math.min(100, normalized === 'success' ? 100 : ps.pct || 0))}%`
+        if (text) text.textContent = label
+        else btn.textContent = label
+      }
+    })
+  }
+
+  function renderModal() {

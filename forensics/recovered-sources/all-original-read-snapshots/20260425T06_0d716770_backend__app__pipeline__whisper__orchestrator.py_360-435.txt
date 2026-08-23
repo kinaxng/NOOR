@@ -1,0 +1,76 @@
+        missing = []
+
+        if self.config.pipeline_mode == PipelineMode.ENSEMBLE:
+            # Resolve actual model from pipeline mode (NOT from pass1_model.value
+            # which holds the default, not the user-selected override)
+            pass1_mode = PipelineMode(self.config.pass1_pipeline.value) if self.config.pass1_pipeline else PipelineMode.ANIME
+            pass2_mode = PipelineMode(self.config.pass2_pipeline.value) if self.config.pass2_pipeline else PipelineMode.FASTER
+
+            # pipeline mode → model value → HF repo ID
+            pipeline_model_map = {
+                PipelineMode.ANIME: "anime-whisper",
+                PipelineMode.TRANSFORMERS: "kotoba-whisper-v2.2",
+                PipelineMode.FASTER: "tiny",
+                PipelineMode.BALANCED: "large-v3",
+                PipelineMode.QWEN: "large-v3",
+                PipelineMode.SINGLE: self.config.model.value,
+            }
+            repo_map = {
+                "anime-whisper": "litagin/anime-whisper",
+                "kotoba-whisper-v2.2": "kotoba-tech/kotoba-whisper-v2.2",
+                "tiny": "Systran/faster-whisper-tiny",
+                "base": "Systran/faster-whisper-base",
+                "small": "Systran/faster-whisper-small",
+                "medium": "Systran/faster-whisper-medium",
+                "large-v3": "Systran/faster-whisper-large-v3",
+                "large-v3-turbo": "Systran/faster-whisper-large-v3-turbo",
+            }
+
+            p1_model = pipeline_model_map.get(pass1_mode, "anime-whisper")
+            p2_model = pipeline_model_map.get(pass2_mode, "large-v3")
+            p1_repo = repo_map.get(p1_model)
+            p2_repo = repo_map.get(p2_model)
+
+            if p1_repo and not self._check_model_cached(p1_repo):
+                missing.append(f"[{p1_model}] (Pass1，请到 设置 → Whisper → 模型 下载)")
+            if p2_repo and not self._check_model_cached(p2_repo):
+                missing.append(f"[{p2_model}] (Pass2，请到 设置 → Whisper → 模型 下载)")
+        else:
+            # Single pipeline — determine model from pipeline mode
+            mode = self.config.pipeline_mode
+            if mode == PipelineMode.ANIME:
+                repo_id = "litagin/anime-whisper"
+            elif mode == PipelineMode.TRANSFORMERS:
+                repo_id = "kotoba-tech/kotoba-whisper-v2.2"
+            elif mode == PipelineMode.FASTER:
+                repo_id = "Systran/faster-whisper-tiny"
+            elif mode == PipelineMode.BALANCED:
+                repo_id = "Systran/faster-whisper-large-v3"
+            elif mode == PipelineMode.QWEN:
+                repo_id = "Systran/faster-whisper-large-v3"
+            elif mode == PipelineMode.SINGLE:
+                repo_id_map = {
+                    "anime-whisper": "litagin/anime-whisper",
+                    "kotoba-whisper-v2.2": "kotoba-tech/kotoba-whisper-v2.2",
+                }
+                repo_id = repo_id_map.get(self.config.model.value)
+            else:
+                repo_id = None
+
+            if repo_id and not self._check_model_cached(repo_id):
+                missing.append(f"[{self.config.model.value}] (请到 设置 → Whisper → 模型 下载)")
+
+        if missing:
+            raise RuntimeError(
+                f"模型未下载: {', '.join(missing)}。"
+                f"请先在 设置 → Whisper → 模型 中下载对应模型，"
+                f"然后重试任务。"
+            )
+
+    async def process(
+        self,
+        video_path: str,
+        video_name: str = ""
+    ) -> tuple[TranscriptionResult, str]:
+        """
+        处理视频文件生成字幕

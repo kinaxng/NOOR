@@ -1,0 +1,178 @@
+            "pip_mirror": env_data.get("PIP_MIRROR", "https://pypi.tuna.tsinghua.edu.cn/simple"),
+            "hf_token": env_data.get("HF_TOKEN", ""),
+        },
+    }
+
+
+@router.put("/emby")
+async def update_emby_config(config: EmbyConfig):
+    """Update Emby configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Emby 配置...")
+    try:
+        update_env_value("EMBY_SERVER", config.server)
+        update_env_value("EMBY_API_KEY", config.api_key)
+        update_env_value("EMBY_USER_ID", config.user_id)
+        if config.enabled_library_ids:
+            update_env_value("EMBY_ENABLED_LIBRARY_IDS", ",".join(config.enabled_library_ids))
+        else:
+            update_env_value("EMBY_ENABLED_LIBRARY_IDS", "")
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Emby 配置已保存")
+        return {"success": True, "message": "Emby settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Emby 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/emby/test")
+async def test_emby_connection():
+    """Test Emby server connection."""
+    settings = get_settings()
+    if not settings.emby_api_key or not settings.emby_server:
+        raise HTTPException(status_code=400, detail="Emby server and API key are required")
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Emby] 正在测试 Emby 连接...")
+
+    headers = {"X-Emby-Token": settings.emby_api_key}
+    try:
+        async with _get_httpx().AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.emby_server}/emby/System/Info",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            server_name = data.get("ServerName", "Unknown")
+            version = data.get("Version", "Unknown")
+            log_mgr.add_log("success", f"[Emby] 连接成功 — {server_name} v{version}")
+            return {
+                "success": True,
+                "server_name": server_name,
+                "version": version,
+            }
+    except _get_httpx().HTTPError as e:
+        log_mgr.add_log("error", f"[Emby] 连接失败 — {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Emby connection failed: {str(e)}")
+
+
+@router.put("/storage")
+async def update_storage_config(config: StorageConfig):
+    """Update storage directories configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存存储路径配置...")
+    try:
+        set_env_values(
+            {
+                "SOURCE_DIR": config.source_dir,
+                "OUTPUT_DIR": config.output_dir,
+                "WHISPER_MODEL_DIR": config.whisper_model_dir,
+                LADA_MODEL_WEIGHTS_ENV: config.lada_model_dir,
+            },
+        )
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] 存储路径配置已保存")
+        return {"success": True, "message": "Storage settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 存储路径配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+class DirectoryEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+
+
+class DirectoryBrowseResponse(BaseModel):
+    path: str
+    parent: str | None
+    entries: list[DirectoryEntry]
+
+
+@router.get("/directories", response_model=DirectoryBrowseResponse)
+async def browse_directory(path: str = ""):
+    """Browse directory contents for path picker.
+    If path is empty, starts from source_dir or home.
+    Only returns directories within allowed paths."""
+    settings = get_settings()
+    browse_path = resolve_browse_path(settings, path)
+
+    if not os.path.isdir(browse_path):
+        raise HTTPException(status_code=400, detail=f"Not a directory: {browse_path}")
+
+    if not is_allowed_directory_path(browse_path, settings):
+        raise HTTPException(status_code=403, detail="Access denied: path not within allowed directories")
+
+    try:
+        payload = build_directory_browse_payload(browse_path)
+        return DirectoryBrowseResponse(
+            path=payload["path"],
+            parent=payload["parent"],
+            entries=[DirectoryEntry(**entry) for entry in payload["entries"]],
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+
+@router.put("/lada")
+async def update_lada_config(config: LadaConfig):
+    """Update Lada configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA CLI 配置...")
+    try:
+        update_env_value("LADA_CLI_PATH", config.cli_path)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA CLI 配置已保存")
+        return {"success": True, "message": "Lada settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA CLI 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.put("/network")
+async def update_network_config(config: NetworkConfig):
+    """Update network configuration (acceleration mode, proxy, mirrors)."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存网络加速配置...")
+    try:
+        update_env_value("ACCELERATION_MODE", config.acceleration_mode)
+        update_env_value("HTTP_PROXY", config.http_proxy)
+        update_env_value("GITHUB_MIRROR", config.github_mirror)
+        update_env_value("HF_MIRROR", config.hf_mirror)
+        update_env_value("PIP_MIRROR", config.pip_mirror)
+        update_env_value("HF_TOKEN", config.hf_token)
+        clear_settings_cache()
+
+        # Apply to current process environment
+        settings = get_settings()
+        settings.apply_network_env()
+
+        log_mgr.add_log("success", "[Settings] 网络加速配置已保存并生效")
+        return {"success": True, "message": "Network settings saved and applied"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 网络加速配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/lada/upgrade")
+async def upgrade_lada():
+    """Upgrade LADA from its official git checkout when running natively."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[LADA] 正在升级 LADA...")
+    install_info = _get_lada_installation_info()
+
+    if install_info["is_docker"]:
+        log_mgr.add_log("warning", "[LADA] Docker 模式下不支持容器内自升级")
+        raise HTTPException(
+            status_code=409,
+            detail="Docker 模式下不建议在容器内直接升级 LADA。请更新镜像后重建容器。",
+        )
+
+    lada_path = install_info["repo_path"]
+    if not lada_path:
+        log_mgr.add_log("error", "[LADA] 升级失败：未找到可升级的 LADA 工作副本")
+        raise HTTPException(
+            status_code=400,
+            detail="当前未检测到可自升级的 LADA 源码工作副本，请手动升级你的 lada-cli 安装来源。",

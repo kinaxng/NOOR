@@ -1,0 +1,51 @@
+])
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">
+      <!-- 1. Default Settings -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.whisper.defaultSettings') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.defaultSettingsHint') }}</p>
+
+        <div class="settings-form mt-4">
+          <div class="whisper-strategy-card">
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t('whisper.best.title') }}</div>
+                <p class="whisper-strategy-card__desc">{{ t('whisper.best.desc') }}</p>
+              </div>
+              <VuiBadge color="info" variant="gradient" size="sm">Anime-Whisper</VuiBadge>
+            </div>
+            <div class="whisper-strategy-card__chips">
+              <span class="whisper-strategy-card__chip">{{ t('whisper.lang.ja') }}</span>
+              <span class="whisper-strategy-card__chip">{{ t('whisper.sensitivity.balanced') }}</span>
+              <span class="whisper-strategy-card__chip">{{ t('whisper.merge.smartMerge') }}</span>
+            </div>
+            <p class="whisper-strategy-card__stack">{{ t('whisper.best.stack') }}</p>
+            <div class="flex flex-wrap gap-3">
+              <VuiButton variant="gradient" color="info" size="small" :loading="saving" @click="saveBestDefaults">
+                {{ saving ? t('settings.whisper.saving') : t('settings.whisper.useBestDefaults') }}
+              </VuiButton>
+              <VuiButton
+                variant="outlined"
+                color="secondary"
+                size="small"
+                @click="defaultAdvancedExpanded = !defaultAdvancedExpanded"
+              >
+                {{ defaultAdvancedExpanded ? t('settings.whisper.hideAdvancedDefaults') : t('settings.whisper.showAdvancedDefaults') }}
+              </VuiButton>
+            </div>
+          </div>
+
+          <div v-if="defaultAdvancedExpanded" class="settings-field-hint !mt-0">
+            {{ t('whisper.advanced.hint') }}
+          </div>
+
+          <!-- Pipeline Selector -->
+          <div v-if="defaultAdvancedExpanded" class="settings-form__field">
+            <label class="settings-form__label">{{ t('settings.whisper.pipelineLabel') }}</label>

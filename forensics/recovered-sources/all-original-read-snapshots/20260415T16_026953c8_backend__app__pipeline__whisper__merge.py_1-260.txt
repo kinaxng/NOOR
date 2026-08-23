@@ -1,0 +1,260 @@
+"""字幕合并引擎 - 实现 smart_merge 策略"""
+from typing import List, Tuple
+from dataclasses import dataclass
+from .types import SubtitleSegment, TranscriptionResult, MergeStrategy
+
+
+@dataclass
+class Subtitle:
+    """内部使用的字幕格式"""
+    start_time: float
+    end_time: float
+    duration: float
+    text: str
+    source: str  # "pass1" / "pass2"
+
+
+class MergeEngine:
+    """合并引擎"""
+
+    OVERLAP_THRESHOLD = 0.30  # 30% 重叠阈值
+    _DIVERSITY_FLOOR = 0.20   # 重复文本判定阈值
+
+    def __init__(self, strategy: MergeStrategy = MergeStrategy.SMART):
+        self.strategy = strategy
+
+    def merge(
+        self,
+        pass1_result: TranscriptionResult,
+        pass2_result: TranscriptionResult
+    ) -> TranscriptionResult:
+        """合并两遍结果"""
+        if self.strategy == MergeStrategy.SMART:
+            return self._smart_merge(pass1_result, pass2_result)
+        elif self.strategy == MergeStrategy.FULL_MERGE:
+            return self._full_merge(pass1_result, pass2_result)
+        elif self.strategy == MergeStrategy.PASS1_PRIMARY:
+            return self._pass_primary(pass1_result, pass2_result, primary="pass1")
+        elif self.strategy == MergeStrategy.PASS2_PRIMARY:
+            return self._pass_primary(pass1_result, pass2_result, primary="pass2")
+        elif self.strategy == MergeStrategy.LONGEST:
+            return self._longest_merge(pass1_result, pass2_result)
+        elif self.strategy == MergeStrategy.PASS1_OVERLAP:
+            return self._overlap_merge(pass1_result, pass2_result, primary="pass1")
+        elif self.strategy == MergeStrategy.PASS2_OVERLAP:
+            return self._overlap_merge(pass1_result, pass2_result, primary="pass2")
+        else:
+            return pass2_result  # 默认返回 pass2
+
+    def _smart_merge(
+        self,
+        pass1: TranscriptionResult,
+        pass2: TranscriptionResult
+    ) -> TranscriptionResult:
+        """智能合并 - 时序驱动 + 质量调整"""
+        subs1 = [Subtitle(
+            start_time=s.start_time,
+            end_time=s.end_time,
+            duration=s.end_time - s.start_time,
+            text=s.text,
+            source="pass1"
+        ) for s in pass1.segments]
+
+        subs2 = [Subtitle(
+            start_time=s.start_time,
+            end_time=s.end_time,
+            duration=s.end_time - s.start_time,
+            text=s.text,
+            source="pass2"
+        ) for s in pass2.segments]
+
+        merged = []
+        used1 = set()
+        used2 = set()
+
+        # 首先处理重叠的字幕
+        for i, s1 in enumerate(subs1):
+            best_match = None
+            best_coverage = 0
+
+            for j, s2 in enumerate(subs2):
+                if j in used2:
+                    continue
+
+                overlap_dur = self._overlap_duration(s1, s2)
+                if overlap_dur <= 0:
+                    continue
+
+                coverage1 = self._coverage_ratio(s1, overlap_dur)
+                coverage2 = self._coverage_ratio(s2, overlap_dur)
+
+                # 检查覆盖率差
+                if abs(coverage1 - coverage2) > 0.05:
+                    if coverage1 > coverage2 and coverage1 > best_coverage:
+                        best_match = (j, s2, coverage1)
+                        best_coverage = coverage1
+                    elif coverage2 > coverage1 and coverage2 > best_coverage:
+                        best_match = (j, s2, coverage2)
+                        best_coverage = coverage2
+
+            if best_match:
+                j, s2, _ = best_match
+                # 选择更优的
+                chosen = self._choose_by_quality(s1, s2)
+                merged.append(chosen)
+                used1.add(i)
+                used2.add(j)
+            else:
+                merged.append(s1)
+                used1.add(i)
+
+        # 添加未匹配的 pass2 字幕
+        for j, s2 in enumerate(subs2):
+            if j not in used2:
+                merged.append(s2)
+
+        # 按时间排序
+        merged.sort(key=lambda x: x.start_time)
+
+        # 转换回 TranscriptionResult
+        segments = []
+        for i, sub in enumerate(merged):
+            segments.append(SubtitleSegment(
+                index=i + 1,
+                start_time=sub.start_time,
+                end_time=sub.end_time,
+                text=sub.text,
+                words=[]
+            ))
+
+        return TranscriptionResult(
+            segments=segments,
+            language=pass2.language,
+            duration=pass2.duration,
+            source="merged",
+            metadata={"strategy": "smart_merge"}
+        )
+
+    def _full_merge(
+        self,
+        pass1: TranscriptionResult,
+        pass2: TranscriptionResult
+    ) -> TranscriptionResult:
+        """合并所有字幕，按时间排序"""
+        all_subs = []
+        for s in pass1.segments:
+            all_subs.append(Subtitle(
+                start_time=s.start_time,
+                end_time=s.end_time,
+                duration=s.end_time - s.start_time,
+                text=s.text,
+                source="pass1"
+            ))
+        for s in pass2.segments:
+            all_subs.append(Subtitle(
+                start_time=s.start_time,
+                end_time=s.end_time,
+                duration=s.end_time - s.start_time,
+                text=s.text,
+                source="pass2"
+            ))
+
+        all_subs.sort(key=lambda x: x.start_time)
+
+        segments = []
+        for i, sub in enumerate(all_subs):
+            segments.append(SubtitleSegment(
+                index=i + 1,
+                start_time=sub.start_time,
+                end_time=sub.end_time,
+                text=sub.text,
+                words=[]
+            ))
+
+        return TranscriptionResult(
+            segments=segments,
+            language=pass2.language,
+            duration=pass2.duration,
+            source="merged",
+            metadata={"strategy": "full_merge"}
+        )
+
+    def _pass_primary(
+        self,
+        pass1: TranscriptionResult,
+        pass2: TranscriptionResult,
+        primary: str
+    ) -> TranscriptionResult:
+        """以一个 pass 为主"""
+        if primary == "pass1":
+            primary_result = pass1
+            secondary_result = pass2
+        else:
+            primary_result = pass2
+            secondary_result = pass1
+
+        merged = []
+        primary_subs = []
+        secondary_subs = []
+
+        for s in primary_result.segments:
+            primary_subs.append(Subtitle(
+                start_time=s.start_time,
+                end_time=s.end_time,
+                duration=s.end_time - s.start_time,
+                text=s.text,
+                source=primary
+            ))
+
+        for s in secondary_result.segments:
+            secondary_subs.append(Subtitle(
+                start_time=s.start_time,
+                end_time=s.end_time,
+                duration=s.end_time - s.start_time,
+                text=s.text,
+                source="secondary"
+            ))
+
+        used = set()
+
+        # 填充 primary 中没有覆盖的时间段
+        for ps in primary_subs:
+            merged.append(ps)
+            used.add(ps.start_time)
+
+        for ss in secondary_subs:
+            # 检查是否与已有的重叠
+            overlaps = False
+            for ms in merged:
+                if self._overlap_duration(ms, ss) > 0:
+                    overlaps = True
+                    break
+            if not overlaps:
+                merged.append(ss)
+
+        merged.sort(key=lambda x: x.start_time)
+
+        segments = []
+        for i, sub in enumerate(merged):
+            segments.append(SubtitleSegment(
+                index=i + 1,
+                start_time=sub.start_time,
+                end_time=sub.end_time,
+                text=sub.text,
+                words=[]
+            ))
+
+        return TranscriptionResult(
+            segments=segments,
+            language=primary_result.language,
+            duration=primary_result.duration,
+            source="merged",
+            metadata={"strategy": f"{primary}_primary"}
+        )
+
+    def _longest_merge(
+        self,
+        pass1: TranscriptionResult,
+        pass2: TranscriptionResult
+    ) -> TranscriptionResult:
+        """选择文本最长的"""

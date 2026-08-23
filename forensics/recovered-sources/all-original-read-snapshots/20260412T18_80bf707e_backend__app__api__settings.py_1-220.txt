@@ -1,0 +1,623 @@
+from fastapi import APIRouter, HTTPException
+from app.api.system import SystemLogManager
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
+from app.core.config import (
+    get_settings,
+    clear_settings_cache,
+    PROJECT_ROOT,
+    WHISPER_MODEL_DIR,
+)
+import os
+import subprocess
+from pathlib import Path
+import shutil
+import logging
+
+from app.api.settings_helpers import (
+    ENV_FILE,
+    LADA_MODEL_WEIGHTS_ENV,
+    WHISPER_MODELS,
+    clear_version_cache as _clear_version_cache,
+    format_size as _format_size,
+    get_httpx as _get_httpx,
+    get_lada_installation_info as _get_lada_installation_info,
+    get_lada_model_weights_dir_from_env as _get_lada_model_weights_dir_from_env,
+    get_lada_version_info as _get_lada_version_info,
+    get_whisper_feature_flags as _get_whisper_feature_flags,
+    lada_cli_base_cmd as _lada_cli_base_cmd,
+    parse_custom_config as _parse_custom_config,
+    python_executable as _python_executable,
+    read_env_file,
+    set_env_values,
+    update_env_value,
+)
+
+from app.api.settings_status_helpers import (
+    install_status_path,
+    model_download_status_path,
+    read_install_status_response,
+    read_model_download_status_response,
+    status_timestamp,
+    write_status_file,
+)
+
+from app.api.settings_lada import get_lada_info_impl
+from app.api.settings_whisper import (
+    apply_whisper_config_updates,
+    build_whisper_models_payload,
+    sanitize_download_status,
+)
+
+router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+class EmbyConfig(BaseModel):
+    server: str
+    api_key: str
+    user_id: str = ""
+    enabled_library_ids: list[str] = []
+
+
+class StorageConfig(BaseModel):
+    source_dir: str
+    output_dir: str
+    whisper_model_dir: str = ""
+    lada_model_dir: str = Field(default="", validation_alias="lada_model_weights_dir")
+
+
+class LadaConfig(BaseModel):
+    cli_path: str
+    version: str | None = None
+    is_docker: bool = False
+
+
+class LadaDefaultsConfig(BaseModel):
+    device: str = "cuda:0"
+    fp16: bool = True
+    detection_model: str = "v4-fast"
+    restoration_model: str = "basicvsrpp-v1.2"
+    encoding_preset: str = "hevc-nvidia-gpu-hq"
+    max_clip_length: int = 180
+    detect_face_mosaics: bool = False
+
+
+class CustomPipelineConfig(BaseModel):
+    model: str = "large-v3"  # large-v3 | large-v2 | turbo
+    vad_method: str = "semantic"
+    scene_detector: str = "semantic"
+    enhancers: list[str] = []  # 多选：ffmpeg-dsp, clearvoice, silero-vad, demucs
+    segmenter: str = "silero-v6.2"
+    timestamp_mode: str = "aligner_interpolation"  # aligner_interpolation / vad_only
+    aligner_backend: str = "qwen3"  # qwen3 / none
+    framer_backend: str = "vad-grouped"  # vad-grouped / full-scene
+
+
+class WhisperConfig(BaseModel):
+    model: str = "anime-whisper"
+    pipeline_mode: str = "ensemble"
+    merge_strategy: str = "smart_merge"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    vad_method: str = "semantic"
+    translate_to: str = ""
+    translate_model: str = "gpt-4o-mini"
+    translate_style: str = "adult_explicit"  # adult_explicit | standard
+    translate_base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    translate_api_key: str = ""
+    pass1_pipeline: str = "anime"  # anime | faster | balanced | transformers | qwen | custom
+    pass2_pipeline: str = ""  # "" = not selected, or one of the above
+    custom_config: CustomPipelineConfig = CustomPipelineConfig()
+
+
+def _assert_custom_pipeline_supported(*pipeline_values: Optional[str]) -> None:
+    if any(value == "custom" for value in pipeline_values if value):
+        feature = _get_whisper_feature_flags()["custom_pipeline"]
+        if not feature["available"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Custom Whisper pipeline 当前不可用：{feature['reason']}",
+            )
+
+
+class NetworkConfig(BaseModel):
+    acceleration_mode: str = "mirror"  # "none" / "proxy" / "mirror"
+    http_proxy: str = ""
+    github_mirror: str = "https://ghproxy.com"
+    hf_mirror: str = "https://hf-mirror.com"
+    pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
+    hf_token: str = ""  # HuggingFace token for gated repos (e.g. Kotoba v2)
+
+
+@router.get("")
+async def get_settings_all():
+    """Get all settings."""
+    version_info = _get_lada_version_info()
+    version = version_info["version"]
+    is_docker = version_info["is_docker"]
+
+    # Get current env values
+    env_data = read_env_file()
+    lada_model_weights_dir = _get_lada_model_weights_dir_from_env(env_data)
+    whisper_features = _get_whisper_feature_flags()
+
+    return {
+        "emby": {
+            "server": env_data.get("EMBY_SERVER", ""),
+            "api_key": env_data.get("EMBY_API_KEY", ""),
+            "user_id": env_data.get("EMBY_USER_ID", ""),
+            "enabled_library_ids": env_data.get("EMBY_ENABLED_LIBRARY_IDS", "").split(",") if env_data.get("EMBY_ENABLED_LIBRARY_IDS") else [],
+        },
+        "storage": {
+            "source_dir": env_data.get("SOURCE_DIR", ""),
+            "output_dir": env_data.get("OUTPUT_DIR", ""),
+            "whisper_model_dir": env_data.get("WHISPER_MODEL_DIR", ""),
+            "lada_model_dir": lada_model_weights_dir,
+            "lada_model_weights_dir": lada_model_weights_dir,
+        },
+        "lada": {
+            "cli_path": env_data.get("LADA_CLI_PATH", "python3 -m lada.cli.main"),
+            "version": version,
+            "is_docker": is_docker,
+            "is_submodule": version_info["is_submodule"],
+            "install_mode": version_info["install_mode"],
+            "can_self_upgrade": version_info["can_self_upgrade"],
+            "upgrade_strategy": version_info["upgrade_strategy"],
+            "upgrade_hint": version_info["upgrade_hint"],
+            "repo_path": version_info["repo_path"],
+        },
+        "lada_defaults": {
+            "device": env_data.get("LADA_DEVICE", "cuda:0"),
+            "fp16": env_data.get("LADA_FP16", "true").lower() == "true",
+            "detection_model": env_data.get("LADA_DETECTION_MODEL", "v4-fast"),
+            "restoration_model": env_data.get("LADA_RESTORATION_MODEL", "basicvsrpp-v1.2"),
+            "encoding_preset": env_data.get("LADA_ENCODING_PRESET", "hevc-nvidia-gpu-hq"),
+            "max_clip_length": int(env_data.get("LADA_MAX_CLIP_LENGTH", "180")),
+            "detect_face_mosaics": env_data.get("LADA_DETECT_FACE_MOSAICS", "false").lower() == "true",
+        },
+        "whisper": {
+            "model": env_data.get("WHISPER_MODEL", "anime-whisper"),
+            "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "ensemble"),
+            "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
+            "language": env_data.get("WHISPER_LANGUAGE", "ja"),
+            "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
+            "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
+            "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
+            "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+            "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),
+            "translate_base_url": env_data.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1"),
+            "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
+            "pass1_pipeline": env_data.get("WHISPER_PASS1_PIPELINE", "anime"),
+            "pass2_pipeline": env_data.get("WHISPER_PASS2_PIPELINE", ""),
+            "custom_config": _parse_custom_config(env_data),
+            "features": whisper_features,
+        },
+        "network": {
+            "acceleration_mode": env_data.get("ACCELERATION_MODE", "mirror"),
+            "http_proxy": env_data.get("HTTP_PROXY", ""),
+            "github_mirror": env_data.get("GITHUB_MIRROR", "https://ghproxy.com"),
+            "hf_mirror": env_data.get("HF_MIRROR", "https://hf-mirror.com"),
+            "pip_mirror": env_data.get("PIP_MIRROR", "https://pypi.tuna.tsinghua.edu.cn/simple"),
+            "hf_token": env_data.get("HF_TOKEN", ""),
+        },
+    }
+
+
+@router.put("/emby")
+async def update_emby_config(config: EmbyConfig):
+    """Update Emby configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Emby 配置...")
+    try:
+        update_env_value("EMBY_SERVER", config.server)
+        update_env_value("EMBY_API_KEY", config.api_key)
+        update_env_value("EMBY_USER_ID", config.user_id)
+        if config.enabled_library_ids:
+            update_env_value("EMBY_ENABLED_LIBRARY_IDS", ",".join(config.enabled_library_ids))
+        else:
+            update_env_value("EMBY_ENABLED_LIBRARY_IDS", "")
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Emby 配置已保存")
+
+=====
+        log_mgr.add_log("success", "[Settings] Emby 配置已保存")
+        return {"success": True, "message": "Emby settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Emby 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/emby/test")
+async def test_emby_connection():
+    """Test Emby server connection."""
+    settings = get_settings()
+    if not settings.emby_api_key or not settings.emby_server:
+        raise HTTPException(status_code=400, detail="Emby server and API key are required")
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Emby] 正在测试 Emby 连接...")
+
+    headers = {"X-Emby-Token": settings.emby_api_key}
+    try:
+        async with _get_httpx().AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.emby_server}/emby/System/Info",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            server_name = data.get("ServerName", "Unknown")
+            version = data.get("Version", "Unknown")
+            log_mgr.add_log("success", f"[Emby] 连接成功 — {server_name} v{version}")
+            return {
+                "success": True,
+                "server_name": server_name,
+                "version": version,
+            }
+    except _get_httpx().HTTPError as e:
+        log_mgr.add_log("error", f"[Emby] 连接失败 — {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Emby connection failed: {str(e)}")
+
+
+@router.put("/storage")
+async def update_storage_config(config: StorageConfig):
+    """Update storage directories configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存存储路径配置...")
+    try:
+        set_env_values(
+            {
+                "SOURCE_DIR": config.source_dir,
+                "OUTPUT_DIR": config.output_dir,
+                "WHISPER_MODEL_DIR": config.whisper_model_dir,
+                LADA_MODEL_WEIGHTS_ENV: config.lada_model_dir,
+            },
+        )
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] 存储路径配置已保存")
+        return {"success": True, "message": "Storage settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 存储路径配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+class DirectoryEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+
+
+class DirectoryBrowseResponse(BaseModel):
+    path: str
+    parent: str | None
+    entries: list[DirectoryEntry]
+
+
+@router.get("/directories", response_model=DirectoryBrowseResponse)
+async def browse_directory(path: str = ""):
+    """Browse directory contents for path picker.
+    If path is empty, starts from source_dir or home.
+    Only returns directories within allowed paths."""
+    settings = get_settings()
+
+    def is_allowed(p: str) -> bool:
+        try:
+            real = os.path.realpath(os.path.expanduser(p))
+            # Allow home directory of the running user
+            home = os.path.expanduser("~")
+            if real.startswith(home + "/") or real == home:
+                return True
+            # Allow configured directories
+            for allowed in [settings.source_dir, settings.output_dir,
+                             settings.whisper_model_dir or "", settings.lada_model_dir or ""]:
+                if allowed:
+                    allowed_real = os.path.realpath(os.path.expanduser(allowed))
+                    if real.startswith(allowed_real + "/") or real == allowed_real:
+                        return True
+            # Allow /volume1, /mnt, /media (common Docker media mounts)
+            if real.startswith("/volume1/") or real.startswith("/mnt/") or real.startswith("/media/"):
+                return True
+            # Allow /home (user home directories)
+            if real.startswith("/home/") or real == "/home":
+                return True
+            return False
+        except Exception:
+            return False
+
+    if not path:
+        # Default to source_dir or home
+        browse_path = settings.source_dir or os.path.expanduser("~")
+    else:
+        browse_path = os.path.expanduser(path)
+
+    if not os.path.isdir(browse_path):
+        raise HTTPException(status_code=400, detail=f"Not a directory: {browse_path}")
+
+    if not is_allowed(browse_path):
+        raise HTTPException(status_code=403, detail="Access denied: path not within allowed directories")
+
+    try:
+        entries = []
+        for entry in os.scandir(browse_path):
+            try:
+                entries.append(DirectoryEntry(
+                    name=entry.name,
+                    path=entry.path,
+                    is_dir=entry.is_dir(),
+                ))
+            except PermissionError:
+                continue
+        # Sort: directories first, then alphabetically
+        entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
+        parent = os.path.dirname(browse_path) if browse_path not in ["/", os.path.expanduser("~")] else None
+        return DirectoryBrowseResponse(
+            path=browse_path,
+            parent=parent,
+            entries=entries,
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+
+@router.put("/lada")
+async def update_lada_config(config: LadaConfig):
+    """Update Lada configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA CLI 配置...")
+    try:
+        update_env_value("LADA_CLI_PATH", config.cli_path)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA CLI 配置已保存")
+        return {"success": True, "message": "Lada settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA CLI 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.put("/network")
+async def update_network_config(config: NetworkConfig):
+    """Update network configuration (acceleration mode, proxy, mirrors)."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存网络加速配置...")
+    try:
+        update_env_value("ACCELERATION_MODE", config.acceleration_mode)
+        update_env_value("HTTP_PROXY", config.http_proxy)
+        update_env_value("GITHUB_MIRROR", config.github_mirror)
+        update_env_value("HF_MIRROR", config.hf_mirror)
+        update_env_value("PIP_MIRROR", config.pip_mirror)
+        update_env_value("HF_TOKEN", config.hf_token)
+        clear_settings_cache()
+
+        # Apply to current process environment
+        settings = get_settings()
+        settings.apply_network_env()
+
+        log_mgr.add_log("success", "[Settings] 网络加速配置已保存并生效")
+        return {"success": True, "message": "Network settings saved and applied"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 网络加速配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/lada/upgrade")
+async def upgrade_lada():
+    """Upgrade LADA from its official git checkout when running natively."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[LADA] 正在升级 LADA...")
+    install_info = _get_lada_installation_info()
+
+    if install_info["is_docker"]:
+        log_mgr.add_log("warning", "[LADA] Docker 模式下不支持容器内自升级")
+        raise HTTPException(
+            status_code=409,
+            detail="Docker 模式下不建议在容器内直接升级 LADA。请更新镜像后重建容器。",
+        )
+
+    lada_path = install_info["repo_path"]
+    if not lada_path:
+        log_mgr.add_log("error", "[LADA] 升级失败：未找到可升级的 LADA 工作副本")
+        raise HTTPException(
+            status_code=400,
+            detail="当前未检测到可自升级的 LADA 源码工作副本，请手动升级你的 lada-cli 安装来源。",
+        )
+
+    # Apply network settings for git
+    settings = get_settings()
+    settings.apply_network_env()
+    env = os.environ.copy()
+
+    try:
+        # Unset proxy env vars for git pull to avoid proxy redirect issues
+        no_proxy_env = {}
+        for k, v in env.items():
+            k_lower = k.lower()
+            if k_lower not in ("http_proxy", "https_proxy", "http://proxy", "https://proxy"):
+                no_proxy_env[k] = v
+        no_proxy_env.pop("HTTP_PROXY", None)
+        no_proxy_env.pop("HTTPS_PROXY", None)
+        no_proxy_env.pop("http_proxy", None)
+        no_proxy_env.pop("https_proxy", None)
+
+        branch_result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=no_proxy_env,
+        )
+        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+
+        log_mgr.add_log("info", "[LADA] 正在拉取最新代码...")
+        fetch = subprocess.run(
+            ["git", "fetch", "--tags", "origin"],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=no_proxy_env,
+        )
+        if fetch.returncode != 0:
+            log_mgr.add_log("error", f"[LADA] git fetch 失败 — {fetch.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Git fetch failed: {fetch.stderr}")
+
+        result = subprocess.run(
+            ["git", "pull", "--ff-only", "origin", branch],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=no_proxy_env,
+        )
+
+        if result.returncode != 0:
+            if "redirect" in result.stderr.lower() or "ghfast" in result.stderr:
+                log_mgr.add_log("error", "[LADA] 升级失败：代理镜像重定向错误")
+                raise HTTPException(status_code=500,
+                    detail="代理镜像重定向错误。GitHub 被重定向到了不可用的镜像。 "
+                           "请在代理软件中将 github.com 加入直连，或手动执行以下命令：\n"
+                           f"cd {lada_path} && git pull --ff-only origin {branch}")
+            if "Could not connect" in result.stderr or "timeout" in result.stderr.lower() or "curl 28" in result.stderr:
+                log_mgr.add_log("error", "[LADA] 升级失败：无法连接 GitHub")
+                raise HTTPException(status_code=500,
+                    detail="无法连接 GitHub。请检查网络代理设置，确保可以访问 github.com。")
+            log_mgr.add_log("error", f"[LADA] 升级失败 — {result.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Git pull failed: {result.stderr}")
+
+        log_mgr.add_log("info", "[LADA] 代码拉取成功，正在重新安装...")
+        pip_cmd = [_python_executable(), "-m", "pip", "install", "-e", lada_path, "--no-deps"]
+        if not hasattr(sys, "base_prefix") or sys.prefix == getattr(sys, "base_prefix", sys.prefix):
+            pip_cmd.append("--break-system-packages")
+        reinstall = subprocess.run(
+            pip_cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=no_proxy_env,
+        )
+
+        if reinstall.returncode != 0:
+            log_mgr.add_log("error", f"[LADA] pip 安装失败 — {reinstall.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Reinstall failed: {reinstall.stderr}")
+
+        # Get new version
+        version_cp = subprocess.run(
+            [_python_executable(), "-c", "import lada; print(lada.VERSION)"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        new_version = version_cp.stdout.strip() if version_cp.returncode == 0 else None
+
+        log_mgr.add_log("success", f"[LADA] 升级完成 — 新版本：{new_version or '未知'}")
+        return {
+            "success": True,
+            "version": new_version,
+            "output": result.stdout,
+        }
+    except subprocess.TimeoutExpired:
+        log_mgr.add_log("error", "[LADA] 升级超时")
+        raise HTTPException(status_code=500, detail="Upgrade timeout")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[LADA] 升级异常 — {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== LADA Settings ====================
+
+@router.put("/lada/defaults")
+async def update_lada_defaults(config: LadaDefaultsConfig):
+    """Update Lada default configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA 默认参数...")
+    try:
+        update_env_value("LADA_DEVICE", config.device)
+        update_env_value("LADA_FP16", "true" if config.fp16 else "false")
+        update_env_value("LADA_DETECTION_MODEL", config.detection_model)
+        update_env_value("LADA_RESTORATION_MODEL", config.restoration_model)
+        update_env_value("LADA_ENCODING_PRESET", config.encoding_preset)
+        update_env_value("LADA_MAX_CLIP_LENGTH", str(config.max_clip_length))
+        update_env_value("LADA_DETECT_FACE_MOSAICS", "true" if config.detect_face_mosaics else "false")
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA 默认参数已保存")
+        return {"success": True, "message": "Lada defaults saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA 默认参数保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.get("/lada/info")
+async def get_lada_info():
+    """Get LADA system info: available devices, encoding presets, and model status.
+    Model lists come from lada's ModelFiles (lada/__init__.py), with download status
+    checked against LADA_MODEL_WEIGHTS_DIR."""
+    return get_lada_info_impl(
+        settings=get_settings(),
+        project_root=PROJECT_ROOT,
+        install_info=_get_lada_installation_info(),
+        lada_cli_base_cmd_fn=_lada_cli_base_cmd,
+        python_executable_fn=_python_executable,
+        format_size_fn=_format_size,
+    )
+
+
+# ==================== Whisper Settings ====================
+
+@router.put("/whisper")
+async def update_whisper_config(config: WhisperConfig):
+    """Update Whisper default configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Whisper 配置...")
+    try:
+        _assert_custom_pipeline_supported(config.pipeline_mode, config.pass1_pipeline, config.pass2_pipeline)
+        apply_whisper_config_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Whisper 配置已保存")
+        return {"success": True, "message": "Whisper settings saved to .env"}
+    except HTTPException as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e.detail)}")
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/whisper/check")
+async def check_whisper_dependencies():
+    """Check Whisper dependencies and environment."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Whisper] 正在检查依赖环境...")
+    deps = {}
+    models_info = {}
+    cuda_available = False
+    cuda_info = {}
+    settings = get_settings()
+
+    # Check Python packages
+    try:
+        import torch
+        cuda_available = torch.cuda.is_available()
+        cuda_info = {
+            "available": cuda_available,
+            "device_count": 0,
+            "device_name": None,
+            "version": torch.version.cuda,
+        }
+        if cuda_available:
+            try:
+                cuda_info["device_count"] = torch.cuda.device_count()
+                if cuda_info["device_count"] > 0:
+                    cuda_info["device_name"] = torch.cuda.get_device_name(0)
+            except Exception:
+                pass
+        deps["torch"] = {
+            "installed": True,
+            "version": torch.__version__,
+            "cuda": cuda_available,
+            "cuda_info": cuda_info,
+            "installable": True,  # can switch GPU/CPU variant
+        }
+    except ImportError:
+        deps["torch"] = {"installed": False, "version": None, "cuda": False, "cuda_info": {}, "installable": True}

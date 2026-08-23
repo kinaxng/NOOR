@@ -1,0 +1,345 @@
+        return translations[:expected_count]
+
+    @staticmethod
+    def _extract_from_reasoning(reasoning: str, expected_count: int) -> str:
+        """
+        从 qwen3.5 等思维模型的 reasoning 字段中提取翻译结果。
+        reasoning 中翻译可能有两种格式：
+        1. "[数字] 翻译" 格式（末尾格式化输出）
+        2. "**[数字]** 日语文本 ➡️ **中文:** 中文翻译" 格式
+        """
+        import re
+
+        # 格式1: 查找末尾的 [1] 翻译 格式（优先）
+        # reasoning 末尾通常有 "Final Output" 或 "Ready to generate" 后跟着格式化输出
+        lines = reasoning.split("\n")
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if line.startswith("["):
+                parts = line.split("]", 1)
+                if len(parts) == 2 and parts[1].strip():
+                    # 找到了 [数字] 翻译 格式
+                    result_lines = []
+                    for j in range(i, len(lines)):
+                        l = lines[j].strip()
+                        if l.startswith("["):
+                            p = l.split("]", 1)
+                            if len(p) == 2:
+                                result_lines.append(f"[{p[0][1:]}] {p[1].strip()}")
+                        elif result_lines:
+                            result_lines[-1] += " " + l
+                    if result_lines:
+                        return "\n".join(result_lines)
+
+        # 格式2: 提取 "**[数字]** 日语文本 ➡️ **中文:** 翻译" 模式
+        # 匹配 **[1]** こんにちは ➡️ **中文:** 你好 类似的模式
+        translations = []
+        for i in range(1, expected_count + 1):
+            # 尝试匹配任何包含该数字的翻译模式
+            patterns = [
+                rf'\*\*\[{i}\]\*\*.*?➡️.*?\*\*中文[:：]\*\*\s*(.+?)(?:\n|$)',
+                rf'\[{i}\].*?➡️.*?:\s*(.+?)(?:\n|$)',
+                rf'中文[:：]\s*(.+?)(?:\n|$)',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, reasoning, re.DOTALL)
+                if match:
+                    translations.append(match.group(1).strip())
+                    break
+            else:
+                translations.append("")
+
+        # 如果提取到了有效翻译，重新构建为 [1] 翻译 格式
+        if any(translations):
+            return "\n".join([f"[{i+1}] {t}" for i, t in enumerate(translations)])
+
+        # 完全解析失败，返回原始 reasoning 供 _parse_translations 兜底
+        return reasoning.strip()
+
+    @staticmethod
+    def _get_lang_display(lang_code: str) -> str:
+        lang_map = {
+            "zh": "中文",
+            "en": "英文",
+            "ko": "韩文",
+            "zh-CN": "简体中文",
+            "zh-TW": "繁体中文",
+        }
+        return lang_map.get(lang_code, lang_code)
+
+
+def get_translator(
+    model: Optional[str] = None,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    translate_style: str = "adult_explicit",
+    timeout: Optional[int] = None,
+) -> OpenAILikeTranslator:
+    """
+    获取翻译器实例（统一 OpenAI-Compatible）。
+    所有兼容 OpenAI API 格式的接口均可使用。
+    本地模型（Ollama）自动使用 300s 超时，云端 API 使用默认 120s。
+    """
+    settings_base_url = os.environ.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1")
+    settings_api_key = os.environ.get("WHISPER_TRANSLATE_API_KEY", "")
+    resolved_base_url = base_url or settings_base_url
+
+    # 本地模型自动使用更长超时（首请求需要加载模型）
+    if timeout is None:
+        timeout = 300 if _is_ollama_url(resolved_base_url) else 120
+
+    return OpenAILikeTranslator(
+        model=model or os.environ.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+        base_url=resolved_base_url,
+        api_key=api_key or settings_api_key,
+        translate_style=translate_style,
+        timeout=timeout,
+    )
+
+
+def check_translator_health(base_url: str, api_key: Optional[str] = None, model: str = "gpt-4o-mini") -> dict:
+    """
+    检查翻译服务健康状态。
+    base_url: 填到 /v1 即可，例如 http://localhost:11434 或 https://api.openai.com/v1
+    """
+    result = {"available": False, "message": "", "models": []}
+
+    base_url = base_url.rstrip("/")
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        # 先尝试获取模型列表
+        with httpx.Client(timeout=10) as client:
+            models_resp = client.get(
+                f"{base_url}/v1/models",
+                headers=headers,
+            )
+            if models_resp.status_code == 200:
+                models_data = models_resp.json()
+                available_models = [
+                    m["id"] for m in models_data.get("data", [])
+                    if not model or m["id"] == model or m["id"].startswith(model.split("-")[0])
+                ]
+                result["models"] = available_models[:10]
+    except Exception:
+        pass
+
+    # 用实际翻译请求验证连通性
+    try:
+        # Ollama 本地模型首次加载耗时长，使用 300s 超时
+        test_timeout = 300 if _is_ollama_url(base_url) else 30
+        test_translator = OpenAILikeTranslator(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            translate_style="standard",
+            timeout=test_timeout,
+        )
+        test_texts = ["テスト"]
+        result_texts = test_translator.translate_batch(test_texts, "zh")
+        if result_texts and result_texts[0]:
+            result["available"] = True
+            result["message"] = "连接成功，翻译功能正常"
+        else:
+            result["message"] = "连接成功但翻译返回为空"
+    except ConnectionError as e:
+        result["message"] = f"连接失败: {str(e)}"
+    except TimeoutError as e:
+        result["message"] = f"请求超时: {str(e)}"
+    except Exception as e:
+        result["message"] = f"错误: {str(e)}"
+
+    return result
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
+import { useConfirm } from '../../composables/useConfirm'
+import { useI18n } from '../../composables/useI18n'
+import { dictionaries } from '../../i18n'
+import VuiButton from '../../components/ui/Button/VuiButton.vue'
+import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+import { buildWhisperProfileWithTranslation, formatWhisperAudioPreprocessSummary, formatWhisperTranslationSummary, getWhisperSelectableStrategyPresentation, getWhisperStrategyMeta, resolveWhisperEditableDefaults } from '../../composables/useWhisperProfiles'
+
+const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
+
+const loading = ref(false)
+const saving = ref(false)
+const checkingDeps = ref(false)
+const checkingModels = ref(false)
+const downloadingModel = ref<string | null>(null)
+const installingDeps = computed(() => installStatus.value.status === 'running')
+const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
+const activeStrategy = ref<'recommended' | 'reazon_nemo'>('recommended')
+const audioPreprocessMode = ref('none')
+const audioPreprocessModel = ref('vocal_balanced')
+
+// ===== Translation settings =====
+const translateEnabled = ref(true)
+const translateTo = ref('zh')
+const translateModel = ref('gpt-4o-mini')
+const translateStyle = ref('adult_explicit')
+const translateBaseUrl = ref('https://api.openai.com/v1')
+const translateApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ available: boolean; message: string; models?: string[] } | null>(null)
+
+const checkingDepsResult = ref<Record<string, any>>({})
+const whisperCudaAvailable = ref(false)
+const torchVariant = ref<'gpu' | 'cpu'>('gpu')
+const whisperModels = ref<any[]>([])
+const whisperFeatures = ref<any>({})
+const depsExpanded = ref(false)
+const modelsExpanded = ref(false)
+
+// 只显示不便 Docker build 的运行时依赖（installable: true）
+const runtimeInstallableDeps = computed(() =>
+  Object.fromEntries(
+    Object.entries(checkingDepsResult.value).filter(([, v]) => (v as any).installable)
+  )
+)
+
+// 是否有缺失的运行时依赖（控制安装按钮显示）
+const hasMissingRuntimeDeps = computed(() => {
+  return Object.values(runtimeInstallableDeps.value).some((v: any) => !v.installed)
+})
+const installStatus = ref<{ status: string; progress: number; message: string; current_package?: string }>({
+  status: 'idle',
+  progress: 0,
+  message: '',
+})
+
+onMounted(async () => {
+  await loadSettings()
+  await Promise.all([checkWhisperDeps(), loadWhisperModels()])
+})
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const resp = await api.get('/settings')
+    if (resp.data.whisper) {
+      const w = resp.data.whisper
+      const defaults = resolveWhisperEditableDefaults(w)
+      whisperFeatures.value = w.features || {}
+      activeStrategy.value = defaults.strategy
+      audioPreprocessMode.value = defaults.audio_preprocess_mode
+      audioPreprocessModel.value = defaults.audio_preprocess_model
+      translateEnabled.value = defaults.translate_enabled
+      translateTo.value = defaults.translate_to
+      translateModel.value = defaults.translate_model
+      translateStyle.value = defaults.translate_style
+      translateBaseUrl.value = defaults.translate_base_url
+      translateApiKey.value = defaults.translate_api_key
+    }
+  } catch (e) {
+    console.error('Failed to load whisper settings:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function checkWhisperDeps() {
+  checkingDeps.value = true
+  try {
+    const resp = await api.post('/settings/whisper/check')
+    checkingDepsResult.value = resp.data.dependencies
+    whisperFeatures.value = resp.data.features || whisperFeatures.value
+    whisperCudaAvailable.value = resp.data.cuda_available
+    torchVariant.value = resp.data.cuda_available ? 'gpu' : 'cpu'
+    const statusResp = await api.get('/settings/whisper/install-status')
+    installStatus.value = statusResp.data
+  } catch (e: any) {
+    toast.error(t('settings.whisper.checkFailed'))
+  } finally {
+    checkingDeps.value = false
+  }
+}
+
+async function loadWhisperModels() {
+  checkingModels.value = true
+  try {
+    const resp = await api.get('/settings/whisper/models')
+    whisperModels.value = resp.data.models
+    // 更新下载状态（如果有正在进行的下载）
+    if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'running') {
+      modelDownloadStatus.value = resp.data.downloadStatus
+      // 恢复 downloadingModel 状态
+      if (resp.data.downloadStatus.model) {
+        downloadingModel.value = resp.data.downloadStatus.model
+      }
+    } else if (resp.data.downloadStatus && resp.data.downloadStatus.status === 'idle') {
+      // 下载完成或空闲时，清除状态
+      downloadingModel.value = null
+    }
+  } catch (e: any) {
+    console.error('Failed to load models:', e)
+  } finally {
+    checkingModels.value = false
+  }
+}
+
+function buildWhisperSettingsPayload() {
+  return buildWhisperProfileWithTranslation(activeStrategy.value, {
+    audio_preprocess_mode: audioPreprocessMode.value,
+    audio_preprocess_model: audioPreprocessModel.value,
+    translate_enabled: translateEnabled.value,
+    translate_to: translateTo.value,
+    translate_model: translateModel.value,
+    translate_style: translateStyle.value,
+    translate_base_url: translateBaseUrl.value,
+    translate_api_key: translateApiKey.value,
+  })
+}
+
+async function saveWhisper() {
+  saving.value = true
+  try {
+    await api.put('/settings/whisper', buildWhisperSettingsPayload())
+    toast.success(t('settings.whisper.whisperSettingsSaved'))
+  } catch (e: any) {
+    toast.error(t('settings.whisper.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function testTranslateConnection() {
+  testingConnection.value = true
+  connectionResult.value = null
+  try {
+    const resp = await api.post('/whisper/translate/test', null, {
+      params: {
+        base_url: translateBaseUrl.value,
+        api_key: translateApiKey.value || undefined,
+        model: translateModel.value,
+      },
+    })
+    connectionResult.value = resp.data
+    if (resp.data.available) {
+      toast.success(resp.data.message)
+    } else {
+      toast.error(resp.data.message)
+    }
+  } catch (e: any) {
+    connectionResult.value = { available: false, message: t('settings.emby.connectFailed', { error: t('common.error') }) }
+    toast.error(t('settings.whisper.testFailed'))
+  } finally {
+/home/kinax/noor/frontend/src/components/noor/SubtitlePanel.vue:88:const whisperTranslateBaseUrl = ref('https://api.openai.com/v1')
+/home/kinax/noor/frontend/src/components/noor/SubtitlePanel.vue:96:const whisperSavedTranslateBaseUrl = ref('https://api.openai.com/v1')
+/home/kinax/noor/frontend/src/components/noor/SubtitlePanel.vue:352:      base_url: whisperTranslateBaseUrl.value || 'https://api.openai.com/v1',
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:35:const translateBaseUrl = ref('https://api.openai.com/v1')
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:387:        <p class="settings-card__desc">{{ t('settings.whisper.translationDesc') }}</p>
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:407:          <FieldRow customClass="whisper-field-row" :label="t('settings.whisper.translateBaseUrlLabel')" :description="t('settings.whisper.translateBaseUrlDesc')">
+/home/kinax/noor/frontend/src/views/settings/WhisperSettings.vue:408:            <input v-model="translateBaseUrl" type="text" class="settings-input" placeholder="https://api.openai.com/v1" :disabled="!translateEnabled" />
+/home/kinax/noor/frontend/src/i18n/zh.ts:729:  'settings.whisper.translationDesc': '统一 OpenAI-API 规范接口，Ollama / OpenAI / Groq / LM Studio 等均可使用',
+/home/kinax/noor/frontend/src/i18n/zh.ts:744:  'settings.whisper.translateBaseUrlDesc': '填到 /v1 即可，兼容所有 OpenAI-API 规范接口（Ollama / OpenAI / Groq / LM Studio 等）',
+/home/kinax/noor/frontend/src/i18n/en.ts:728:  'settings.whisper.translationDesc': 'Uses the OpenAI-API compatible interface; works with Ollama / OpenAI / Groq / LM Studio and others',
+/home/kinax/noor/frontend/src/i18n/en.ts:743:  'settings.whisper.translateBaseUrlDesc': 'Enter up to /v1; compatible with OpenAI-API style endpoints (Ollama / OpenAI / Groq / LM Studio etc.)',

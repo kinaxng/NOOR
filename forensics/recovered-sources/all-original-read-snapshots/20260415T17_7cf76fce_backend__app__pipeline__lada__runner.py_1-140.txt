@@ -1,0 +1,140 @@
+import asyncio
+import concurrent.futures
+import os
+import re
+import signal
+import subprocess
+import threading
+from pathlib import Path
+from app.core.config import get_settings
+
+default_settings = get_settings()
+
+
+def _build_lada_env(lada_model_dir: str) -> dict:
+    """Build environment dict with LADA_MODEL_WEIGHTS_DIR set."""
+    env = os.environ.copy()
+    if lada_model_dir:
+        env["LADA_MODEL_WEIGHTS_DIR"] = lada_model_dir
+    return env
+
+
+async def run_lada_restoration(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    job_settings: dict,
+    progress_queue: asyncio.Queue,
+    cancel_event: asyncio.Event | None = None,
+) -> bool:
+    """Run lada-cli restoration using a dedicated thread pool executor."""
+    settings = get_settings()
+
+    # Resolve model weights directory
+    lada_model_dir = job_settings.get("lada_model_dir", settings.lada_model_dir) or ""
+
+    # Build lada-cli command
+    # Support two invocation styles:
+    #   1. File path: /home/kinax/.local/bin/lada-cli  → uses unbuffered wrapper
+    #   2. Module:     python3 -m lada.cli.main         → python3 -u -m lada.cli.main
+    lada_cli_path = job_settings.get("lada_cli_path", settings.lada_cli_path)
+    lada_cli_path = lada_cli_path.strip()
+
+    if " " in lada_cli_path:
+        # Module invocation style: "python3 -m lada.cli.main" or just "python3.13 -m lada.cli.main"
+        parts = lada_cli_path.split()
+        cmd = [parts[0], "-u"] + parts[1:]  # python3 -u -m lada.cli.main
+    else:
+        # File path style: use unbuffered wrapper if available
+        unbuffered_path = re.sub(r"/lada-cli$", "/lada-cli-unbuffered", lada_cli_path)
+        if os.path.exists(unbuffered_path):
+            cmd = [unbuffered_path]
+        else:
+            cmd = [lada_cli_path]
+
+    cmd.extend([
+        "--input", input_path,
+        "--output", output_path,
+        "--device", job_settings.get("device", settings.lada_device or "cuda:0"),
+        "--mosaic-detection-model", job_settings.get("detection_model", settings.lada_detection_model or "v4-fast"),
+        "--mosaic-restoration-model", job_settings.get("restoration_model", settings.lada_restoration_model or "basicvsrpp-v1.2"),
+        "--encoding-preset", job_settings.get("encoding_preset", settings.lada_encoding_preset or "hevc-nvidia-gpu-hq"),
+        "--max-clip-length", str(job_settings.get("max_clip_length", settings.lada_max_clip_length or 180)),
+    ])
+
+    # FP16 flag
+    lada_fp16 = job_settings.get("fp16", settings.lada_fp16)
+    if lada_fp16:
+        cmd.append("--fp16")
+    else:
+        cmd.append("--no-fp16")
+
+    # Face mosaics flag
+    detect_face = job_settings.get("detect_face_mosaics", settings.lada_detect_face_mosaics)
+    if detect_face:
+        cmd.append("--detect-face-mosaics")
+
+    await progress_queue.put({
+        "type": "log",
+        "line": f"Starting command: {' '.join(cmd)}"
+    })
+
+    env = _build_lada_env(lada_model_dir)
+
+    # Thread-safe result container
+    result = {"returncode": None, "lines": [], "cancelled": False}
+    proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
+    proc_lock = threading.Lock()
+    terminate_requested = threading.Event()
+
+    def _terminate_process_tree(proc: subprocess.Popen | None):
+        if proc is None or proc.poll() is not None:
+            return
+        result["cancelled"] = True
+        terminate_requested.set()
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+    def _kill_process_tree(proc: subprocess.Popen | None):
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    def run_in_thread():
+        creation_kwargs = {"start_new_session": True} if os.name == "posix" else {}
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            **creation_kwargs,
+        )
+        with proc_lock:
+            proc_holder["proc"] = proc
+        if terminate_requested.is_set():
+            _terminate_process_tree(proc)
+        for raw_line in iter(proc.stdout.readline, b""):
+            if terminate_requested.is_set():
+                _terminate_process_tree(proc)
+                break

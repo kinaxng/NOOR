@@ -1,0 +1,590 @@
+        raw["detail_enriched"] = True
+        raw["detail_enrich_error"] = True
+        enriched = dict(item)
+        enriched["raw"] = raw
+        return enriched
+    return _merge_latest_detail(config, item, detail if isinstance(detail, dict) else {})
+
+
+async def _latest_page_items(config: dict[str, Any], latest_type: str, sort_by: str, page: int, *, scan_limit: int = 80) -> list[dict[str, Any]]:
+    cache_key = (_base(config), str(latest_type), str(sort_by), int(page), int(scan_limit))
+    cached = _cache_get(LATEST_PAGE_CACHE, cache_key, LATEST_PAGE_CACHE_TTL)
+    if cached is not None:
+        return list(cached)
+    batch = _data(await _request(config, "GET", "/latest", params={"page": page, "limit": scan_limit, "type": latest_type, "sort_by": sort_by, "filter_by": "all"}))
+    movies = [x for x in _movie_list(batch) if isinstance(x, dict)]
+    items = [_normalize_movie(config, movie) for movie in movies]
+    _cache_set(LATEST_PAGE_CACHE, cache_key, items)
+    return list(items)
+
+
+async def _enrich_page_items_for_filter(config: dict[str, Any], items: list[dict[str, Any]], requested_filter: str) -> list[dict[str, Any]]:
+    if requested_filter != "cracked":
+        return items
+
+    semaphore = asyncio.Semaphore(DETAIL_ENRICH_CONCURRENCY)
+
+    async def enrich_one(item: dict[str, Any]) -> dict[str, Any]:
+        if _matches_latest_filter(item, requested_filter):
+            return item
+        async with semaphore:
+            return await _enrich_latest_item(config, item)
+
+    return list(await asyncio.gather(*(enrich_one(item) for item in items)))
+
+
+def _normalize_movie(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    number = _code(item.get("number") or item.get("code"))
+    title = str(item.get("title") or item.get("origin_title") or number or item.get("id") or "").strip()
+    magnets_count = item.get("magnets_count")
+    if magnets_count is None:
+        magnets_count = item.get("magnet_count")
+    return {
+        "id": str(item.get("id") or item.get("video_id") or number or title),
+        "number": number,
+        "code": number,
+        "title": title,
+        "origin_title": item.get("origin_title") or "",
+        "display_title": f"{number} {title}".strip(),
+        "cover_url": _abs(config, item.get("cover_url")),
+        "thumb_url": _abs(config, item.get("thumb_url")),
+        "release_date": item.get("release_date") or item.get("date") or "",
+        "duration": item.get("duration") or 0,
+        "score": item.get("score") or item.get("ranking") or 0,
+        "ranking": item.get("ranking") or 0,
+        "magnets_count": magnets_count or 0,
+        "has_cnsub": bool(item.get("has_cnsub") or item.get("has_subtitle") or item.get("has_magnet_subtitle") or item.get("play_subtitle")),
+        "play_subtitle": int(item.get("play_subtitle") or 0),
+        "can_play": bool(item.get("can_play")),
+        "is_cracked": _is_cracked_movie(item),
+        "library": item.get("library") if isinstance(item.get("library"), dict) else {},
+        "raw": item,
+    }
+
+
+def _in_library(item: dict[str, Any]) -> bool:
+    library = item.get("library")
+    return bool(library.get("in_library")) if isinstance(library, dict) else False
+
+
+def _matches_latest_filter(item: dict[str, Any], requested_filter: str) -> bool:
+    if requested_filter in {"", "all"}:
+        return True
+    if requested_filter == "magnets":
+        return int(item.get("magnets_count") or 0) > 0
+    if requested_filter == "cnsub":
+        return bool(item.get("has_cnsub") or item.get("play_subtitle"))
+    if requested_filter == "cracked":
+        return bool(item.get("is_cracked"))
+    if requested_filter == "playable":
+        return bool(item.get("can_play"))
+    if requested_filter == "library":
+        return _in_library(item)
+    if requested_filter == "not_library":
+        return not _in_library(item)
+    return True
+
+
+async def _collect_latest_items(config: dict[str, Any], latest_type: str, sort_by: str, *, scan_limit: int = 80, max_scan_pages: int = 24) -> list[dict[str, Any]]:
+    cache_key = (str(latest_type), str(sort_by))
+    cached = _cache_get(LATEST_CACHE, cache_key, LATEST_CACHE_TTL)
+    if cached is not None:
+        return list(cached)
+    items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_page_signatures: set[tuple[str, ...]] = set()
+    for scan_page in range(1, max_scan_pages + 1):
+        page_items = await _latest_page_items(config, latest_type, sort_by, scan_page, scan_limit=scan_limit)
+        if not page_items:
+            break
+        signature = tuple(str(item.get("id") or item.get("code") or item.get("number") or "") for item in page_items)
+        if signature and signature in seen_page_signatures:
+            break
+        seen_page_signatures.add(signature)
+        added = 0
+        for item in page_items:
+            item_id = str(item.get("id") or item.get("code") or item.get("number") or "")
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
+            items.append(item)
+            added += 1
+        if added == 0:
+            break
+    _cache_set(LATEST_CACHE, cache_key, items)
+    return list(items)
+
+
+async def _scan_latest_filtered_page(
+    config: dict[str, Any],
+    latest_type: str,
+    sort_by: str,
+    requested_filter: str,
+    *,
+    page: int,
+    limit: int,
+    scan_limit: int = 80,
+    max_scan_pages: int = 24,
+) -> dict[str, Any]:
+    cache_key = (_base(config), str(latest_type), str(sort_by), str(requested_filter), int(page), int(limit))
+    cached = _cache_get(FILTER_PAGE_CACHE, cache_key, FILTER_PAGE_CACHE_TTL)
+    if cached is not None:
+        return dict(cached)
+
+    start = (page - 1) * limit
+    target_count = start + limit
+    filtered_items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_page_signatures: set[tuple[str, ...]] = set()
+    needs_detail_enrich = requested_filter == "cracked"
+    exhausted = True
+
+    for scan_page in range(1, max_scan_pages + 1):
+        page_items = await _latest_page_items(config, latest_type, sort_by, scan_page, scan_limit=scan_limit)
+        if not page_items:
+            break
+        signature = tuple(str(item.get("id") or item.get("code") or item.get("number") or "") for item in page_items)
+        if signature and signature in seen_page_signatures:
+            break
+        seen_page_signatures.add(signature)
+
+        unique_additions = 0
+        if needs_detail_enrich:
+            page_items = await _enrich_page_items_for_filter(config, page_items, requested_filter)
+        for item in page_items:
+            item_id = str(item.get("id") or item.get("code") or item.get("number") or "")
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
+            unique_additions += 1
+
+            if _matches_latest_filter(item, requested_filter):
+                filtered_items.append(item)
+                if len(filtered_items) >= target_count:
+                    exhausted = False
+                    break
+
+        if not unique_additions or not exhausted:
+            break
+
+    total = len(filtered_items) if exhausted else max(len(filtered_items) + 1, target_count + 1)
+    result = {
+        "ok": True,
+        "items": filtered_items[start:start + limit],
+        "total": total,
+        "raw": {
+            "client_filtered": requested_filter,
+            "partial_total": not exhausted,
+            "scan_pages": len(seen_page_signatures),
+        },
+
+--- latest scan ---
+        if signature and signature in seen_page_signatures:
+            break
+        seen_page_signatures.add(signature)
+        added = 0
+        for item in page_items:
+            item_id = str(item.get("id") or item.get("code") or item.get("number") or "")
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
+            items.append(item)
+            added += 1
+        if added == 0:
+            break
+    _cache_set(LATEST_CACHE, cache_key, items)
+    return list(items)
+
+
+async def _scan_latest_filtered_page(
+    config: dict[str, Any],
+    latest_type: str,
+    sort_by: str,
+    requested_filter: str,
+    *,
+    page: int,
+    limit: int,
+    scan_limit: int = 80,
+    max_scan_pages: int = 24,
+) -> dict[str, Any]:
+    cache_key = (_base(config), str(latest_type), str(sort_by), str(requested_filter), int(page), int(limit))
+    cached = _cache_get(FILTER_PAGE_CACHE, cache_key, FILTER_PAGE_CACHE_TTL)
+    if cached is not None:
+        return dict(cached)
+
+    start = (page - 1) * limit
+    target_count = start + limit
+    filtered_items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_page_signatures: set[tuple[str, ...]] = set()
+    needs_detail_enrich = requested_filter == "cracked"
+    exhausted = True
+
+    for scan_page in range(1, max_scan_pages + 1):
+        page_items = await _latest_page_items(config, latest_type, sort_by, scan_page, scan_limit=scan_limit)
+        if not page_items:
+            break
+        signature = tuple(str(item.get("id") or item.get("code") or item.get("number") or "") for item in page_items)
+        if signature and signature in seen_page_signatures:
+            break
+        seen_page_signatures.add(signature)
+
+        unique_additions = 0
+        if needs_detail_enrich:
+            page_items = await _enrich_page_items_for_filter(config, page_items, requested_filter)
+        for item in page_items:
+            item_id = str(item.get("id") or item.get("code") or item.get("number") or "")
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
+            unique_additions += 1
+
+            if _matches_latest_filter(item, requested_filter):
+                filtered_items.append(item)
+                if len(filtered_items) >= target_count:
+                    exhausted = False
+                    break
+
+        if not unique_additions or not exhausted:
+            break
+
+    total = len(filtered_items) if exhausted else max(len(filtered_items) + 1, target_count + 1)
+    result = {
+        "ok": True,
+        "items": filtered_items[start:start + limit],
+        "total": total,
+        "raw": {
+            "client_filtered": requested_filter,
+            "partial_total": not exhausted,
+            "scan_pages": len(seen_page_signatures),
+        },
+    }
+    _cache_set(FILTER_PAGE_CACHE, cache_key, result)
+    return dict(result)
+
+
+def _normalize_actor(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(item.get("id") or item.get("external_id") or item.get("name") or ""),
+        "name": str(item.get("name") or ""),
+        "name_zht": str(item.get("name_zht") or ""),
+        "other_name": str(item.get("other_name") or ""),
+        "avatar_url": _abs(config, item.get("avatar_url")),
+        "uncensored": bool(item.get("uncensored")),
+        "raw": item,
+    }
+
+
+def _normalize_magnet(magnet: dict[str, Any], code: str) -> dict[str, Any]:
+    tags = magnet.get("tags") if isinstance(magnet.get("tags"), list) else []
+    size_mb = float(magnet.get("size_mb") or 0)
+    return {
+        "name": magnet.get("name") or code,
+        "magnet": magnet.get("magnet") or "",
+        "size_mb": size_mb,
+        "size_bytes": int(size_mb * 1024 * 1024),
+        "file_count": magnet.get("file_count") or 0,
+        "date": magnet.get("date") or "",
+        "tags": tags,
+        "site": magnet.get("site") or "JavDB",
+        "source_key": magnet.get("source_key") or PLUGIN_ID,
+        "chinese": any("字幕" in str(x) or "中字" in str(x) for x in tags),
+        "hd": any("高清" in str(x).upper() or "HD" in str(x).upper() for x in tags),
+    }
+
+
+async def test(config: dict[str, Any]) -> PluginTestResult:
+    try:
+        payload = await _request(config, "GET", "/stats")
+        data = _data(payload) or {}
+        return PluginTestResult(ok=True, message="JavDB connected", details=data if isinstance(data, dict) else {})
+
+--- frontend latest ---
+  const rankingPeriods = [
+    ['daily', '日榜'],
+    ['weekly', '周榜'],
+    ['monthly', '月榜'],
+  ]
+  const relationActorBadgeFilters = [
+    ['magnets', '有磁链'],
+    ['cnsub', '字幕'],
+    ['cracked', '破解'],
+  ]
+  const relationActorSortOptions = [
+    { label: '最新优先', value: 'release_desc' },
+    { label: '最早优先', value: 'release_asc' },
+    { label: '磁链数', value: 'magnets_desc' },
+    { label: '标题', value: 'title_asc' },
+  ]
+
+  function isActorRankingFrame() {
+    return state.tab === 'rankings' && state.rankingMode === 'actors' && !state.relation
+  }
+
+  function rerenderCurrentList() {
+    renderFilters()
+    renderGrid()
+    renderPager()
+  }
+
+  function latestRemoteFilter() {
+    if (state.latestSelectedFilters.includes('cracked')) return 'cracked'
+    if (state.latestSelectedFilters.includes('cnsub')) return 'cnsub'
+    if (state.latestSelectedFilters.includes('magnets')) return 'magnets'
+    return 'all'
+  }
+
+  function estimatePageSize() {
+    if (isActorRankingFrame()) {
+      const width = grid.clientWidth || root.clientWidth || window.innerWidth
+      const top = grid.getBoundingClientRect?.().top || 240
+      const height = Math.max(360, window.innerHeight - top - 84)
+      const cardWidth = 236
+      const cardHeight = 280
+      const cols = Math.max(1, Math.floor((width + 16) / cardWidth))
+      const rows = Math.max(1, Math.floor((height + 16) / cardHeight))
+      state.limit = Math.max(cols, cols * rows)
+      return
+    }
+    state.limit = 48
+  }
+
+  function setTab(next) {
+    if (state.tab === next) return
+    state.tab = next
+    state.page = 1
+    state.latestSelectedFilters = []
+    state.latestType = 'all'
+    state.rankingMode = 'top250'
+    state.rankingType = 0
+    state.rankingPeriod = 'daily'
+    state.top250Year = ''
+    state.relation = null
+    loadData()
+  }
+
+  function setRelation(relType, relId, label) {
+    state.relation = { relType, relId, label }
+    state.relationActorSelectedFilters = []
+    state.relationActorSingleFilter = false
+    state.relationActorYear = ''
+    state.relationActorSort = 'release_desc'
+    state.page = 1
+    loadData()
+  }
+
+  function actorRelationYears() {
+    const years = new Set()
+    for (const item of state.items) {
+      const year = String(item?.release_date || '').slice(0, 4)
+      if (year) years.add(year)
+    }
+    return [...years].sort((a, b) => Number(b) - Number(a))
+  }
+
+  function filteredItems() {
+    if (state.relation?.relType === 'actor') {
+      const list = state.items.filter(item => {
+        if (state.relationActorSelectedFilters.includes('magnets') && Number(item?.magnets_count || 0) <= 0) return false
+        if (state.relationActorSelectedFilters.includes('cnsub') && !(item?.has_cnsub || item?.play_subtitle)) return false
+        if (state.relationActorSelectedFilters.includes('cracked') && !item?.is_cracked) return false
+        if (state.relationActorSingleFilter && Number(item?.actor_count || 0) > 1) return false
+        if (state.relationActorYear && String(item?.release_date || '').slice(0, 4) !== state.relationActorYear) return false
+        return true
+      })
+      const sorted = [...list]
+      if (state.relationActorSort === 'release_desc') sorted.sort((a, b) => String(b.release_date || '').localeCompare(String(a.release_date || '')))
+      else if (state.relationActorSort === 'release_asc') sorted.sort((a, b) => String(a.release_date || '').localeCompare(String(b.release_date || '')))
+      else if (state.relationActorSort === 'magnets_desc') sorted.sort((a, b) => Number(b.magnets_count || 0) - Number(a.magnets_count || 0))
+      else if (state.relationActorSort === 'title_asc') sorted.sort((a, b) => titleOf(a).localeCompare(titleOf(b), 'zh-CN'))
+      return sorted
+    }
+    if (state.tab === 'latest') {
+      return state.items.filter(item => {
+        if (state.latestSelectedFilters.includes('magnets') && Number(item?.magnets_count || 0) <= 0) return false
+        if (state.latestSelectedFilters.includes('cnsub') && !(item?.has_cnsub || item?.play_subtitle)) return false
+        if (state.latestSelectedFilters.includes('cracked') && !item?.is_cracked) return false
+        return true
+      })
+    }
+    return state.items
+  }
+
+  async function enrichWorkItems(items) {
+    const targets = (items || []).filter(item => item && item.code && !item.__detailEnriched)
+    if (!targets.length) return
+    const queue = targets.slice(0, state.relation?.relType === 'actor' ? 120 : 80)
+    const concurrency = 8
+    let index = 0
+    async function worker() {
+      while (index < queue.length) {
+        const current = queue[index++]
+        try {
+          const res = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code: current.code } })
+
+--- frontend load/pager ---
+              },
+            })
+          : null
+        if (yearSelect) yearWrap.appendChild(yearSelect)
+        filtersWrap.appendChild(yearWrap)
+      }
+      if (['daily', 'weekly', 'monthly'].includes(state.rankingMode)) {
+        const filterGroup = el('div', 'javdb-filter-group')
+        const activeLabel = state.rankingMode === 'daily' ? '日榜'
+          : state.rankingMode === 'weekly' ? '周榜'
+          : '月榜'
+        filterGroup.appendChild(sdk.ui.chip({ label: activeLabel, active: true, onClick: () => {} }))
+        filtersWrap.append(el('div', 'javdb-filter-divider'), filterGroup)
+      }
+    }
+  }
+
+  async function loadData() {
+    const seq = ++loadSeq
+    estimatePageSize()
+    state.loading = true
+    renderFilters()
+    renderGrid()
+    try {
+      const remoteLatestFilter = latestRemoteFilter()
+      const action = state.relation
+        ? 'related_movies'
+        : (
+          state.tab === 'rankings'
+            ? (state.rankingMode === 'actors' ? 'actors' : state.rankingMode === 'top250' ? 'top250' : 'rankings')
+            : state.tab
+        )
+      const payload = {
+        page: state.page,
+        limit: state.limit,
+        ...(state.relation ? { rel_type: state.relation.relType, rel_id: state.relation.relId } : {}),
+        ...(state.tab === 'latest' ? { type: state.latestType, filter_by: remoteLatestFilter, sort_by: 'update' } : {}),
+        ...(state.tab === 'rankings' && ['daily', 'weekly', 'monthly'].includes(state.rankingMode)
+          ? { type: state.rankingType, period: state.rankingMode }
+          : {}),
+        ...(state.tab === 'rankings' && state.rankingMode === 'top250'
+          ? { type_value: state.top250Year || String(state.rankingType) }
+          : {}),
+        ...(isActorRankingFrame() ? { type: state.rankingType } : {}),
+      }
+      if (state.relation?.relType === 'actor') {
+        payload.page = 1
+        payload.limit = 200
+        payload.sort_by = 'release'
+        payload.order_by = 'desc'
+      }
+      const res = await sdk.api.post(`/plugins/javdb/actions/${action}`, { payload })
+      if (seq !== loadSeq) return
+      state.items = res.data.items || []
+      state.total = Number(res.data.total || state.items.length)
+      if (state.items.length && (state.relation?.relType === 'actor' || (state.tab === 'latest' && remoteLatestFilter !== 'all'))) {
+        await enrichWorkItems(state.items)
+        if (seq !== loadSeq) return
+      }
+    } catch (e) {
+      if (seq !== loadSeq) return
+      sdk.toast.error(e.message || '数据加载失败')
+      state.items = []
+      state.total = 0
+    }
+    if (seq !== loadSeq) return
+    state.loading = false
+    renderFilters()
+    renderGrid()
+    renderPager()
+  }
+
+  function renderGrid() {
+    grid.innerHTML = ''
+    grid.classList.toggle('javdb-grid--actors', isActorRankingFrame())
+    const items = filteredItems()
+
+    if (state.loading && !items.length) {
+      for (let i = 0; i < 12; i++) grid.appendChild(el('div', 'javdb-card javdb-skeleton'))
+      return
+    }
+
+    if (!items.length) {
+      grid.appendChild(sdk.ui.emptyState({ text: '暂无符合条件的作品' }))
+      return
+    }
+
+    const start = (state.page - 1) * state.limit
+    const visible = items.slice(start, start + state.limit)
+
+    visible.forEach(item => {
+      if (isActorRankingFrame()) {
+        const actorTitle = item.name_zht || item.name || '-'
+        const actorMeta = [item.name, item.other_name].filter(Boolean).join(' · ')
+        const actorCard = el('button', 'javdb-actor-card')
+        actorCard.type = 'button'
+        actorCard.onclick = () => setRelation('actor', item.id, actorTitle)
+        const avatar = el('div', 'javdb-actor-avatar')
+        if (item.avatar_url) {
+          const img = el('img')
+          img.src = item.avatar_url
+          img.alt = actorTitle
+          avatar.appendChild(img)
+        }
+        actorCard.appendChild(avatar)
+        actorCard.appendChild(el('div', 'javdb-actor-name', actorTitle))
+        actorCard.appendChild(el('div', 'javdb-actor-meta', actorMeta || ''))
+        const badgeRow = el('div', 'javdb-actor-badges')
+        if (item.uncensored) badgeRow.appendChild(sdk.ui.badge({ label: '无码', tone: 'info' }))
+        actorCard.appendChild(badgeRow)
+        grid.appendChild(actorCard)
+        return
+      }
+      const badges = []
+      const magnetText = magnetLabel(item)
+      if (magnetText) badges.push(sdk.ui.badge({ label: magnetText, tone: 'info' }))
+      if (item.has_cnsub || item.play_subtitle) badges.push(sdk.ui.badge({ label: '中字', tone: 'success' }))
+      if (item.is_cracked) badges.push(sdk.ui.badge({ label: '破解', tone: 'danger' }))
+      if (item.library?.in_library) badges.push(sdk.ui.badge({ label: '已入库', tone: 'info' }))
+
+      const card = sdk.ui.mediaCard({
+        title: titleOf(item),
+        cover: item.cover_url || item.thumb_url,
+        sharp: true,
+        meta: [classifyCategory(item), fmtMin(item.duration)].filter(Boolean),
+        badges,
+        onClick: () => openDetail(item),
+        className: 'javdb-card',
+      })
+      grid.appendChild(card)
+    })
+  }
+
+  function renderPager() {
+    pager.innerHTML = ''
+    let totalItems = Number(state.total || 0)
+    if (state.relation?.relType === 'actor') {
+      totalItems = filteredItems().length
+    } else if (state.tab === 'latest' && state.latestSelectedFilters.length && latestRemoteFilter() === 'all') {
+      totalItems = filteredItems().length
+    }
+    if (totalItems <= state.limit) return
+    pager.appendChild(sdk.ui.pagination({
+      page: state.page,
+      totalPages: Math.ceil(totalItems / state.limit),
+      onPage: next => {
+        state.page = next
+        renderGrid()
+        renderPager()
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      },
+    }))
+  }
+
+  async function openDetail(item) {
+    const code = item.number || item.code || item.id
+    const panel = sdk.ui.panel({ title: code, eyebrow: '影片详情', scroll: true })
+    state.activePanel = panel
+    panel.body.appendChild(sdk.ui.loadingState({ text: '正在调取详情数据...' }))
+
+    try {

@@ -1,0 +1,151 @@
+    except Exception as e:
+        return False, f"连接失败: {e}"
+
+
+# ─── Libraries ─────────────────────────────────────────────────────────────────
+
+async def _list_libraries(config: dict) -> list[dict]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{_server_url(config)}/emby/Library/MediaFolders",
+            headers=_headers(config.get("api_key", "")),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    libraries = []
+    for item in data.get("Items", []):
+        item_type = item.get("Type")
+        collection_type = item.get("CollectionType")
+        if item_type in ("movies", "tvshows") or collection_type in ("movies", "tvshows"):
+            poster_url = None
+            if item.get("ImageTags"):
+                tag = item["ImageTags"].get("Primary")
+                if tag:
+                    poster_url = f"{_server_url(config)}/emby/Items/{item['Id']}/Images/Primary?tag={tag}"
+            libraries.append({
+                "id": item["Id"],
+                "name": item["Name"],
+                "type": collection_type or item_type or "unknown",
+                "poster_url": poster_url,
+            })
+    return libraries
+
+
+
+async def _get_siblings(config: dict, parent_id: str, current_id: str) -> list[dict]:
+    return await get_siblings_impl(
+        config,
+        parent_id,
+        current_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+        map_path_fn=_map_path,
+    )
+
+
+def _get_main_nfo(file_path: str | None) -> str | None:
+    return get_main_nfo_impl(file_path)
+
+
+async def _get_item(config: dict, item_id: str) -> dict | None:
+    return await get_item_impl(
+        config,
+        item_id,
+        httpx_module=httpx,
+        server_url_fn=_server_url,
+        headers_fn=_headers,
+        map_path_fn=_map_path,
+        parse_tags_fn=_parse_tags,
+        get_siblings_fn=_get_siblings,
+        get_main_nfo_fn=_get_main_nfo,
+    )
+
+
+# ─── Hardlink group management ─────────────────────────────────────────────────
+
+def _hardlink_groups_path() -> Path:
+    return _config_path().parent / "hardlink_groups.txt"
+
+
+VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.webm', '.mpg', '.mpeg'}
+
+
+def _scan_inodes(dir_path: str) -> dict[tuple[int, int], str]:
+    """Scan a directory recursively for video files.
+    Returns { (inode, dev): path } — one path per inode.
+    """
+    result: dict[tuple[int, int], str] = {}
+    if not os.path.isdir(dir_path):
+        return result
+    for dirpath, _dirnames, filenames in os.walk(dir_path):
+        for fn in filenames:
+            ext = os.path.splitext(fn)[1].lower()
+            if ext not in VIDEO_EXTS:
+                continue
+            full_path = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(full_path)
+            except (OSError, PermissionError):
+                continue
+            if st.st_ino == 0:
+                continue
+            key = (st.st_ino, st.st_dev)
+            # Keep first path found for this inode
+            if key not in result:
+                result[key] = full_path
+    return result
+
+
+def _scan_single_group(source_dir: str, hardlink_dir: str) -> list[dict]:
+    """Find hardlinks between source_dir and hardlink_dir.
+    Iterates from hardlink (main file) side: every video in hardlink_dir
+    appears as one entry; source_path is null if no source inode is found.
+    Returns list of { source_path: str|null, hardlink_paths: [...] }.
+    """
+    # Scan source dir: inode -> single path
+    source_inodes = _scan_inodes(source_dir)
+
+    # Scan hardlink dir: inode -> list of all paths
+    hardlink_inodes: dict[tuple[int, int], list[str]] = {}
+    if os.path.isdir(hardlink_dir):
+        for dirpath, _dirnames, filenames in os.walk(hardlink_dir):
+            for fn in filenames:
+                ext = os.path.splitext(fn)[1].lower()
+                if ext not in VIDEO_EXTS:
+                    continue
+                full_path = os.path.join(dirpath, fn)
+                try:
+                    st = os.stat(full_path)
+                except (OSError, PermissionError):
+                    continue
+                if st.st_ino == 0:
+                    continue
+                key = (st.st_ino, st.st_dev)
+                hardlink_inodes.setdefault(key, []).append(full_path)
+
+    # Iterate from hardlinks (main files)
+    results: list[dict] = []
+    for inode_key, hl_paths in hardlink_inodes.items():
+        source_path = source_inodes.get(inode_key)
+        results.append({
+            "source_path": source_path,  # may be None (LADA file with no source)
+            "hardlink_paths": hl_paths,
+        })
+    return results
+
+
+def _fetch_emby_item_info(config: dict, emby_id: str | None) -> tuple[str | None, str | None]:
+    """Fetch Emby item name and primary poster URL by Emby item ID.
+    Returns (name, poster_url).
+    """
+    if not emby_id or not config.get("api_key"):
+        return None, None
+
+    user_id = config.get("user_id", "")
+    api_key = config.get("api_key", "")
+    base_url = _server_url(config)
+
+    fields = "Name,ImageTags"
+
+    async def _fetch(url: str):

@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import asyncio
+import os
+from pathlib import Path
+
+import pytest
+
+from app.pipeline.lada.runner import run_lada_restoration
+
+
+@pytest.mark.asyncio
+async def test_lada_runner_cancel_terminates_process_and_cleans_temp(tmp_path: Path):
+    fake_cli = tmp_path / "fake_lada.py"
+    pid_file = tmp_path / "fake.pid"
+    fake_cli.write_text(
+        """
+import argparse
+import os
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--input')
+parser.add_argument('--output')
+parser.add_argument('--device')
+parser.add_argument('--mosaic-detection-model')
+parser.add_argument('--mosaic-restoration-model')
+parser.add_argument('--encoding-preset')
+parser.add_argument('--max-clip-length')
+parser.add_argument('--fp16', action='store_true')
+parser.add_argument('--no-fp16', action='store_true')
+parser.add_argument('--detect-face-mosaics', action='store_true')
+args = parser.parse_args()
+open(r'%s', 'w').write(str(os.getpid()))
+open(args.output + '.tmp.mp4', 'wb').write(b'x' * 1024)
+print('Progress: 1%%', flush=True)
+time.sleep(60)
+""" % str(pid_file),
+        encoding="utf-8",
+    )
+
+    input_path = tmp_path / "input.mp4"
+    output_path = tmp_path / "output.mp4"
+    input_path.write_bytes(b"x" * 2048)
+
+    progress_queue: asyncio.Queue = asyncio.Queue()
+    cancel_event = asyncio.Event()
+
+    task = asyncio.create_task(
+        run_lada_restoration(
+            job_id="fake-job",
+            input_path=str(input_path),
+            output_path=str(output_path),
+            job_settings={
+                "lada_cli_path": f"python3 {fake_cli}",
+                "device": "cpu",
+                "fp16": False,
+            },
+            progress_queue=progress_queue,
+            cancel_event=cancel_event,
+        )
+    )
+
+    await asyncio.sleep(1.0)
+    cancel_event.set()
+    success = await asyncio.wait_for(task, timeout=25)
+
+    assert success is False
+    assert not output_path.exists()
+    assert not Path(str(output_path) + ".tmp.mp4").exists()
+
+    pid = int(pid_file.read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+    events = []
+    while not progress_queue.empty():
+        events.append(await progress_queue.get())
+    assert any("Cancellation requested" in e.get("line", "") for e in events)
+    assert any("Process cancelled" in e.get("line", "") for e in events)

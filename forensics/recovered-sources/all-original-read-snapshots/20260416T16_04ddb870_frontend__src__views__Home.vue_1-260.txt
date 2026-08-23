@@ -1,0 +1,266 @@
+Dashboard.vue
+HardlinkView.vue
+History.vue
+Home.vue
+Jobs.vue
+settings
+<script setup lang="ts">
+import { ref, onMounted, watch, computed, defineAsyncComponent } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useMediaLibraryStore } from '../stores/mediaLibrary'
+import { useI18n } from '../composables/useI18n'
+import MediaCard from '../components/noor/MediaCard.vue'
+import BaseIcon from '../components/noor/BaseIcon.vue'
+import VisionTabs from '../components/ui/Tabs.vue'
+import VuiButton from '../components/ui/Button/VuiButton.vue'
+
+// Lazy-load panels that are only shown on demand
+const AsyncMediaDetailPanel = defineAsyncComponent(() => import('../components/noor/MediaDetailPanel.vue'))
+const AsyncLadaPanel = defineAsyncComponent(() => import('../components/noor/LadaPanel.vue'))
+const AsyncSubtitlePanel = defineAsyncComponent(() => import('../components/noor/SubtitlePanel.vue'))
+import type { MediaItem } from '../api/types'
+
+const { t, i18nVersion } = useI18n()
+const mediaLibraryStore = useMediaLibraryStore()
+const route = useRoute()
+const router = useRouter()
+
+const activeFilter = ref((route.query.filter as string) || '')
+const filters = computed(() => {
+  void i18nVersion.value
+  return [
+    { key: '', label: t('library.filter.all') },
+    { key: 'cracked', label: t('library.filter.cracked') },
+    { key: 'chinese', label: t('library.filter.chinese') },
+    { key: 'leaked', label: t('library.filter.leaked') },
+    { key: 'uncensored', label: t('library.filter.uncensored') },
+  ]
+})
+
+const activeFilterStr = computed({
+  get: () => activeFilter.value,
+  set: (v: string) => { activeFilter.value = v },
+})
+
+const searchQuery = ref(mediaLibraryStore.searchQuery)
+const searchPlaceholder = computed(() => {
+  void i18nVersion.value
+  return t('library.search.placeholder')
+})
+
+const visibleItems = computed(() => mediaLibraryStore.filteredItems)
+
+const showDetailPanel = ref(false)
+const showLadaPanel = ref(false)
+const selectedVideo = ref<MediaItem | null>(null)
+const videoDetail = ref<any>(null)
+const loadingDetail = ref(false)
+const detailError = ref<string | null>(null)
+
+const showSubtitlePanel = ref(false)
+const subtitleVideoPath = ref('')
+const subtitleVideoId = ref('')
+const subtitleFolderPaths = ref<string[]>([])
+const detailActionPath = ref('')
+const detailActionId = ref('')
+
+onMounted(async () => {
+  await ensureLibraryReady()
+})
+
+watch(activeFilter, (key) => {
+  mediaLibraryStore.setFilter(key || null)
+  router.replace({ query: key ? { filter: key } : {} })
+}, { flush: 'post' })
+
+
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+watch(searchQuery, (value) => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    mediaLibraryStore.setSearch(value)
+  }, 220)
+})
+
+function autoSelectLibrary(_filter: string | null) {
+  const preferredId = mediaLibraryStore.enabledLibraryIds[0]
+  const lib = (preferredId
+    ? mediaLibraryStore.allLibraries.find(l => l.id === preferredId)
+    : null) || mediaLibraryStore.libraries[0] || null
+  if (!lib) {
+    mediaLibraryStore.selectLibrary(null)
+    return null
+  }
+  mediaLibraryStore.selectLibrary(lib)
+  return lib
+}
+
+async function ensureLibraryReady() {
+  await mediaLibraryStore.fetchLibraries()
+  mediaLibraryStore.filterTag = activeFilter.value || null
+  const lib = autoSelectLibrary(activeFilter.value || null)
+  if (!lib) return
+
+  const selectedId = mediaLibraryStore.selectedLibrary?.id
+  const shouldFetchDirectly = selectedId === lib.id || mediaLibraryStore.items.length === 0
+  if (shouldFetchDirectly) {
+    await mediaLibraryStore.fetchItems(lib.id, 1, activeFilter.value || null, searchQuery.value)
+  }
+}
+
+watch(() => mediaLibraryStore.selectedLibrary, (lib) => {
+  if (lib) mediaLibraryStore.fetchItems(lib.id, 1, activeFilter.value || null, searchQuery.value)
+})
+
+
+// Sync filter from URL changes (e.g., browser back/forward)
+watch(() => route.query.filter, (f) => {
+  const filter = (f as string) || ''
+  if (filter !== activeFilter.value) {
+    activeFilter.value = filter
+  }
+})
+
+watch(() => route.path, async (path) => {
+  if (path === '/library') {
+    await ensureLibraryReady()
+  }
+})
+
+function handleSelectVideo(item: MediaItem) {
+  detailActionPath.value = ''
+  detailActionId.value = ''
+  selectedVideo.value = item
+  showDetailPanel.value = true
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  mediaLibraryStore.fetchItemDetail(item.id)
+    .then(() => { videoDetail.value = mediaLibraryStore.selectedItem })
+    .catch((e: any) => { detailError.value = e?.message || t('common.loadFailed') })
+    .finally(() => { loadingDetail.value = false })
+}
+
+function handleQuickAction(item: MediaItem) {
+  detailActionPath.value = ''
+  detailActionId.value = ''
+  selectedVideo.value = item
+  showLadaPanel.value = true
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  mediaLibraryStore.fetchItemDetail(item.id)
+    .then(() => { videoDetail.value = mediaLibraryStore.selectedItem })
+    .catch((e: any) => { detailError.value = e?.message || t('common.loadFailed') })
+    .finally(() => { loadingDetail.value = false })
+}
+
+function handleSubtitleAction(item: MediaItem) {
+  selectedVideo.value = item
+  subtitleVideoId.value = item.id
+  loadingDetail.value = true
+  videoDetail.value = null
+  // Always fetch detail to get siblings (folder paths)
+  mediaLibraryStore.fetchItemDetail(item.id).then(() => {
+    const detail = mediaLibraryStore.selectedItem
+    videoDetail.value = detail
+    subtitleVideoPath.value = detail?.file_path || item.path || ''
+    // Build all folder paths: current + siblings
+    const allPaths = [subtitleVideoPath.value]
+    if (detail?.siblings) {
+      for (const s of detail.siblings) {
+        if (s.file_path && !allPaths.includes(s.file_path)) {
+          allPaths.push(s.file_path)
+        }
+      }
+    }
+    subtitleFolderPaths.value = allPaths
+    showSubtitlePanel.value = true
+  }).finally(() => {
+    loadingDetail.value = false
+  })
+}
+
+function handleOpenSubtitleFromDetail(path: string) {
+  if (!selectedVideo.value) return
+  subtitleVideoPath.value = path || videoDetail.value?.file_path || selectedVideo.value.path || ''
+  showDetailPanel.value = false
+  showSubtitlePanel.value = true
+}
+
+function handleOpenLadaFromDetail(path: string) {
+  if (!selectedVideo.value) return
+  detailActionPath.value = path || videoDetail.value?.file_path || selectedVideo.value.path || ''
+  showDetailPanel.value = false
+  showLadaPanel.value = true
+}
+
+function handleCloseDetail() {
+  showDetailPanel.value = false
+  showLadaPanel.value = false
+  selectedVideo.value = null
+}
+
+function handleCloseSubtitle() {
+  showSubtitlePanel.value = false
+}
+
+function goNextPage() {
+  if (mediaLibraryStore.enabledLibraryIds.length === 0) {
+    mediaLibraryStore.fetchAllItems(mediaLibraryStore.currentPage + 1)
+  } else {
+    mediaLibraryStore.nextPage()
+  }
+}
+function goPrevPage() {
+  if (mediaLibraryStore.enabledLibraryIds.length === 0) {
+    mediaLibraryStore.fetchAllItems(mediaLibraryStore.currentPage - 1)
+  } else {
+    mediaLibraryStore.prevPage()
+  }
+}
+
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <VisionTabs v-model="activeFilterStr" :tabs="filters" />
+
+      <div class="flex items-center gap-3 xl:justify-end xl:pl-4">
+        <div class="relative w-full xl:w-[320px] xl:max-w-[320px]">
+          <BaseIcon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+          <input
+            v-model="searchQuery"
+            type="search"
+            :placeholder="searchPlaceholder"
+            class="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-3 text-sm text-white placeholder:text-white/25 outline-none transition-colors focus:border-[#0075FF]/60 focus:bg-white/[0.07]"
+          />
+        </div>
+        <span v-if="searchQuery.trim()" class="shrink-0 text-xs text-white/40">{{ visibleItems.length }} 条</span>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="mediaLibraryStore.loading" class="flex flex-col items-center justify-center py-24">
+      <div class="w-10 h-10 border-2 rounded-full animate-spin mb-4 border-[#0075FF] border-t-transparent"></div>
+      <span class="text-sm text-white/30">{{ t('common.loading') }}</span>
+    </div>
+
+    <!-- Empty content -->
+    <div
+      v-else-if="visibleItems.length === 0 && !mediaLibraryStore.error"
+      class="ui-card flex flex-col items-center justify-center py-24 text-center"
+    >
+      <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 empty-state-icon">
+        <BaseIcon name="folder" class="w-8 h-8 text-white/20" />
+      </div>
+      <h2 class="text-lg font-semibold mb-2 text-white font-display">{{ t('library.emptyTitle') }}</h2>
+      <p class="text-sm text-white/30">{{ t('library.emptyDesc') }}</p>
+    </div>
+
+    <!-- Media library not configured / disabled -->
+    <div
+      v-else-if="mediaLibraryStore.error"
+      class="ui-card flex flex-col items-center justify-center py-24 text-center"

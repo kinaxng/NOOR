@@ -1,0 +1,81 @@
+    ladaModelWeightsDir.value = resp.data.model_weights_dir || ''
+  } catch (e: any) {
+    console.error('Failed to load LADA info:', e)
+  } finally {
+    loadingLadaInfo.value = false
+  }
+}
+
+async function saveLada() {
+  saving.value = true
+  try {
+    await api.put('/settings/lada', { cli_path: ladaCliPath.value })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function upgradeLada() {
+  if (!ladaCanSelfUpgrade.value) {
+    toast.error(ladaUpgradeHint.value || t('settings.lada.upgradeFailed'))
+    return
+  }
+  if (!confirm(t('settings.lada.upgradeConfirm'))) return
+  upgrading.value = true
+  try {
+    const resp = await api.post('/settings/lada/upgrade')
+    ladaVersion.value = resp.data.version
+    toast.success(t('settings.lada.upgradedTo', { version: resp.data.version }))
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.lada.upgradeFailed'))
+  } finally {
+    upgrading.value = false
+  }
+}
+
+async function saveLadaDefaults() {
+  saving.value = true
+  try {
+    await api.put('/settings/lada/defaults', {
+      device: ladaDevice.value,
+      fp16: ladaFp16.value,
+      detection_model: ladaDetectionModel.value,
+      restoration_model: ladaRestorationModel.value,
+      encoding_preset: ladaEncodingPreset.value,
+      max_clip_length: ladaMaxClipLength.value,
+      detect_face_mosaics: ladaDetectFaceMosaics.value,
+    })
+    toast.success(t('settings.saveSuccess'))
+  } catch (e: any) {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function installModeLabel(mode: string) {
+  switch (mode) {
+    case 'docker-image':
+      return t('settings.lada.installModeDockerImage')
+    case 'editable-repo':
+      return t('settings.lada.installModeEditableRepo')
+    default:
+      return t('settings.lada.installModeExternalCli')
+  }
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-else>
+      <!-- CLI & Version Info -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.lada.cli') }}</h2>
+

@@ -1,0 +1,153 @@
+---src/noor-kit/NoorBadge.vue
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = withDefaults(defineProps<{
+  tone?: 'muted' | 'info' | 'success' | 'warning' | 'danger'
+}>(), {
+  tone: 'muted',
+})
+
+const color = computed(() => ({
+  muted: 'neutral',
+  info: 'info',
+  success: 'success',
+  warning: 'warning',
+  danger: 'error',
+}[props.tone]))
+</script>
+
+<template>
+  <UBadge :color="color" variant="soft" size="sm" class="noor-badge" :class="`noor-badge--${tone}`">
+    <slot />
+  </UBadge>
+</template>
+---src/noor-kit/NoorButton.vue
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = withDefaults(defineProps<{
+  tone?: 'primary' | 'secondary' | 'danger' | 'ghost'
+  disabled?: boolean
+  type?: 'button' | 'submit' | 'reset'
+}>(), {
+  tone: 'secondary',
+  disabled: false,
+  type: 'button',
+})
+
+const color = computed(() => (props.tone === 'danger' ? 'error' : props.tone === 'primary' ? 'primary' : 'neutral'))
+const variant = computed(() => (props.tone === 'ghost' ? 'ghost' : props.tone === 'primary' ? 'solid' : 'soft'))
+</script>
+
+<template>
+  <UButton
+    :type="type"
+    :color="color"
+    :variant="variant"
+    size="sm"
+    class="noor-button"
+    :class="`noor-button--${tone}`"
+    :disabled="disabled"
+  >
+    <slot />
+  </UButton>
+</template>
+---src/noor-kit/NoorPagination.vue
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = withDefaults(defineProps<{
+  page: number
+  total: number
+  pageSize?: number
+}>(), {
+  pageSize: 10,
+})
+
+const emit = defineEmits<{ 'update:page': [value: number] }>()
+const pageCount = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
+const pages = computed<(number | string)[]>(() => {
+  const total = pageCount.value
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1)
+
+  const current = props.page
+  const list: (number | string)[] = [1]
+  const left = Math.max(2, current - 1)
+  const right = Math.min(total - 1, current + 1)
+
+  if (left > 2) list.push('...')
+  for (let item = left; item <= right; item += 1) list.push(item)
+  if (right < total - 1) list.push('...')
+  list.push(total)
+  return list
+})
+
+function go(page: number) {
+  const next = Math.max(1, Math.min(page, pageCount.value))
+  if (next !== props.page) emit('update:page', next)
+}
+</script>
+
+<template>
+  <nav class="noor-pagination">
+    <button type="button" :disabled="page <= 1" @click="go(page - 1)">上一页</button>
+    <template v-for="item in pages" :key="item">
+      <span v-if="typeof item === 'string'" class="pagination-ellipsis">...</span>
+      <button
+        v-else
+        type="button"
+        :class="{ 'is-active': item === page }"
+        @click="go(item)"
+      >
+        {{ item }}
+      </button>
+    </template>
+    <button type="button" :disabled="page >= pageCount" @click="go(page + 1)">下一页</button>
+  </nav>
+</template>
+---src/noor-kit/NoorState.vue
+<script setup lang="ts">
+withDefaults(defineProps<{
+  type?: 'loading' | 'empty' | 'error'
+  title?: string
+  description?: string
+}>(), {
+  type: 'empty',
+  title: '',
+  description: '',
+})
+</script>
+
+<template>
+  <div class="noor-state" :class="`noor-state--${type}`">
+    <span v-if="type === 'loading'" class="spinner" />
+    <strong>{{ title || (type === 'loading' ? '加载中' : type === 'error' ? '加载失败' : '暂无内容') }}</strong>
+    <span v-if="description">{{ description }}</span>
+  </div>
+</template>
+---src/noor-kit/NoorTabs.vue
+<script setup lang="ts">
+defineProps<{
+  tabs: Array<{ key: string; label: string }>
+  modelValue: string
+}>()
+
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+</script>
+
+<template>
+  <div class="noor-tabs" role="tablist">
+    <button
+      v-for="tab in tabs"
+      :key="tab.key"
+      type="button"
+      class="noor-tab"
+      :class="{ 'is-active': tab.key === modelValue }"
+      role="tab"
+      @click="emit('update:modelValue', tab.key)"
+    >
+      {{ tab.label }}
+    </button>
+  </div>
+</template>

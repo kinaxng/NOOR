@@ -1,0 +1,280 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Callable, Optional
+
+from app.core.config import get_settings
+
+from .runtime import raise_if_cancelled
+
+
+class AudioPreprocessError(RuntimeError):
+    """Raised when experimental audio preprocessing fails."""
+
+
+def preprocess_audio(
+    input_wav: str,
+    *,
+    mode: str = "none",
+    model: str = "vocal_balanced",
+    output_dir: str | Path | None = None,
+    progress_callback: Optional[Callable[[str, int | None], None]] = None,
+    cancel_callback: Optional[Callable[[], bool]] = None,
+) -> str:
+    """
+    Experimental audio preprocessing hook.
+
+    Current phase:
+    - none: passthrough
+    - vocal_isolation: explicit not-yet-implemented placeholder
+
+    This keeps orchestration and config plumbing stable before integrating the
+    actual separator backend.
+    """
+    raise_if_cancelled(cancel_callback)
+
+    normalized_mode = (mode or "none").strip().lower()
+    normalized_model = (model or "vocal_balanced").strip().lower()
+
+    if normalized_mode in {"", "none"}:
+        return input_wav
+
+    if progress_callback:
+        progress_callback(
+            f"[AudioPreprocess] 模式: {normalized_mode} · 模型: {normalized_model}",
+            None,
+        )
+
+    if normalized_mode != "vocal_isolation":
+        raise AudioPreprocessError(f"Unsupported audio preprocess mode: {normalized_mode}")
+
+    settings = get_settings()
+    model_dir = Path(settings.audio_separator_model_dir or "/volume1/models/audio-separator")
+    work_dir = Path(output_dir) if output_dir is not None else Path(input_wav).parent
+    _ = model_dir, work_dir  # reserved for next step integration
+
+    raise AudioPreprocessError(
+        "audio_preprocess_mode=vocal_isolation 已配置，但实际分离器尚未接入。"
+    )
+
+=== orchestrator hook ===
+"""Whisper 处理管线编排器"""
+import asyncio
+import logging
+import os
+import re
+import uuid
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Callable
+import subprocess
+
+from .types import (
+    WhisperConfig,
+    WhisperTask,
+    TranscriptionResult,
+    PipelineMode,
+    WhisperModel,
+    VADMethod,
+    WhisperCancellationRequested,
+)
+from .engine import (
+    AudioExtractor, AnimeWhisperProcessor, FasterWhisperProcessor,
+    KotobaWhisperProcessor, generate_srt
+)
+from .enhancer import AudioEnhancer
+from .merge import MergeEngine
+from .japanese_post import JapanesePostProcessor, RecommendedSubtitlePostProcessor
+from .scene_detector import AudioSceneDetector
+from .runtime import raise_if_cancelled
+from .preprocess import AudioPreprocessError, preprocess_audio
+from .decoupled import AnimeQwen3ChainProcessor, qwen3_aligner_available
+
+logger = logging.getLogger(__name__)
+
+
+# 各预设 pipeline 的推荐增强器组合（仅用于 balanced/faster 等旧架构 pipeline）
+# anime / transformers / qwen(large-v3 baseline) / custom 走新架构，enhancers 从 self.config.enhancers 获取
+# 设计原则：
+#   - ffmpeg-dsp: 仅 loudnorm 响度标准化（CPU快）
+#   - clearvoice: WebRTC VAD 静音移除 + 轻降噪（CPU）
+#   - silero-vad: Silero VAD 静音检测（不增强）
+#   - demucs: GPU 神经人声分离（最强）
+PIPELINE_ENHANCERS: dict[PipelineMode, list[str]] = {
+    PipelineMode.ANIME:        ['ffmpeg-dsp', 'clearvoice'],    # 响度标准化 + 人声提取
+    PipelineMode.FASTER:        ['ffmpeg-dsp'],                   # 清洁音频，仅响度标准化
+    PipelineMode.BALANCED:     ['ffmpeg-dsp', 'clearvoice'],    # 嘈杂对话均衡
+    PipelineMode.TRANSFORMERS: ['ffmpeg-dsp', 'demucs'],        # 响度标准化 + GPU 人声分离
+    PipelineMode.QWEN:         ['demucs'],                      # GPU 人声分离，对齐优化
+    PipelineMode.SINGLE:        ['ffmpeg-dsp'],                   # 仅响度标准化
+}
+
+
+@dataclass
+class _PreparedSegment:
+    index: int
+    audio_path: str
+    start: float
+    end: float
+    duration: float
+    pass1_result: Optional[TranscriptionResult] = None
+    pass2_result: Optional[TranscriptionResult] = None
+
+
+
+class WhisperPipeline:
+    """Whisper 字幕生成管线"""
+
+    def __init__(
+        self,
+        config: WhisperConfig,
+        progress_callback: Optional[Callable] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ):
+        self.config = config
+        self.progress_callback = progress_callback
+        self.cancel_callback = cancel_callback
+        self._log_lines = []
+        # 跨段落缓存 processor 实例，避免重复加载模型
+        self._anime_processor: Optional[AnimeWhisperProcessor] = None
+        self._faster_processor: Optional[FasterWhisperProcessor] = None
+        self._balanced_processor: Optional[FasterWhisperProcessor] = None
+        self._kotoba_processor: Optional[KotobaWhisperProcessor] = None
+        self._qwen_processor: Optional[FasterWhisperProcessor] = None
+        self._anime_qwen3_chain: Optional[AnimeQwen3ChainProcessor] = None
+
+    def log(self, msg: str, progress: int = None):
+        """记录日志"""
+        self._log_lines.append(msg)
+        if self.progress_callback:
+            try:
+                self.progress_callback(msg, progress)
+            except TypeError:
+                self.progress_callback(msg)
+            except Exception as e:
+                logger.warning("Progress callback error: %s", e)
+
+    def _raise_if_cancelled(self):
+        raise_if_cancelled(self.cancel_callback)
+
+    def _get_output_dir(self) -> Path:
+        """获取输出目录"""
+        if self.config.output_dir:
+            return Path(self.config.output_dir)
+        return Path(tempfile.gettempdir()) / "whisper_jav"
+
+    def _get_enhancers(self) -> list[str]:
+        """根据 pipeline 模式获取增强器组合"""
+        if getattr(self.config, "executor_key", "advanced") == "recommended":
+            # 产品默认链路明确声明 speech_enhancer=none。
+            # 不要再因为 anime preset 的旧默认表而隐式注入 loudnorm / clearvoice。
+            return []
+
+        mode = self.config.pipeline_mode
+
+        # Ensemble 模式：用 pass1 的增强器组合
+        if mode == PipelineMode.ENSEMBLE and self.config.pass1_pipeline:
+            pass1_mode = PipelineMode(self.config.pass1_pipeline.value)
+            return PIPELINE_ENHANCERS.get(pass1_mode, [])
+
+        return PIPELINE_ENHANCERS.get(mode, [])
+
+    @staticmethod
+    def _pipeline_display_name(mode: PipelineMode) -> str:
+        if mode == PipelineMode.QWEN:
+            return "large-v3-baseline"
+        return mode.value
+
+    _PASS2_GATING_PUNCT_RE = re.compile(r"[。、「」『』、,，.!！?？…~〜・\-\s]")
+    _PASS2_GATING_KANJI_RE = re.compile(r"[一-龯々]")
+    _PASS2_GATING_JA_RE = re.compile(r"[ぁ-んァ-ヶー一-龯々]")
+    _STEPDOWN_SENTENCE_RE = re.compile(r"[。！？?!]")
+
+    @classmethod
+    def _normalize_pass_text(cls, text: str) -> str:
+        return cls._PASS2_GATING_PUNCT_RE.sub("", text or "").strip()
+
+    @classmethod
+    def _is_likely_noise_only_text(cls, text: str) -> bool:
+        normalized = cls._normalize_pass_text(text)
+        if not normalized:
+            return True
+
+        if not cls._PASS2_GATING_JA_RE.search(normalized):
+            return False
+
+        unique_ratio = len(set(normalized)) / max(len(normalized), 1)
+        repeated_voice_like = unique_ratio <= 0.35 and len(normalized) >= 6
+        moan_tokens = ("あ", "ぁ", "ん", "っ", "は", "う", "え", "お", "ぅ", "ふ", "む", "ら", "ちゅ", "ぷ", "る")
+        token_ratio = sum(normalized.count(token) * len(token) for token in moan_tokens) / max(len(normalized), 1)
+
+        return token_ratio >= 0.72 or repeated_voice_like
+
+    def _should_run_pass2(
+        self,
+        seg_duration: float,
+        pass1_result: TranscriptionResult,
+        pass2_mode: PipelineMode,
+    ) -> tuple[bool, str]:
+        """Low-risk gating to avoid obviously low-value Pass2 work.
+
+        Current scope intentionally narrow:
+        - only for recommended executor
+        - only for anime -> large-v3 baseline style second pass
+        - only skip when pass1 already produced a short, non-noise result
+        """
+        if getattr(self.config, "executor_key", "advanced") != "recommended":
+            return True, "advanced-mode"
+
+        if pass2_mode != PipelineMode.QWEN:
+            return True, "pass2-not-large-v3-baseline"
+
+        if not pass1_result.segments:
+            return True, "pass1-empty"
+
+        combined_text = "".join(seg.text for seg in pass1_result.segments)
+        normalized = self._normalize_pass_text(combined_text)
+        if len(normalized) < 4:
+            return True, "pass1-too-short"
+
+        if self._is_likely_noise_only_text(combined_text):
+            return True, "pass1-noise-like"
+
+        has_kanji = bool(self._PASS2_GATING_KANJI_RE.search(normalized))
+        if seg_duration <= 4.5 and len(pass1_result.segments) <= 2:
+            return False, "short-segment-pass1-sufficient"
+
+        if seg_duration <= 7.0 and len(pass1_result.segments) == 1 and has_kanji and len(normalized) >= 10:
+            return False, "compact-narration-pass1-sufficient"
+
+        if seg_duration <= 10.0 and len(pass1_result.segments) <= 2 and len(normalized) >= 8:
+            return False, "short-scene-pass1-sufficient"
+
+        if seg_duration <= 12.0 and len(pass1_result.segments) == 1 and has_kanji and len(normalized) >= 14:
+            return False, "mid-scene-pass1-sufficient"
+
+        return True, "needs-pass2"
+
+    def _get_model_cache_path(self, model_id: str) -> Path:
+        """Get the HuggingFace cache path for a model."""
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        hf_home = Path(whisper_model_dir)
+        # huggingface hub cache format: models--{org}--{name}
+        return hf_home / "huggingface" / "hub" / f"models--{model_id.replace('/', '--')}"
+
+    def _check_model_cached(self, model_id: str) -> bool:
+        """Check if a model is cached. Supports both snapshot_download style
+        (direct under whisper_model_dir) and legacy huggingface hub style."""
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        base = Path(whisper_model_dir)
+
+        # snapshot_download style: base/models--{org}--{name}
+        snapshot_path = base / f"models--{model_id.replace('/', '--')}"
+        if snapshot_path.exists() and any(snapshot_path.iterdir()):
+            return True
+

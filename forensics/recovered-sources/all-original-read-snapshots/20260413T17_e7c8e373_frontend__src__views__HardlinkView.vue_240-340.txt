@@ -1,0 +1,101 @@
+    lines.push('')
+    lines.push(`[${index + 1}] ${mainFileLabel.value}`)
+    lines.push(entry.source_path || missingSourceLabel.value)
+    if (entry.hardlink_paths.length > 0) {
+      lines.push(hardlinksLabel.value)
+      entry.hardlink_paths.forEach((path) => lines.push(`- ${path}`))
+    }
+  })
+
+  return lines.join('\n')
+}
+
+function formatVisibleGroups() {
+  return visibleGroups.value.map((group) => formatGroupLines(group)).join('\n\n====================\n\n')
+}
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.success(t('common.copied'))
+  } catch (error: any) {
+    toast.error(error?.message || t('common.copyFailed'))
+  }
+}
+
+async function copyPath(path: string) {
+  await copyText(path)
+}
+
+async function copyVisibleGroups() {
+  if (!visibleGroups.value.length) return
+  await copyText(formatVisibleGroups())
+}
+
+function exportVisibleGroups() {
+  if (!visibleGroups.value.length) return
+
+  const blob = new Blob([formatVisibleGroups()], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  anchor.href = url
+  anchor.download = `hardlinks-${stamp}.txt`
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+const mainFileLabel = computed(() => { void i18nVersion.value; return t('hardlinks.mainFile') })
+const hardlinksLabel = computed(() => { void i18nVersion.value; return t('hardlinks.hardlinks') })
+const missingSourceLabel = computed(() => { void i18nVersion.value; return t('hardlinks.missingSource') })
+
+function clearFilters() {
+  searchQuery.value = ''
+  filterKey.value = 'all'
+  sortKey.value = 'hardlinkCount'
+  sortDir.value = 'desc'
+  currentPage.value = 1
+}
+
+function isDeletingHardlink(path: string) {
+  return deletingHardlinkPaths.value.has(path)
+}
+
+function isDeletingSource(path: string | null) {
+  return !!path && deletingSourcePaths.value.has(path)
+}
+
+function isDeletingGroup(code: string) {
+  return deletingGroupCodes.value.has(code)
+}
+
+function withDeletingState(setRef: typeof deletingHardlinkPaths, key: string, active: boolean) {
+  const next = new Set(setRef.value)
+  if (active) next.add(key)
+  else next.delete(key)
+  setRef.value = next
+}
+
+async function deleteHardlink(path: string) {
+  if (!path || isDeletingHardlink(path)) return
+  const ok = await confirm({
+    message: t('hardlinks.deleteHardlinkConfirm', { path }),
+    danger: true,
+  })
+  if (!ok) return
+
+  withDeletingState(deletingHardlinkPaths, path, true)
+  try {
+    await api.post('/media-library/hardlinks/delete-hardlink', {
+      file_path: path,
+      remove_nfo: true,
+    })
+    toast.success(t('hardlinks.deleteHardlinkSuccess'))
+    await mediaStore.loadHardlinkGroups()
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || t('hardlinks.deleteHardlinkFailed'))
+  } finally {
+    withDeletingState(deletingHardlinkPaths, path, false)
+  }
+}
+

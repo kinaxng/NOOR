@@ -1,0 +1,45 @@
+@router.get("/config")
+async def get_config():
+    """Get saved media library configuration."""
+    return {"config": _load_config()}
+
+
+@router.post("/config")
+async def save_config(config: dict):
+    """Partially update media library configuration.
+    Only updates the fields provided; all other fields are preserved.
+    """
+    existing = _load_config()
+    existing.update(config)
+    _save_config(existing)
+    return {"ok": True}
+
+
+@router.post("/test")
+async def test_connection(config: dict | None = None):
+    """Test connection with provided config. Returns available libraries on success."""
+    cfg = config if config is not None else _load_config()
+    if not cfg:
+        return {"ok": False, "message": _ADAPTER_NOT_ACTIVATED, "libraries": []}
+    # Test connection by fetching items (works reliably; MediaFolders may return 502)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{_server_url(cfg)}/emby/Items",
+                headers=_headers(cfg.get("api_key", "")),
+                params={"limit": 1, "Fields": "BasicSyncInfo"},
+            )
+            resp.raise_for_status()
+        # Also try to get libraries
+        try:
+            libraries = await _list_libraries(cfg)
+        except Exception:
+            libraries = []
+        return {"ok": True, "message": f"已连接至 {cfg.get('server_url', 'Emby/Jellyfin')}", "libraries": libraries}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return {"ok": False, "message": "API Key 无效或已过期", "libraries": []}
+        return {"ok": False, "message": f"连接失败: HTTP {e.response.status_code}", "libraries": []}
+    except Exception as e:
+        return {"ok": False, "message": f"连接失败: {e}", "libraries": []}
+

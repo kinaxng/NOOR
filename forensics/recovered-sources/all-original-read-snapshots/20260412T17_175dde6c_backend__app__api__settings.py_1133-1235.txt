@@ -1,0 +1,46 @@
+@router.get("/whisper/models")
+async def list_whisper_models():
+    """List available Whisper models."""
+    # Get download status
+    check_result = await check_whisper_dependencies()
+
+    # Read current download status from JSON file
+    download_status = {"status": "idle", "progress": 0, "message": "", "model": ""}
+    try:
+        status_file = model_download_status_path()
+        data = read_status_file(status_file)
+        if data is not None:
+            download_status = {
+                "status": data.get("status", "idle"),
+                "progress": data.get("progress", 0),
+                "message": data.get("message", ""),
+                "model": data.get("model", "")
+            }
+    except Exception:
+        pass
+
+    models = []
+    # Map WHISPER_MODELS keys to check_result keys for transformers models
+    TRANSFORMERS_MODEL_KEYS = {
+        "anime-whisper": "anime_whisper",
+        "kotoba-whisper-v2.2": "kotoba-whisper-v2.2",
+    }
+    for key, info in WHISPER_MODELS.items():
+        # Find matching downloaded status
+        downloaded = False
+        if info["type"] == "transformers":
+            check_key = TRANSFORMERS_MODEL_KEYS.get(key, key)
+            downloaded = check_result["models"].get(check_key, {}).get("downloaded", False)
+        else:
+            downloaded = check_result["models"].get(f"faster_{key}", {}).get("downloaded", False)
+
+        models.append({
+            "id": key,
+            "name": info["name"],
+            "size": info["size"],
+            "type": info["type"],
+            "downloaded": downloaded,
+            "description": info.get("description", "")
+        })
+
+    return {"models": models, "downloadStatus": download_status}

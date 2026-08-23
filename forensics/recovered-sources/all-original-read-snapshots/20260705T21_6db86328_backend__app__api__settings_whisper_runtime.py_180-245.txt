@@ -1,0 +1,137 @@
+def _faster_exists(model_id: str, base: Path) -> bool:
+    return any(
+        path.exists() and any(path.iterdir())
+        for path in (
+            base / "hub" / f"models--{model_id}",
+            base / f"models--{model_id}",
+            base / "huggingface" / "hub" / f"models--{model_id}",
+        )
+    )
+
+
+def inspect_whisper_model_cache(*, whisper_model_dir: str, whisper_models: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    cache_paths = resolve_whisper_cache_paths(whisper_model_dir)
+    models_info: dict[str, dict[str, Any]] = {}
+
+    for output_key, repo_id, size in TRANSFORMERS_MODELS:
+        downloaded = _transformers_exists(repo_id, cache_paths["hf_base"])
+        if not downloaded and not cache_paths["is_default_hf"]:
+            downloaded = _transformers_exists(repo_id, cache_paths["default_hf_base"])
+        models_info[output_key] = {
+            "type": "transformers",
+            "repo_id": repo_id,
+            "downloaded": downloaded,
+            "size": size,
+        }
+
+    for model_name, model_id in FASTER_WHISPER_MODELS:
+        downloaded = _faster_exists(model_id, cache_paths["hf_base"])
+        if not downloaded and not cache_paths["is_default_hf"]:
+            downloaded = _faster_exists(model_id, cache_paths["default_hf_base"])
+        models_info[f"faster_{model_name}"] = {
+            "type": "faster-whisper",
+            "downloaded": downloaded,
+            "size": whisper_models.get(model_name, {}).get("size", "Unknown"),
+        }
+
+    reazon_nemo_path = Path(getattr(get_settings(), 'reazon_nemo_model_path', DEFAULT_REAZON_NEMO_MODEL_PATH) or DEFAULT_REAZON_NEMO_MODEL_PATH)
+    models_info["reazon_nemo"] = {
+        "type": "reazon-nemo",
+        "downloaded": reazon_nemo_path.exists(),
+        "size": whisper_models.get("reazonspeech-nemo-v2", {}).get("size", "Unknown"),
+        "path": str(reazon_nemo_path),
+    }
+
+    return models_info
+
+
+def log_whisper_dependency_summary(
+    log_mgr: Any,
+    *,
+    deps: dict[str, dict[str, Any]],
+    cuda_available: bool,
+    cuda_info: dict[str, Any],
+) -> None:
+    missing_installable = [key for key, value in deps.items() if value.get("installable") and not value.get("installed")]
+    if missing_installable:
+        log_mgr.add_log("warning", f"[Whisper] 依赖检查完成 — 需安装: {', '.join(missing_installable)}")
+        return
+
+    external_modules = [
+        key for key, value in deps.items()
+        if not key.startswith("_") and value.get("installed") and not value.get("in_noor_env", True)
+    ]
+    if external_modules:
+        log_mgr.add_log("warning", f"[Whisper] 依赖检查完成 — 有模块来自 NOOR 环境外: {', '.join(external_modules[:8])}")
+        return
+            normalized_payload.get("pass2_pipeline"),
+        )
+        apply_whisper_config_updates(normalized_payload, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Whisper 配置已保存")
+        return {"success": True, "message": "Whisper settings saved to .env"}
+    except HTTPException as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e.detail)}")
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/whisper/check")
+async def check_whisper_dependencies():
+    """Check Whisper dependencies and environment."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Whisper] 正在检查依赖环境...")
+
+    settings = get_settings()
+    whisper_model_dir = settings.whisper_model_dir
+    deps, cuda_available, cuda_info = inspect_whisper_python_dependencies()
+    models_info = inspect_whisper_model_cache(
+        whisper_model_dir=whisper_model_dir,
+        whisper_models=WHISPER_MODELS,
+    )
+    log_whisper_dependency_summary(
+        log_mgr,
+        deps=deps,
+        cuda_available=cuda_available,
+        cuda_info=cuda_info,
+    )
+
+    return {
+        "dependencies": deps,
+        "cuda_available": cuda_available,
+        "models": models_info,
+        "whisper_model_dir": whisper_model_dir,
+        "features": _get_whisper_feature_flags(),
+    }
+
+
+class ModelDownloadRequest(BaseModel):
+    model: str  # e.g., "anime-whisper", "large-v3"
+
+
+class InstallDepsRequest(BaseModel):
+    torch_variant: Literal["gpu", "cpu"] = "gpu"
+    torch_current_cuda: bool = False  # current install has CUDA
+
+
+@router.post("/whisper/models/download")
+async def download_whisper_model(req: ModelDownloadRequest):
+    """Download a Whisper model in background thread."""
+    model_name = req.model
+    model_info = WHISPER_MODELS.get(model_name)
+    if not model_info:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
+    if model_info.get("type") == "reazon-nemo":
+        raise HTTPException(status_code=400, detail="Reazon / NeMo model is managed externally for now")
+
+    import threading
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", f"[Whisper] 正在下载模型 {model_info['name']}...")
+
+    # Save initial status to JSON file
+    status_file = model_download_status_path()
+    write_status_file(status_file, build_status_payload(
+        status="running",

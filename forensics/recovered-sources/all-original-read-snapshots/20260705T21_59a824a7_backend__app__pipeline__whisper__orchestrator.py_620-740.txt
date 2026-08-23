@@ -1,0 +1,121 @@
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.FASTER:
+                    seg_result = await self._process_faster_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.BALANCED:
+                    seg_result = await self._process_balanced_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.TRANSFORMERS:
+                    seg_result = await self._process_transformers_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.ANIME:
+                    seg_result = await self._process_anime_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.QWEN:
+                    seg_result = await self._process_qwen_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.REAZON:
+                    seg_result = await self._process_reazon_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                elif self.config.pipeline_mode == PipelineMode.CUSTOM:
+                    seg_result = await self._process_single_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+                else:
+                    seg_result = await self._process_single_segment(
+                        audio_file, seg_start, seg_end, idx
+                    )
+
+                self.log(f"段落 {idx + 1} 完成: {len(seg_result.segments)} 片段", seg_end_pct)
+
+                for seg in seg_result.segments:
+                    seg.start_time += seg_start
+                    seg.end_time += seg_start
+
+                all_results.append(seg_result)
+
+        # 合并所有段落结果
+        self._raise_if_cancelled()
+        recommended_segment_diagnostics = None
+        if getattr(self.config, "executor_key", "advanced") == "recommended":
+            recommended_segment_diagnostics = self._collect_recommended_segment_diagnostics(all_results)
+            self.log(
+                "[Recommended] 诊断: "
+                f"对齐 {recommended_segment_diagnostics['aligned_segments']}/{recommended_segment_diagnostics['segment_count']} · "
+                f"large-v3 retry {recommended_segment_diagnostics['large_v3_retry_segments']} · "
+                f"Qwen fallback {recommended_segment_diagnostics['qwen_retry_segments']} · "
+                f"step-down {recommended_segment_diagnostics['stepdown_segments']}",
+            )
+        if len(all_results) == 1:
+            result = all_results[0]
+        else:
+            result = self._merge_all_results(all_results)
+            self.log(f"段落合并完成: {len(result.segments)} 片段", 90)
+        if recommended_segment_diagnostics is not None:
+            result.metadata = {
+                **result.metadata,
+                "recommended_segment_diagnostics": recommended_segment_diagnostics,
+            }
+
+        # Phase: 日语后处理
+        self.log("=" * 50)
+        self.log("日语后处理: 断句优化 & 格式整理", 92)
+        self.log("=" * 50)
+        try:
+            self._raise_if_cancelled()
+            if getattr(self.config, "executor_key", "advanced") == "recommended":
+                post_processor = RecommendedSubtitlePostProcessor()
+                self.log("后处理策略: default-cleanup")
+            else:
+                post_processor = JapanesePostProcessor(
+                    min_segment_duration=0.8,
+                    max_segment_duration=8.0,
+                    min_gap_threshold=0.3,
+                    merge_below=1.2,
+                )
+            result = post_processor.process(result)
+            if result.metadata.get("recommended_strategy_post_processed"):
+                before_count = result.metadata.get("recommended_cleanup_before_segments", len(result.segments))
+                after_count = result.metadata.get("recommended_cleanup_after_segments", len(result.segments))
+                deduped_count = result.metadata.get("recommended_cleanup_deduped_segments", 0)
+                diagnostics = result.metadata.get("recommended_segment_diagnostics") or recommended_segment_diagnostics or {}
+                cleanup_summary = {
+                    "before_segments": before_count,
+                    "after_segments": after_count,
+                    "deduped_segments": deduped_count,
+                    "noise_only_segments": result.metadata.get("recommended_cleanup_noise_only_segments", 0),
+                    "trimmed_noise_chars": result.metadata.get("recommended_cleanup_trimmed_noise_chars", 0),
+                    "particle_merged_segments": result.metadata.get("recommended_cleanup_particle_merged_segments", 0),
+                    "window_echo_segments": result.metadata.get("recommended_cleanup_window_echo_segments", 0),
+                }
+                result.metadata["recommended_diagnostics"] = {
+                    **diagnostics,
+                    "cleanup": cleanup_summary,
+                }
+                self.log(
+                    f"default-cleanup 统计: {before_count} → {after_count} 片段，去重 {deduped_count} 条"
+                )
+            self.log(f"后处理完成: {len(result.segments)} 片段", 95)
+        except Exception as e:
+            self.log(f"后处理失败（跳过）: {e}")
+
+        if getattr(self.config, "executor_key", "advanced") == "recommended" and not result.metadata.get("recommended_diagnostics"):
+            diagnostics = result.metadata.get("recommended_segment_diagnostics") or recommended_segment_diagnostics
+            if diagnostics is None:
+                diagnostics = self._collect_recommended_segment_diagnostics(all_results)
+            result.metadata = {
+                **result.metadata,
+                "recommended_segment_diagnostics": diagnostics,
+                "recommended_diagnostics": diagnostics,
+            }
+            self.log("[Default] 已写入基础链路诊断")
+
+        # Phase: 生成 SRT
+        self.log("=" * 50)

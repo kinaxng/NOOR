@@ -1,0 +1,233 @@
+import { ref } from 'vue'
+import { defineStore } from 'pinia'
+import { api } from '../api/client'
+import type { SettingsPayload } from '../api/types'
+
+type SaveTarget = 'emby' | 'storage' | 'network' | 'whisper' | 'lada' | 'lada-defaults' | 'test-emby'
+
+function cloneSettings(settings: SettingsPayload): SettingsPayload {
+  return JSON.parse(JSON.stringify(settings))
+}
+
+function withDefaults(settings: SettingsPayload): SettingsPayload {
+  return {
+    ...settings,
+    emby: {
+      server: '',
+      api_key: '',
+      user_id: '',
+      enabled_library_ids: [],
+      ...(settings.emby || {}),
+    },
+    storage: {
+      source_dir: '',
+      output_dir: '',
+      whisper_model_dir: '',
+      lada_model_dir: '',
+      lada_model_weights_dir: '',
+      ...(settings.storage || {}),
+    },
+    network: {
+      acceleration_mode: 'mirror',
+      http_proxy: '',
+      github_mirror: '',
+      hf_mirror: '',
+      pip_mirror: '',
+      hf_token: '',
+      ...(settings.network || {}),
+    },
+    lada: {
+      cli_path: '',
+      version: null,
+      is_docker: false,
+      ...(settings.lada || {}),
+    },
+    lada_defaults: {
+      device: 'cuda:0',
+      fp16: true,
+      detection_model: 'v4-fast',
+      restoration_model: 'basicvsrpp-v1.2',
+      encoding_preset: 'hevc-nvidia-gpu-hq',
+      max_clip_length: 180,
+      detect_face_mosaics: false,
+      ...(settings.lada_defaults || {}),
+    },
+    whisper: {
+      strategy: 'recommended',
+      model: 'anime-whisper',
+      pipeline_mode: 'ensemble',
+      merge_strategy: 'smart_merge',
+      language: 'ja',
+      sensitivity: 'balanced',
+      vad_method: 'semantic',
+      audio_preprocess_mode: 'none',
+      audio_preprocess_model: 'vocal_balanced',
+      translate_to: '',
+      translate_model: 'gpt-4o-mini',
+      translate_style: 'adult_explicit',
+      translate_base_url: 'https://api.openai.com/v1',
+      translate_api_key: '',
+      pass1_pipeline: 'anime',
+      pass2_pipeline: '',
+      custom_config: {},
+      ...(settings.whisper || {}),
+    },
+  }
+}
+
+export const useSettingsStore = defineStore('settings', () => {
+  const settings = ref<SettingsPayload | null>(null)
+  const draft = ref<SettingsPayload | null>(null)
+  const loading = ref(false)
+  const saving = ref<SaveTarget | null>(null)
+  const error = ref<string | null>(null)
+  const message = ref<string | null>(null)
+
+  async function fetchSettings() {
+    loading.value = true
+    error.value = null
+    message.value = null
+    try {
+      const data = withDefaults(await api.get<SettingsPayload>('/settings'))
+      settings.value = data
+      draft.value = cloneSettings(data)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '设置加载失败'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function resetDraft() {
+    if (settings.value) draft.value = cloneSettings(settings.value)
+    message.value = '已恢复为最近加载的配置'
+  }
+
+  async function saveEmby() {
+    if (!draft.value?.emby) return
+    saving.value = 'emby'
+    error.value = null
+    message.value = null
+    try {
+      await api.put('/settings/emby', draft.value.emby)
+      await fetchSettings()
+      message.value = 'Emby 设置已保存'
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Emby 设置保存失败'
+    } finally {
+      saving.value = null
+    }
+  }
+
+  async function testEmby() {
+    saving.value = 'test-emby'
+    error.value = null
+    message.value = null
+    try {
+      const result = await api.post<{ server_name?: string; version?: string }>('/settings/emby/test')
+      message.value = `Emby 连接成功：${result.server_name || 'Unknown'} ${result.version || ''}`.trim()
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Emby 连接测试失败'
+    } finally {
+      saving.value = null
+    }
+  }
+
+  async function saveStorage() {
+    if (!draft.value?.storage) return
+    saving.value = 'storage'
+    error.value = null
+    message.value = null
+    try {
+      await api.put('/settings/storage', draft.value.storage)
+      await fetchSettings()
+      message.value = '存储路径已保存'
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '存储路径保存失败'
+    } finally {
+      saving.value = null
+    }
+  }
+
+  async function saveNetwork() {
+    if (!draft.value?.network) return
+    saving.value = 'network'
+    error.value = null
+    message.value = null
+    try {
+      await api.put('/settings/network', draft.value.network)
+      await fetchSettings()
+      message.value = '网络设置已保存'
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '网络设置保存失败'
+    } finally {
+      saving.value = null
+    }
+  }
+
+  async function saveWhisper() {
+    if (!draft.value?.whisper) return
+    saving.value = 'whisper'
+    error.value = null
+    message.value = null
+    try {
+      await api.put('/settings/whisper', draft.value.whisper)
+      await fetchSettings()
+      message.value = 'Whisper 设置已保存'
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Whisper 设置保存失败'
+    } finally {
+      saving.value = null
+    }
+  }
+
+  async function saveLada() {
+    if (!draft.value?.lada) return
+    saving.value = 'lada'
+    error.value = null
+    message.value = null
+    try {
+      await api.put('/settings/lada', draft.value.lada)
+      await fetchSettings()
+      message.value = 'LADA 设置已保存'
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'LADA 设置保存失败'
+    } finally {
+      saving.value = null
+    }
+  }
+
+  async function saveLadaDefaults() {
+    if (!draft.value?.lada_defaults) return
+    saving.value = 'lada-defaults'
+    error.value = null
+    message.value = null
+    try {
+      await api.put('/settings/lada/defaults', draft.value.lada_defaults)
+      await fetchSettings()
+      message.value = 'LADA 默认参数已保存'
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'LADA 默认参数保存失败'
+    } finally {
+      saving.value = null
+    }
+  }
+
+  return {
+    settings,
+    draft,
+    loading,
+    saving,
+    error,
+    message,
+    fetchSettings,
+    resetDraft,
+    saveEmby,
+    testEmby,
+    saveStorage,
+    saveNetwork,
+    saveWhisper,
+    saveLada,
+    saveLadaDefaults,
+  }
+})

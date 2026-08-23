@@ -1,0 +1,71 @@
+export async function mount(root, sdk) {
+  const state = {
+    tab: 'latest',
+    latestSelectedFilters: [],
+    latestType: 'all',
+    rankingMode: 'top250',
+    rankingType: 0,
+    rankingPeriod: 'daily',
+    top250Year: '',
+    relation: null,
+    relationActorSelectedFilters: [],
+    relationActorSingleFilter: false,
+    relationActorYear: '',
+    relationActorSort: 'release_desc',
+    page: 1,
+    limit: 48,
+    total: 0,
+    items: [],
+    loading: false,
+    activePanel: null,
+  }
+
+  let tabControl = null
+  let resizeTimer = null
+  let loadSeq = 0
+
+  root.innerHTML = ''
+  const page = el('div', 'javdb-page')
+  const header = el('div', 'javdb-header-wrap')
+  const tabsWrap = el('div', 'javdb-tabs-wrap')
+  const filtersWrap = el('div', 'javdb-filters-wrap')
+  const grid = el('div', 'javdb-grid')
+  const pager = el('div', 'javdb-pager')
+  header.append(tabsWrap, filtersWrap)
+  page.append(header, grid, pager)
+  root.appendChild(page)
+
+  const tabDefs = [
+    { value: 'latest', label: '最近更新' },
+    { value: 'recommend', label: '推荐' },
+    { value: 'rankings', label: '榜单' },
+    { value: 'videos', label: '影库' },
+  ]
+
+  const latestFilters = [
+    ['magnets', '有磁链'],
+    ['cnsub', '中字'],
+    ['cracked', '破解'],
+  ]
+  const latestTypes = [
+    ['all', '全部'],
+    ['censored', '有码'],
+    ['uncensored', '无码'],
+    ['western', '欧美'],
+    ['fc2', 'FC2'],
+    ['anime', '动漫'],
+  ]
+  const rankingModes = [
+    ['top250', 'TOP250'],
+    ['daily', '日榜'],
+    ['weekly', '周榜'],
+    ['monthly', '月榜'],
+    ['actors', '演员榜'],
+  ]
+  const rankingTypes = [
+    [0, '有码'],
+    [1, '无码'],
+    [2, '欧美'],
+    [3, 'FC2'],
+  ]
+  const rankingPeriods = [

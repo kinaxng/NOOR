@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+RECOMMENDED_WHISPER_STRATEGY = {
+    "strategy": "recommended",
+    "model": "anime-whisper",
+    "pipeline_mode": "ensemble",
+    "merge_strategy": "smart_merge",
+    "language": "ja",
+    "sensitivity": "balanced",
+    "vad_method": "semantic",
+    "speech_enhancer": "none",
+    "audio_preprocess_mode": "none",
+    "audio_preprocess_model": "vocal_balanced",
+    "pass1_pipeline": "anime",
+    "pass2_pipeline": "qwen",
+    "custom_config": None,
+    "timestamp_mode": "aligner_interpolation",
+    "aligner_backend": "qwen3",
+    "framer_backend": "vad-grouped",
+}
+
+BASELINE_WHISPER_STRATEGY = {
+    "strategy": "baseline",
+    "model": "large-v3",
+    "pipeline_mode": "qwen",
+    "merge_strategy": "smart_merge",
+    "language": "ja",
+    "sensitivity": "balanced",
+    "vad_method": "semantic",
+    "speech_enhancer": "none",
+    "audio_preprocess_mode": "none",
+    "audio_preprocess_model": "vocal_balanced",
+    "pass1_pipeline": "qwen",
+    "pass2_pipeline": "",
+    "custom_config": None,
+    "timestamp_mode": "aligner_interpolation",
+    "aligner_backend": "none",
+    "framer_backend": "vad-grouped",
+}
+
+_BASELINE_ALIASES = {
+    "baseline",
+    "compat",
+    "compatibility",
+    "experimental",
+    "experiment",
+    "fast",
+    "faster",
+    "compare",
+    "contrast",
+}
+
+
+def normalize_whisper_strategy(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized == "best":
+        return "recommended"
+    if normalized in _BASELINE_ALIASES:
+        return "baseline"
+    return normalized or "advanced"
+
+
+@dataclass(frozen=True)
+class WhisperExecutionPlan:
+    strategy: str
+    executor_key: str
+    runtime_settings: dict[str, Any]
+    summary: str
+    detail_lines: tuple[str, ...] = ()
+
+
+def apply_whisper_strategy(payload: dict[str, Any], strategy: str | None) -> dict[str, Any]:
+    normalized = normalize_whisper_strategy(strategy)
+    merged = dict(payload)
+
+    if normalized == "recommended":
+        merged.update(RECOMMENDED_WHISPER_STRATEGY)
+        return merged
+
+    if normalized == "baseline":
+        merged.update(BASELINE_WHISPER_STRATEGY)
+        return merged
+
+    merged["strategy"] = normalized
+    return merged
+
+
+def is_recommended_whisper_strategy(strategy: str | None) -> bool:
+    return normalize_whisper_strategy(strategy) == "recommended"
+
+
+def build_whisper_execution_plan(payload: dict[str, Any], strategy: str | None) -> WhisperExecutionPlan:
+    normalized = normalize_whisper_strategy(strategy or payload.get("strategy"))
+    runtime_settings = apply_whisper_strategy(payload, normalized)
+    preprocess_mode = (runtime_settings.get("audio_preprocess_mode") or "none").strip().lower()
+    preprocess_model = (runtime_settings.get("audio_preprocess_model") or "vocal_balanced").strip().lower()
+
+    preprocess_detail_lines: tuple[str, ...] = ()
+    if preprocess_mode != "none":
+        preprocess_detail_lines = (
+            f"实验前处理: {preprocess_mode} / {preprocess_model}",
+            "注意: 音频前处理当前仅建议手动实验，不进入默认推荐链路",
+        )
+
+    if normalized == "recommended":
+        return WhisperExecutionPlan(
+            strategy="recommended",
+            executor_key="recommended",
+            runtime_settings=runtime_settings,
+            summary="推荐字幕策略",
+            detail_lines=(
+                "执行分支: recommended",
+                "主链路: Anime-Whisper + Qwen3-ASR fallback + Qwen3 ForcedAligner",
+                "固定参数: ensemble / anime+qwen3-align / ja / balanced / smart_merge",
+                *preprocess_detail_lines,
+            ),
+        )
+
+    if normalized == "baseline":
+        return WhisperExecutionPlan(
+            strategy="baseline",
+            executor_key="baseline",
+            runtime_settings=runtime_settings,
+            summary="large-v3 对照策略",
+            detail_lines=(
+                "执行分支: baseline",
+                "主链路: faster-whisper large-v3",
+                "固定参数: qwen(legacy key) / large-v3 / ja / balanced / semantic",
+            ),
+        )
+
+    return WhisperExecutionPlan(
+        strategy=normalized,
+        executor_key="advanced",
+        runtime_settings=runtime_settings,
+        summary="高级参数策略",
+        detail_lines=(
+            "执行分支: advanced",
+            "运行参数: 以任务保存的 pipeline / merge / custom_config 为准",
+            *preprocess_detail_lines,
+        ),
+    )
+---orchestrator diag---
+        raise_if_cancelled(self.cancel_callback)
+
+    def _get_output_dir(self) -> Path:
+        """获取输出目录"""
+        if self.config.output_dir:
+            return Path(self.config.output_dir)
+        return Path(tempfile.gettempdir()) / "whisper_jav"
+
+    def _get_enhancers(self) -> list[str]:
+        """根据 pipeline 模式获取增强器组合"""
+        if getattr(self.config, "executor_key", "advanced") in {"recommended", "baseline"}:
+            # 产品化链路（默认 / large-v3 对照）都明确声明 speech_enhancer=none。
+            # 不要再因为旧 preset 表而隐式注入 loudnorm / clearvoice / demucs。
+            return []
+
+        mode = self.config.pipeline_mode
+
+        # Ensemble 模式：用 pass1 的增强器组合
+        if mode == PipelineMode.ENSEMBLE and self.config.pass1_pipeline:
+            pass1_mode = PipelineMode(self.config.pass1_pipeline.value)
+            return PIPELINE_ENHANCERS.get(pass1_mode, [])
+
+        return PIPELINE_ENHANCERS.get(mode, [])
+
+    @staticmethod
+    def _pipeline_display_name(mode: PipelineMode) -> str:
+        if mode == PipelineMode.QWEN:
+            return "large-v3-baseline"
+        return mode.value
+
+    _PASS2_GATING_PUNCT_RE = re.compile(r"[。、「」『』、,，.!！?？…~〜・\-\s]")
+    _PASS2_GATING_KANJI_RE = re.compile(r"[一-龯々]")
+    _PASS2_GATING_JA_RE = re.compile(r"[ぁ-んァ-ヶー一-龯々]")
+    _STEPDOWN_SENTENCE_RE = re.compile(r"[。！？?!]")
+
+    @classmethod
+    def _normalize_pass_text(cls, text: str) -> str:
+        return cls._PASS2_GATING_PUNCT_RE.sub("", text or "").strip()
+
+    @classmethod
+    def _is_likely_noise_only_text(cls, text: str) -> bool:
+        normalized = cls._normalize_pass_text(text)
+        if not normalized:
+            return True
+
+        if not cls._PASS2_GATING_JA_RE.search(normalized):
+---orchestrator collect---
+        for idx in range(window_count):
+            end = duration if idx == window_count - 1 else min(duration, cursor + window)
+            windows.append((cursor, end))
+            cursor = end
+        return windows
+
+    @staticmethod
+    def _collect_recommended_segment_diagnostics(results: list[TranscriptionResult]) -> dict:
+        if not results:
+            return {
+                "segment_count": 0,
+                "aligned_segments": 0,
+                "large_v3_retry_segments": 0,
+                "qwen_retry_segments": 0,
+                "stepdown_segments": 0,
+                "aligner_empty_segments": 0,
+                "hardened_segments": 0,
+                "stepdown_window_total": 0,
+                "segments": [],
+            }
+
+        segment_rows: list[dict] = []
+        aligned_segments = 0
+        large_v3_retry_segments = 0
+        qwen_retry_segments = 0
+        stepdown_segments = 0
+        aligner_empty_segments = 0
+        hardened_segments = 0
+        stepdown_window_total = 0
+
+        for idx, result in enumerate(results, start=1):
+            metadata = result.metadata or {}
+            chain_state = str(metadata.get("anime_qwen3_chain") or "")
+            aligned = chain_state == "qwen3_forced_aligner"
+            large_v3_retry = bool(metadata.get("recommended_large_v3_retry"))
+            qwen_retry = bool(metadata.get("recommended_qwen_retry") or metadata.get("anime_qwen3_retry"))
+            stepdown = bool(metadata.get("recommended_stepdown_retry"))
+            aligner_empty = chain_state == "aligner_empty"
+            hardened = bool(metadata.get("hardening_applied"))
+            window_count = int(metadata.get("recommended_stepdown_window_count") or 0)
+            qwen_reason = str(metadata.get("recommended_qwen_retry_reason") or "")
+            stepdown_reason = str(metadata.get("recommended_stepdown_reason") or "")
+
+            aligned_segments += int(aligned)
+            large_v3_retry_segments += int(large_v3_retry)
+            qwen_retry_segments += int(qwen_retry)
+            stepdown_segments += int(stepdown)
+            aligner_empty_segments += int(aligner_empty)
+            hardened_segments += int(hardened)
+            stepdown_window_total += window_count
+
+            segment_rows.append({
+                "index": idx,
+                "source": result.source,
+                "subtitle_count": len(result.segments),
+                "chain_state": chain_state or metadata.get("chain_stage") or "",
+                "large_v3_retry": large_v3_retry,
+                "qwen_retry": qwen_retry,
+                "large_v3_retry_reason": str(metadata.get("recommended_large_v3_retry_reason") or ""),
+                "qwen_retry_reason": qwen_reason,
+                "stepdown": stepdown,
+                "stepdown_reason": stepdown_reason,
+                "stepdown_window_count": window_count,
+                "aligner_empty": aligner_empty,
+                "hardened": hardened,
+            })
+
+        return {
+            "segment_count": len(results),
+            "aligned_segments": aligned_segments,
+            "qwen_retry_segments": qwen_retry_segments,
+            "stepdown_segments": stepdown_segments,
+            "aligner_empty_segments": aligner_empty_segments,
+            "hardened_segments": hardened_segments,
+---i18n zh excerpt---
+301:  'whisper.presets.baseline.title': '对照链路',
+302:  'whisper.presets.baseline.badge': '对照',
+303:  'whisper.presets.baseline.desc': '用于 large-v3 快速转写或与默认链路做对照，不承担默认补救识别与对齐。',
+304:  'whisper.presets.baseline.stack': 'faster-whisper large-v3 单链路，速度更直接，适合快速试跑与质量对照。',
+305:  'whisper.presets.compat.title': '实验链路',
+306:  'whisper.presets.compat.badge': '兼容',
+307:  'whisper.presets.compat.desc': '仅用于旧配置兼容与问题排查，不建议常规使用。',
+308:  'whisper.presets.compat.stack': 'large-v3 基线路径，用于兼容旧任务与排障。',
+---i18n en excerpt---
+301:  'whisper.presets.baseline.title': 'Baseline Path',
+302:  'whisper.presets.baseline.badge': 'Baseline',
+303:  'whisper.presets.baseline.desc': 'Use large-v3 for faster transcription or side-by-side comparison with the default path. It does not include the default fallback-and-align stack.',
+304:  'whisper.presets.baseline.stack': 'Single faster-whisper large-v3 route for quicker trial runs and quality comparison.',
+305:  'whisper.presets.compat.title': 'Experimental Path',
+306:  'whisper.presets.compat.badge': 'Compat',
+307:  'whisper.presets.compat.desc': 'Only for legacy compatibility and troubleshooting; not recommended for normal use.',
+308:  'whisper.presets.compat.stack': 'large-v3 baseline path for old jobs and troubleshooting.',

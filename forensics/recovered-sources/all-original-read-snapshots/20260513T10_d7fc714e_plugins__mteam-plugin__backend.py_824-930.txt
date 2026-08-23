@@ -1,0 +1,195 @@
+def _raw_torrent_items(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        return [x for x in data if isinstance(x, dict)]
+    if not isinstance(data, dict):
+        return []
+    candidates: list[Any] = [data]
+    for key in ("data", "items", "results", "rows", "list"):
+        val = data.get(key)
+        if isinstance(val, list):
+            return [x for x in val if isinstance(x, dict)]
+        if isinstance(val, dict):
+            candidates.append(val)
+    for obj in candidates:
+        if not isinstance(obj, dict):
+            continue
+        for key in ("data", "items", "results", "rows", "list"):
+            val = obj.get(key)
+            if isinstance(val, list):
+                return [x for x in val if isinstance(x, dict)]
+    return []
+
+
+async def _search_torrents_by_codes(config: dict[str, Any], codes: list[str], *, per_code: int = 3) -> list[dict[str, Any]]:
+    token = str(config.get("api_key") or "").strip()
+    if not token:
+        return []
+    max_codes = max(0, min(int(config.get("knowledge_search_code_limit") or 20), 80))
+    if max_codes <= 0:
+        return []
+
+    raw_set = {str(x or "").strip().upper() for x in codes if str(x or "").strip()}
+    search_codes: list[str] = []
+    seen_codes: set[str] = set()
+    for raw_code in codes:
+        code = str(raw_code or "").strip().upper()
+        if not code:
+            continue
+        suffix_match = re.match(r"^(.+)-[A-Z]$", code)
+        if suffix_match and suffix_match.group(1) in raw_set:
+            # Local filenames often add suffixes such as "-C" for translated
+            # variants. Search the canonical code once; graph matching still
+            # uses the official title-extracted code to avoid false edges.
+            continue
+        if code in seen_codes:
+            continue
+        seen_codes.add(code)
+        search_codes.append(code)
+        if len(search_codes) >= max_codes:
+            break
+
+    concurrency = max(1, min(int(config.get("knowledge_search_concurrency") or 4), 8))
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def query_one(code: str) -> list[dict[str, Any]]:
+        try:
+            payload = {
+                "pageNumber": 1,
+                "pageSize": max(1, min(per_code, 10)),
+                "keyword": code,
+                "mode": "adult",
+                "status": "NORMAL",
+                "withCache": True,
+            }
+            async with semaphore:
+                data = await _mteam_post(config, "/api/torrent/search", json_body=payload)
+        except Exception:
+            return []
+        found: list[dict[str, Any]] = []
+        for raw in _raw_torrent_items(data)[:per_code]:
+            item = _normalize_api_item(raw, _mteam_site_base_url(config))
+            # Prefer codes extracted from the official torrent title. Do not
+            # blindly force the query code into aliases: media filenames often
+            # carry local suffixes such as "-C", and forcing them would create
+            # false graph links. If the API title has no recognizable code at
+            # all, keep the query code as a conservative fallback.
+            aliases = item.get("code_aliases") if isinstance(item.get("code_aliases"), list) else []
+            if not aliases:
+                item["code_aliases"] = [code]
+            if not item.get("code"):
+                item["code"] = code
+            item["knowledge_query_code"] = code
+            found.append(item)
+        return found
+
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for batch in await asyncio.gather(*(query_one(code) for code in search_codes)):
+        for item in batch:
+            key = str(item.get("guid") or item.get("link") or item.get("title") or "")
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+def _knowledge_contribution_from_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    key = str(item.get("guid") or item.get("link") or item.get("title") or "").strip()
+    title = str(item.get("display_title") or item.get("smart_title") or item.get("title") or key).strip()
+    if not key or not title:
+        return None
+    torrent_ref = f"mteam_torrent:{key}"
+    entities = [
+        {
+            "alias": torrent_ref,
+            "type": "torrent",
+            "key": f"mteam:{key}",
+
+---ALBUM NORMALIZE---
+        resp = await client.post(f"{base_url}{path}", headers=_mteam_headers(config), params=params, json=json_body)
+        resp.raise_for_status()
+        data = resp.json()
+    if str(data.get("code")) not in {"0", "SUCCESS"}:
+        raise ValueError(data.get("message") or "M-Team API failed")
+    return data.get("data") or {}
+
+
+def _normalize_album_torrent(item: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    base_url = _mteam_site_base_url(config)
+    tid = str(item.get("id") or item.get("torrentId") or "")
+    title = str(item.get("name") or item.get("title") or item.get("subject") or "").strip()
+    image_list = item.get("imageList") if isinstance(item.get("imageList"), list) else []
+    image_url = ""
+    for url in image_list:
+        if isinstance(url, str) and _is_dmm_image(url):
+            image_url = url
+            break
+    if not image_url and image_list:
+        image_url = str(image_list[0] or "")
+    size = 0
+    try:
+        size = int(item.get("size") or 0)
+    except Exception:
+        size = 0
+    category = str(item.get("category") or "")
+    return _with_display_title({
+        "title": title,
+        "link": f"{base_url}/detail/{tid}" if tid else base_url,
+        "pubDate": str(item.get("createdDate") or ""),
+        "guid": tid,
+        "description": str(item.get("smallDescr") or ""),
+        "plain_description": str(item.get("smallDescr") or ""),
+        "image_url": image_url,
+        "image_source": "dmm" if _is_dmm_image(image_url) else (urlparse(image_url).hostname or "" if image_url else ""),
+        "is_av": True,
+        "category": category,
+        "size_bytes": size,
+        "download_url": "",
+        "enclosure_url": "",
+    })
+
+
+def _is_mteam_rss_url(raw: str) -> bool:
+    if not raw:
+        return False
+    parsed = urlparse(raw)
+    return parsed.scheme in {"http", "https"} and "/api/rss/fetch" in parsed.path
+
+
+async def _load_album(config: dict[str, Any], album_id: int, rss_url: str = "", alias: str = "") -> dict[str, Any]:
+    detail = await _mteam_post(config, "/api/album/albumDetail", params={"albumId": album_id})
+    timeout = float(config.get("timeout", 15))
+    items: list[dict[str, Any]] = []
+    source = "api"
+    if _is_mteam_rss_url(rss_url):
+        try:
+            items = await _fetch_rss_url(rss_url, timeout)
+            items = _apply_known_cover_cache(items, int(config.get("cache_days") or 7))
+            items = await _enrich_covers_via_api(items, config, timeout)
+            source = "rss"
+        except Exception:
+            items = []
+            source = "api"
+
+    if not items:
+        torrents_data = await _mteam_post(
+            config,
+            "/api/album/albumTorrentSearch",
+            json_body={"pageNumber": 1, "pageSize": 100, "albumId": album_id, "status": "NORMAL"},
+        )
+        raw_items = torrents_data.get("data") if isinstance(torrents_data, dict) else []
+        items = [_normalize_album_torrent(x, config) for x in raw_items if isinstance(x, dict)]
+
+    image_cache_days = int(config.get("cache_days") or 7)
+    max_images = max(0, min(int(config.get("max_image_cache_per_fetch") or 40), 80))
+    items = await _cache_feed_images(
+        PLUGIN_ID,
+        items,
+        image_cache_days,
+        timeout,
+        max_images=max_images,
+    )
+    _schedule_background_refresh(items, config, image_cache_days, float(config.get("timeout", 15)))
+    original_title = str(detail.get("title") or f"片单 {album_id}")
+    return {

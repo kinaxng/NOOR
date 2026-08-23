@@ -1,0 +1,98 @@
+616:@router.get("/config")
+622:@router.post("/config")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{_server_url(cfg)}/emby/Items",
+                headers=_headers(cfg.get("api_key", "")),
+                params={"limit": 1, "Fields": "BasicSyncInfo"},
+            )
+            resp.raise_for_status()
+        # Also try to get libraries
+        try:
+            libraries = await _list_libraries(cfg)
+        except Exception:
+            libraries = []
+        return {"ok": True, "message": f"已连接至 {cfg.get('server_url', 'Emby/Jellyfin')}", "libraries": libraries}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return {"ok": False, "message": "API Key 无效或已过期", "libraries": []}
+        return {"ok": False, "message": f"连接失败: HTTP {e.response.status_code}", "libraries": []}
+    except Exception as e:
+        return {"ok": False, "message": f"连接失败: {e}", "libraries": []}
+
+
+@router.get("/libraries")
+async def get_libraries():
+    """Get list of media libraries."""
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    try:
+        libraries = await _list_libraries(config)
+    except Exception:
+        return {"libraries": []}
+
+    return {"libraries": libraries}
+
+
+@router.get("/items")
+async def get_items(
+    library_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    filter: str | None = None,
+    q: str | None = None,
+    force_refresh: bool = Query(False, description="强制刷新缓存"),
+):
+    """Get items from the media library."""
+    import time
+
+    config = _load_config()
+    if not config.get("server_url") or not config.get("api_key"):
+        raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+
+    now = time.time()
+
+    if not library_id:
+        raw = config.get("enabled_library_ids", "") if isinstance(config, dict) else ""
+        enabled_ids = [lid.strip() for lid in raw.split(",") if lid.strip()] if raw else []
+
+        try:
+            all_libraries = await _list_libraries(config)
+            target_ids = enabled_ids if enabled_ids else [lib["id"] for lib in all_libraries]
+
+            all_items: list[dict] = []
+            for lid in target_ids:
+                cache_key = f"all_{lid}"
+                if not force_refresh and cache_key in _items_cache:
+                    cached, cached_at = _items_cache[cache_key]
+                    if now - cached_at < _CACHE_TTL:
+                        all_items.extend(cached)
+                        continue
+                items, _ = await _list_items(config, lid, limit=2000, offset=0)
+                _items_cache[cache_key] = (items, now)
+                all_items.extend(items)
+
+            all_items.sort(key=lambda x: x.get("date_created") or "", reverse=True)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"获取媒体失败: {e}")
+
+        all_items = [i for i in all_items if _item_matches_filter(i, filter)] if filter else all_items
+        all_items = [i for i in all_items if _item_matches_query(i, q)] if q else all_items
+
+        total = len(all_items)
+        return {"items": all_items[offset:offset + limit], "total": total}
+
+    cache_key = library_id
+    if not force_refresh and cache_key in _items_cache:
+        cached_items, cached_at = _items_cache[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return _paginate_filter(cached_items, filter, q, offset, limit)
+
+    try:
+        all_items, _ = await _list_items(config, library_id, limit=2000, offset=0)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取媒体失败: {e}")
+

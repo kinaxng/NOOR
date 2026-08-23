@@ -1,0 +1,41 @@
+  if (segment.stepdown) {
+    const windows = segment.stepdown_window_count ? ` · ${segment.stepdown_window_count} ${t('jobs.diagnosticsWindows')}` : ''
+    parts.push(`${t('jobs.diagnosticsStepdown')}${windows}`)
+  }
+  if (segment.aligner_empty) parts.push('aligner_empty')
+  if (segment.hardened) parts.push('hardening')
+  return parts.join(' · ')
+}
+
+function diagnosticReasonLabel(reason?: string) {
+  if (!reason) return ''
+  const normalized = reason.trim()
+  if (!normalized) return ''
+  return normalized
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase())
+}
+
+const { currentTabJobCards, selectedJobStatusLabel, selectedJobActivityLine, selectedJobChainFlow, selectedJobChainSummary, selectedJobChainModels } = useJobRuntimePresentation({
+  allJobs,
+  currentLang,
+  jobStatuses,
+  selectedJobId,
+  flashJobId,
+  activeTab,
+  currentTabJobs,
+  selectedJob,
+  selectedJobChain,
+  cancelLabel: cancelTaskLabel,
+})
+
+function selectChainMember(jobId: string) {
+  void selectJobById(jobId)
+}
+
+
+</script>
+
+<template>
+  <div class="w-full space-y-6 animate-fade-in">
+    <!-- Header -->

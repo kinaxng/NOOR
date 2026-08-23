@@ -1,0 +1,36 @@
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.whisper.defaultSettings') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.defaultSettingsHint') }}</p>
+
+        <div class="settings-form mt-4">
+          <div class="whisper-strategy-card">
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t('whisper.recommended.title') }}</div>
+                <p class="whisper-strategy-card__desc">{{ t('whisper.recommended.desc') }}</p>
+              </div>
+              <VuiBadge color="info" variant="gradient" size="sm">Anime-Whisper</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">Anime-Whisper · {{ t('whisper.lang.ja') }} · {{ t('whisper.merge.smartMerge') }}</p>
+            <p class="whisper-strategy-card__stack">{{ t('whisper.recommended.stack') }}</p>
+            <div class="flex flex-wrap gap-3">
+              <VuiButton variant="gradient" color="info" size="small" :loading="saving" @click="saveRecommendedDefaults">
+                {{ saving ? t('settings.whisper.saving') : t('settings.whisper.useRecommendedDefaults') }}
+              </VuiButton>
+              <VuiButton
+                variant="outlined"
+                color="secondary"
+                size="small"
+                @click="defaultAdvancedExpanded = !defaultAdvancedExpanded"
+              >
+                {{ defaultAdvancedExpanded ? t('settings.whisper.hideDebugDefaults') : t('settings.whisper.showDebugDefaults') }}
+              </VuiButton>
+            </div>
+          </div>
+
+          <div v-if="defaultAdvancedExpanded" class="settings-field-hint !mt-0">
+            {{ t('settings.whisper.debugDefaultsHint') }}
+          </div>
+
+          <!-- Pipeline Selector -->
+          <div v-if="defaultAdvancedExpanded" class="settings-form__field">

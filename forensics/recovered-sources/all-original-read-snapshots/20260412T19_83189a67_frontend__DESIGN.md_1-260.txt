@@ -1,0 +1,59 @@
+✗ 禁止硬编码 Tailwind 默认色（bg-red-600 / text-gray-400 等）—— 必须换算为设计系统 token
+✗ 禁止混用两套色板（MASTER.md 的 OLED 风格未实现，禁止使用）
+✗ 禁止在组件 scoped style 中直接写 hex 值（除了 #FFFFFF #000000）
+✗ 禁止用 100vh 代替自动高度（移动端使用 100dvh）
+✗ 禁止用 emoji 代替 SVG icon
+✗ 禁止在活动状态用颜色单独传达信息（需配合 icon 或文字）
+✗ 禁止 animate width/height —— 用 transform: scale()
+
+Responsive Behavior
+-------------------
+< 640px     媒体库 2 列，sidebar 隐藏（drawer）
+640-1024px  媒体库 4 列
+> 1024px    媒体库 6 列，sidebar 固定
+
+Agent Prompt Guide
+------------------
+给 AI 编程助手的特殊指令：
+
+1. 颜色优先级：当设计系统和代码中的值不一致时，以 style.css 中实际定义的 CSS 变量为准。
+   现状冲突：index.html 导入了 IBM Plex Sans + Rajdhani，但 --font-display 实际是 Plus Jakarta Display。
+   修复方式：使用 Google Fonts CDN 导入 Plus Jakarta Display 和 Inter（不要导入 Rajdhani）。
+
+2. 状态颜色映射（牢记）：
+   running → info (blue)    #0075FF
+   completed → success     #01B574
+   queued → warning        #FFB547
+   failed → error          #E31A1A
+   常见错误：把 success 写成 #00E58B，把 error 写成 #FF474B —— 这些值不在 design system 中。
+
+3. 媒体卡片标签色板（MediaCardBento 用）：
+   有字幕/中文  →  status-error (red)  bg: rgba(227,26,26,0.15)
+   破解         →  status-success  bg: rgba(1,181,116,0.15)
+   流出         →  status-warning  bg: rgba(255,181,71,0.15)
+   无码         →  accent-magenta   bg: rgba(255,45,149,0.15)
+   无标签       →  text-muted       bg: rgba(255,255,255,0.08)
+
+4. 组件库选择：
+   使用 src/components/vision/ 下的 VuiButton、VuiBadge、VuiProgress、VuiBox、VuiTypography
+   不要混用 BaseButton、BaseBadge（待废弃）
+   .vision-card 是统一卡片类，配合 Tailwind 的 bg-surface 使用
+
+5. VuiButton variant="contained" 的默认色是白色按钮（深色字），variant="gradient" 是蓝色按钮。
+   NOOR 主要使用 gradient variant 表示主操作。
+
+6. 新增组件时：将设计 token 值（颜色、半径、阴影）定义在 style.css 的 :root 中，
+   在组件中通过 var() 引用，而不是复制具体值。
+
+
+7. 文案与反馈一致性：
+   所有用户可见文案必须走 i18n key，禁止在页面组件中硬编码中英文状态词、空状态文案、分页文案、错误提示。
+   例如 Running / Queued / 暂无内容 / 上一页 这类字符串都必须来自 i18n。
+
+8. 交互反馈：
+   普通成功/失败/信息提示优先使用 BaseToast / useToast；
+   不允许新增 alert() 作为常规反馈；
+   confirm() 仅可作为过渡方案，后续应统一到设计系统 modal。
+
+9. 导航一致性：
+   Sidebar、Router、Topbar 页面标题必须保持一一对应；新增路由时必须同步更新顶部标题映射，避免出现进入页面后标题错误回退。

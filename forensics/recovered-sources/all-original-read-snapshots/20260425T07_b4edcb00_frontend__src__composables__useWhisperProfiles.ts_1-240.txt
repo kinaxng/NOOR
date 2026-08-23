@@ -1,0 +1,63 @@
+export type WhisperStrategyMode = 'recommended' | 'baseline'
+
+export type WhisperTranslationOverrides = {
+  audio_preprocess_mode?: string
+  audio_preprocess_model?: string
+  translate_to?: string
+  translate_base_url?: string
+  translate_api_key?: string
+  translate_model?: string
+  translate_style?: string
+}
+
+export function buildWhisperProfile(mode: WhisperStrategyMode) {
+  const isRecommended = mode === 'recommended'
+  return {
+    strategy: isRecommended ? 'recommended' : 'baseline',
+    model: isRecommended ? 'anime-whisper' : 'large-v3',
+    pipeline_mode: isRecommended ? 'ensemble' : 'qwen',
+    merge_strategy: 'smart_merge',
+    language: 'ja',
+    sensitivity: 'balanced',
+    vad_method: 'semantic',
+    pass1_pipeline: isRecommended ? 'anime' : 'qwen',
+    pass2_pipeline: isRecommended ? 'qwen' : '',
+    custom_config: undefined,
+  }
+}
+
+export function buildWhisperProfileWithTranslation(
+  mode: WhisperStrategyMode,
+  overrides: WhisperTranslationOverrides = {},
+) {
+  return {
+    ...buildWhisperProfile(mode),
+    audio_preprocess_mode: overrides.audio_preprocess_mode,
+    audio_preprocess_model: overrides.audio_preprocess_model,
+    translate_to: overrides.translate_to || '',
+    translate_base_url: overrides.translate_base_url,
+    translate_api_key: overrides.translate_api_key,
+    translate_model: overrides.translate_model,
+    translate_style: overrides.translate_style,
+  }
+}
+
+export function getWhisperStrategyMeta(mode: WhisperStrategyMode) {
+  if (mode === 'recommended') {
+    return {
+      titleKey: 'whisper.recommended.title',
+      descKey: 'whisper.recommended.desc',
+      stackKey: 'whisper.recommended.stack',
+      badgeKey: 'whisper.recommended.badge',
+      stackText: 'Anime-Whisper · Qwen3-ASR fallback · Qwen3 ForcedAligner',
+    }
+  }
+
+  return {
+    titleKey: 'whisper.presets.baseline.title',
+    descKey: 'whisper.presets.baseline.desc',
+    stackKey: 'whisper.presets.baseline.stack',
+    badgeKey: 'whisper.presets.baseline.badge',
+    stackText: 'faster-whisper large-v3 · baseline comparison route',
+  }
+}

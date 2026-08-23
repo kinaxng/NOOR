@@ -1,0 +1,21 @@
+            actor_seen[str(actor)] += 1
+        for category in (picked.get("categories") or [])[:4]:
+            if _generic_category_factor(category) >= 0.5:
+                category_seen[str(category)] += 1
+    return selected
+
+
+def _filtered_summary(diagnostics: list[dict[str, Any]]) -> dict[str, Any]:
+    counts: Counter = Counter(str(item.get("reason") or "unknown") for item in diagnostics)
+    labels = {
+        "missing_code": "缺少番号",
+        "ignored": "已忽略",
+        "disliked": "不感兴趣",
+        "score_too_low": "评分过低",
+    }
+    return {
+        "total": len(diagnostics),
+        "reasons": [
+            {"reason": key, "label": labels.get(key, key), "count": int(count)}
+            for key, count in counts.most_common()
+        ],

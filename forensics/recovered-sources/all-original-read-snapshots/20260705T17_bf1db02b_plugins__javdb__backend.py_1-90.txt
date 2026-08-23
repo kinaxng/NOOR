@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import asyncio
+import re
+import time
+from typing import Any
+from urllib.parse import urljoin
+
+import httpx
+
+from app.plugins.contracts import DashboardWidget, PluginManifest, PluginTestResult
+
+PLUGIN_ID = "javdb"
+LATEST_CACHE_TTL = 120
+LATEST_PAGE_CACHE_TTL = 600
+VIDEO_DETAIL_CACHE_TTL = 1800
+FILTER_PAGE_CACHE_TTL = 300
+ACTOR_OPTIONS_CACHE_TTL = 600
+DETAIL_ENRICH_CONCURRENCY = 8
+LATEST_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+LATEST_PAGE_CACHE: dict[tuple[str, str, str, str, int, int], dict[str, Any]] = {}
+VIDEO_DETAIL_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+FILTER_PAGE_CACHE: dict[tuple[str, str, str, str, int, int], dict[str, Any]] = {}
+ACTOR_OPTIONS_CACHE: dict[tuple[str], dict[str, Any]] = {}
+
+
+class JavDBUpstreamError(RuntimeError):
+    """DBOnline/JavDB returned an application-level failure."""
+
+
+class JavDBHttpError(RuntimeError):
+    """DBOnline/JavDB returned a non-2xx response."""
+
+
+class JavDBTimeoutError(RuntimeError):
+    """DBOnline/JavDB did not respond before the configured timeout."""
+
+
+def _base(config: dict[str, Any]) -> str:
+    return str(config.get("base_url") or "").strip().rstrip("/")
+
+
+def _api_base(config: dict[str, Any]) -> str:
+    return _base(config).rstrip("/") + "/api"
+
+
+def _cache_get(cache: dict[Any, dict[str, Any]], key: Any, ttl: int) -> Any | None:
+    cached = cache.get(key)
+    if not cached:
+        return None
+    if time.time() - float(cached.get("ts") or 0) >= ttl:
+        cache.pop(key, None)
+        return None
+    return cached.get("value")
+
+
+def _cache_set(cache: dict[Any, dict[str, Any]], key: Any, value: Any) -> Any:
+    cache[key] = {"ts": time.time(), "value": value}
+    return value
+
+
+def _headers(config: dict[str, Any]) -> dict[str, str]:
+    key = str(config.get("api_key") or "").strip()
+    headers = {"Accept": "application/json", "User-Agent": "NOOR-JavDB-Plugin/0.1"}
+    if key:
+        headers["X-API-Key"] = key
+    return headers
+
+
+def _timeout(config: dict[str, Any]) -> float:
+    try:
+        return max(3.0, min(float(config.get("timeout") or 15), 60.0))
+    except Exception:
+        return 15.0
+
+
+async def _request(config: dict[str, Any], method: str, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> Any:
+    base = _api_base(config)
+    url = urljoin(base + "/", path.lstrip("/"))
+    async with httpx.AsyncClient(timeout=_timeout(config), follow_redirects=True, trust_env=False) as client:
+        try:
+            resp = await client.request(method, url, params=params, json=json, headers=_headers(config))
+        except httpx.TimeoutException as exc:
+            raise JavDBTimeoutError(f"JavDB API timeout after {_timeout(config):.0f}s: {url} params={params or {}}") from exc
+        except httpx.RequestError as exc:
+            raise JavDBHttpError(f"JavDB API request failed: {url} params={params or {}} error={exc}") from exc
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            body = resp.text[:500].strip()
+        if _matches_latest_filters(item, list(wanted)):
+            return item
+        async with semaphore:
+            return await _enrich_latest_item(config, item)
+
+    return list(await asyncio.gather(*(enrich_one(item) for item in items)))
+
+
+def _normalize_movie(config: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    number = _code(item.get("number") or item.get("code"))
+    title = str(item.get("title") or item.get("origin_title") or number or item.get("id") or "").strip()
+    magnets_count = item.get("magnets_count")
+    if magnets_count is None:
+        magnets_count = item.get("magnet_count")
+    return {
+        "id": str(item.get("id") or item.get("video_id") or number or title),
+        "number": number,
+        "code": number,
+        "title": title,
+        "origin_title": item.get("origin_title") or "",
+        "display_title": f"{number} {title}".strip(),
+        "cover_url": _abs(config, item.get("cover_url")),
+        "thumb_url": _abs(config, item.get("thumb_url")),
+        "release_date": item.get("release_date") or item.get("date") or "",
+        "duration": item.get("duration") or 0,
+        "score": item.get("score") or item.get("ranking") or 0,
+        "ranking": item.get("ranking") or 0,
+        "magnets_count": magnets_count or 0,
+        "has_cnsub": bool(item.get("has_cnsub") or item.get("has_subtitle") or item.get("has_magnet_subtitle") or item.get("play_subtitle")),
+        "play_subtitle": int(item.get("play_subtitle") or 0),
+        "can_play": bool(item.get("can_play")),

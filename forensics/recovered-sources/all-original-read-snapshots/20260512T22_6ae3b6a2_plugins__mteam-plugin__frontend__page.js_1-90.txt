@@ -1,0 +1,90 @@
+export async function mount(el, sdk = {}) {
+  const pluginId = sdk.pluginId || 'mteam-plugin'
+  const apiPlugin = (path, init) => sdk.api?.plugin ? sdk.api.plugin(path, init) : fetch(`/api/plugins/${pluginId}${path}`, init)
+  const state = {
+    activeTab: 'rss',
+    rssItems: [],
+    albums: [],
+    activeAlbumId: '',
+    category: '',
+    page: 1,
+    pageSize: 12,
+    loading: false,
+    hasLoadedOnce: false,
+    loadError: '',
+    notice: '',
+    noticeType: 'info',
+    refreshing: false,
+    imageLoading: false,
+    imageProgress: 0,
+    pushing: new Set(),
+    pushProgress: {},
+    addOpen: false,
+    addValue: '',
+    adding: false,
+    editingAlbumId: '',
+    editAlbumValue: '',
+    clearCacheOpen: false,
+    clearingCache: false,
+    destroyed: false,
+    imageLoadSeq: 0,
+  }
+
+  el.innerHTML = `
+    <div class="mteam-page">
+      <div class="noor-plugin-topbar mteam-toolbar">
+        <div data-role="tabs" class="noor-plugin-topbar__tabs"></div>
+        <div class="noor-plugin-topbar__actions mteam-actions"><span data-role="cacheDays" style="display:none"></span><span data-role="cacheCount" style="display:none"></span><span data-role="refreshHost"></span></div>
+      </div>
+      <div data-role="albumBar" class="mteam-album-bar" style="display:none"></div>
+      <div data-role="categoryBar" class="mteam-category-bar"></div>
+      <div data-role="notice" class="mteam-notice" style="display:none"></div><div data-role="state" class="mteam-state" style="display:none"></div><div data-role="imageProgress" class="mteam-image-progress" style="display:none"><i></i></div>
+      <div data-role="grid" class="mteam-grid"></div>
+      <div data-role="pager" class="mteam-pager"></div>
+      <div data-role="modalRoot"></div>
+    </div>
+  `
+
+  const $ = role => el.querySelector(`[data-role="${role}"]`)
+  let grid = $('grid'), stateBox = $('state'), pager = $('pager'), refreshHost = $('refreshHost'), refreshBtn = null, albumBar = $('albumBar'), categoryBar = $('categoryBar'), modalRoot = $('modalRoot'), noticeBox = $('notice'), imageProgress = $('imageProgress'), cacheDays = $('cacheDays'), cacheCount = $('cacheCount'), tabsHost = $('tabs')
+  const fmtDate = v => { if (!v) return ''; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString('zh-CN', { hour12: false }) }
+  const fmtSize = n => { n = Number(n || 0); if (!n) return ''; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ } return `${n.toFixed(i >= 3 ? 2 : 1)} ${u[i]}` }
+  const keyOf = it => String(it.guid || it.download_url || it.enclosure_url || it.link || it.title || '')
+  const escapeHtml = s => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
+  const notify = (type, msg) => sdk.toast?.[type]?.(msg)
+  let activeAlbumModal = null
+
+  function initUiKitTopbar() {
+    const btn = sdk.ui?.button
+      ? sdk.ui.button({ label: '刷新', tone: 'primary', className: 'mteam-btn mteam-btn--primary' })
+      : Object.assign(document.createElement('button'), { type: 'button', className: 'mteam-btn mteam-btn--primary', textContent: '刷新' })
+    btn.dataset.role = 'refresh'
+    refreshHost.replaceWith(btn)
+    refreshBtn = btn
+  }
+  initUiKitTopbar()
+
+  function currentItems() {
+    if (state.activeTab === 'rss') return state.rssItems
+    const album = state.albums.find(x => x.id === state.activeAlbumId) || state.albums[0]
+    return album?.items || []
+  }
+
+  function filteredItems() {
+    const items = currentItems()
+    if (!state.category) return items
+    return items.filter(it => String(it.category || it.image_source || '未分类') === state.category)
+  }
+
+  function categories() {
+    const counts = new Map()
+    for (const it of currentItems()) {
+      const key = String(it.category || it.image_source || '未分类')
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
+  }
+
+  function currentAlbum() {
+    return state.albums.find(x => x.id === state.activeAlbumId) || state.albums[0] || null
+  }

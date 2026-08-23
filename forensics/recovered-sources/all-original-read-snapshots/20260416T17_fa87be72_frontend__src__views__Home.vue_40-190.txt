@@ -1,0 +1,151 @@
+const searchPlaceholder = computed(() => {
+  void i18nVersion.value
+  return t('library.search.placeholder')
+})
+
+const visibleItems = computed(() => mediaLibraryStore.filteredItems)
+
+const showDetailPanel = ref(false)
+const showLadaPanel = ref(false)
+const selectedVideo = ref<MediaItem | null>(null)
+const videoDetail = ref<any>(null)
+const loadingDetail = ref(false)
+const detailError = ref<string | null>(null)
+
+const showSubtitlePanel = ref(false)
+const subtitleVideoPath = ref('')
+const subtitleVideoId = ref('')
+const subtitleFolderPaths = ref<string[]>([])
+const detailActionPath = ref('')
+const detailActionId = ref('')
+let detailRequestToken = 0
+
+function resetPanelState(options: { keepSelectedVideo?: boolean } = {}) {
+  showDetailPanel.value = false
+  showLadaPanel.value = false
+  showSubtitlePanel.value = false
+  loadingDetail.value = false
+  videoDetail.value = null
+  detailError.value = null
+  subtitleVideoPath.value = ''
+  subtitleVideoId.value = ''
+  subtitleFolderPaths.value = []
+  detailActionPath.value = ''
+  detailActionId.value = ''
+  if (!options.keepSelectedVideo) {
+    selectedVideo.value = null
+  }
+}
+
+async function loadItemDetail(item: MediaItem) {
+  const token = ++detailRequestToken
+  loadingDetail.value = true
+  videoDetail.value = null
+  detailError.value = null
+  try {
+    const detail = await mediaLibraryStore.fetchItemDetail(item.id)
+    if (token !== detailRequestToken || selectedVideo.value?.id !== item.id) return null
+    videoDetail.value = detail
+    return detail
+  } catch (e: any) {
+    if (token === detailRequestToken && selectedVideo.value?.id === item.id) {
+      detailError.value = e?.message || t('common.loadFailed')
+    }
+    return null
+  } finally {
+    if (token === detailRequestToken && selectedVideo.value?.id === item.id) {
+      loadingDetail.value = false
+    }
+  }
+}
+
+onMounted(async () => {
+  await ensureLibraryReady()
+})
+
+watch(activeFilter, (key) => {
+  mediaLibraryStore.setFilter(key || null)
+  router.replace({ query: key ? { filter: key } : {} })
+}, { flush: 'post' })
+
+
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+watch(searchQuery, (value) => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    mediaLibraryStore.setSearch(value)
+  }, 220)
+})
+
+function autoSelectLibrary(_filter: string | null) {
+  const preferredId = mediaLibraryStore.enabledLibraryIds[0]
+  const lib = (preferredId
+    ? mediaLibraryStore.allLibraries.find(l => l.id === preferredId)
+    : null) || mediaLibraryStore.libraries[0] || null
+  if (!lib) {
+    mediaLibraryStore.selectLibrary(null)
+    return null
+  }
+  mediaLibraryStore.selectLibrary(lib)
+  return lib
+}
+
+async function ensureLibraryReady() {
+  await mediaLibraryStore.fetchLibraries()
+  mediaLibraryStore.filterTag = activeFilter.value || null
+  const lib = autoSelectLibrary(activeFilter.value || null)
+  if (!lib) return
+
+  const selectedId = mediaLibraryStore.selectedLibrary?.id
+  const shouldFetchDirectly = selectedId === lib.id || mediaLibraryStore.items.length === 0
+  if (shouldFetchDirectly) {
+    await mediaLibraryStore.fetchItems(lib.id, 1, activeFilter.value || null, searchQuery.value)
+  }
+}
+
+// Sync filter from URL changes (e.g., browser back/forward)
+watch(() => route.query.filter, (f) => {
+  const filter = (f as string) || ''
+  if (filter !== activeFilter.value) {
+    activeFilter.value = filter
+  }
+})
+
+watch(() => route.path, async (path) => {
+  if (path === '/library') {
+    await ensureLibraryReady()
+  }
+})
+
+function handleSelectVideo(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  showDetailPanel.value = true
+  void loadItemDetail(item)
+}
+
+function handleQuickAction(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  showLadaPanel.value = true
+  void loadItemDetail(item)
+}
+
+async function handleSubtitleAction(item: MediaItem) {
+  resetPanelState({ keepSelectedVideo: true })
+  selectedVideo.value = item
+  subtitleVideoId.value = item.id
+  const detail = await loadItemDetail(item)
+  if (!detail) return
+  subtitleVideoPath.value = detail.file_path || item.path || ''
+  const allPaths = [subtitleVideoPath.value]
+  if (detail.siblings) {
+    for (const s of detail.siblings) {
+      if (s.file_path && !allPaths.includes(s.file_path)) {
+        allPaths.push(s.file_path)
+      }
+    }
+  }
+  subtitleFolderPaths.value = allPaths
+  showSubtitlePanel.value = true

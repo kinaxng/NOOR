@@ -1,0 +1,25 @@
+}
+
+.job-chain-panel__phase {
+  margin-top: 0.15rem;
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-chain-panel__progress {
+  margin-top: 0.12rem;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+
+.job-chain-panel__role {
+  font-size: 10px;
+  color: rgba(86, 204, 242, 0.88);
+  border: 1px solid rgba(86, 204, 242, 0.18);
+  border-radius: 999px;
+  padding: 0.05rem 0.35rem;
+}
+</style>

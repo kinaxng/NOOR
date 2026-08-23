@@ -1,0 +1,461 @@
+                # 更新内存
+                if job_id not in self._logs:
+                    self._logs[job_id] = []
+                self._logs[job_id].append(line)
+
+                # 发 SSE（通过 run_coroutine_threadsafe 发送到主事件循环）
+                if estimated is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        event_queue.put({"type": "progress", "progress": estimated}),
+                        main_loop
+                    )
+                asyncio.run_coroutine_threadsafe(
+                    event_queue.put({"type": "log", "line": line, "progress": estimated}),
+                    main_loop
+                )
+
+                # 更新数据库（直接用 SessionLocal，线程安全）
+                if estimated is not None:
+                    try:
+                        from app.core.database import SessionLocal
+                        from sqlalchemy import select
+                        sess = SessionLocal()
+                        try:
+                            res = sess.execute(select(Job).where(Job.id == job_id))
+                            j = res.scalar_one_or_none()
+                            if j and j.status != "cancelled":
+                                j.progress = estimated
+                                sess.commit()
+                        finally:
+                            sess.close()
+                    except Exception as e:
+                        logger.warning("DB update error while streaming whisper progress for job %s: %s", job_id, e)
+
+        reader = threading.Thread(target=reader_thread_fn, daemon=True)
+        reader.start()
+
+        error_msg = None
+        pipeline_result = [None, None]
+
+        def run_pipeline():
+            try:
+                p = WhisperPipeline(config, progress_callback=whisper_progress)
+                vn = os.path.splitext(os.path.basename(input_path))[0]
+                # 用 per-thread event loop 而非 asyncio.run()（后者会在结束时关闭 loop，
+                # 破坏 huggingface_hub 的全局 httpx client 状态）
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    r, s = loop.run_until_complete(p.process(input_path, vn))
+                finally:
+                    loop.close()
+                pipeline_result[0] = r
+                pipeline_result[1] = s
+            except Exception as e:
+                pipeline_result[0] = e
+                pipeline_result[1] = None
+
+        t = threading.Thread(target=run_pipeline)
+        t.start()
+
+        cancel_logged = False
+        while t.is_alive():
+            if self._cancel_event_for(job_id).is_set() and not cancel_logged:
+                cancel_logged = True
+                await self.add_log(job_id, "Whisper 取消请求已收到；等待当前识别线程安全退出...")
+            await asyncio.sleep(0.5)
+
+        t.join()
+
+        if isinstance(pipeline_result[0], Exception):
+            success = False
+            output_path = None
+            error_msg = str(pipeline_result[0])
+            await self.add_log(job_id, f"错误: {error_msg}")
+        else:
+            result, srt_path = pipeline_result
+            video_dir = os.path.dirname(input_path)
+            clean_name = re_module.sub(r'[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)', '', os.path.splitext(os.path.basename(input_path))[0], flags=re_module.IGNORECASE)
+            target_srt = os.path.join(video_dir, f"{clean_name}.ja.srt")
+            if os.path.exists(srt_path):
+                shutil.copy(srt_path, target_srt)
+                await self.add_log(job_id, f"字幕已保存: {target_srt}")
+
+            # 如果有翻译设置，直接在当前 job 内执行翻译（复用 _run_translate_srt 逻辑）
+            translate_to = getattr(config, "translate_to", None)
+            if translate_to:
+                await self.add_log(job_id, f"=" * 50)
+                await self.add_log(job_id, f"翻译: {config.translate_model} -> {translate_to} | 风格: {config.translate_style}")
+                await self.add_log(job_id, f"=" * 50)
+                try:
+                    from app.pipeline.whisper.translator import get_translator, _is_ollama_url
+
+                    # 读取 whisper 刚写好的 .ja.srt
+                    ja_srt_path = os.path.join(video_dir, f"{clean_name}.ja.srt")
+                    if not os.path.exists(ja_srt_path):
+                        raise FileNotFoundError(f"日语字幕不存在: {ja_srt_path}")
+                    with open(ja_srt_path, "r", encoding="utf-8") as f:
+                        srt_content = f.read()
+
+                    # 解析 SRT
+                    subtitles = []
+                    srt_content = srt_content.replace("\r\n", "\n").replace("\r", "\n")
+                    blocks = re_module.split(r"\n\n+", srt_content.strip())
+                    for block in blocks:
+                        lines = block.strip().split("\n")
+                        if not lines:
+                            continue
+                        match = re_module.match(
+                            r"(\d+)\s+(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})",
+                            lines[0]
+                        )
+                        if match:
+                            subtitles.append({
+                                "index": match.group(1),
+                                "start": match.group(2),
+                                "end": match.group(3),
+                                "text": "\n".join(lines[1:]) if len(lines) > 1 else ""
+                            })
+                            continue
+                        if len(lines) >= 2:
+                            match2 = re_module.match(
+                                r"(\d+)\n(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})",
+                                lines[0] + "\n" + lines[1]
+                            )
+                            if match2:
+                                subtitles.append({
+                                    "index": match2.group(1),
+                                    "start": match2.group(2),
+                                    "end": match2.group(3),
+                                    "text": "\n".join(lines[2:]) if len(lines) > 2 else ""
+                                })
+
+                    if not subtitles:
+                        raise ValueError("SRT 文件中没有有效的字幕条目")
+
+                    total = len(subtitles)
+                    await self.add_log(job_id, f"共 {total} 条字幕，开始翻译...")
+
+                    # 获取翻译器
+                    translator = get_translator(
+                        model=config.translate_model,
+                        base_url=config.translate_base_url,
+                        api_key=config.translate_api_key or None,
+                        translate_style=config.translate_style,
+                    )
+
+                    # 批量翻译（与 _run_translate_srt 相同参数）
+                    BATCH_SIZE = 3
+                    MAX_RETRIES = 4
+                    total_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
+                    if "openrouter.ai" in config.translate_base_url:
+                        base_delay = 3.0
+                    elif "siliconflow" in config.translate_base_url:
+                        base_delay = 1.0
+                    elif "together" in config.translate_base_url:
+                        base_delay = 1.0
+                    elif _is_ollama_url(config.translate_base_url):
+                        base_delay = 0.0
+                    else:
+                        base_delay = 2.0
+
+                    translated_texts = ["" for _ in subtitles]
+                    for batch_idx in range(total_batches):
+                        start = batch_idx * BATCH_SIZE
+                        end = min(start + BATCH_SIZE, total)
+                        batch = subtitles[start:end]
+                        batch_texts = [sub["text"] for sub in batch]
+                        total_chars = sum(len(t) for t in batch_texts)
+                        await self.add_log(job_id, f"批次 {batch_idx + 1}/{total_batches}: {len(batch_texts)} 条, 共 {total_chars} 字符")
+
+                        delay = base_delay
+                        for retry in range(MAX_RETRIES + 1):
+                            try:
+                                results = await asyncio.to_thread(
+                                    translator.translate_batch, batch_texts, translate_to
+                                )
+                                for j, text in enumerate(results):
+                                    translated_texts[start + j] = text
+                                retry_msg = f"（重试 {retry} 次）" if retry > 0 else ""
+                                await self.add_log(job_id, f"批次 {batch_idx + 1}/{total_batches} 完成 {retry_msg}")
+                                break
+                            except Exception as e:
+                                err_str = str(e)
+                                is_429 = "429" in err_str or "Too Many Requests" in err_str or "rate limit" in err_str.lower()
+                                is_conn = "连接失败" in err_str or "无法连接" in err_str or "ConnectError" in err_str
+                                if is_429 and retry < MAX_RETRIES:
+                                    wait = delay * (2 ** retry)
+                                    await self.add_log(job_id, f"批次 {batch_idx + 1} 速率限制（{retry + 1}/{MAX_RETRIES}），等待 {wait:.1f}s...")
+                                    await asyncio.sleep(wait)
+                                    delay = min(delay * 1.5, 30.0)
+                                elif is_conn and retry < MAX_RETRIES:
+                                    await asyncio.sleep(1.0 * (retry + 1))
+                                else:
+                                    await self.add_log(job_id, f"批次 {batch_idx + 1} 失败: {err_str[:80]}，保留原文")
+                                    for j in range(len(batch_texts)):
+                                        translated_texts[start + j] = batch_texts[j]
+                                    break
+
+                        progress = int((end) / total * 100)
+                        await event_queue.put({"type": "progress", "progress": 90 + progress // 10})
+
+                    # 写入翻译后的 SRT
+                    output_lines = []
+                    for i, sub in enumerate(subtitles):
+                        t = translated_texts[i] if i < len(translated_texts) else sub["text"]
+                        output_lines.append(f"{sub['index']}\n{sub['start']} --> {sub['end']}\n{t}\n")
+
+                    trans_srt_path = os.path.join(video_dir, f"{clean_name}.{translate_to}.srt")
+                    with open(trans_srt_path, "w", encoding="utf-8") as f:
+                        f.write("\n".join(output_lines))
+
+                    await self.add_log(job_id, f"翻译完成: {trans_srt_path}")
+
+                except Exception as e:
+                    await self.add_log(job_id, f"翻译失败（保留原始字幕）: {e}")
+
+            success = True
+            output_path = target_srt
+
+        # 通知 reader 退出
+        running[0] = False
+        reader.join(timeout=1)
+
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(select(Job).where(Job.id == job_id))
+                job = result.scalar_one_or_none()
+                if job:
+                    if job.status == "cancelled" or self._cancel_event_for(job_id).is_set():
+                        job.status = "cancelled"
+                        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                        await session.commit()
+                        await event_queue.put({"type": "cancelled", "success": False})
+                        await self.add_log(job_id, "Whisper 任务已取消")
+                        return
+                    job.status = "completed" if success else "failed"
+                    job.output_path = output_path
+                    job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    if not success:
+                        job.error_message = error_msg or "Unknown error"
+                    await session.commit()
+
+        await event_queue.put({
+            "type": "completed" if success else "failed",
+            "success": success,
+            "progress": 100 if success else None
+        })
+
+        await self.add_log(job_id, "Whisper 任务完成" if success else "Whisper 任务失败")
+
+    async def _run_translate_srt(self, job_id: str, job_data: JobCreate):
+        """执行 SRT 翻译任务（批量翻译 + 429 指数退避）"""
+        import re as re_module
+        from app.pipeline.whisper.translator import get_translator, _is_ollama_url
+
+        settings_dict = job_data.settings.model_dump() if hasattr(job_data, 'settings') else {}
+        srt_path = settings_dict.get("srt_path") or job_data.input_path
+        target_lang = settings_dict.get("target_lang", "zh")
+        model_name = settings_dict.get("translate_model", "gpt-4o-mini")
+        base_url = settings_dict.get("translate_base_url", "https://api.openai.com/v1")
+        api_key = settings_dict.get("translate_api_key") or None
+        translate_style = settings_dict.get("translate_style", "adult_explicit")
+
+        # 根据 base_url 判断速率限制（每批请求之间的基础延迟）
+        if "openrouter.ai" in base_url:
+            base_delay = 3.0    # OpenRouter 免费版: ~20 req/min
+        elif "siliconflow" in base_url:
+            base_delay = 1.0    # SiliconFlow: 较宽松
+        elif "together" in base_url:
+            base_delay = 1.0
+        elif _is_ollama_url(base_url):
+            base_delay = 0.0   # 本地无限制
+        else:
+            base_delay = 2.0    # 默认保守
+
+        BATCH_SIZE = 3           # 每批翻译多少条字幕（成人内容文本较长，需要小批量）
+        MAX_RETRIES = 4         # 429 时最多重试几次
+
+        event_queue = self.get_event_queue(job_id)
+        cancel_event = self._cancel_event_for(job_id)
+        output_path = None
+        error_msg = None
+
+        try:
+            await self.add_log(job_id, f"开始翻译字幕: {srt_path} -> {target_lang}")
+            await self.add_log(job_id, f"批量翻译（每批 {BATCH_SIZE} 条），基础延迟 {base_delay}s，429 时指数退避")
+
+            # 读取 SRT 文件
+            if not os.path.exists(srt_path):
+                raise FileNotFoundError(f"SRT 文件不存在: {srt_path}")
+
+            with open(srt_path, "r", encoding="utf-8") as f:
+                srt_content = f.read()
+
+            # 解析 SRT
+            subtitles = []
+            srt_content = srt_content.replace("\r\n", "\n").replace("\r", "\n")
+            blocks = re_module.split(r"\n\n+", srt_content.strip())
+            for block in blocks:
+                lines = block.strip().split("\n")
+                if not lines:
+                    continue
+                match = re_module.match(r"(\d+)\s+(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})", lines[0])
+                if match:
+                    subtitles.append({
+                        "index": match.group(1),
+                        "start": match.group(2),
+                        "end": match.group(3),
+                        "text": "\n".join(lines[1:]) if len(lines) > 1 else ""
+                    })
+                    continue
+                if len(lines) >= 2:
+                    match2 = re_module.match(r"(\d+)\n(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})", lines[0] + "\n" + lines[1])
+                    if match2:
+                        subtitles.append({
+                            "index": match2.group(1),
+                            "start": match2.group(2),
+                            "end": match2.group(3),
+                            "text": "\n".join(lines[2:]) if len(lines) > 2 else ""
+                        })
+
+            if not subtitles:
+                raise ValueError("SRT 文件中没有有效的字幕条目")
+
+            total = len(subtitles)
+            total_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
+            await self.add_log(job_id, f"共 {total} 条字幕，分 {total_batches} 批翻译")
+
+            # 获取翻译器
+            translator = get_translator(
+                model=model_name,
+                base_url=base_url,
+                api_key=api_key,
+                translate_style=translate_style,
+            )
+
+            translated_texts = ["" for _ in subtitles]
+
+            for batch_idx in range(total_batches):
+                if cancel_event.is_set():
+                    await self.add_log(job_id, "翻译任务已取消")
+                    await event_queue.put({"type": "cancelled", "success": False})
+                    return
+                start = batch_idx * BATCH_SIZE
+                end = min(start + BATCH_SIZE, total)
+                batch = subtitles[start:end]
+                batch_texts = [sub["text"] for sub in batch]
+                total_chars = sum(len(t) for t in batch_texts)
+                await self.add_log(job_id, f"批次 {batch_idx + 1}/{total_batches}: {len(batch_texts)} 条, 共 {total_chars} 字符")
+
+                # 指数退避重试
+                delay = base_delay
+                for retry in range(MAX_RETRIES + 1):
+                    try:
+                        results = await asyncio.to_thread(
+                            translator.translate_batch, batch_texts, target_lang
+                        )
+                        # 成功：写入结果
+                        for j, text in enumerate(results):
+                            translated_texts[start + j] = text
+                        retry_msg = f"（重试 {retry} 次）" if retry > 0 else ""
+                        await self.add_log(job_id, f"批次 {batch_idx + 1}/{total_batches} 完成 {retry_msg}")
+                        break
+                    except Exception as e:
+                        err_str = str(e)
+                        is_429 = "429" in err_str or "Too Many Requests" in err_str or "rate limit" in err_str.lower()
+                        is_conn_error = "连接失败" in err_str or "无法连接" in err_str or "ConnectError" in err_str
+                        if is_429 and retry < MAX_RETRIES:
+                            wait = delay * (2 ** retry)
+                            await self.add_log(job_id, f"批次 {batch_idx + 1} 触发速率限制（{retry + 1}/{MAX_RETRIES}），等待 {wait:.1f}s...")
+                            await asyncio.sleep(wait)
+                            delay = min(delay * 1.5, 30.0)   # 上限 30s
+                        elif is_conn_error and retry < MAX_RETRIES:
+                            # 连接失败：短暂等待后直接重试（不等指数退避）
+                            await self.add_log(job_id, f"批次 {batch_idx + 1} 连接失败（{retry + 1}/{MAX_RETRIES}），{1.0 * (retry+1):.0f}s 后重试...")
+                            await asyncio.sleep(1.0 * (retry + 1))
+                        else:
+                            # 最终失败：保留原文
+                            await self.add_log(job_id, f"批次 {batch_idx + 1} 最终失败: {err_str[:80]}，保留原文")
+                            for j in range(len(batch_texts)):
+                                translated_texts[start + j] = batch_texts[j]
+                            break
+
+                # 更新进度
+                progress = int((end) / total * 100)
+                await event_queue.put({"type": "progress", "progress": progress})
+                async with self._db_lock:
+                    async with async_session_maker() as session:
+                        from sqlalchemy import select
+                        result = await session.execute(select(Job).where(Job.id == job_id))
+                        job = result.scalar_one_or_none()
+                        if job and job.status != "cancelled":
+                            job.progress = progress
+                            await session.commit()
+
+            # 构建翻译后的 SRT
+            output_lines = []
+            for i, sub in enumerate(subtitles):
+                t = translated_texts[i] if i < len(translated_texts) else sub["text"]
+                output_lines.append(f"{sub['index']}\n{sub['start']} --> {sub['end']}\n{t}\n")
+
+            base_path = os.path.splitext(srt_path)[0]
+            output_path = f"{base_path}.{target_lang}.srt"
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(output_lines))
+
+            async with self._db_lock:
+                async with async_session_maker() as session:
+                    from sqlalchemy import select
+                    result = await session.execute(select(Job).where(Job.id == job_id))
+                    job = result.scalar_one_or_none()
+                    if job:
+                        if job.status == "cancelled" or cancel_event.is_set():
+                            job.status = "cancelled"
+                            job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                            await session.commit()
+                            await event_queue.put({"type": "cancelled", "success": False})
+                            await self.add_log(job_id, "翻译任务已取消")
+                            return
+                        job.status = "completed"
+                        job.output_path = output_path
+                        job.progress = 100
+                        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                        await session.commit()
+
+            await event_queue.put({"type": "completed", "success": True, "progress": 100})
+            await self.add_log(job_id, f"翻译完成: {output_path}")
+
+        except asyncio.CancelledError:
+            await self.add_log(job_id, "翻译任务已取消")
+            await event_queue.put({"type": "cancelled", "success": False})
+        except Exception as e:
+            error_msg = str(e)
+            if cancel_event.is_set() or await self._is_cancelled(job_id):
+                await self.add_log(job_id, "翻译任务已取消")
+                await event_queue.put({"type": "cancelled", "success": False})
+                return
+            await self.add_log(job_id, f"翻译失败: {error_msg}")
+            await event_queue.put({"type": "failed", "success": False})
+            async with self._db_lock:
+                async with async_session_maker() as session:
+                    from sqlalchemy import select
+                    result = await session.execute(select(Job).where(Job.id == job_id))
+                    job = result.scalar_one_or_none()
+                    if job and job.status != "cancelled":
+                        job.status = "failed"
+                        job.error_message = error_msg
+                        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                        await session.commit()
+
+    async def get_job(self, job_id: str) -> Optional[JobResponse]:
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(select(Job).where(Job.id == job_id))
+                job = result.scalar_one_or_none()
+                if job:
+                    return JobResponse.model_validate(job)
+        return None
+

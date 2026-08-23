@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import asyncio
+import queue
+
+import pytest
+from sqlalchemy import select
+
+from app.core.models import Job, JobCreate, JobSettings
+from app.tasks.manager import JobManager
+
+from conftest import wait_until
+
+
+def make_translate_job(path: str) -> JobCreate:
+    return JobCreate(
+        emby_item_id='translate-job',
+        emby_item_name='Translate Job',
+        input_path=path,
+        settings=JobSettings(
+            srt_path=path,
+            target_lang='zh',
+            translate_model='gpt-4o-mini',
+            translate_base_url='https://api.openai.com/v1',
+            translate_api_key='',
+            translate_style='adult_explicit',
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_blocked_translate_job_has_waiting_translate_phase(temp_db):
+    manager = JobManager()
+    job = make_translate_job('/tmp/waiting.ja.srt')
+    job.depends_on_task_id = 'parent-job'
+    job.parent_task_id = 'parent-job'
+
+    result = await manager.create_job(
+        job,
+        job_type='translate-srt',
+        status='blocked',
+        enqueue_now=False,
+    )
+
+    assert result.status == 'blocked'
+    assert result.phase_key == 'translate'
+    assert result.phase_label == '字幕翻译'
+    assert result.phase_progress == 0
+    assert result.detail == '等待主任务完成后自动开始'
+
+    async with temp_db() as session:
+      db_job = await session.get(Job, result.id)
+      assert db_job is not None
+      assert db_job.phase_key == 'translate'
+      assert db_job.phase_label == '字幕翻译'
+      assert db_job.phase_progress == 0
+      assert db_job.detail == '等待主任务完成后自动开始'
+
+
+@pytest.mark.asyncio
+async def test_activate_blocked_translate_job_sets_queued_followup_detail(temp_db):
+    manager = JobManager()
+    job = make_translate_job('/tmp/queued-followup.ja.srt')
+    job.depends_on_task_id = 'parent-job'
+    job.parent_task_id = 'parent-job'
+
+    created = await manager.create_job(
+        job,
+        job_type='translate-srt',
+        status='blocked',
+        enqueue_now=False,
+    )
+
+    activated = await manager._activate_blocked_dependents('parent-job')
+
+    assert activated == [created.id]
+
+    async with temp_db() as session:
+        db_job = await session.get(Job, created.id)
+        assert db_job is not None
+        assert db_job.status == 'queued'
+        assert db_job.phase_key == 'translate'
+        assert db_job.phase_label == '字幕翻译'
+        assert db_job.phase_progress == 0
+        assert db_job.detail == '主任务已完成，准备开始后续任务'
+
+
+@pytest.mark.asyncio
+async def test_cancel_running_translate_job_does_not_start_next_until_current_exits(temp_db, tmp_path):
+    manager = JobManager()
+    first_can_exit = asyncio.Event()
+    second_started = asyncio.Event()
+    second_can_exit = asyncio.Event()
+    started: list[str] = []
+
+    first_path = tmp_path / 'first.ja.srt'
+    first_path.write_text('1\n00:00:00,000 --> 00:00:01,000\nhello\n', encoding='utf-8')
+    second_path = tmp_path / 'second.ja.srt'
+    second_path.write_text('1\n00:00:00,000 --> 00:00:01,000\nworld\n', encoding='utf-8')
+
+    async def fake_run_translate(job_id: str, job_data: JobCreate):
+        started.append(job_id)
+        if len(started) == 1:
+            await manager._cancel_event_for(job_id).wait()
+            await first_can_exit.wait()
+            await manager._finish_cancelled_job(
+                job_id,
+                event_queue=manager.get_event_queue(job_id),
+                log_message="翻译任务已取消",
+            )
+        else:
+            second_started.set()
+            await second_can_exit.wait()
+            await manager._finalize_job(job_id, status='completed', progress=100)
+
+    manager._run_translate_srt = fake_run_translate  # type: ignore[method-assign]
+
+    first = await manager.create_job(make_translate_job(str(first_path)), job_type='translate-srt')
+    second = await manager.create_job(make_translate_job(str(second_path)), job_type='translate-srt')
+

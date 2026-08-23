@@ -1,0 +1,92 @@
+  return sorted[1]
+})
+
+const showMergeStrategy = computed(() => selectedPipelines.value.length === 2)
+const mergeStrategy = ref('smart_merge')
+
+// ===== Custom Pipeline config =====
+const customConfig = ref({
+  model: 'large-v3',
+  vad_method: 'semantic',
+  scene_detector: 'semantic',
+  enhancers: [] as string[],
+  segmenter: 'silero-v6.2',
+})
+
+// Custom pipeline enhancer options (multi-select pill toggles)
+const enhancerOptions = computed(() => [
+  { value: 'ffmpeg-dsp', label: t('settings.whisper.enhancerLabel.ffmpegDsp'), cssVar: '--color-success' },
+  { value: 'clearvoice', label: t('settings.whisper.enhancerLabel.clearvoice'), cssVar: '--color-info' },
+  { value: 'bs-roformer', label: t('settings.whisper.enhancerLabel.bsRoformer'), cssVar: '--color-warning' },
+])
+
+function isEnhancerActive(value: string) {
+  return customConfig.value.enhancers.includes(value)
+}
+
+function toggleEnhancer(value: string) {
+  const idx = customConfig.value.enhancers.indexOf(value)
+  if (idx >= 0) {
+    customConfig.value.enhancers.splice(idx, 1)
+  } else {
+    customConfig.value.enhancers.push(value)
+  }
+}
+
+// ===== Common settings =====
+const language = ref('ja')
+const sensitivity = ref('balanced')
+const vadMethod = ref('semantic')
+
+// ===== Translation settings =====
+const translateTo = ref('zh')
+const translateModel = ref('gpt-4o-mini')
+const translateStyle = ref('adult_explicit')
+const translateBaseUrl = ref('https://api.openai.com/v1')
+const translateApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ available: boolean; message: string; models?: string[] } | null>(null)
+
+const checkingDepsResult = ref<Record<string, any>>({})
+const whisperCudaAvailable = ref(false)
+// Merge strategy options
+const mergeOptions = computed(() => [
+  { value: 'smart_merge', label: t('whisper.merge.smartMerge') },
+  { value: 'full_merge', label: t('whisper.merge.fullMerge') },
+  { value: 'pass1_primary', label: t('whisper.merge.pass1Primary') },
+  { value: 'pass2_primary', label: t('whisper.merge.pass2Primary') },
+  { value: 'longest', label: t('whisper.merge.longest') },
+  { value: 'pass1_overlap', label: t('whisper.merge.pass1Overlap') },
+  { value: 'pass2_overlap', label: t('whisper.merge.pass2Overlap') },
+])
+
+// VAD options (only for single-pass mode)
+const vadOptions = computed(() => [
+  { value: 'semantic', label: t('whisper.vad.semantic') },
+  { value: 'silero', label: t('whisper.vad.silero') },
+  { value: 'auditok', label: t('whisper.vad.auditok') },
+  { value: 'ten', label: t('whisper.vad.ten') },
+  { value: 'none', label: t('whisper.vad.none') },
+])
+
+// Translation target language options — derived from available i18n dictionaries
+const translateLangOptions = computed(() => {
+  return Object.keys(dictionaries).map(lang => ({
+    value: lang,
+    label: t(`settings.whisper.translateLang.${lang}`) || lang.toUpperCase(),
+  }))
+})
+
+// Translation style options
+const translateStyleOptions = computed(() => [
+  { value: 'adult_explicit', label: t('settings.whisper.translateStyle.adultExplicit') },
+  { value: 'standard', label: t('settings.whisper.translateStyle.standard') },
+])
+</script>
+<template>
+  <div class="flex flex-col gap-6">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-2 rounded-full animate-spin border-[#0075FF] border-t-transparent"></div>
+    </div>
+
+    <template v-if="!loading">

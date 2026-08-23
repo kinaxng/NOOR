@@ -1,0 +1,81 @@
+                seg_result = await self._process_single_segment(
+                    audio_file, seg_start, seg_end, idx
+                )
+
+            self.log(f"段落 {idx + 1} 完成: {len(seg_result.segments)} 片段", seg_end_pct)
+
+            # 调整时间戳为全局时间
+            for seg in seg_result.segments:
+                seg.start_time += seg_start
+                seg.end_time += seg_start
+
+            all_results.append(seg_result)
+
+        # 合并所有段落结果
+        self._raise_if_cancelled()
+        if len(all_results) == 1:
+            result = all_results[0]
+        else:
+            result = self._merge_all_results(all_results)
+            self.log(f"段落合并完成: {len(result.segments)} 片段", 90)
+
+        # Phase: 日语后处理
+        self.log("=" * 50)
+        self.log("日语后处理: 断句优化 & 格式整理", 92)
+        self.log("=" * 50)
+        try:
+            self._raise_if_cancelled()
+            if getattr(self.config, "executor_key", "advanced") == "best":
+                post_processor = BestSubtitlePostProcessor()
+                self.log("后处理策略: best-cleanup")
+            else:
+                post_processor = JapanesePostProcessor(
+                    min_segment_duration=0.8,
+                    max_segment_duration=8.0,
+                    min_gap_threshold=0.3,
+                    merge_below=1.2,
+                )
+            result = post_processor.process(result)
+            if result.metadata.get("best_strategy_post_processed"):
+                before_count = result.metadata.get("best_cleanup_before_segments", len(result.segments))
+                after_count = result.metadata.get("best_cleanup_after_segments", len(result.segments))
+                deduped_count = result.metadata.get("best_cleanup_deduped_segments", 0)
+                self.log(
+                    f"best-cleanup 统计: {before_count} → {after_count} 片段，去重 {deduped_count} 条"
+                )
+            self.log(f"后处理完成: {len(result.segments)} 片段", 95)
+        except Exception as e:
+            self.log(f"后处理失败（跳过）: {e}")
+
+        # Phase: 生成 SRT
+        self.log("=" * 50)
+        self.log("生成 SRT 文件", 97)
+        self.log("=" * 50)
+
+        # 清理视频名用于字幕文件
+        self._raise_if_cancelled()
+        clean_name = self._clean_video_name(video_name)
+
+        # 生成原始字幕 SRT
+        srt_path = output_dir / f"{clean_name}.ja.srt"
+        generate_srt(result.segments, str(srt_path))
+        self.log(f"原始字幕已保存: {srt_path}", 97)
+
+        # 翻译由 manager 统一调用 translate_srt 任务处理（不在 pipeline 内 inline 翻译）
+        self.log(f"SRT 已保存: {srt_path}", 97)
+
+        # 清理临时音频
+        try:
+            os.remove(audio_path)
+        except:
+            pass
+
+        return result, str(srt_path)
+
+    async def _process_single(self, audio_path: str, duration: float) -> TranscriptionResult:
+        """单遍处理"""
+        self._raise_if_cancelled()
+        if self.config.model.value == "anime-whisper":
+            if self._anime_processor is None:
+                self._anime_processor = AnimeWhisperProcessor(self.config, self.progress_callback, self.cancel_callback)
+            return await asyncio.to_thread(self._anime_processor.process, audio_path, "")

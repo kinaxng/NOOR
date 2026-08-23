@@ -1,0 +1,112 @@
+    top250Year: '',
+    relation: null,
+    relationActorSelectedFilters: [],
+    relationActorSingleFilter: false,
+    relationActorYear: '',
+    relationActorSort: 'release_desc',
+    page: 1,
+    limit: 48,
+    total: 0,
+    items: [],
+    loading: false,
+    activePanel: null,
+  }
+  const chooserState = {
+    modal: null,
+    search: '',
+  }
+
+  let tabControl = null
+  let resizeTimer = null
+  let loadSeq = 0
+  const initialCode = new URLSearchParams(window.location.search).get('code')?.trim() || ''
+  let initialCodeOpened = false
+
+  root.innerHTML = ''
+  const page = el('div', 'javdb-page')
+  const header = el('div', 'javdb-header-wrap')
+  const tabsWrap = el('div', 'javdb-tabs-wrap')
+  const panelWrap = el('div', 'javdb-panel-wrap')
+  const filtersWrap = el('div', 'javdb-filters-wrap')
+  const grid = el('div', 'javdb-grid')
+  const pager = el('div', 'javdb-pager')
+  header.append(tabsWrap, panelWrap, filtersWrap)
+  page.append(header, grid, pager)
+  root.appendChild(page)
+
+  const tabDefs = [
+    { value: 'latest', label: '最近更新' },
+    { value: 'rankings', label: '榜单' },
+    { value: 'videos', label: '查看记录' },
+  ]
+
+  const latestFilters = [
+    ['magnets', '有磁链'],
+    ['cnsub', '中字'],
+    ['cracked', '破解'],
+  ]
+  const latestTypes = [
+    ['all', '全部'],
+    ['censored', '有码'],
+    ['uncensored', '无码'],
+    ['western', '欧美'],
+    ['fc2', 'FC2'],
+    ['anime', '动漫'],
+  ]
+  const rankingModes = [
+    ['top250', 'TOP250'],
+    ['daily', '日榜'],
+    ['weekly', '周榜'],
+    ['monthly', '月榜'],
+    ['actors', '演员榜'],
+  function isLatestRemoteBuffered() {
+    return state.tab === 'latest' && state.latestSelectedFilters.length > 0
+  }
+
+  function estimatePageSize() {
+    if (isActorRankingFrame()) {
+      const width = grid.clientWidth || root.clientWidth || window.innerWidth
+      const top = grid.getBoundingClientRect?.().top || 240
+      const height = Math.max(360, window.innerHeight - top - 84)
+      const cardWidth = 236
+      const cardHeight = 280
+      const cols = Math.max(1, Math.floor((width + 16) / cardWidth))
+      const rows = Math.max(1, Math.floor((height + 16) / cardHeight))
+      state.limit = Math.max(cols, cols * rows)
+      return
+    }
+    state.limit = 48
+  }
+
+  function setTab(next) {
+    if (state.tab === next) return
+    state.tab = next
+    state.page = 1
+    state.latestSelectedFilters = []
+    state.latestType = 'all'
+    state.videosFilter = ''
+    state.videosActorId = ''
+    state.videosCategoryIds = []
+    state.videosMinScore = ''
+    state.videosSort = 'created'
+    state.videosOrder = 'desc'
+    state.rankingMode = 'top250'
+    state.rankingType = 0
+    state.rankingPeriod = 'daily'
+    state.top250Year = ''
+    state.relation = null
+    if (next === 'videos') void ensureVideoCategories()
+    if (next === 'videos') void ensureVideoActors()
+    loadData()
+  }
+
+  function setRelation(relType, relId, label) {
+    state.relation = { relType, relId, label }
+    state.relationActorSelectedFilters = []
+    state.relationActorSingleFilter = false
+    state.relationActorYear = ''
+    state.relationActorSort = 'release_desc'
+    state.page = 1
+    loadData()
+  }
+

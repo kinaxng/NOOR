@@ -1,0 +1,65 @@
+    media_library_config = load_media_library_config()
+    settings = get_settings()
+    whisper_strategy = normalize_whisper_strategy(env_data.get("WHISPER_STRATEGY", "chickenrice"))
+    env_model_backend = env_data.get("WHISPER_MODEL_BACKEND", "").strip()
+    default_model_backend = env_model_backend or ("chickenrice-zh" if whisper_strategy == "chickenrice" else env_data.get("WHISPER_MODEL", "anime-whisper"))
+    default_model = default_model_backend if whisper_strategy == "chickenrice" else env_data.get("WHISPER_MODEL", default_model_backend)
+    whisper_payload = {
+        "strategy": whisper_strategy,
+        "subtitle_profile": env_data.get("WHISPER_SUBTITLE_PROFILE", "standard"),
+        "model_backend": default_model_backend,
+        "whisper_task": env_data.get("WHISPER_TASK", "translate"),
+        "vad_backend": env_data.get("WHISPER_VAD_BACKEND", "energy"),
+        "chunker": env_data.get("WHISPER_CHUNKER", "smart_vad_chunk"),
+        "target_chunk_duration_s": float(env_data.get("WHISPER_TARGET_CHUNK_DURATION_S", "30") or 30),
+        "max_chunk_duration_s": float(env_data.get("WHISPER_MAX_CHUNK_DURATION_S", "30") or 30),
+        "model": default_model,
+        "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "faster"),
+        "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
+        "language": env_data.get("WHISPER_LANGUAGE", "ja"),
+        "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
+        "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
+        "audio_preprocess_mode": env_data.get("WHISPER_AUDIO_PREPROCESS_MODE", "none"),
+        "audio_preprocess_model": env_data.get("WHISPER_AUDIO_PREPROCESS_MODEL", "vocal_balanced"),
+        "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
+        "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+        "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),
+        "translate_base_url": env_data.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1"),
+        "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
+        "pass1_pipeline": env_data.get("WHISPER_PASS1_PIPELINE", "anime"),
+        "pass2_pipeline": env_data.get("WHISPER_PASS2_PIPELINE", ""),
+        "timestamp_mode": custom_whisper_config.get("timestamp_mode", "aligner_interpolation"),
+        "aligner_backend": custom_whisper_config.get("aligner_backend", "qwen3"),
+        "framer_backend": custom_whisper_config.get("framer_backend", "vad-grouped"),
+        "custom_config": custom_whisper_config,
+    }
+    if whisper_strategy in {"chickenrice", "recommended", "baseline", "reazon_nemo"}:
+    payload["audio_preprocess_mode"] = payload.get("audio_preprocess_mode", DEFAULT_AUDIO_PREPROCESS_MODE)
+    payload["audio_preprocess_model"] = payload.get("audio_preprocess_model", DEFAULT_AUDIO_PREPROCESS_MODEL)
+    payload["subtitle_profile"] = payload.get("subtitle_profile", "standard")
+    payload["model_backend"] = payload.get("model_backend") or payload.get("model") or "chickenrice-zh"
+    payload["whisper_task"] = payload.get("whisper_task") or ("translate" if payload["model_backend"] == "chickenrice-zh" else "transcribe")
+    payload["vad_backend"] = payload.get("vad_backend", "energy")
+    payload["chunker"] = payload.get("chunker", "smart_vad_chunk")
+    payload["target_chunk_duration_s"] = payload.get("target_chunk_duration_s", 30.0)
+    payload["max_chunk_duration_s"] = payload.get("max_chunk_duration_s", 30.0)
+    return payload
+
+
+def apply_whisper_config_updates(config: Any, update_env_value_fn: Callable[[str, str], None]) -> None:
+    payload = normalize_whisper_config_payload(config)
+    update_env_value_fn("WHISPER_STRATEGY", payload["strategy"])
+    update_env_value_fn("WHISPER_SUBTITLE_PROFILE", payload["subtitle_profile"])
+    update_env_value_fn("WHISPER_MODEL_BACKEND", payload["model_backend"])
+    update_env_value_fn("WHISPER_TASK", payload["whisper_task"])
+    update_env_value_fn("WHISPER_VAD_BACKEND", payload["vad_backend"])
+    update_env_value_fn("WHISPER_CHUNKER", payload["chunker"])
+    update_env_value_fn("WHISPER_TARGET_CHUNK_DURATION_S", str(payload["target_chunk_duration_s"]))
+    update_env_value_fn("WHISPER_MAX_CHUNK_DURATION_S", str(payload["max_chunk_duration_s"]))
+    update_env_value_fn("WHISPER_MODEL", payload["model"])
+    update_env_value_fn("WHISPER_PIPELINE_MODE", payload["pipeline_mode"])
+    update_env_value_fn("WHISPER_MERGE_STRATEGY", payload["merge_strategy"])
+    update_env_value_fn("WHISPER_LANGUAGE", payload["language"])
+    update_env_value_fn("WHISPER_SENSITIVITY", payload["sensitivity"])
+    update_env_value_fn("WHISPER_VAD_METHOD", payload["vad_method"])
+    update_env_value_fn("WHISPER_AUDIO_PREPROCESS_MODE", payload["audio_preprocess_mode"])

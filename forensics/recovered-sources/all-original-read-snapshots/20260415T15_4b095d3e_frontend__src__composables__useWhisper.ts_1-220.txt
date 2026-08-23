@@ -1,0 +1,129 @@
+import { ref } from 'vue'
+import api from '../api'
+import { useJobsStore } from '../stores/jobs'
+import { useToast } from './useToast'
+import { useI18n } from './useI18n'
+
+export function useWhisper() {
+  const jobsStore = useJobsStore()
+  const toast = useToast()
+  const { t } = useI18n()
+
+  const whisperTaskId = ref('')
+  const whisperStatus = ref('')
+  const whisperProgress = ref(0)
+  const whisperRunning = ref(false)
+  const whisperEventSource = ref<EventSource | null>(null)
+
+  function disconnectWhisperEvents() {
+    if (whisperEventSource.value) {
+      whisperEventSource.value.close()
+      whisperEventSource.value = null
+    }
+  }
+
+  async function startWhisperTask(params: {
+    video_path: string
+    strategy?: string
+    model: string
+    pipeline_mode?: string
+    merge_strategy: string
+    language: string
+    sensitivity: string
+    vad_method?: string
+    speech_enhancer?: string
+    pass1_pipeline?: string
+    pass2_pipeline?: string
+    custom_config?: {
+      model: string
+      vad_method: string
+      enhancers: string[]
+      segmenter: string
+      timestamp_mode: string
+      aligner_backend: string
+      framer_backend: string
+      generator_backend: string
+    }
+    translate_to?: string
+    translate_base_url?: string
+    translate_api_key?: string
+    translate_model?: string
+    translate_style?: string
+  }) {
+    if (!params.video_path) {
+      toast.warning(t('whisper.selectVideoFirst'))
+      return
+    }
+
+    whisperRunning.value = true
+    whisperStatus.value = t('whisper.status.submitting')
+    whisperProgress.value = 0
+
+    try {
+      const createResp = await api.post('/whisper/tasks', params)
+      whisperTaskId.value = createResp.data.task_id
+      whisperStatus.value = t('whisper.status.submitted')
+      whisperProgress.value = 10
+
+      await api.post(`/whisper/tasks/${whisperTaskId.value}/run`)
+      jobsStore.fetchJobs()
+
+      disconnectWhisperEvents()
+      whisperEventSource.value = new EventSource(`/api/jobs/${whisperTaskId.value}/events`)
+
+      whisperEventSource.value.addEventListener('connected', () => {
+        console.log('Whisper SSE connected')
+        whisperProgress.value = 20
+      })
+
+      whisperEventSource.value.addEventListener('progress', (e) => {
+        const data = JSON.parse(e.data)
+        const baseProgress = data.progress || 0
+        whisperProgress.value = Math.max(20, Math.min(95, 20 + baseProgress * 0.75))
+      })
+
+      whisperEventSource.value.addEventListener('done', (e) => {
+        const data = JSON.parse(e.data)
+        if (data.type === 'completed') {
+          whisperStatus.value = t('whisper.status.completed')
+          whisperProgress.value = 100
+          whisperRunning.value = false
+          disconnectWhisperEvents()
+        } else if (data.type === 'failed') {
+          whisperStatus.value = t('whisper.status.failed')
+          whisperRunning.value = false
+          disconnectWhisperEvents()
+        }
+      })
+
+      whisperEventSource.value.addEventListener('error', (e) => {
+        console.error('Whisper SSE error:', e)
+        whisperStatus.value = t('whisper.status.disconnected')
+        whisperRunning.value = false
+        disconnectWhisperEvents()
+      })
+
+    } catch (e: any) {
+      console.error('Whisper task failed:', e)
+      whisperStatus.value = t('whisper.status.createFailed', { detail: e?.response?.data?.detail || e.message })
+      whisperRunning.value = false
+    }
+  }
+
+  function stopWhisper() {
+    disconnectWhisperEvents()
+    whisperRunning.value = false
+    whisperStatus.value = ''
+    whisperProgress.value = 0
+  }
+
+  return {
+    whisperTaskId,
+    whisperStatus,
+    whisperProgress,
+    whisperRunning,
+    startWhisperTask,
+    stopWhisper,
+    disconnectWhisperEvents,
+  }
+}

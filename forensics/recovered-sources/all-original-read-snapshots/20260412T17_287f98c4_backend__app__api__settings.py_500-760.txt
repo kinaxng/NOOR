@@ -1,0 +1,261 @@
+        log_mgr.add_log("success", f"[LADA] 升级完成 — 新版本：{new_version or '未知'}")
+        return {
+            "success": True,
+            "version": new_version,
+            "output": result.stdout,
+        }
+    except subprocess.TimeoutExpired:
+        log_mgr.add_log("error", "[LADA] 升级超时")
+        raise HTTPException(status_code=500, detail="Upgrade timeout")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[LADA] 升级异常 — {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== LADA Settings ====================
+
+@router.put("/lada/defaults")
+async def update_lada_defaults(config: LadaDefaultsConfig):
+    """Update Lada default configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA 默认参数...")
+    try:
+        update_env_value("LADA_DEVICE", config.device)
+        update_env_value("LADA_FP16", "true" if config.fp16 else "false")
+        update_env_value("LADA_DETECTION_MODEL", config.detection_model)
+        update_env_value("LADA_RESTORATION_MODEL", config.restoration_model)
+        update_env_value("LADA_ENCODING_PRESET", config.encoding_preset)
+        update_env_value("LADA_MAX_CLIP_LENGTH", str(config.max_clip_length))
+        update_env_value("LADA_DETECT_FACE_MOSAICS", "true" if config.detect_face_mosaics else "false")
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA 默认参数已保存")
+        return {"success": True, "message": "Lada defaults saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA 默认参数保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+LADA_ENCODING_PRESETS = [
+    {"id": "hevc-nvidia-gpu-hq", "name": "HEVC (H.265) - High Quality", "desc": "Nvidia GPU, High Quality, Medium File Size"},
+    {"id": "hevc-nvidia-gpu-balanced", "name": "HEVC (H.265) - Balanced", "desc": "Nvidia GPU, Excellent Quality, Smaller File Size"},
+    {"id": "hevc-nvidia-gpu-uhq", "name": "HEVC (H.265) - Ultra HQ", "desc": "Nvidia GPU, Indistinguishable Quality, Large File Size"},
+    {"id": "h264-nvidia-gpu-fast", "name": "H.264 - Fast", "desc": "Nvidia GPU, Fast, Medium File Size"},
+    {"id": "h264-cpu-fast", "name": "H.264 - CPU Fast", "desc": "x264 software encoder, Fast, Medium File Size"},
+    {"id": "h264-cpu-uhq", "name": "H.264 - CPU Ultra HQ", "desc": "x264 software encoder, Indistinguishable Quality, Slow, Very Large File Size"},
+    {"id": "av1-cpu-uhq", "name": "AV1 - CPU Ultra HQ", "desc": "SVT-AV1 software encoder, Indistinguishable Quality, Smaller File Size"},
+]
+
+
+@router.get("/lada/info")
+async def get_lada_info():
+    """Get LADA system info: available devices, encoding presets, and model status.
+    Model lists come from lada's ModelFiles (lada/__init__.py), with download status
+    checked against LADA_MODEL_WEIGHTS_DIR."""
+    settings = get_settings()
+    install_info = _get_lada_installation_info()
+
+    # Get available devices
+    devices = []
+    try:
+        result = subprocess.run(
+            _lada_cli_base_cmd() + ["--list-devices"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split("\n")[2:]  # Skip header
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith("-") and not line.startswith("Device"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        devices.append({"id": parts[0], "name": " ".join(parts[1:]).strip()})
+    except Exception:
+        devices = [{"id": "cpu", "name": "CPU"}, {"id": "cuda:0", "name": "CUDA GPU"}]
+
+    # Determine model weights directory
+    configured_dir = settings.lada_model_dir
+    if configured_dir:
+        if os.path.isabs(configured_dir):
+            model_weights_dir = configured_dir
+        else:
+            model_weights_dir = str(PROJECT_ROOT / configured_dir)
+    else:
+        model_weights_dir = str(PROJECT_ROOT / "app" / "pipeline" / "lada" / "model_weights")
+
+    # Get ALL known models from lada's ModelFiles (authoritative, includes not-downloaded)
+    # Use current interpreter where lada is installed; _WELL_KNOWN_* returns complete list
+    lada_model_script = """
+import json
+import lada as lada_pkg
+detection = lada_pkg.ModelFiles._WELL_KNOWN_DETECTION_MODELS
+restoration = lada_pkg.ModelFiles._WELL_KNOWN_RESTORATION_MODELS
+result = {
+    "detection": [(m.name, m.description or "", m.path) for m in detection],
+    "restoration": [(m.name, m.description or "", m.path) for m in restoration],
+}
+print(json.dumps(result))
+"""
+    try:
+        env = {**os.environ, "LADA_MODEL_WEIGHTS_DIR": model_weights_dir}
+        cp = subprocess.run(
+            [_python_executable(), "-c", lada_model_script],
+            capture_output=True, text=True, timeout=10, env=env
+        )
+        if cp.returncode == 0:
+            import json as _json
+            lada_result = _json.loads(cp.stdout)
+            all_detection_raw = lada_result["detection"]
+            all_restoration_raw = lada_result["restoration"]
+        else:
+            all_detection_raw = []
+            all_restoration_raw = []
+    except Exception:
+        all_detection_raw = []
+        all_restoration_raw = []
+
+    # Build downloaded files map for size check
+    downloaded_files: dict[str, int] = {}
+    if os.path.isdir(model_weights_dir):
+        for root, _, files in os.walk(model_weights_dir):
+            for f in files:
+                if not f.endswith((".license", ".txt")) and not f.startswith("."):
+                    downloaded_files[f] = os.path.getsize(os.path.join(root, f))
+
+    # Comprehensive model descriptions (Chinese)
+    # Format: { model_id: (display_name, detailed_description) }
+    DETECTION_MODEL_INFO = {
+        "v2": (
+            "v2（经典版）",
+            "LADA 早期检测模型，算法成熟，兼容性好。精度中等，适用于对旧模型有特殊需求的场景。性能对比：★★☆"
+        ),
+        "v3": (
+            "v3（稳定版）",
+            "v3 系列首个版本，检测稳定性良好。相比 v2 有明显提升，是早期用户常用的版本。性能对比：★★☆"
+        ),
+        "v3.1-fast": (
+            "v3.1 快速版",
+            "v3.1 的速度优化版本，在保持较好精度的同时提升推理速度。适合批量处理场景。性能对比：★★★"
+        ),
+        "v3.1-accurate": (
+            "v3.1 精准版",
+            "v3.1 的精度优化版本，检测准确率更高，适合对质量要求更严格的场景。性能对比：★★★☆"
+        ),
+        "v4-fast": (
+            "v4 极速版",
+            "最新第四代检测模型的速度优先版本。推理速度最快，适合高吞吐量场景，精度损失极小。性能对比：★★★★"
+        ),
+        "v4-accurate": (
+            "v4 精准版 ⭐推荐",
+            "最新第四代检测模型的精度优先版本。比极速版稍慢，但检测准确率最高，适合对质量要求极高的场景。性能对比：★★★★★"
+        ),
+    }
+
+    RESTORATION_MODEL_INFO = {
+        "basicvsrpp-v1.0": (
+            "BasicVSR++ v1.0",
+            "基于 BasicVSR++ 架构的早期版本，画质提升稳定。模型较小，处理速度快，但细节恢复能力有限。性能对比：★★★"
+        ),
+        "basicvsrpp-v1.1": (
+            "BasicVSR++ v1.1",
+            "v1.0 的改进版本，在细节恢复和运动补偿上有优化。文件体积增大，输出质量更好。性能对比：★★★☆"
+        ),
+        "basicvsrpp-v1.2": (
+            "BasicVSR++ v1.2 ⭐推荐",
+            "LADA 最新推荐版本。基于 BasicVSR++ 深度增强，色彩和细节恢复效果最好，综合体验最优。性能对比：★★★★★"
+        ),
+        "deepmosaics": (
+            "DeepMosaics（备选）",
+            "来自已停止维护的 DeepMosaics 项目。使用与 BasicVSR++ 不同的 GAN/自编码器架构，风格略有差异。可作为效果对比备选。性能对比：★★★★（风格差异，非优劣）"
+        ),
+    }
+
+    # Map detection models
+    detection_models = []
+    for name, desc, path in all_detection_raw:
+        filename = os.path.basename(path)
+        file_size = downloaded_files.get(filename, 0)
+        downloaded = file_size > 1000
+        info = DETECTION_MODEL_INFO.get(name)
+        display_name, desc_zh = info if info else (name, desc or "")
+        detection_models.append({
+            "id": name,
+            "name": display_name,
+            "size": _format_size(file_size) if downloaded else "Not downloaded",
+            "description": desc or display_name,
+            "description_zh": desc_zh,
+            "downloaded": downloaded,
+            "filename": filename,
+        })
+
+    # Map restoration models
+    restoration_models = []
+    for name, desc, path in all_restoration_raw:
+        filename = os.path.basename(path)
+        file_size = downloaded_files.get(filename, 0)
+        downloaded = file_size > 1000
+        info = RESTORATION_MODEL_INFO.get(name)
+        display_name, desc_zh = info if info else (name, desc or "")
+        restoration_models.append({
+            "id": name,
+            "name": display_name,
+            "size": _format_size(file_size) if downloaded else "Not downloaded",
+            "description": desc or display_name,
+            "description_zh": desc_zh,
+            "downloaded": downloaded,
+            "filename": filename,
+        })
+
+    return {
+        "model_weights_dir": model_weights_dir,
+        "devices": devices,
+        "encoding_presets": LADA_ENCODING_PRESETS,
+        "detection_models": detection_models,
+        "restoration_models": restoration_models,
+        "install_mode": install_info["install_mode"],
+        "can_self_upgrade": install_info["can_self_upgrade"],
+        "upgrade_strategy": install_info["upgrade_strategy"],
+        "upgrade_hint": install_info["upgrade_hint"],
+    }
+
+
+# ==================== Whisper Settings ====================
+
+@router.put("/whisper")
+async def update_whisper_config(config: WhisperConfig):
+    """Update Whisper default configuration."""
+    import json
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Whisper 配置...")
+    try:
+        _assert_custom_pipeline_supported(config.pipeline_mode, config.pass1_pipeline, config.pass2_pipeline)
+        update_env_value("WHISPER_MODEL", config.model)
+        update_env_value("WHISPER_PIPELINE_MODE", config.pipeline_mode)
+        update_env_value("WHISPER_MERGE_STRATEGY", config.merge_strategy)
+        update_env_value("WHISPER_LANGUAGE", config.language)
+        update_env_value("WHISPER_SENSITIVITY", config.sensitivity)
+        update_env_value("WHISPER_VAD_METHOD", config.vad_method)
+        update_env_value("WHISPER_TRANSLATE_TO", config.translate_to)
+        update_env_value("WHISPER_TRANSLATE_MODEL", config.translate_model)
+        update_env_value("WHISPER_TRANSLATE_STYLE", config.translate_style)
+        update_env_value("WHISPER_TRANSLATE_BASE_URL", config.translate_base_url)
+        update_env_value("WHISPER_TRANSLATE_API_KEY", config.translate_api_key)
+        update_env_value("WHISPER_PASS1_PIPELINE", config.pass1_pipeline)
+        update_env_value("WHISPER_PASS2_PIPELINE", config.pass2_pipeline)
+        update_env_value("WHISPER_CUSTOM_CONFIG", json.dumps(config.custom_config.model_dump()))
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Whisper 配置已保存")
+        return {"success": True, "message": "Whisper settings saved to .env"}
+    except HTTPException as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e.detail)}")
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/whisper/check")
+async def check_whisper_dependencies():

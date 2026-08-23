@@ -1,0 +1,937 @@
+from fastapi import APIRouter, HTTPException
+from app.api.system import SystemLogManager
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
+from app.core.config import (
+    get_settings,
+    clear_settings_cache,
+    PROJECT_ROOT,
+    WHISPER_MODEL_DIR,
+)
+import os
+import sys
+import subprocess
+from pathlib import Path
+import shutil
+import logging
+
+from app.api.settings_helpers import (
+    ENV_FILE,
+    LADA_MODEL_WEIGHTS_ENV,
+    WHISPER_MODELS,
+    clear_version_cache as _clear_version_cache,
+    format_size as _format_size,
+    get_httpx as _get_httpx,
+    get_lada_installation_info as _get_lada_installation_info,
+    get_lada_model_weights_dir_from_env as _get_lada_model_weights_dir_from_env,
+    get_lada_version_info as _get_lada_version_info,
+    get_whisper_feature_flags as _get_whisper_feature_flags,
+    lada_cli_base_cmd as _lada_cli_base_cmd,
+    parse_custom_config as _parse_custom_config,
+    python_executable as _python_executable,
+    read_env_file,
+    set_env_values,
+    update_env_value,
+)
+
+from app.api.settings_status_helpers import (
+    build_status_payload,
+    install_status_path,
+    model_download_status_path,
+    read_install_status_response,
+    read_model_download_status_response,
+    write_status_file,
+)
+
+from app.api.settings_directories import (
+    build_directory_browse_payload,
+    is_allowed_directory_path,
+    resolve_browse_path,
+)
+from app.api.settings_lada import get_lada_info_impl
+from app.api.settings_updates import (
+    apply_emby_config_updates,
+    apply_lada_config_updates,
+    apply_network_config_updates,
+    build_storage_env_updates,
+)
+from app.api.settings_lada_defaults import apply_lada_defaults_updates
+from app.api.settings_whisper import (
+    apply_whisper_config_updates,
+    build_whisper_models_payload,
+    sanitize_download_status,
+)
+from app.api.settings_whisper_runtime import (
+    detect_install_requirements,
+    inspect_whisper_model_cache,
+    inspect_whisper_python_dependencies,
+    log_whisper_dependency_summary,
+)
+
+router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+class EmbyConfig(BaseModel):
+    server: str
+    api_key: str
+    user_id: str = ""
+    enabled_library_ids: list[str] = []
+
+
+class StorageConfig(BaseModel):
+    source_dir: str
+    output_dir: str
+    whisper_model_dir: str = ""
+    lada_model_dir: str = Field(default="", validation_alias="lada_model_weights_dir")
+
+
+class LadaConfig(BaseModel):
+    cli_path: str
+    version: str | None = None
+    is_docker: bool = False
+
+
+class LadaDefaultsConfig(BaseModel):
+    device: str = "cuda:0"
+    fp16: bool = True
+    detection_model: str = "v4-fast"
+    restoration_model: str = "basicvsrpp-v1.2"
+    encoding_preset: str = "hevc-nvidia-gpu-hq"
+    max_clip_length: int = 180
+    detect_face_mosaics: bool = False
+
+
+class CustomPipelineConfig(BaseModel):
+    model: str = "large-v3"  # large-v3 | large-v2 | turbo
+    vad_method: str = "semantic"
+    scene_detector: str = "semantic"
+    enhancers: list[str] = []  # 多选：ffmpeg-dsp, clearvoice, silero-vad, demucs
+    segmenter: str = "silero-v6.2"
+    timestamp_mode: str = "aligner_interpolation"  # aligner_interpolation / vad_only
+    aligner_backend: str = "qwen3"  # qwen3 / none
+    framer_backend: str = "vad-grouped"  # vad-grouped / full-scene
+
+
+class WhisperConfig(BaseModel):
+    model: str = "anime-whisper"
+    pipeline_mode: str = "ensemble"
+    merge_strategy: str = "smart_merge"
+    language: str = "ja"
+    sensitivity: str = "balanced"
+    vad_method: str = "semantic"
+    translate_to: str = ""
+    translate_model: str = "gpt-4o-mini"
+    translate_style: str = "adult_explicit"  # adult_explicit | standard
+    translate_base_url: str = "https://api.openai.com/v1"  # OpenAI-Compatible 端点（填到 /v1 即可）
+    translate_api_key: str = ""
+    pass1_pipeline: str = "anime"  # anime | faster | balanced | transformers | qwen | custom
+    pass2_pipeline: str = ""  # "" = not selected, or one of the above
+    custom_config: CustomPipelineConfig = CustomPipelineConfig()
+
+
+def _assert_custom_pipeline_supported(*pipeline_values: Optional[str]) -> None:
+    if any(value == "custom" for value in pipeline_values if value):
+        feature = _get_whisper_feature_flags()["custom_pipeline"]
+        if not feature["available"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Custom Whisper pipeline 当前不可用：{feature['reason']}",
+            )
+
+
+class NetworkConfig(BaseModel):
+    acceleration_mode: str = "mirror"  # "none" / "proxy" / "mirror"
+    http_proxy: str = ""
+    github_mirror: str = "https://ghproxy.com"
+    hf_mirror: str = "https://hf-mirror.com"
+    pip_mirror: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
+    hf_token: str = ""  # HuggingFace token for gated repos (e.g. Kotoba v2)
+
+
+@router.get("")
+async def get_settings_all():
+    """Get all settings."""
+    version_info = _get_lada_version_info()
+    version = version_info["version"]
+    is_docker = version_info["is_docker"]
+
+    # Get current env values
+    env_data = read_env_file()
+    lada_model_weights_dir = _get_lada_model_weights_dir_from_env(env_data)
+    whisper_features = _get_whisper_feature_flags()
+
+    return {
+        "emby": {
+            "server": env_data.get("EMBY_SERVER", ""),
+            "api_key": env_data.get("EMBY_API_KEY", ""),
+            "user_id": env_data.get("EMBY_USER_ID", ""),
+            "enabled_library_ids": env_data.get("EMBY_ENABLED_LIBRARY_IDS", "").split(",") if env_data.get("EMBY_ENABLED_LIBRARY_IDS") else [],
+        },
+        "storage": {
+            "source_dir": env_data.get("SOURCE_DIR", ""),
+            "output_dir": env_data.get("OUTPUT_DIR", ""),
+            "whisper_model_dir": env_data.get("WHISPER_MODEL_DIR", ""),
+            "lada_model_dir": lada_model_weights_dir,
+            "lada_model_weights_dir": lada_model_weights_dir,
+        },
+        "lada": {
+            "cli_path": env_data.get("LADA_CLI_PATH", "python3 -m lada.cli.main"),
+            "version": version,
+            "is_docker": is_docker,
+            "is_submodule": version_info["is_submodule"],
+            "install_mode": version_info["install_mode"],
+            "can_self_upgrade": version_info["can_self_upgrade"],
+            "upgrade_strategy": version_info["upgrade_strategy"],
+            "upgrade_hint": version_info["upgrade_hint"],
+            "repo_path": version_info["repo_path"],
+        },
+        "lada_defaults": {
+            "device": env_data.get("LADA_DEVICE", "cuda:0"),
+            "fp16": env_data.get("LADA_FP16", "true").lower() == "true",
+            "detection_model": env_data.get("LADA_DETECTION_MODEL", "v4-fast"),
+            "restoration_model": env_data.get("LADA_RESTORATION_MODEL", "basicvsrpp-v1.2"),
+            "encoding_preset": env_data.get("LADA_ENCODING_PRESET", "hevc-nvidia-gpu-hq"),
+            "max_clip_length": int(env_data.get("LADA_MAX_CLIP_LENGTH", "180")),
+            "detect_face_mosaics": env_data.get("LADA_DETECT_FACE_MOSAICS", "false").lower() == "true",
+        },
+        "whisper": {
+            "model": env_data.get("WHISPER_MODEL", "anime-whisper"),
+            "pipeline_mode": env_data.get("WHISPER_PIPELINE_MODE", "ensemble"),
+            "merge_strategy": env_data.get("WHISPER_MERGE_STRATEGY", "smart_merge"),
+            "language": env_data.get("WHISPER_LANGUAGE", "ja"),
+            "sensitivity": env_data.get("WHISPER_SENSITIVITY", "balanced"),
+            "vad_method": env_data.get("WHISPER_VAD_METHOD", "semantic"),
+            "translate_to": env_data.get("WHISPER_TRANSLATE_TO", ""),
+            "translate_model": env_data.get("WHISPER_TRANSLATE_MODEL", "gpt-4o-mini"),
+            "translate_style": env_data.get("WHISPER_TRANSLATE_STYLE", "adult_explicit"),
+            "translate_base_url": env_data.get("WHISPER_TRANSLATE_BASE_URL", "https://api.openai.com/v1"),
+            "translate_api_key": env_data.get("WHISPER_TRANSLATE_API_KEY", ""),
+            "pass1_pipeline": env_data.get("WHISPER_PASS1_PIPELINE", "anime"),
+            "pass2_pipeline": env_data.get("WHISPER_PASS2_PIPELINE", ""),
+            "custom_config": _parse_custom_config(env_data),
+            "features": whisper_features,
+        },
+        "network": {
+            "acceleration_mode": env_data.get("ACCELERATION_MODE", "mirror"),
+            "http_proxy": env_data.get("HTTP_PROXY", ""),
+            "github_mirror": env_data.get("GITHUB_MIRROR", "https://ghproxy.com"),
+            "hf_mirror": env_data.get("HF_MIRROR", "https://hf-mirror.com"),
+            "pip_mirror": env_data.get("PIP_MIRROR", "https://pypi.tuna.tsinghua.edu.cn/simple"),
+            "hf_token": env_data.get("HF_TOKEN", ""),
+
+=====
+            "hf_token": env_data.get("HF_TOKEN", ""),
+        },
+    }
+
+
+@router.put("/emby")
+async def update_emby_config(config: EmbyConfig):
+    """Update Emby configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Emby 配置...")
+    try:
+        apply_emby_config_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Emby 配置已保存")
+        return {"success": True, "message": "Emby settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Emby 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/emby/test")
+async def test_emby_connection():
+    """Test Emby server connection."""
+    settings = get_settings()
+    if not settings.emby_api_key or not settings.emby_server:
+        raise HTTPException(status_code=400, detail="Emby server and API key are required")
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Emby] 正在测试 Emby 连接...")
+
+    headers = {"X-Emby-Token": settings.emby_api_key}
+    try:
+        async with _get_httpx().AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.emby_server}/emby/System/Info",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            server_name = data.get("ServerName", "Unknown")
+            version = data.get("Version", "Unknown")
+            log_mgr.add_log("success", f"[Emby] 连接成功 — {server_name} v{version}")
+            return {
+                "success": True,
+                "server_name": server_name,
+                "version": version,
+            }
+    except _get_httpx().HTTPError as e:
+        log_mgr.add_log("error", f"[Emby] 连接失败 — {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Emby connection failed: {str(e)}")
+
+
+@router.put("/storage")
+async def update_storage_config(config: StorageConfig):
+    """Update storage directories configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存存储路径配置...")
+    try:
+        set_env_values(build_storage_env_updates(config, LADA_MODEL_WEIGHTS_ENV))
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] 存储路径配置已保存")
+        return {"success": True, "message": "Storage settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 存储路径配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+class DirectoryEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+
+
+class DirectoryBrowseResponse(BaseModel):
+    path: str
+    parent: str | None
+    entries: list[DirectoryEntry]
+
+
+@router.get("/directories", response_model=DirectoryBrowseResponse)
+async def browse_directory(path: str = ""):
+    """Browse directory contents for path picker.
+    If path is empty, starts from source_dir or home.
+    Only returns directories within allowed paths."""
+    settings = get_settings()
+    browse_path = resolve_browse_path(settings, path)
+
+    if not os.path.isdir(browse_path):
+        raise HTTPException(status_code=400, detail=f"Not a directory: {browse_path}")
+
+    if not is_allowed_directory_path(browse_path, settings):
+        raise HTTPException(status_code=403, detail="Access denied: path not within allowed directories")
+
+    try:
+        payload = build_directory_browse_payload(browse_path)
+        return DirectoryBrowseResponse(
+            path=payload["path"],
+            parent=payload["parent"],
+            entries=[DirectoryEntry(**entry) for entry in payload["entries"]],
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+
+@router.put("/lada")
+async def update_lada_config(config: LadaConfig):
+    """Update Lada configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA CLI 配置...")
+    try:
+        apply_lada_config_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA CLI 配置已保存")
+        return {"success": True, "message": "Lada settings saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA CLI 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.put("/network")
+async def update_network_config(config: NetworkConfig):
+    """Update network configuration (acceleration mode, proxy, mirrors)."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存网络加速配置...")
+    try:
+        apply_network_config_updates(config, update_env_value)
+        clear_settings_cache()
+
+        # Apply to current process environment
+        settings = get_settings()
+        settings.apply_network_env()
+
+        log_mgr.add_log("success", "[Settings] 网络加速配置已保存并生效")
+        return {"success": True, "message": "Network settings saved and applied"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] 网络加速配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/lada/upgrade")
+async def upgrade_lada():
+    """Upgrade LADA from its official git checkout when running natively."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[LADA] 正在升级 LADA...")
+    install_info = _get_lada_installation_info()
+
+    if install_info["is_docker"]:
+        log_mgr.add_log("warning", "[LADA] Docker 模式下不支持容器内自升级")
+        raise HTTPException(
+            status_code=409,
+            detail="Docker 模式下不建议在容器内直接升级 LADA。请更新镜像后重建容器。",
+        )
+
+    lada_path = install_info["repo_path"]
+    if not lada_path:
+        log_mgr.add_log("error", "[LADA] 升级失败：未找到可升级的 LADA 工作副本")
+        raise HTTPException(
+            status_code=400,
+            detail="当前未检测到可自升级的 LADA 源码工作副本，请手动升级你的 lada-cli 安装来源。",
+        )
+
+    # Apply network settings for git
+    settings = get_settings()
+    settings.apply_network_env()
+    env = os.environ.copy()
+
+    try:
+        # Unset proxy env vars for git pull to avoid proxy redirect issues
+        no_proxy_env = {}
+        for k, v in env.items():
+            k_lower = k.lower()
+            if k_lower not in ("http_proxy", "https_proxy", "http://proxy", "https://proxy"):
+                no_proxy_env[k] = v
+        no_proxy_env.pop("HTTP_PROXY", None)
+        no_proxy_env.pop("HTTPS_PROXY", None)
+        no_proxy_env.pop("http_proxy", None)
+        no_proxy_env.pop("https_proxy", None)
+
+        branch_result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=no_proxy_env,
+        )
+        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+
+        log_mgr.add_log("info", "[LADA] 正在拉取最新代码...")
+        fetch = subprocess.run(
+            ["git", "fetch", "--tags", "origin"],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=no_proxy_env,
+        )
+        if fetch.returncode != 0:
+            log_mgr.add_log("error", f"[LADA] git fetch 失败 — {fetch.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Git fetch failed: {fetch.stderr}")
+
+        result = subprocess.run(
+            ["git", "pull", "--ff-only", "origin", branch],
+            cwd=lada_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=no_proxy_env,
+        )
+
+        if result.returncode != 0:
+            if "redirect" in result.stderr.lower() or "ghfast" in result.stderr:
+                log_mgr.add_log("error", "[LADA] 升级失败：代理镜像重定向错误")
+                raise HTTPException(status_code=500,
+                    detail="代理镜像重定向错误。GitHub 被重定向到了不可用的镜像。 "
+                           "请在代理软件中将 github.com 加入直连，或手动执行以下命令：\n"
+                           f"cd {lada_path} && git pull --ff-only origin {branch}")
+            if "Could not connect" in result.stderr or "timeout" in result.stderr.lower() or "curl 28" in result.stderr:
+                log_mgr.add_log("error", "[LADA] 升级失败：无法连接 GitHub")
+                raise HTTPException(status_code=500,
+                    detail="无法连接 GitHub。请检查网络代理设置，确保可以访问 github.com。")
+            log_mgr.add_log("error", f"[LADA] 升级失败 — {result.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Git pull failed: {result.stderr}")
+
+        log_mgr.add_log("info", "[LADA] 代码拉取成功，正在重新安装...")
+        pip_cmd = [_python_executable(), "-m", "pip", "install", "-e", lada_path, "--no-deps"]
+        if not hasattr(sys, "base_prefix") or sys.prefix == getattr(sys, "base_prefix", sys.prefix):
+            pip_cmd.append("--break-system-packages")
+        reinstall = subprocess.run(
+            pip_cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=no_proxy_env,
+        )
+
+        if reinstall.returncode != 0:
+            log_mgr.add_log("error", f"[LADA] pip 安装失败 — {reinstall.stderr[:100]}")
+            raise HTTPException(status_code=500, detail=f"Reinstall failed: {reinstall.stderr}")
+
+        # Get new version
+        version_cp = subprocess.run(
+            [_python_executable(), "-c", "import lada; print(lada.VERSION)"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        new_version = version_cp.stdout.strip() if version_cp.returncode == 0 else None
+
+        log_mgr.add_log("success", f"[LADA] 升级完成 — 新版本：{new_version or '未知'}")
+        return {
+            "success": True,
+            "version": new_version,
+            "output": result.stdout,
+        }
+    except subprocess.TimeoutExpired:
+        log_mgr.add_log("error", "[LADA] 升级超时")
+        raise HTTPException(status_code=500, detail="Upgrade timeout")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[LADA] 升级异常 — {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== LADA Settings ====================
+
+@router.put("/lada/defaults")
+async def update_lada_defaults(config: LadaDefaultsConfig):
+    """Update Lada default configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 LADA 默认参数...")
+    try:
+        apply_lada_defaults_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] LADA 默认参数已保存")
+        return {"success": True, "message": "Lada defaults saved to .env"}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] LADA 默认参数保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.get("/lada/info")
+async def get_lada_info():
+    """Get LADA system info: available devices, encoding presets, and model status.
+    Model lists come from lada's ModelFiles (lada/__init__.py), with download status
+    checked against LADA_MODEL_WEIGHTS_DIR."""
+    return get_lada_info_impl(
+        settings=get_settings(),
+        project_root=PROJECT_ROOT,
+        install_info=_get_lada_installation_info(),
+        lada_cli_base_cmd_fn=_lada_cli_base_cmd,
+        python_executable_fn=_python_executable,
+        format_size_fn=_format_size,
+    )
+
+
+# ==================== Whisper Settings ====================
+
+@router.put("/whisper")
+async def update_whisper_config(config: WhisperConfig):
+    """Update Whisper default configuration."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Settings] 正在保存 Whisper 配置...")
+    try:
+        _assert_custom_pipeline_supported(config.pipeline_mode, config.pass1_pipeline, config.pass2_pipeline)
+        apply_whisper_config_updates(config, update_env_value)
+        clear_settings_cache()
+        log_mgr.add_log("success", "[Settings] Whisper 配置已保存")
+        return {"success": True, "message": "Whisper settings saved to .env"}
+    except HTTPException as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e.detail)}")
+        raise
+    except Exception as e:
+        log_mgr.add_log("error", f"[Settings] Whisper 配置保存失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+
+
+@router.post("/whisper/check")
+async def check_whisper_dependencies():
+    """Check Whisper dependencies and environment."""
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", "[Whisper] 正在检查依赖环境...")
+
+    settings = get_settings()
+    whisper_model_dir = settings.whisper_model_dir or str(WHISPER_MODEL_DIR)
+    deps, cuda_available, cuda_info = inspect_whisper_python_dependencies()
+    models_info = inspect_whisper_model_cache(
+        whisper_model_dir=whisper_model_dir,
+        whisper_models=WHISPER_MODELS,
+    )
+    log_whisper_dependency_summary(
+        log_mgr,
+        deps=deps,
+        cuda_available=cuda_available,
+        cuda_info=cuda_info,
+    )
+
+    return {
+        "dependencies": deps,
+        "cuda_available": cuda_available,
+        "models": models_info,
+        "whisper_model_dir": whisper_model_dir,
+        "features": _get_whisper_feature_flags(),
+    }
+
+
+class ModelDownloadRequest(BaseModel):
+    model: str  # e.g., "anime-whisper", "large-v3"
+
+
+class InstallDepsRequest(BaseModel):
+    torch_variant: Literal["gpu", "cpu"] = "gpu"
+    torch_current_cuda: bool = False  # current install has CUDA
+
+
+@router.post("/whisper/models/download")
+async def download_whisper_model(req: ModelDownloadRequest):
+    """Download a Whisper model in background thread."""
+    model_name = req.model
+    model_info = WHISPER_MODELS.get(model_name)
+    if not model_info:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
+
+    import threading
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", f"[Whisper] 正在下载模型 {model_info['name']}...")
+
+    # Save initial status to JSON file
+    status_file = model_download_status_path()
+    write_status_file(status_file, build_status_payload(
+        status="running",
+        progress=0,
+        message=f"Downloading {model_info['name']}...",
+        model=model_name,
+        output=None,
+    ))
+
+    def download_in_background():
+        import subprocess
+
+        bg_log_mgr = SystemLogManager.get_instance()
+
+        def update_status(status: str, progress: int, message: str, output: str = None):
+            try:
+                status_file = model_download_status_path()
+                write_status_file(status_file, build_status_payload(
+                    status=status,
+                    progress=progress,
+                    message=message,
+                    model=model_name,
+                    output=output or "",
+                ))
+            except Exception as e:
+                logger.warning("Failed to update download status: %s", e)
+
+        # Apply network settings based on acceleration_mode
+        settings = get_settings()
+        settings.apply_network_env()
+
+
+=====
+
+        # Unified HF_HOME = WHISPER_MODEL_DIR (user-configured or default)
+        whisper_model_dir = settings.whisper_model_dir or str(WHISPER_MODEL_DIR)
+        os.environ["HF_HOME"] = whisper_model_dir
+        os.environ["TRANSFORMERS_CACHE"] = whisper_model_dir
+
+        # Determine HF endpoint based on acceleration_mode
+        # - none: use default huggingface.co (or HF_TOKEN is set)
+        # - proxy: use default huggingface.co via HTTP_PROXY
+        # - mirror: use hf_mirror URL
+        def get_hf_endpoint() -> str | None:
+            if settings.acceleration_mode == "mirror":
+                return settings.hf_mirror or "https://hf-mirror.com"
+            # none and proxy: use default (None means huggingface.co)
+            return None
+
+        hf_endpoint = get_hf_endpoint()
+        if hf_endpoint:
+            os.environ["HF_ENDPOINT"] = hf_endpoint
+
+        try:
+            if model_info["type"] == "transformers":
+                # Download transformers model using snapshot_download (avoids httpx client issues)
+                update_status("running", 10, f"Downloading {model_info['name']}...")
+                bg_log_mgr.add_log("info", f"[Whisper] 正在下载 {model_info['name']} (transformers)...")
+                try:
+                    from huggingface_hub import snapshot_download
+                    model_id = model_info["repo"]
+                    update_status("running", 30, f"Downloading files...")
+                    snapshot_download(
+                        repo_id=model_id,
+                        cache_dir=whisper_model_dir,
+                        endpoint=hf_endpoint,
+                    )
+                    update_status("completed", 100, f"{model_info['name']} downloaded successfully")
+                    bg_log_mgr.add_log("success", f"[Whisper] 模型 {model_info['name']} 下载完成")
+                except Exception as e:
+                    update_status("failed", 0, f"Download failed: {str(e)}")
+                    bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+            elif model_info.get("repo"):
+                # Custom repo (e.g., faster-whisper with custom HuggingFace repo)
+                update_status("running", 10, f"Downloading {model_info['name']} (faster-whisper, custom repo)...")
+                bg_log_mgr.add_log("info", f"[Whisper] 正在下载 {model_info['name']} (faster-whisper, repo: {model_info['repo']})...")
+                try:
+                    from faster_whisper import WhisperModel
+                    update_status("running", 30, f"Downloading {model_info['name']}...")
+                    WhisperModel(model_info["repo"], device="cpu", download_root=whisper_model_dir)
+                    update_status("completed", 100, f"{model_info['name']} downloaded successfully")
+                    bg_log_mgr.add_log("success", f"[Whisper] 模型 {model_info['name']} 下载完成")
+                except Exception as e:
+                    update_status("failed", 0, f"Download failed: {str(e)}")
+                    bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+            else:
+                # Download faster-whisper model
+                update_status("running", 10, f"Downloading {model_info['name']} via faster-whisper...")
+                bg_log_mgr.add_log("info", f"[Whisper] 正在下载 {model_info['name']} (faster-whisper)...")
+                try:
+                    from faster_whisper import WhisperModel
+                    update_status("running", 50, f"Downloading {model_info['name']}...")
+                    WhisperModel(model_name, device="cpu", download_root=whisper_model_dir)
+                    update_status("completed", 100, f"{model_info['name']} downloaded successfully")
+                    bg_log_mgr.add_log("success", f"[Whisper] 模型 {model_info['name']} 下载完成")
+                except Exception as e:
+                    update_status("failed", 0, f"Download failed: {str(e)}")
+                    bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+        except Exception as e:
+            update_status("failed", 0, f"Download failed: {str(e)}")
+            bg_log_mgr.add_log("error", f"[Whisper] 模型下载失败 — {str(e)}")
+
+    # Run download in background thread
+    thread = threading.Thread(target=download_in_background)
+    thread.start()
+
+    return {"success": True, "message": f"Download started in background"}
+
+
+@router.get("/whisper/models/download-status")
+async def get_model_download_status():
+    """Get current model download status from JSON file."""
+    try:
+        response = read_model_download_status_response()
+        return {
+            "status": response["status"],
+            "progress": response["progress"],
+            "message": response["message"],
+            "output": response["output"],
+        }
+    except Exception:
+        return {"status": "idle", "progress": 0, "message": "", "output": None}
+
+
+@router.delete("/whisper/models/{model_name}")
+async def delete_whisper_model(model_name: str):
+    """Delete a downloaded Whisper model."""
+    model_info = WHISPER_MODELS.get(model_name)
+    if not model_info:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
+
+    log_mgr = SystemLogManager.get_instance()
+    log_mgr.add_log("info", f"[Whisper] 正在删除模型 {model_info['name']}...")
+
+    settings = get_settings()
+    whisper_model_dir = settings.whisper_model_dir or str(WHISPER_MODEL_DIR)
+
+    deleted = []
+
+    try:
+        # Unified path logic: same as check_whisper_dependencies
+        default_hf_cache = str(Path.home() / ".cache" / "huggingface")
+        is_default_hf = (whisper_model_dir == default_hf_cache)
+        hf_base = Path(whisper_model_dir)
+        default_hf_base = Path(default_hf_cache)
+
+        def _transformers_delete(repo: str, base: Path) -> bool:
+            cache = base / ("hub" if str(base) == default_hf_cache else "huggingface/hub")
+            path = cache / f"models--{repo.replace('/', '--')}"
+            if path.exists():
+                shutil.rmtree(path)
+                deleted.append(str(path))
+                return True
+            return False
+
+        def _faster_delete(repo_cache_name: str, base: Path) -> bool:
+            path1 = base / "hub" / f"models--{repo_cache_name}"
+            path2 = base / f"models--{repo_cache_name}"
+            path = path1 if path1.exists() else path2
+            if path.exists():
+                shutil.rmtree(path)
+                deleted.append(str(path))
+                return True
+            return False
+
+        if model_info["type"] == "transformers":
+            found = _transformers_delete(model_info["repo"], hf_base)
+            if not found and not is_default_hf:
+                _transformers_delete(model_info["repo"], default_hf_base)
+        else:
+            repo_cache_name = model_info["repo"].replace("/", "--") if model_info.get("repo") \
+                else f"Systran--faster-whisper-{model_name}"
+            found = _faster_delete(repo_cache_name, hf_base)
+            if not found and not is_default_hf:
+                _faster_delete(repo_cache_name, default_hf_base)
+
+            # Also try mx Fofr path
+            mx_path = Path.home() / ".cache" / "mx Fofr" / "Faster-Whisper" / model_name
+            if mx_path.exists():
+                shutil.rmtree(mx_path)
+                deleted.append(str(mx_path))
+
+        if deleted:
+            log_mgr.add_log("success", f"[Whisper] 模型 {model_info['name']} 已删除")
+        else:
+            log_mgr.add_log("warning", f"[Whisper] 模型 {model_info['name']} 文件未找到（可能已删除）")
+        return {"success": True, "deleted": deleted}
+    except Exception as e:
+        log_mgr.add_log("error", f"[Whisper] 删除模型 {model_info['name']} 失败 — {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/whisper/install-deps")
+async def install_whisper_deps(req: Optional[InstallDepsRequest] = None):
+    """Install Whisper runtime dependencies via pip (background thread).
+
+    Handles torch variant selection (GPU/CPU) and librosa.
+    torch is installed from PyTorch index (GPU) or PyPI (CPU).
+    """
+    import threading
+
+    if req is None:
+        req = InstallDepsRequest()
+
+    torch_variant = req.torch_variant  # "gpu" or "cpu"
+    torch_current_cuda = req.torch_current_cuda
+
+    log_mgr = SystemLogManager.get_instance()
+    # Determine what actually needs installing
+    needs_torch, needs_librosa = detect_install_requirements(torch_variant, torch_current_cuda)
+
+    if not needs_torch and not needs_librosa:
+        log_mgr.add_log("success", "[Whisper] 所有运行时依赖已就绪，无需安装")
+        return {"success": True, "message": "All dependencies already installed"}
+
+    parts = []
+    if needs_librosa:
+        parts.append("librosa")
+    if needs_torch:
+        parts.append(f"torch ({torch_variant.upper()})")
+    log_mgr.add_log("info", f"[Whisper] 正在安装运行时依赖: {', '.join(parts)}...")
+
+    # Apply network settings
+    settings = get_settings()
+    env = os.environ.copy()
+    settings.apply_network_env()
+
+    # pip base args: always use --break-system-packages (PEP 668)
+    pip_base = ["pip", "install", "--break-system-packages"]
+    if settings.acceleration_mode == "mirror":
+        pip_extra = ["-i", settings.pip_mirror or "https://pypi.tuna.tsinghua.edu.cn/simple", "--timeout=60"]
+    else:
+        pip_extra = []
+
+    # Save initial status to JSON file
+    status_file = install_status_path()
+    write_status_file(status_file, build_status_payload(
+        status="running",
+        progress=0,
+        message="Preparing...",
+        current_package="",
+        output=None,
+    ))
+
+    def update_status(status: str, progress: int, message: str, current_package: str = "", output: str = None):
+        try:
+            status_file = install_status_path()
+            write_status_file(status_file, build_status_payload(
+                status=status,
+                progress=progress,
+                message=message,
+                current_package=current_package,
+                output=output or "",
+            ))
+        except Exception as e:
+            logger.warning("Failed to update install status: %s", e)
+
+    def run_install():
+        """Run pip installs in background thread."""
+        import subprocess
+
+        bg_log_mgr = SystemLogManager.get_instance()
+
+        def run_pip(args: list[str], pkg_name: str) -> tuple[bool, str]:
+            """Run pip install, stream output. Returns (success, last_output)."""
+            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+            output_lines = []
+            for line in iter(proc.stdout.readline, ""):
+                if line:
+                    output_lines.append(line.strip())
+                    if "Downloading" in line or "Collecting" in line or "%" in line:
+                        snippet = line.strip()[:100]
+                        update_status("running", 0, f"Installing {pkg_name}: {snippet}", pkg_name, "\n".join(output_lines[-10:]))
+            proc.stdout.close()
+            returncode = proc.wait(timeout=600)
+            return returncode == 0, "\n".join(output_lines[-20:])
+
+        try:
+            tasks: list[tuple[str, list[str], str]] = []
+
+            # Torch: only if variant changed or not installed
+            if needs_torch:
+                if torch_variant == "gpu":
+                    tasks.append(("torch (GPU)", pip_base + ["torch", "--index-url", "https://download.pytorch.org/whl/cu128"] + pip_extra, "torch"))
+                else:
+                    tasks.append(("torch (CPU)", pip_base + ["torch", "--index-url", "https://download.pytorch.org/whl/cpu"] + pip_extra, "torch"))
+
+            if needs_librosa:
+                tasks.append(("librosa", pip_base + ["librosa"] + pip_extra, "librosa"))
+
+            total = len(tasks)
+            for i, (label, args, pkg) in enumerate(tasks):
+                update_status("running", int((i / total) * 100), f"Installing {label}...", pkg)
+                bg_log_mgr.add_log("info", f"[Whisper] 正在安装 {label}...")
+                success, err_output = run_pip(args, pkg)
+                if not success:
+                    update_status("failed", int((i / total) * 100), f"Failed to install {label}", pkg, err_output)
+                    bg_log_mgr.add_log("error", f"[Whisper] 安装 {label} 失败")
+                    return
+                update_status("running", int(((i + 1) / total) * 100), f"Installed {label}", pkg, "")
+                bg_log_mgr.add_log("success", f"[Whisper] {label} 安装成功")
+
+            update_status("completed", 100, "All dependencies installed!", "", "Installation complete")
+            bg_log_mgr.add_log("success", "[Whisper] 运行时依赖安装完成")
+        except subprocess.TimeoutExpired:
+            update_status("failed", 0, "Installation timeout")
+            bg_log_mgr.add_log("error", "[Whisper] 依赖安装超时")
+        except Exception as e:
+            update_status("failed", 0, f"Error: {str(e)}")
+            bg_log_mgr.add_log("error", f"[Whisper] 依赖安装异常 — {str(e)}")
+
+    # Run install in background thread
+    thread = threading.Thread(target=run_install)
+    thread.start()
+
+    return {"success": True, "message": "Installation started in background"}
+
+
+@router.get("/whisper/install-status")
+async def get_install_status():
+    """Get current installation/download status from JSON file."""
+    try:
+        return read_install_status_response()
+    except Exception:
+        return {"status": "idle", "progress": 0, "message": "", "output": None}
+
+
+@router.get("/whisper/models")
+async def list_whisper_models():
+    """List available Whisper models."""
+    # Get download status
+    check_result = await check_whisper_dependencies()
+
+    # Read current download status from JSON file
+    download_status = {"status": "idle", "progress": 0, "message": "", "model": ""}
+    try:
+        current_download_status = read_model_download_status_response()
+        download_status = sanitize_download_status(current_download_status)
+    except Exception:
+        pass
+
+    return {
+        "models": build_whisper_models_payload(check_result=check_result, whisper_models=WHISPER_MODELS),
+        "downloadStatus": download_status,
+    }

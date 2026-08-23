@@ -1,0 +1,204 @@
+        "speech_enhancer": request.speech_enhancer,
+        "pass1_pipeline": request.pass1_pipeline,
+        "pass2_pipeline": request.pass2_pipeline,
+        "custom_config": request.custom_config,
+        "translate_to": None,
+        "translate_base_url": request.translate_base_url,
+        "translate_api_key": request.translate_api_key,
+        "translate_model": request.translate_model,
+        "translate_style": request.translate_style,
+    }
+    whisper_config = apply_whisper_strategy(whisper_config, resolved_strategy)
+    _assert_custom_pipeline_supported(
+        whisper_config.get("pipeline_mode"),
+        whisper_config.get("pass1_pipeline"),
+        whisper_config.get("pass2_pipeline"),
+    )
+
+    # 从路径提取视频名称
+    video_name = os.path.splitext(os.path.basename(local_video_path))[0]
+
+    chain_id = str(os.urandom(16).hex())
+    job_data = JobCreate(
+        emby_item_id=f"whisper_{os.path.basename(local_video_path)}",
+        emby_item_name=f"[Whisper] {video_name}",
+        input_path=local_video_path,
+        settings=JobSettings(**whisper_config),
+        chain_id=chain_id,
+    )
+
+    result = await job_manager.enqueue_whisper(job_data)
+
+    if requested_translate_to:
+        translate_job_data = JobCreate(
+            emby_item_id=f"translate_{os.path.basename(local_video_path)}",
+            emby_item_name=f"[翻译] {video_name}",
+            input_path=build_expected_ja_srt_path(local_video_path),
+            settings=JobSettings(
+                srt_path=build_expected_ja_srt_path(local_video_path),
+                target_lang=requested_translate_to,
+                translate_model=request.translate_model,
+                translate_base_url=request.translate_base_url,
+                translate_api_key=request.translate_api_key or "",
+                translate_style=request.translate_style,
+            ),
+            chain_id=chain_id,
+            depends_on_task_id=result.id,
+            parent_task_id=result.id,
+        )
+        await job_manager.create_job(
+            translate_job_data,
+            job_type="translate-srt",
+            status="blocked",
+            enqueue_now=False,
+        )
+
+    return WhisperResponse(
+        task_id=result.id,
+        status=result.status,
+        message="Whisper 任务已创建"
+    )
+
+
+@router.get("/tasks/{task_id}")
+async def get_whisper_task(task_id: str):
+    """获取任务状态"""
+    job = await job_manager.get_job(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    log_lines = await job_manager.get_logs(task_id)
+
+    return {
+        "task_id": job.id,
+        "status": job.status,
+        "progress": job.progress,
+        "log_lines": log_lines[-50:],
+        "error": job.error_message,
+    }
+
+
+@router.post("/tasks/{task_id}/run")
+
+---MANAGER---
+
+    async def get_logs(self, job_id: str) -> list[str]:
+        # 优先从内存获取实时日志
+        if job_id in self._logs and self._logs[job_id]:
+            return self._logs[job_id]
+        # 从文件读取
+        return read_log_lines(job_id)
+
+    async def add_log(self, job_id: str, log: str):
+        if job_id not in self._logs:
+            self._logs[job_id] = []
+        self._logs[job_id].append(log)
+        # 持久化到文件
+        try:
+            append_log_line(job_id, log)
+        except Exception as e:
+            logger.warning("Failed to save log to file for job %s: %s", job_id, e)
+
+    async def remove_event_queue(self, job_id: str):
+        if job_id in self._event_queues:
+            del self._event_queues[job_id]
+
+    def _build_job_create_from_row(self, job: Job) -> JobCreate:
+        return JobCreate(
+            emby_item_id=job.emby_item_id,
+            emby_item_name=job.emby_item_name,
+            input_path=job.input_path,
+            settings=job.settings or {},
+            chain_id=job.chain_id,
+            depends_on_task_id=job.depends_on_task_id,
+            parent_task_id=job.parent_task_id,
+        )
+
+    async def _activate_blocked_dependents(self, parent_job_id: str) -> list[str]:
+        activated_ids: list[str] = []
+        pending_jobs: list[tuple[str, JobCreate, str]] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status == "blocked",
+                    ).order_by(Job.created_at)
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "queued"
+                    job.error_message = None
+                    pending_jobs.append((job.id, self._build_job_create_from_row(job), job.job_type))
+                    activated_ids.append(job.id)
+                await session.commit()
+        for job_id, job_data, job_type in pending_jobs:
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put({"type": "queued", "job_id": job_id})
+        if pending_jobs:
+            self._ensure_worker()
+        return activated_ids
+
+    async def _skip_blocked_dependents(self, parent_job_id: str, reason: str) -> list[str]:
+        skipped_ids: list[str] = []
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Job).where(
+                        Job.depends_on_task_id == parent_job_id,
+                        Job.status.in_(["blocked", "pending"]),
+                    )
+                )
+                jobs = result.scalars().all()
+                for job in jobs:
+                    job.status = "skipped"
+                    job.error_message = reason
+                    job.completed_at = utcnow_naive()
+                    skipped_ids.append(job.id)
+                await session.commit()
+        for job_id in skipped_ids:
+            await self.get_event_queue(job_id).put({"type": "failed", "success": False, "error": reason})
+        return skipped_ids
+
+    async def create_job(
+        self,
+        job_data: JobCreate,
+        *,
+        job_type: str = "lada",
+        status: str = "queued",
+        enqueue_now: bool = True,
+    ) -> JobResponse:
+        job_id = str(uuid.uuid4())
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                job = Job(
+                    id=job_id,
+                    job_type=job_type,
+                    emby_item_id=job_data.emby_item_id,
+                    emby_item_name=job_data.emby_item_name,
+                    input_path=job_data.input_path,
+                    status=status,
+                    chain_id=job_data.chain_id,
+                    depends_on_task_id=job_data.depends_on_task_id,
+                    parent_task_id=job_data.parent_task_id,
+                    settings=job_data.settings.model_dump() if hasattr(job_data, 'settings') else {},
+                )
+                session.add(job)
+                await session.commit()
+                await session.refresh(job)
+                response = JobResponse.model_validate(job)
+
+        if enqueue_now and status == "queued":
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put({"type": "queued", "job_id": job_id})
+            self._ensure_worker()
+        elif status == "blocked":
+            await self.get_event_queue(job_id).put({"type": "blocked", "job_id": job_id})
+
+        return response
+
+    async def enqueue(self, job_data: JobCreate, job_type: str = "lada") -> JobResponse:
+        """入队 Lada 或 Whisper 任务"""
+        return await self.create_job(job_data, job_type=job_type, status="queued", enqueue_now=True)

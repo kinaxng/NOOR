@@ -1,0 +1,265 @@
+    def _pass5_format(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
+        """最终格式化"""
+        for seg in segments:
+            text = seg.text.strip()
+            # 清理连续空格
+            text = re.sub(r'\s+', ' ', text)
+            # 统一引号
+            text = text.replace('「「', '「').replace('」」', '」')
+            # 去除行首行尾标点
+            text = re.sub(r'^[。、？?！!]\s*', '', text)
+            text = re.sub(r'\s*[。、？?！!]$', '', text)
+            seg.text = text
+
+        # 移除空片段
+        return [s for s in segments if s.text.strip()]
+
+
+class RecommendedSubtitlePostProcessor:
+    _LONG_REPEAT_CHAR_RE = re.compile(r"(る{10,}|じゅる{4,}|ごく(?:ごく){3,}|んぐ(?:んぐ){3,}|んむ(?:んむ){3,})")
+    _LONG_SYLLABLE_RUN_RE = re.compile(r"((?:じゅ|ちゅ|んっ|はぁ|る|んむ|ごく){6,})")
+    _MOAN_SPAN_RE = re.compile(r"(?:(?:んっ|はぁ|あっ|うっ|じゅる|ちゅ|くちゅ|ごく|る|んぐ|んむ){8,})")
+    _NOISE_EDGE_RE = re.compile(r"^(?:じゅる|る|ごく|んぐ|んむ){4,}|(?:じゅる|る|ごく|んぐ|んむ){4,}$")
+
+    """Recommended-strategy specific subtitle cleanup.
+
+    Goal: low-risk quality gains for the product default path:
+    - remove exact / near-exact adjacent duplicates
+    - merge tiny repeated tails
+    - suppress punctuation-only / onomatopoeia-only noise spans
+    - apply slightly stricter Japanese post-processing parameters
+    """
+
+    _PUNCT_ONLY_RE = re.compile(r"^[。、「」『』、,，.!！?？…~〜・\-\s]+$")
+    _KANJI_RE = re.compile(r"[一-龯々]")
+    _VOICE_CHAR_RE = re.compile(r"^[ぁ-んァ-ヶーっッ゛゜ゃゅょゎゐゑをん]+$")
+    _NOISE_TOKENS = tuple(sorted((
+        "はぁい", "ごくごく", "ちゅるっ", "ちゅう", "ちゅぅ", "ちゅっ", "ちゅぱ", "ちゅぷ", "ちゅる", "ちゅぽ",
+        "くちゅ", "ぺろっ", "じゅぽ", "はむっ", "ごくっ", "んっ", "んん", "あっ", "あん", "はぁ", "ふぅ",
+        "うっ", "えっ", "おっ", "むっ", "ぺろ", "じゅる", "はむ", "ごく", "んぐ", "んむ", "ゴク", "ちゅ", "ん", "あ", "む", "っ"
+    ), key=len, reverse=True))
+
+    def __init__(self):
+        self._base = JapanesePostProcessor(
+            min_segment_duration=0.8,
+            max_segment_duration=7.0,
+            min_gap_threshold=0.25,
+            merge_below=0.8,
+        )
+
+    def process(self, result: TranscriptionResult) -> TranscriptionResult:
+        processed = self._base.process(result)
+        before_count = len(processed.segments)
+        trimmed_segments, trimmed_chars, trimmed_empty_removed = self._trim_embedded_noise_spans(processed.segments)
+        adjacent_deduped, adjacent_removed = self._dedupe_adjacent_segments(trimmed_segments)
+        echoed_segments, echo_removed = self._suppress_short_window_echoes(adjacent_deduped)
+        segments, noise_removed = self._suppress_noise_only_segments(echoed_segments)
+        after_count = len(segments)
+        for i, seg in enumerate(segments):
+            seg.index = i + 1
+        return TranscriptionResult(
+            segments=segments,
+            language=processed.language,
+            duration=processed.duration,
+            source=processed.source,
+            metadata={
+                **processed.metadata,
+                "post_processed": True,
+                "recommended_strategy_post_processed": True,
+                "recommended_cleanup_before_segments": before_count,
+                "recommended_cleanup_after_segments": after_count,
+                "recommended_cleanup_deduped_segments": max(0, before_count - after_count),
+                "recommended_cleanup_adjacent_deduped_segments": adjacent_removed,
+                "recommended_cleanup_window_echo_segments": echo_removed,
+                "recommended_cleanup_noise_only_segments": noise_removed + trimmed_empty_removed,
+                "recommended_cleanup_trimmed_noise_chars": trimmed_chars,
+            },
+        )
+
+    def _trim_embedded_noise_spans(self, segments: list[SubtitleSegment]) -> tuple[list[SubtitleSegment], int, int]:
+        cleaned: list[SubtitleSegment] = []
+        trimmed_chars = 0
+        dropped = 0
+        for seg in segments:
+            trimmed_text, removed = self._trim_noise_from_text(seg.text)
+            if removed > 0:
+                trimmed_chars += removed
+                seg.text = trimmed_text
+            if seg.text.strip():
+                cleaned.append(seg)
+            else:
+                dropped += 1
+        return cleaned, trimmed_chars, dropped
+
+    @classmethod
+    def _trim_noise_from_text(cls, text: str) -> tuple[str, int]:
+        original = text or ''
+        updated = original
+
+        def repl(match: re.Match[str]) -> str:
+            chunk = match.group(0)
+            normalized = re.sub(r"\s+", "", chunk)
+            if len(normalized) < 12:
+                return chunk
+            return ' '
+
+        for pattern in (cls._LONG_REPEAT_CHAR_RE, cls._LONG_SYLLABLE_RUN_RE, cls._MOAN_SPAN_RE):
+            updated = pattern.sub(repl, updated)
+
+        updated = re.sub(r"(?:じゅる){4,}", ' ', updated)
+        updated = re.sub(r"(?:ごく|ゴク){5,}", ' ', updated)
+        updated = re.sub(r"(?:んぐ){4,}", ' ', updated)
+        updated = re.sub(r"(?:んむ){4,}", ' ', updated)
+        updated = re.sub(r"る{12,}", ' ', updated)
+        updated = cls._NOISE_EDGE_RE.sub('', updated)
+        updated = re.sub(r"\s+", ' ', updated).strip(' 、,')
+        return updated, max(0, len(original) - len(updated))
+
+    def _dedupe_adjacent_segments(self, segments: list[SubtitleSegment]) -> tuple[list[SubtitleSegment], int]:
+        if not segments:
+            return segments, 0
+
+        deduped: list[SubtitleSegment] = [segments[0]]
+        removed = 0
+        for seg in segments[1:]:
+            prev = deduped[-1]
+            if self._is_near_duplicate(prev.text, seg.text):
+                prev.end_time = max(prev.end_time, seg.end_time)
+                removed += 1
+                continue
+            deduped.append(seg)
+        return deduped, removed
+
+    def _suppress_short_window_echoes(self, segments: list[SubtitleSegment]) -> tuple[list[SubtitleSegment], int]:
+        if len(segments) < 3:
+            return segments, 0
+
+        cleaned: list[SubtitleSegment] = []
+        removed = 0
+        for seg in segments:
+            duplicate_idx = None
+            for idx in range(len(cleaned) - 1, max(-1, len(cleaned) - 3), -1):
+                prev = cleaned[idx]
+                if seg.start_time - prev.end_time > 2.5:
+                    continue
+                if not self._is_near_duplicate(prev.text, seg.text):
+                    continue
+                if len(self._normalize_text(seg.text)) < 5:
+                    continue
+                duplicate_idx = idx
+                break
+
+            if duplicate_idx is None:
+                cleaned.append(seg)
+                continue
+
+            cleaned[duplicate_idx].end_time = max(cleaned[duplicate_idx].end_time, seg.end_time)
+            removed += 1
+
+        return cleaned, removed
+
+    def _suppress_noise_only_segments(self, segments: list[SubtitleSegment]) -> tuple[list[SubtitleSegment], int]:
+        cleaned: list[SubtitleSegment] = []
+        removed = 0
+        for seg in segments:
+            if self._should_drop_noise_segment(seg):
+                removed += 1
+                continue
+            cleaned.append(seg)
+        return cleaned, removed
+
+    def _should_drop_noise_segment(self, seg: SubtitleSegment) -> bool:
+        if self._is_noise_only(seg.text):
+            return True
+
+        compact = re.sub(r"\s+", "", seg.text or "")
+        normalized = re.sub(r"[。、「」『』、,，.!！?？…~〜・\-]", "", compact)
+        if not normalized:
+            return True
+
+        duration = max(0.0, seg.end_time - seg.start_time)
+        noise_ratio = self._noise_token_ratio(normalized)
+        unique_ratio = len(set(normalized)) / max(len(normalized), 1)
+        has_kanji = bool(self._KANJI_RE.search(normalized))
+        voice_like = bool(self._VOICE_CHAR_RE.fullmatch(normalized))
+
+        if not has_kanji and len(normalized) >= 6 and noise_ratio >= 0.72 and duration <= 10.0:
+            return True
+        if not has_kanji and voice_like and len(normalized) >= 8 and unique_ratio <= 0.34 and duration <= 12.0:
+            return True
+        if not has_kanji and voice_like and len(normalized) >= 12 and noise_ratio >= 0.55:
+            return True
+        return False
+
+    @classmethod
+    def _is_noise_only(cls, text: str) -> bool:
+        compact = re.sub(r"\s+", "", text or "")
+        if not compact:
+            return True
+        if cls._PUNCT_ONLY_RE.fullmatch(compact):
+            return True
+
+        normalized = re.sub(r"[。、「」『』、,，.!！?？…~〜・\-]", "", compact)
+        if not normalized:
+            return True
+        if len(normalized) <= 48 and cls._consists_of_noise_tokens(normalized):
+            return True
+
+        for width in range(1, min(5, len(normalized) // 4 + 1)):
+            unit = normalized[:width]
+            if unit and unit * max(4, len(normalized) // width) == normalized[: len(unit) * max(4, len(normalized) // width)]:
+                if len(normalized) >= width * 4 and normalized == unit * (len(normalized) // width):
+                    return True
+        return False
+
+    @classmethod
+    def _noise_token_ratio(cls, text: str) -> float:
+        remaining = text
+        matched = 0
+        while remaining:
+            found = False
+            for token in cls._NOISE_TOKENS:
+                if remaining.startswith(token):
+                    matched += len(token)
+                    remaining = remaining[len(token):]
+                    found = True
+                    break
+            if not found:
+                remaining = remaining[1:]
+        return matched / max(len(text), 1)
+
+    @classmethod
+    def _consists_of_noise_tokens(cls, text: str) -> bool:
+        remaining = text
+        while remaining:
+            matched = False
+            for token in cls._NOISE_TOKENS:
+                if remaining.startswith(token):
+                    remaining = remaining[len(token):]
+                    matched = True
+                    break
+            if not matched:
+                return False
+        return True
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        normalized = re.sub(r"\s+", "", text or "")
+        normalized = re.sub(r"[。、「」『』!！?？…~〜]+", "", normalized)
+        return normalized.strip()
+
+    def _is_near_duplicate(self, left: str, right: str) -> bool:
+        lnorm = self._normalize_text(left)
+        rnorm = self._normalize_text(right)
+        if not lnorm or not rnorm:
+            return False
+        if lnorm == rnorm:
+            return True
+        if len(lnorm) >= 6 and (lnorm in rnorm or rnorm in lnorm):
+            return True
+        if len(lnorm) >= 8 and len(rnorm) >= 8:
+            common = lnorm if len(lnorm) <= len(rnorm) else rnorm
+            other = rnorm if common is lnorm else lnorm
+            if common[: max(6, len(common) - 2)] in other:
+                return True
+        return False

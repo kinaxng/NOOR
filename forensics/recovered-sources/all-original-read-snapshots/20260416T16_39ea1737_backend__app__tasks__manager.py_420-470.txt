@@ -1,0 +1,51 @@
+    async def create_job(
+        self,
+        job_data: JobCreate,
+        *,
+        job_type: str = "lada",
+        status: str = "queued",
+        enqueue_now: bool = True,
+    ) -> JobResponse:
+        job_id = str(uuid.uuid4())
+        async with self._db_lock:
+            async with async_session_maker() as session:
+                job = Job(
+                    id=job_id,
+                    job_type=job_type,
+                    emby_item_id=job_data.emby_item_id,
+                    emby_item_name=job_data.emby_item_name,
+                    input_path=job_data.input_path,
+                    status=status,
+                    chain_id=job_data.chain_id,
+                    depends_on_task_id=job_data.depends_on_task_id,
+                    parent_task_id=job_data.parent_task_id,
+                    settings=job_data.settings.model_dump() if hasattr(job_data, 'settings') else {},
+                )
+                session.add(job)
+                await session.commit()
+                await session.refresh(job)
+                response = JobResponse.model_validate(job)
+
+        if enqueue_now and status == "queued":
+            await self.queue.put((job_id, job_data, job_type))
+            await self.get_event_queue(job_id).put({"type": "queued", "job_id": job_id})
+            self._ensure_worker()
+        elif status == "blocked":
+            await self.get_event_queue(job_id).put({"type": "queued", "job_id": job_id})
+
+        return response
+
+    async def enqueue(self, job_data: JobCreate, job_type: str = "lada") -> JobResponse:
+        """入队 Lada 或 Whisper 任务"""
+        return await self.create_job(job_data, job_type=job_type, status="queued", enqueue_now=True)
+
+    async def enqueue_whisper(self, job_data: JobCreate) -> JobResponse:
+        """入队 Whisper 任务"""
+        return await self.enqueue(job_data, job_type="whisper")
+
+    async def enqueue_translate_srt(self, job_data: JobCreate) -> JobResponse:
+        """入队 SRT 翻译任务"""
+        return await self.enqueue(job_data, job_type="translate-srt")
+
+    def set_max_concurrent(self, max_concurrent: int):
+        """设置最大并发任务数"""

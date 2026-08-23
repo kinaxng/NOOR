@@ -1,0 +1,36 @@
+    manager._ensure_worker = lambda: None  # type: ignore[method-assign]
+
+    async def fake_run_lada(job_id: str, job_data: JobCreate):
+        run_started.set()
+
+    manager._run_lada = fake_run_lada  # type: ignore[method-assign]
+
+    queued = await manager.enqueue(make_job("queued"))
+
+    assert await manager.cancel_job(queued.id) is True
+
+    async with temp_db() as session:
+        result = await session.execute(select(Job).where(Job.id == queued.id))
+        db_job = result.scalar_one()
+        assert db_job.status == "cancelled"
+        assert db_job.completed_at is not None
+
+    cancel_event = await asyncio.wait_for(manager.get_event_queue(queued.id).get(), timeout=2)
+    assert cancel_event == {
+        "type": "queued",
+        "job_id": queued.id,
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+        "phase_progress": 0,
+    }
+    terminal_event = await asyncio.wait_for(manager.get_event_queue(queued.id).get(), timeout=2)
+    assert terminal_event == {
+        "type": "cancelled",
+        "success": False,
+        "progress": 0,
+        "phase_key": "prepare",
+        "phase_label": "准备任务",
+        "phase_progress": 0,
+        "detail": "视频修复已取消",
+    }
+

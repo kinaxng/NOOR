@@ -1,0 +1,110 @@
+        <div class="settings-form mt-4">
+          <div class="whisper-current-profile">
+            <div>
+              <p class="whisper-current-profile__label">{{ t('settings.whisper.currentProfileTitle') }}</p>
+              <div class="whisper-current-profile__headline">
+                <span>{{ t(activeStrategyMeta.titleKey) }}</span>
+                <VuiBadge :color="activeStrategy === 'recommended' ? 'info' : 'warning'" variant="gradient" size="xs">{{ t(activeStrategyMeta.badgeKey) }}</VuiBadge>
+              </div>
+              <p class="whisper-current-profile__desc">{{ t('settings.whisper.currentProfileDesc') }}</p>
+            </div>
+            <div class="whisper-current-profile__meta">
+              <span class="whisper-current-profile__chip">{{ activeStrategyMeta.stackText }}</span>
+              <span class="whisper-current-profile__chip">{{ activeAudioPreprocessSummary }}</span>
+              <span class="whisper-current-profile__chip">{{ activeTranslateSummary }}</span>
+            </div>
+          </div>
+          <div class="whisper-strategy-grid whisper-strategy-grid--duo">
+          <div class="whisper-strategy-card whisper-strategy-card--primary" :class="{ 'whisper-strategy-card--active': activeStrategy === 'recommended' }">
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t('whisper.recommended.title') }}</div>
+                <p class="whisper-strategy-card__desc">{{ t('whisper.recommended.desc') }}</p>
+              </div>
+              <VuiBadge color="info" variant="gradient" size="sm">{{ t('whisper.recommended.badge') }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">Anime-Whisper · Qwen3-ASR fallback · Qwen3 ForcedAligner</p>
+            <p class="whisper-strategy-card__stack">{{ t('whisper.recommended.stack') }}</p>
+            <div class="whisper-strategy-card__actions">
+              <VuiButton
+                v-if="activeStrategy !== 'recommended'"
+                variant="gradient"
+                color="info"
+                size="small"
+                customClass="settings-primary-btn"
+                :loading="saving"
+                @click="saveRecommendedDefaults"
+              >
+                {{ saving ? t('settings.whisper.saving') : t('settings.whisper.setAsDefault') }}
+              </VuiButton>
+            </div>
+          </div>
+
+          <div class="whisper-strategy-card whisper-strategy-card--muted" :class="{ 'whisper-strategy-card--active': activeStrategy === 'baseline' }">
+            <div class="whisper-strategy-card__head">
+              <div>
+                <div class="whisper-strategy-card__title">{{ t('whisper.presets.baseline.title') }}</div>
+                <p class="whisper-strategy-card__desc">{{ t('whisper.presets.baseline.desc') }}</p>
+              </div>
+              <VuiBadge color="warning" variant="gradient" size="sm">{{ t('whisper.presets.baseline.badge') }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">faster-whisper large-v3 · baseline comparison</p>
+            <p class="whisper-strategy-card__stack">{{ t('whisper.presets.baseline.stack') }}</p>
+            <div class="whisper-strategy-card__actions">
+              <VuiButton
+                v-if="activeStrategy !== 'baseline'"
+                variant="gradient"
+                color="info"
+                size="small"
+                customClass="settings-primary-btn"
+                :loading="saving"
+                @click="saveBaselineDefaults"
+              >
+                {{ saving ? t('settings.whisper.saving') : t('settings.whisper.setAsDefault') }}
+              </VuiButton>
+            </div>
+          </div>
+          </div>
+
+          <FieldRow :label="t('settings.whisper.audioPreprocessLabel')" :description="t('settings.whisper.audioPreprocessDesc')">
+            <select v-model="audioPreprocessMode" class="settings-input">
+              <option value="none">{{ t('settings.whisper.audioPreprocessMode.none') }}</option>
+              <option value="vocal_isolation">{{ t('settings.whisper.audioPreprocessMode.vocalIsolation') }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow
+            :label="t('settings.whisper.audioPreprocessModelLabel')"
+            :description="t('settings.whisper.audioPreprocessModelDesc')"
+          >
+            <select v-model="audioPreprocessModel" class="settings-input" :disabled="audioPreprocessMode === 'none'">
+              <option value="vocal_clean">{{ t('settings.whisper.audioPreprocessModel.vocalClean') }}</option>
+              <option value="vocal_balanced">{{ t('settings.whisper.audioPreprocessModel.vocalBalanced') }}</option>
+            </select>
+          </FieldRow>
+        </div>
+      </div>
+
+      <!-- 2. OpenAI Translation Card -->
+      <div class="settings-card ui-card">
+        <h2 class="settings-card__title">{{ t('settings.whisper.translationTitle') }}</h2>
+        <p class="settings-card__desc">{{ t('settings.whisper.translationDesc') }}</p>
+
+        <div class="settings-form mt-4">
+          <FieldRow :label="t('settings.whisper.translateEnable')" :description="t('settings.whisper.translateEnableDesc')">
+            <div class="flex items-center gap-3">
+              <SettingsSwitch v-model="translateEnabled" />
+              <span class="text-sm text-text-secondary">{{ translateEnabled ? t('common.enabled') : t('common.disabled') }}</span>
+            </div>
+          </FieldRow>
+
+          <FieldRow :label="t('settings.whisper.translateTargetLabel')" :description="t('settings.whisper.translateTargetDesc')">
+            <select v-model="translateTo" class="settings-input" :disabled="!translateEnabled">
+              <option v-for="opt in translateLangOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </FieldRow>
+
+          <FieldRow :label="t('settings.whisper.translateModelLabel')" :description="t('settings.whisper.translateModelDesc')">
+            <input v-model="translateModel" type="text" class="settings-input" placeholder="gpt-4o-mini" :disabled="!translateEnabled" />
+          </FieldRow>
+

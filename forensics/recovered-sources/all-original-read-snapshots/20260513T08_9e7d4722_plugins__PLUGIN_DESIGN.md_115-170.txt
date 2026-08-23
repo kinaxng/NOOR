@@ -1,0 +1,73 @@
+插件页面必须优先使用主程序注入的 `sdk.ui.*`，只有业务布局和插件特有内容可以写私有 CSS。
+
+推荐对应关系：
+
+| 目的 | SDK |
+| --- | --- |
+| 页面根节点 | `sdk.ui.page()` |
+| 顶部操作区 | `sdk.ui.topBar()` 或 `.noor-plugin-topbar` |
+| 一级 tab | `sdk.ui.tabs()` |
+| 按钮 | `sdk.ui.button()` |
+| 按钮内提交进度 | `sdk.ui.submitButton()` |
+| 状态徽章 | `sdk.ui.badge()` |
+| 轻量筛选 | `sdk.ui.chip()` |
+| 分页 | `sdk.ui.pagination()` |
+| 输入/选择/搜索 | `sdk.ui.input()` / `sdk.ui.select()` / `sdk.ui.search()` |
+| 空/加载/错误 | `sdk.ui.emptyState()` / `sdk.ui.loadingState()` / `sdk.ui.errorState()` |
+| 弹窗 | `sdk.ui.modal()` / `sdk.ui.confirm()` |
+
+移动端规则：顶部 actions 排在 tabs 上方；插件不要自行反转顺序，使用 `.noor-plugin-topbar` 即可继承全站规则。
+
+## 10. 反向组件沉淀
+
+主程序不是唯一组件来源。插件中如果出现已经被实际页面验证、符合 NOOR token 且可复用的结构，应提升为通用 SDK 组件，再反哺主程序。
+
+当前标准化来源：
+
+| 来源场景 | 沉淀组件 | 用途 |
+| --- | --- | --- |
+| qB / 迅雷 顶部状态与操作 | `sdk.ui.topBar()`、`sdk.ui.actionRow()` | tabs + 状态 badge + 主操作按钮 |
+| qB / 迅雷 / JavDB 统计区 | `sdk.ui.statCard()`、`sdk.ui.statGrid()` | 任务数、速度、缓存、影片数等指标 |
+| M-Team / JavDB / AVDB 横向作品卡 | `sdk.ui.mediaCard()` | backdrop/fanart 媒体卡片 |
+| 各插件加载状态 | `sdk.ui.loadingState()` | spinner + 短文案 |
+
+判断标准：
+
+- 至少两个页面/插件可能复用。
+- 只依赖 NOOR token，不依赖插件私有配色。
+- 能明确命名和定义交互边界。
+- 抽出来后不会让业务逻辑进入主程序。
+所有通用 UI 必须使用 sdk.ui：page、topBar、tabs、button、submitButton、badge、chip、pagination、input、select、search、emptyState、loadingState、errorState、modal、confirm。
+不要使用 alert/confirm，不要硬编码后端 host/port，不要自定义按钮高度、badge 色板、tab 风格。
+插件 CSS 只允许写业务布局和卡片内容，class 必须带插件名前缀。
+顶部操作区必须使用 sdk.ui.topBar 或 .noor-plugin-topbar；移动端 actions 必须排在 tabs 上方。
+分页使用 sdk.ui.pagination，空/加载/错误态互斥。
+```
+
+## 9. 当前 SDK UI 清单
+
+```js
+sdk.ui.page({ className, children })
+sdk.ui.topBar({ tabs, actions, align })
+sdk.ui.button({ label, tone, active, disabled, onClick })
+sdk.ui.submitButton({ idleLabel, status, progress, onClick })
+sdk.ui.badge({ label, tone, active, onClick })
+sdk.ui.chip({ label, active, onClick })
+sdk.ui.tabs({ value, tabs, onChange })
+sdk.ui.pagination({ page, total, pageSize, totalPages, siblingCount, onPage })
+sdk.ui.search({ value, placeholder, onInput, onClear })
+sdk.ui.input({ value, placeholder, readonly, disabled, onInput, onKeydown })
+sdk.ui.select({ value, options, disabled, onChange })
+sdk.ui.textarea({ value, placeholder, rows, onInput })
+sdk.ui.field({ label, hint, control })
+sdk.ui.card({ children, href, target, onClick })
+sdk.ui.notice({ text, tone })
+sdk.ui.emptyState({ text })
+sdk.ui.loadingState({ text })
+sdk.ui.errorState({ text })
+sdk.ui.skeletonCard()
+sdk.ui.skeletonGrid({ count })
+sdk.ui.modal({ title, content, width, footer, onClose })
+sdk.ui.dialog(options) // modal alias
+sdk.ui.confirm({ title, message, confirmText, danger })
+```

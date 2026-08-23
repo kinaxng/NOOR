@@ -1,0 +1,342 @@
+    <AsyncLadaPanel
+      v-if="showLadaPanel"
+      :open="showLadaPanel"
+      :item="selectedVideo"
+      :detail="videoDetail"
+      :initial-selected-path="detailActionPath"
+      :initial-selected-id="detailActionId"
+      @close="handleCloseDetail"
+    />
+
+    <AsyncSubtitlePanel
+      v-if="showSubtitlePanel"
+      :open="showSubtitlePanel"
+      :detail="videoDetail"
+      :loading="loadingDetail"
+      :initial-selected-path="subtitleVideoPath"
+      @close="handleCloseSubtitle"
+    />
+  </div>
+</template>
+
+---
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import VuiButton from '../ui/Button/VuiButton.vue'
+import VuiBadge from '../ui/Badge/VuiBadge.vue'
+import BaseModal from '../ui/BaseModal.vue'
+import { useI18n } from '../../composables/useI18n'
+import type { FileTags, MediaItem, MediaItemDetail } from '../../api/types'
+import PanelHeader from './panels/PanelHeader.vue'
+
+const { t, i18nVersion, currentLang } = useI18n()
+
+const directorLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.director')
+})
+const errorLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.error')
+})
+const closeLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.close')
+})
+const codeLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.code')
+})
+const releaseLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.release')
+})
+const premieredLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.premiered')
+})
+const addedLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.added')
+})
+const ratingLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.rating')
+})
+const seriesLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.series')
+})
+const plotLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.plot')
+})
+const originalTitleLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.originalTitle')
+})
+const tagsLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.tags')
+})
+const notAvailableLabel = computed(() => {
+  void i18nVersion.value
+  return t('common.notAvailable')
+})
+const previewUnsupportedLabel = computed(() => {
+  void i18nVersion.value
+  return t('hardlinks.previewUnsupported')
+})
+const previewFailedLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.previewFailed')
+})
+const overviewLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.overview')
+})
+const filesLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.files')
+})
+const subtitlePanelLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.openSubtitle')
+})
+const ladaPanelLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.openLada')
+})
+const noVariantsLabel = computed(() => {
+  void i18nVersion.value
+  return t('detail.variant.none')
+})
+const chineseLabel = computed(() => {
+  void i18nVersion.value
+  return t('mediacard.chinese')
+})
+const crackedLabel = computed(() => {
+  void i18nVersion.value
+  return t('mediacard.cracked')
+})
+const leakedLabel = computed(() => {
+  void i18nVersion.value
+  return t('library.filter.leaked')
+})
+const uncensoredLabel = computed(() => {
+  void i18nVersion.value
+  return t('library.filter.uncensored')
+})
+
+const props = defineProps<{
+  open: boolean
+  item: MediaItem | null
+  detail: MediaItemDetail | null
+  loading: boolean
+  error: string | null
+}>()
+
+const emit = defineEmits<{
+  close: []
+  openSubtitle: [path: string]
+  openLada: [path: string]
+}>()
+
+const previewVideoPath = ref('')
+const previewFailed = ref(false)
+
+// Merge genres from NFO and Emby, removing duplicates
+// Filter out genres containing ":" (these are labeled fields like "发行: kawaii", "片商: kawaii" from 刮削 tools)
+const allGenres = computed(() => {
+  if (!props.detail) return []
+  const nfoGenres = (props.detail.nfo?.genres || []).filter((g: string) => !g.includes(':'))
+  const embyGenres = (props.detail.genres || []).filter((g: string) => !g.includes(':'))
+  return [...new Set([...nfoGenres, ...embyGenres])]
+})
+
+// All file paths in the same folder (current + siblings)
+const allFolderPaths = computed(() => {
+  if (!props.detail?.file_path) return []
+  const paths = [props.detail.file_path]
+  for (const s of (props.detail.siblings || [])) {
+    if (s.file_path && !paths.includes(s.file_path)) {
+      paths.push(s.file_path)
+    }
+  }
+  return paths
+})
+
+const previewVideoName = computed(() => previewVideoPath.value.split('/').pop() || previewVideoPath.value)
+
+const previewVideoUrl = computed(() => {
+  if (!previewVideoPath.value) return ''
+  return `/api/media-library/hardlinks/preview-file?path=${encodeURIComponent(previewVideoPath.value)}`
+})
+
+const variantCount = computed(() => props.detail?.variant_count || allFolderPaths.value.length)
+
+const displayTitle = computed(() => {
+  if (!props.detail) return ''
+  return props.detail.nfo?.title || props.detail.nfo?.originaltitle || props.detail.name
+})
+
+const originalTitle = computed(() => {
+  const title = props.detail?.nfo?.originaltitle?.trim()
+  if (!title) return ''
+  return title !== displayTitle.value ? title : ''
+})
+
+const releaseDisplay = computed(() => {
+  const year = props.detail?.nfo?.year?.trim()
+  if (year) return year
+  const premiered = props.detail?.nfo?.premiered || props.detail?.premiered
+  if (!premiered) return ''
+  return formatDate(premiered)
+})
+
+const premieredDisplay = computed(() => {
+  const premiered = props.detail?.premiered || props.detail?.nfo?.premiered
+  if (!premiered) return ''
+  const formatted = formatDate(premiered)
+  return formatted !== releaseDisplay.value ? formatted : ''
+})
+
+const studioItems = computed(() => {
+  const values = [
+    props.detail?.nfo?.maker,
+    props.detail?.nfo?.label,
+    props.detail?.nfo?.publisher,
+    ...(props.detail?.studios || []),
+  ]
+  return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])]
+})
+
+const detailTagItems = computed(() => variantTagItems(props.detail?.tags))
+
+function fileNameOf(path?: string, fallback?: string) {
+  if (path) {
+    const name = path.split('/').pop()
+    if (name) return name
+  }
+  return fallback || notAvailableLabel.value
+}
+
+function dirNameOf(path?: string) {
+  if (!path) return ''
+  const idx = path.lastIndexOf('/')
+  if (idx <= 0) return path
+  return path.slice(0, idx)
+}
+
+const variantRows = computed(() => {
+  if (!props.detail?.file_path) return []
+  const current = {
+    id: props.detail.id,
+    path: props.detail.file_path,
+    name: fileNameOf(props.detail.file_path, props.detail.name),
+    dir: dirNameOf(props.detail.file_path),
+    tags: props.detail.tags,
+  }
+  const siblings = (props.detail.siblings || [])
+    .filter((s) => s.file_path)
+    .map((s, index) => ({
+      id: s.id || `${props.detail?.id}-sib-${index}`,
+      path: s.file_path!,
+      name: fileNameOf(s.file_path, s.name || s.label || `${filesLabel.value} ${index + 1}`),
+      dir: dirNameOf(s.file_path),
+      tags: s.tags,
+    }))
+  return [current, ...siblings]
+})
+
+const selectedVariantPath = ref('')
+
+watch(variantRows, (rows) => {
+  if (!rows.length) {
+    selectedVariantPath.value = ''
+    return
+  }
+  if (!rows.some((variant) => variant.path === selectedVariantPath.value)) {
+    selectedVariantPath.value = rows[0].path
+  }
+}, { immediate: true })
+
+const selectedVariant = computed(() => {
+  return variantRows.value.find((variant) => variant.path === selectedVariantPath.value) || variantRows.value[0] || null
+})
+
+const selectedVariantName = computed(() => selectedVariant.value?.name || '')
+
+function selectVariant(path: string) {
+  selectedVariantPath.value = path
+}
+
+function variantTagItems(tags?: FileTags) {
+  if (!tags) return []
+  const items: { key: string; label: string; tone: 'blue' | 'green' | 'amber' | 'slate' }[] = []
+  if (tags.has_chinese) items.push({ key: 'chinese', label: chineseLabel.value, tone: 'green' })
+  if (tags.release_type_key === 'leaked') {
+    items.push({ key: 'leaked', label: leakedLabel.value, tone: 'amber' })
+  } else if (tags.release_type_key === 'uncensored') {
+    items.push({ key: 'uncensored', label: uncensoredLabel.value, tone: 'slate' })
+  }
+  if (tags.is_cracked) items.push({ key: 'cracked', label: crackedLabel.value, tone: 'blue' })
+  return items
+}
+
+function handleClose() {
+  emit('close')
+}
+
+function openPreview(path?: string) {
+  const targetPath = path || selectedVariant.value?.path || props.detail?.file_path
+  if (!targetPath) return
+  previewFailed.value = false
+  previewVideoPath.value = targetPath
+}
+
+function openSubtitlePanel() {
+  const targetPath = selectedVariant.value?.path || props.detail?.file_path
+  if (!targetPath) return
+  emit('openSubtitle', targetPath)
+}
+
+function openLadaPanel() {
+  const targetPath = selectedVariant.value?.path || props.detail?.file_path
+  if (!targetPath) return
+  emit('openLada', targetPath)
+}
+
+function closePreview() {
+  previewVideoPath.value = ''
+  previewFailed.value = false
+}
+
+function handlePreviewError() {
+  previewFailed.value = true
+}
+
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return notAvailableLabel.value
+  return new Date(dateStr).toLocaleDateString(currentLang.value === 'zh' ? 'zh-CN' : 'en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <Transition name="panel">
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex justify-end"
+      >
+        <!-- Backdrop -->
+        <div
+          class="absolute inset-0 bg-bg-void/80 backdrop-blur-sm"
+          @click="handleClose"
+        ></div>
+
+        <!-- Panel -->

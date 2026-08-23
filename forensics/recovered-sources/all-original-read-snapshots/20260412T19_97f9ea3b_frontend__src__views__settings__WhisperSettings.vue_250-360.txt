@@ -1,0 +1,111 @@
+        model: translateModel.value,
+      },
+    })
+    connectionResult.value = resp.data
+    if (resp.data.available) {
+      toast.success(resp.data.message)
+    } else {
+      toast.error(resp.data.message)
+    }
+  } catch (e: any) {
+    connectionResult.value = { available: false, message: '连接失败' }
+    toast.error(t('settings.whisper.testFailed'))
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+async function installDeps() {
+  const torchIsInstalled = !!checkingDepsResult.value.torch?.installed
+  const librosaIsInstalled = !!checkingDepsResult.value.librosa?.installed
+  const variantChanged = torchIsInstalled && (torchVariant.value === 'gpu') !== !!checkingDepsResult.value.torch?.cuda
+  const parts: string[] = []
+  if (!librosaIsInstalled) parts.push('librosa')
+  if (!torchIsInstalled || variantChanged) parts.push(`torch ${torchVariant.value.toUpperCase()}`)
+  const msg = parts.length === 0
+    ? '所有依赖已就绪，无需安装'
+    : `将安装: ${parts.join(' + ')}`
+  if (!confirm(msg)) return
+
+  installStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.installing') }
+  try {
+    await api.post('/settings/whisper/install-deps', {
+      torch_variant: torchVariant.value,
+      torch_current_cuda: !!checkingDepsResult.value.torch?.cuda,
+    })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/install-status')
+      const status = statusResp.data
+      installStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(t('settings.whisper.installSuccess'))
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.installFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.installFailed'))
+  }
+}
+
+async function downloadModel(modelId: string) {
+  if (!confirm(t('settings.whisper.downloadModelConfirm', { modelId }))) return
+
+  downloadingModel.value = modelId
+  modelDownloadStatus.value = { status: 'running', progress: 0, message: t('settings.whisper.downloading') }
+  try {
+    await api.post('/settings/whisper/models/download', { model: modelId })
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await api.get('/settings/whisper/models/download-status')
+      const status = statusResp.data
+      modelDownloadStatus.value = status
+      if (status.status === 'completed') {
+        toast.success(status.message || t('settings.whisper.downloadSuccess'))
+        await loadWhisperModels()
+        await checkWhisperDeps()
+        break
+      } else if (status.status === 'failed') {
+        toast.error(status.message || t('settings.whisper.downloadFailed'))
+        break
+      }
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.downloadFailed'))
+  } finally {
+    downloadingModel.value = null
+  }
+}
+
+async function deleteModel(modelId: string) {
+  if (!confirm(t('settings.whisper.deleteModelConfirm', { modelId }))) return
+  try {
+    await api.delete(`/settings/whisper/models/${modelId}`)
+    toast.success(t('settings.whisper.deleted'))
+    await loadWhisperModels()
+    await checkWhisperDeps()
+  } catch (e: any) {
+    toast.error(e.response?.data?.detail || t('settings.whisper.deleteFailed'))
+  }
+}
+
+// ===== Option lists =====
+
+// Pipeline usage recommendations (derived from backend specs)
+const PIPELINE_SPECS: Record<string, {
+  // 速度
+  speed: '极快' | '快' | '中' | '慢' | '可调';
+  speedScore: number; // 1-4
+  // 精度
+  accuracy: '低' | '中' | '高' | '最高' | '可调';
+  accuracyScore: number; // 1-4
+  // 显存
+  vram: string;
+  // 语音增强（预设pipeline固定组合，custom多选）
+  enhancers: string[];
+  // 建议标签
+  tips: string[];

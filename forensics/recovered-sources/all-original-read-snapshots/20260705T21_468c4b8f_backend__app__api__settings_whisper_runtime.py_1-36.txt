@@ -1,0 +1,36 @@
+from __future__ import annotations
+
+from pathlib import Path
+import site
+import sys
+import sysconfig
+from typing import Any, Callable
+
+from app.api.settings_whisper_models import resolve_model_cache_candidates
+from app.core.config import DEFAULT_REAZON_NEMO_MODEL_PATH, get_settings
+
+
+FASTER_WHISPER_MODELS = [
+    ("tiny", "Systran--faster-whisper-tiny"),
+    ("base", "Systran--faster-whisper-base"),
+    ("small", "Systran--faster-whisper-small"),
+    ("medium", "Systran--faster-whisper-medium"),
+    ("large-v3", "Systran--faster-whisper-large-v3"),
+    ("large-v3-turbo", "Systran--faster-whisper-large-v3-turbo"),
+]
+
+TRANSFORMERS_MODELS = [
+    ("anime_whisper", "litagin/anime-whisper", "~3GB"),
+    ("kotoba-whisper-v2.2", "kotoba-tech/kotoba-whisper-v2.2", "~3GB"),
+]
+
+OPTIONAL_MODULES = [
+    ("soundfile", "soundfile", False),
+    ("stable_whisper", "stable_whisper", False),
+    ("qwen_asr", "qwen_asr", False),
+    ("audio_separator", "audio_separator", True),
+    ("pydub", "pydub", False),
+    ("onnx", "onnx", False),
+    ("onnxruntime", "onnxruntime", True),
+]
+

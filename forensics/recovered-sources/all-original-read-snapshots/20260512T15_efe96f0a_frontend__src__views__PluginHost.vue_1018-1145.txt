@@ -1,0 +1,129 @@
+1032:<style>
+
+onMounted(mountPlugin)
+watch(pluginId, mountPlugin)
+onBeforeUnmount(clearMounted)
+</script>
+
+<template>
+  <div class="plugin-host-page">
+    <div v-if="loading" class="plugin-host-state">插件加载中</div>
+    <div v-if="error" class="plugin-host-state plugin-host-state--error">{{ error }}</div>
+    <div ref="host" class="plugin-host-mount" :class="{ 'is-loading': loading }" />
+  </div>
+</template>
+
+<style>
+.plugin-host-page { min-height: 40vh; }
+.plugin-host-state { padding: 1rem; margin-bottom: 1rem; border-radius: var(--radius-lg); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.7); }
+.plugin-host-state--error { color: var(--color-error); border-color: rgba(227,26,26,.25); background: rgba(227,26,26,.1); }
+.plugin-host-mount.is-loading { opacity: .6; }
+.noor-plugin-topbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.noor-plugin-topbar__tabs, .noor-plugin-topbar__actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.noor-plugin-btn { min-height: 30px; padding: .35rem .75rem; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: rgba(255,255,255,.78); font-size: .75rem; font-weight: 600; transition: all var(--transition-fast); }
+.noor-plugin-btn:hover:not(:disabled) { background: rgba(255,255,255,.08); color: #fff; }
+.noor-plugin-btn:disabled { opacity: .45; cursor: not-allowed; }
+.noor-plugin-btn--primary { background: var(--color-brand); color: white; border-color: transparent; }
+.noor-plugin-btn--danger { background: rgba(227,26,26,.18); color: #ff8a80; border-color: rgba(227,26,26,.28); }
+.noor-plugin-input { width: 100%; min-height: 36px; padding: .5rem .75rem; border-radius: var(--radius-md); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: white; outline: none; }
+.noor-plugin-input:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgba(0,117,255,.12); }
+.noor-plugin-select option { background: #111936; color: white; }
+.noor-plugin-field { display: flex; flex-direction: column; gap: .35rem; }
+.noor-plugin-field__label { font-size: .75rem; color: rgba(255,255,255,.52); font-weight: 600; }
+.noor-plugin-field__hint { color: rgba(255,255,255,.35); }
+.noor-plugin-modal-mask { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(0,0,0,.62); backdrop-filter: blur(10px); }
+.noor-plugin-modal { width: min(560px, 100%); max-height: min(760px, 92vh); overflow: auto; border-radius: var(--radius-xl); background: rgb(26,31,55); border: 1px solid rgba(255,255,255,.08); box-shadow: var(--shadow-xl); }
+.noor-plugin-modal--lg { width: min(920px, 100%); }
+.noor-plugin-modal__head, .noor-plugin-modal__actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem; border-bottom: 1px solid rgba(255,255,255,.06); }
+.noor-plugin-modal__actions { justify-content: flex-end; border-top: 1px solid rgba(255,255,255,.06); border-bottom: 0; }
+.noor-plugin-modal__title { color: white; font-weight: 700; }
+.noor-plugin-modal__body { padding: 1rem; display: grid; gap: .85rem; }
+.noor-plugin-tabs { position: relative; display: inline-flex; align-items: center; gap: .25rem; padding: .375rem; border-radius: var(--radius-xl); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.noor-plugin-tabs::-webkit-scrollbar { display: none; }
+.noor-plugin-tabs__marker { position: absolute; top: .375rem; bottom: .375rem; left: 0; border-radius: var(--radius-lg); background: var(--color-brand); box-shadow: 0 4px 12px rgba(0,117,255,.3); transition: none; z-index: 0; pointer-events: none; }
+.noor-plugin-tabs--ready .noor-plugin-tabs__marker { transition: transform .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1); }
+.noor-plugin-tabs__item { position: relative; z-index: 1; min-height: 34px; padding: .5rem 1.5rem; border-radius: var(--radius-lg); color: rgba(255,255,255,.4); font-size: .875rem; font-weight: 600; white-space: nowrap; transition: color .2s ease; }
+.noor-plugin-tabs__item:hover { color: rgba(255,255,255,.7); }
+.noor-plugin-tabs__item.is-active { color: #fff; }
+.noor-plugin-pagination, .noor-pagination { display: flex; justify-content: center; align-items: center; gap: .4rem; margin-top: 1rem; flex-wrap: wrap; }
+.noor-pagination__btn { min-height: 30px; min-width: 30px; padding: .35rem .75rem; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: rgba(255,255,255,.78); font-size: .75rem; font-weight: 700; transition: all var(--transition-fast); }
+.noor-pagination__btn:hover:not(:disabled) { background: rgba(255,255,255,.08); color: #fff; transform: translateY(-1px); }
+.noor-pagination__btn:disabled { opacity: .38; cursor: not-allowed; }
+.noor-pagination__page.is-active, .noor-pagination__btn.is-active { background: var(--color-brand); color: white; border-color: transparent; box-shadow: 0 4px 12px rgba(0,117,255,.25); }
+.noor-plugin-badge { min-height: 28px; display: inline-flex; align-items: center; padding: .25rem .6rem; border-radius: var(--radius-pill); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.68); font-size: .75rem; }
+.noor-plugin-chip { border-radius: var(--radius-pill); }
+.noor-plugin-chip.is-active { background: var(--color-brand); color: white; }
+.noor-plugin-notice, .noor-plugin-state { padding: 1rem; border-radius: var(--radius-lg); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.7); }
+.noor-plugin-notice--error, .noor-plugin-state--error { color: #ff8a80; background: rgba(227,26,26,.1); border-color: rgba(227,26,26,.25); }
+.noor-plugin-card { background: rgb(26,31,55); border: 1px solid rgba(255,255,255,.06); color: inherit; text-decoration: none; }
+.noor-plugin-skeleton { min-height: 180px; border-radius: var(--radius-lg); background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.08), rgba(255,255,255,.04)); background-size: 200% 100%; animation: noor-skeleton 1.2s linear infinite; }
+@keyframes noor-skeleton { to { background-position: -200% 0; } }
+@media (max-width: 640px) { .noor-plugin-topbar { flex-direction: column-reverse; align-items: stretch; } .noor-plugin-topbar__actions { order: -1; } }
+/* SDK visual contract: plugins must share main NOOR component metrics. */
+.plugin-host-mount, .plugin-host-mount * { box-sizing: border-box; }
+.noor-plugin-btn { height: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; font-family: var(--font-display); border-radius: var(--radius-button); }
+.noor-plugin-btn--primary:hover:not(:disabled) { background: var(--color-brand-hover); border-color: transparent; }
+.noor-plugin-modal__close { width: 30px; min-width: 30px; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1; }
+.noor-plugin-modal__close:hover:not(:disabled) { color: #fff; border-color: rgba(227,26,26,.35); background: rgba(227,26,26,.16); }
+.detail-panel-topbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.detail-panel-topbar__meta { min-width: 0; }
+.detail-panel-topbar__eyebrow { display: inline-flex; align-items: center; min-height: 1.5rem; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
+.detail-panel-topbar__close { width: 2.1rem; height: 2.1rem; flex: none; border-radius: .7rem; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-secondary); background: var(--color-bg-elevated); border: 1px solid var(--color-border-default); transition: color .16s ease, background .16s ease, border-color .16s ease, transform .16s ease; }
+.detail-panel-topbar__close:hover { color: var(--color-text-primary); background: var(--color-bg-hover); border-color: var(--color-border-strong); transform: translateY(-1px); }
+.noor-plugin-panel-mask { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; justify-content: flex-end; background: rgba(0,0,0,.8); backdrop-filter: blur(8px); }
+.noor-plugin-panel { position: relative; width: 100vw; height: 100vh; background: var(--color-bg-surface); border-left: 1px solid var(--color-border-default); box-shadow: var(--shadow-xl); overflow: hidden; }
+.noor-plugin-panel__scroll { height: 100%; overflow-y: auto; padding: 1rem; display: grid; gap: 1rem; }
+.noor-plugin-panel__head { padding: 0; }
+.noor-plugin-panel__meta { min-width: 0; display: grid; gap: .2rem; }
+.noor-plugin-panel__eyebrow { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
+.noor-plugin-panel__title { color: #fff; font-weight: 700; font-size: 1rem; line-height: 1.35; }
+.noor-plugin-panel__body { display: grid; gap: 1rem; }
+.noor-plugin-panel__close { padding: 0; }
+.noor-plugin-input { font-family: var(--font-display); }
+.noor-plugin-tabs { font-family: var(--font-display); }
+.noor-plugin-tabs__item { min-height: 34px; background: transparent; border: 0; cursor: pointer; }
+.noor-plugin-badge--success, .noor-plugin-badge--good { border-color: rgba(1,181,116,.28); background: rgba(1,181,116,.10); color: #fff; }
+.noor-plugin-badge--info { border-color: rgba(0,117,255,.36); background: rgba(0,117,255,.14); color: #fff; }
+.noor-plugin-badge--warning, .noor-plugin-badge--warn { border-color: rgba(255,181,71,.28); background: rgba(255,181,71,.10); color: #fff; }
+.noor-plugin-badge--error, .noor-plugin-badge--danger { border-color: rgba(227,26,26,.28); background: rgba(227,26,26,.10); color: #fff; }
+.noor-plugin-card { border-radius: var(--radius-lg); background: var(--color-bg-surface); border: 1px solid var(--color-glass-border); box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.16); overflow: hidden; }
+
+
+.noor-submit-btn { position: relative; overflow: hidden; min-width: 108px; isolation: isolate; }
+.noor-submit-btn__bar { position: absolute; inset: 0 auto 0 0; width: var(--submit-progress, 0%); background: linear-gradient(90deg, rgba(0,117,255,.48), rgba(33,212,253,.34)); transition: width .18s ease-out, background var(--transition-fast); z-index: -1; }
+.noor-submit-btn__text { position: relative; z-index: 1; white-space: nowrap; }
+.noor-submit-btn.is-running { border-color: rgba(33,212,253,.45); background: rgba(33,212,253,.1); }
+.noor-submit-btn.is-success { border-color: rgba(1,181,116,.46); background: rgba(1,181,116,.22); color: #fff; }
+.noor-submit-btn.is-success .noor-submit-btn__bar { background: rgba(1,181,116,.36); }
+.noor-submit-btn.is-error { border-color: rgba(227,26,26,.38); background: rgba(227,26,26,.14); color: #fff; }
+.noor-submit-btn.is-error .noor-submit-btn__bar { background: rgba(227,26,26,.22); }
+
+/* Promoted plugin patterns: reusable NOOR SDK components. */
+.noor-plugin-action-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.noor-plugin-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.noor-plugin-stat-card { min-height: 58px; display: grid; align-content: center; gap: 3px; padding: 9px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-glass-border); background: var(--color-bg-surface); color: inherit; text-align: left; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.16); }
+button.noor-plugin-stat-card { cursor: pointer; transition: all var(--transition-fast); }
+button.noor-plugin-stat-card:hover { transform: translateY(-1px); border-color: rgba(0,117,255,.3); background: var(--color-bg-elevated); }
+.noor-plugin-stat-card__label { font-size: 12px; color: var(--color-text-muted); }
+.noor-plugin-stat-card__value { font-size: 18px; color: #fff; font-weight: 750; line-height: 1.15; }
+.noor-plugin-stat-card__hint { color: var(--color-text-muted); font-size: 11px; line-height: 1.25; }
+.noor-plugin-stat-card--success { border-color: rgba(1,181,116,.2); background: rgba(1,181,116,.08); }
+.noor-plugin-stat-card--info { border-color: rgba(0,117,255,.22); background: rgba(0,117,255,.09); }
+.noor-plugin-stat-card--warning { border-color: rgba(255,181,71,.22); background: rgba(255,181,71,.08); }
+.noor-plugin-stat-card--error { border-color: rgba(227,26,26,.22); background: rgba(227,26,26,.08); }
+.noor-plugin-media-card { width: 100%; min-width: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg); border: 1px solid var(--color-glass-border); background: var(--color-bg-surface); color: inherit; text-decoration: none; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.16); transition: all var(--transition-fast); text-align: left; }
+.noor-plugin-media-card--sharp { border-radius: 0; }
+button.noor-plugin-media-card { cursor: pointer; }
+.noor-plugin-media-card:hover { transform: translateY(-1px); border-color: rgba(0,117,255,.3); background: var(--color-bg-elevated); }
+.noor-plugin-media-card__cover { aspect-ratio: 2184 / 1468; background: rgba(255,255,255,.04); overflow: hidden; }
+.noor-plugin-media-card__cover.is-clickable, .noor-plugin-media-card__title.is-clickable { cursor: pointer; }
+.noor-plugin-media-card__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.noor-plugin-media-card__placeholder { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); font-size: 12px; }
+.noor-plugin-media-card__body { display: grid; gap: 7px; padding: 10px; }
+.noor-plugin-media-card__title { height: 38px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #fff; font-size: 13px; font-weight: 750; line-height: 1.42; }
+.noor-plugin-media-card__title.is-clickable:hover { color: rgba(255,255,255,.82); }
+.noor-plugin-media-card__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-text-muted); font-size: 11px; min-width: 0; }
+.noor-plugin-media-card__meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.noor-plugin-media-card__badges { min-height: 22px; display: flex; flex-wrap: wrap; gap: 5px; }
+.noor-plugin-media-card__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.noor-plugin-state--loading { display: flex; align-items: center; justify-content: center; gap: 10px; }

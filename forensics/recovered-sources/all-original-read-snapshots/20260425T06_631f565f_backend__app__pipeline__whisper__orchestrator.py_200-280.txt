@@ -1,0 +1,81 @@
+        """Get the HuggingFace cache path for a model."""
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        hf_home = Path(whisper_model_dir)
+        # huggingface hub cache format: models--{org}--{name}
+        return hf_home / "huggingface" / "hub" / f"models--{model_id.replace('/', '--')}"
+
+    def _check_model_cached(self, model_id: str) -> bool:
+        """Check if a model is cached. Supports both snapshot_download style
+        (direct under whisper_model_dir) and legacy huggingface hub style."""
+        from app.core.config import get_settings
+        settings = get_settings()
+        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        base = Path(whisper_model_dir)
+
+        # snapshot_download style: base/models--{org}--{name}
+        snapshot_path = base / f"models--{model_id.replace('/', '--')}"
+        if snapshot_path.exists() and any(snapshot_path.iterdir()):
+            return True
+
+        # legacy huggingface hub style: base/huggingface/hub/models--{org}--{name}
+        legacy_path = base / "huggingface" / "hub" / f"models--{model_id.replace('/', '--')}"
+        return legacy_path.exists() and any(legacy_path.iterdir())
+
+    @classmethod
+    def _evaluate_recommended_stepdown(
+        cls,
+        seg_duration: float,
+        result: TranscriptionResult,
+    ) -> tuple[bool, str]:
+        if not result.segments:
+            return False, "empty-result"
+        chain_state = str(result.metadata.get("anime_qwen3_chain") or "")
+        normalized = cls._normalize_pass_text("".join(seg.text for seg in result.segments))
+        if len(normalized) < 12:
+            return False, "text-too-short"
+        if chain_state == "aligner_empty":
+            return (seg_duration >= 14.0, "aligner-empty" if seg_duration >= 14.0 else "aligner-empty-too-short")
+
+        if result.metadata.get("recommended_qwen_retry") and seg_duration < 28.0:
+            return False, "recent-qwen-retry"
+
+        if len(result.segments) != 1 or seg_duration < 20.0:
+            return False, "not-collapsed-long-single"
+
+        text = (result.segments[0].text or "").strip()
+
+        sentence_breaks = len(cls._STEPDOWN_SENTENCE_RE.findall(text))
+        if sentence_breaks >= 2:
+            return True, "multi-sentence-collapsed"
+
+        if bool(cls._PASS2_GATING_KANJI_RE.search(normalized)) and len(normalized) >= 36:
+            return True, "long-kanji-dense-single"
+        return False, "single-segment-accepted"
+
+    @classmethod
+    def _should_retry_recommended_stepdown(
+        cls,
+        seg_duration: float,
+        result: TranscriptionResult,
+    ) -> bool:
+        return cls._evaluate_recommended_stepdown(seg_duration, result)[0]
+
+    @staticmethod
+    def _build_stepdown_windows(duration: float, *, target_window: float = 12.0, min_window: float = 6.0) -> list[tuple[float, float]]:
+        if duration <= target_window * 1.35:
+            mid = duration / 2
+            if mid < min_window:
+                return [(0.0, duration)]
+            return [(0.0, mid), (mid, duration)]
+
+        window_count = max(2, int((duration + target_window - 1) // target_window))
+        window = duration / window_count
+        if window < min_window:
+            return [(0.0, duration)]
+
+        windows: list[tuple[float, float]] = []
+        cursor = 0.0
+        for idx in range(window_count):
+            end = duration if idx == window_count - 1 else min(duration, cursor + window)

@@ -1,0 +1,4 @@
+total 8
+drwxrwxr-x  2 kinax kinax 4096 Apr  9 14:40 .
+drwxrwxr-x 11 kinax kinax 4096 Apr 12 00:55 ..
+sed: can't read /home/kinax/noor/frontend/src/layouts/MainLayout.vue: No such file or directory

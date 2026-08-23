@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+from app.api.settings_whisper_runtime import (
+    detect_install_requirements,
+    inspect_whisper_model_cache,
+    log_whisper_dependency_summary,
+)
+
+
+class DummyLogManager:
+    def __init__(self) -> None:
+        self.entries: list[tuple[str, str]] = []
+
+    def add_log(self, level: str, message: str) -> None:
+        self.entries.append((level, message))
+
+
+def test_detect_install_requirements_respects_torch_variant_and_librosa_presence():
+    def fake_import(name: str):
+        if name == "librosa":
+            return object()
+        raise AssertionError(name)
+
+    needs_torch, needs_librosa = detect_install_requirements("gpu", True, fake_import)
+    assert needs_torch is False
+    assert needs_librosa is False
+
+
+def test_detect_install_requirements_marks_missing_librosa():
+    def fake_import(name: str):
+        raise ImportError(name)
+
+    needs_torch, needs_librosa = detect_install_requirements("cpu", True, fake_import)
+    assert needs_torch is True
+    assert needs_librosa is True
+
+
+def test_inspect_whisper_model_cache_checks_custom_and_default_locations(tmp_path: Path, monkeypatch):
+    custom_dir = tmp_path / "custom-cache"
+    custom_dir.mkdir()
+    default_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: default_home)
+
+    (default_home / ".cache" / "huggingface" / "hub" / "models--litagin--anime-whisper").mkdir(parents=True)
+    (custom_dir / "hub" / "models--Systran--faster-whisper-large-v3").mkdir(parents=True)
+
+    models = inspect_whisper_model_cache(
+        whisper_model_dir=str(custom_dir),
+        whisper_models={"large-v3": {"size": "~3GB"}},
+    )
+
+    assert models["anime_whisper"]["downloaded"] is True
+    assert models["faster_large-v3"]["downloaded"] is True
+    assert models["faster_large-v3"]["size"] == "~3GB"
+
+
+def test_log_whisper_dependency_summary_logs_missing_installable_packages():
+    log_mgr = DummyLogManager()
+    log_whisper_dependency_summary(
+        log_mgr,
+        deps={
+            "torch": {"installable": True, "installed": True},
+            "librosa": {"installable": True, "installed": False},
+        },
+        cuda_available=False,
+        cuda_info={},
+    )
+
+    assert log_mgr.entries == [("warning", "[Whisper] 依赖检查完成 — 需安装: librosa")]
+
+
+def test_log_whisper_dependency_summary_logs_cuda_success():
+    log_mgr = DummyLogManager()
+    log_whisper_dependency_summary(
+        log_mgr,
+        deps={"torch": {"installable": True, "installed": True}},
+        cuda_available=True,
+        cuda_info={"device_name": "RTX"},
+    )
+
+    assert log_mgr.entries == [("success", "[Whisper] 依赖检查完成 — 所有运行时依赖已安装 | CUDA 可用 (RTX)")]
+
+
+def test_inspect_whisper_model_cache_detects_reazon_nemo(monkeypatch, tmp_path):
+    from app.api import settings_whisper_runtime as runtime
+    nemo_dir = tmp_path / "reazon"
+    nemo_dir.mkdir(parents=True)
+    nemo_path = nemo_dir / "reazonspeech-nemo-v2.nemo"
+    nemo_path.write_text("ok")
+
+    class FakeSettings:
+        reazon_nemo_model_path = str(nemo_path)
+
+    monkeypatch.setattr(runtime, "get_settings", lambda: FakeSettings())
+
+    payload = runtime.inspect_whisper_model_cache(whisper_model_dir=str(tmp_path / "hub"), whisper_models={"reazonspeech-nemo-v2": {"size": "~2.4GB"}})
+
+    assert payload["reazon_nemo"]["downloaded"] is True
+    assert payload["reazon_nemo"]["path"] == str(nemo_path)
