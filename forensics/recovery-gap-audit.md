@@ -47,6 +47,8 @@
   `database_url`、`database_path`，前端不再依赖已移除的 Reazon 字段。
 - 文件级差距清单已重新生成：当前无 `missing` 路径；121 个路径仍为
   `pending`，需要在后续逐文件核对后转 `verified`。
+- `media_library.py` 已补齐拆分后的旧函数名兼容层；与保留的
+  `media_library.pyc` 顶层代码对象逐项比对，原版旧名字均已可导入。
 
 ## 明确差距
 
@@ -82,6 +84,7 @@
 
 1. 下一批继续用 rollout 回放核对 `i18n`、`ActorManagementView`、`ActorDetailView`
    和 `FaceFusionPanel` 的后续修订，把 `pending` 文件逐步转为 `verified`。
-2. 补充后端原单模块拆分的兼容层，让旧路由/旧函数名仍可被插件调用。
+2. 继续核对拆分后的 actor 路由兼容，确认历史 `/api/media-library/actors*` 调用
+   都能通过当前 `endpoints/actors.py` 得到原版行为。
 3. 把 Whisper 旧链路的 `.py` 源码从历史会话/反编译中重建，或以文档形式明确退役。
 4. 每恢复一个模块，更新本文件并提交，避免再次丢失。

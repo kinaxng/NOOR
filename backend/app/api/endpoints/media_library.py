@@ -13,9 +13,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED, VIDEO_EXTS, config_path as _config_path, headers as _headers, load_config as _load_config, map_path as _map_path, parse_item as _parse_item, parse_tags as _parse_tags, save_config as _save_config, server_url as _server_url
 from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
-from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl, fetch_emby_item_info_impl, hardlink_groups_path_impl, load_hardlink_groups_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
-from app.api.endpoints.media_library_listing import deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, apply_filter_and_paginate as _apply_filter_and_paginate
-from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, execute_delete_targets as _execute_delete_targets, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
+from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl as _fetch_emby_item_info, hardlink_groups_path_impl, load_hardlink_groups_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
+from app.api.endpoints.media_library_listing import apply_filter_and_paginate as _apply_filter_and_paginate, deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, item_variant_penalty as _item_variant_penalty, merge_group_metadata as _merge_group_metadata, pick_group_representative as _pick_group_representative
+from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
 from app.api.endpoints.media_library_streaming import parse_range_header as _parse_range_header, iter_file_range as _iter_file_range
 from app.api.system import SystemLogManager, _webhook_source, _webhook_summary
 
@@ -101,6 +101,28 @@ def _enrich_hardlink_groups(g):return enrich_hardlink_groups_impl(g)
 
 def _configured(config):
  if not config.get('server_url') or not config.get('api_key'):raise HTTPException(503,_ADAPTER_NOT_ACTIVATED)
+
+
+def _item_matches_filter(item: dict, filter_str: str) -> bool:
+    tags = item.get("tags", {})
+    if not tags:
+        return False
+    if filter_str == "cracked" and tags.get("is_cracked"):
+        return True
+    if filter_str == "chinese" and tags.get("has_chinese"):
+        return True
+    if filter_str == "leaked" and tags.get("release_type_key") == "leaked":
+        return True
+    if filter_str == "uncensored" and tags.get("release_type_key") == "uncensored":
+        return True
+    return False
+
+
+def _paginate_filter(all_items: list, filter_str: str | None, q: str | None, offset: int, limit: int):
+    filtered = [item for item in all_items if _item_matches_filter(item, filter_str)] if filter_str else list(all_items)
+    filtered = [item for item in filtered if _item_matches_query(item, q)] if q else filtered
+    total = len(filtered)
+    return {"items": filtered[offset:offset + limit], "total": total}
 
 @router.get('')
 async def get_status():

@@ -243,6 +243,9 @@ the recovered bytecode modules remain unchanged.
 - `forensics/version-gap-audit.md` reports no missing indexed paths. 121 paths remain
   `pending` until the remaining components are verified against original rollout
   evidence; runtime and derived data remain outside the commit.
+- `media_library.py` now re-exports every helper name present in the preserved
+  `media_library.pyc` (listing, deletion, hardlink, stream, and detail helpers),
+  so split-module recovery does not break older plugin imports.
 
 The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts

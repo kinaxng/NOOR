@@ -37,6 +37,31 @@ def test_parse_nfo_file_impl_reads_nested_actor_cdata(tmp_path: Path):
     ]
 
 
+def test_media_library_exposes_legacy_helper_names(tmp_path: Path):
+    assert media_library._normalize_code_token(" abc-123") == "ABC123"
+    assert media_library._extract_code_from_path("/media/AB-123.mp4") == "AB-123"
+    assert media_library._item_matches_filter({"tags": {"is_cracked": True}}, "cracked") is True
+    assert media_library._item_matches_filter({"tags": {}}, "cracked") is False
+
+    payload = media_library._paginate_filter(
+        [
+            {"tags": {"is_cracked": True}, "name": "ABC-123"},
+            {"tags": {}, "name": "ABC-456"},
+        ],
+        "cracked",
+        None,
+        0,
+        10,
+    )
+    assert payload == {"items": [{"tags": {"is_cracked": True}, "name": "ABC-123"}], "total": 1}
+
+    movie = tmp_path / "ABC-123" / "a.mp4"
+    movie.parent.mkdir(parents=True)
+    assert media_library._parent_is_code_bucket(movie, "ABC-123") is True
+    assert media_library._is_under_roots(movie, [tmp_path]) is True
+    assert media_library._item_variant_penalty({"path": str(movie), "tags": {"is_cracked": True}}) == 40
+
+
 @pytest.mark.asyncio
 async def test_get_item_impl_uses_local_nfo_and_mapped_path(tmp_path: Path):
     movie_path = tmp_path / "ABC-123.mp4"
