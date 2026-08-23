@@ -199,8 +199,10 @@
    - 完整 Vue 组件树没有单一可信的“最终原文件”副本。
    - `App.recovered-full.vue` 是旧单文件 UI，不能直接替换当前组件化前端。
    - 每个组件都应按 rollout 证据逐文件核对，已核对完 `ResourceSearch`、
-     `FaceFusionSettings`、`LadaPanel`、`Home`、`Jobs`；下一批是 i18n、
-     `ActorManagementView`、`ActorDetailView` 和 `FaceFusionPanel` 的后续修订。
+     `FaceFusionSettings`、`LadaPanel`、`Home`、`Jobs`、`ActorManagementView`；
+     `ActorDetailView` 的原版读档已归档，当前文件含最终“移除 Provider ID”和
+     删除诊断补丁；`FaceFusionPanel` 在当前 evidence 之上只多最终
+     `face_tracker_score` 提交。下一批是 i18n 和剩余面板的后续修订。
 
 ## 后续恢复建议（按影响排序）
 
