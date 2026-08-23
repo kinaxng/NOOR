@@ -62,7 +62,7 @@
 - `backend/app/tasks/manager.py` 已恢复完整队列语义并转 `verified`：阶段/SSE、
   持久化恢复、排队与运行中取消、依赖链激活/跳过、孤儿 `running` 清理、日志落盘、
   GPU Guard、LADA/FaceFusion，以及 Whisper/翻译独立 worker 进程和超时强杀。
-  新增 `backend/tests/test_job_manager_recovery.py`，当前后端全量测试为 195 项通过。
+  新增 `backend/tests/test_job_manager_recovery.py`，当前后端全量测试为 213 项通过。
 - 新增 `backend/tests/test_media_library_api.py`，覆盖 NFO 嵌套演员/CDATA、
   `get_item_impl` 本地 NFO 集成、媒体库 503/502 错误响应、硬链接扫描与摘要契约。
 - 恢复最终版本 `Settings` 中的 FaceFusion 目录、Python 路径和完整默认参数，
@@ -72,8 +72,8 @@
   `reazon_nemo` 等已退役链路字段。
 - 设置页存储契约改为返回 `model_root_dir`、`runtime_root_dir`、
   `database_url`、`database_path`，前端不再依赖已移除的 Reazon 字段。
-- 文件级差距清单已重新生成：当前无 `missing` 路径；32 个路径仍为
-  `pending`，需要在后续逐文件核对后转 `verified`。
+- 文件级差距清单已重新生成：当前无 `missing`、无 `pending`，130 个路径已转
+  `verified`。目录级路径与对应文件级恢复、测试覆盖一并核销。
 - JavDB 插件清单已按原版会话恢复：补回 `dashboard_widget`、下载器绑定、
   `resource_search`、RSS/知识图谱等能力；浏览器验证概览页的 `JAVDB 推荐`
   卡片恢复，`/api/plugins/dashboard/widgets?plugin_ids=javdb` 返回
@@ -91,8 +91,9 @@
   `runtime/subtitle_library/subtitle_index.db`，并会从三个历史位置复制最强旧索引；
   原 `data/subtitle_index.db` 不再是运行路径。
 - 任务/事件 API 新增契约测试：覆盖任务列表/详情/取消/删除/清理以及 SSE
-  connected/done 序列；后端全量测试更新为 213 项通过。文件级差距清单当前为
-  98 个 `verified`、32 个 `pending`、0 个 `missing`。
+  connected/done 序列，并恢复 `POST /api/jobs` 的原版任务类型白名单；
+  后端全量测试更新为 213 项通过。文件级差距清单当前为 130 个 `verified`、
+  0 个 `pending`、0 个 `missing`。
 - 继续核对 LADA/设置/模型契约：`pipeline/lada/runner.py` 恢复最终 NOOR Python
   环境、LADA model/cache/temp 分离和 `--temporary-directory`；
   `settings_helpers.py` 恢复 `NOOR_DATA_DIR` 模型回退、最终 ChickenRice/VAD 模型
@@ -102,6 +103,10 @@
   `SubtitleSafetyPostProcessor` 合并语义；`settings_lada.py` 恢复 LADA Python 环境
   注入；`database.py`、`plugins/store.py` 和内置 FaceFusion 补丁源码已按最终
   rollout/测试转 `verified`。
+- 继续核销插件与媒体库契约：qBittorrent 的 API Key/Cookie 模式、AVDB/M-Team 的
+  运行时缓存路径、JavDB 的磁链刷新与近期系列目录、Gfriends 的日文优先匹配、
+  订阅/推荐的封面刷新、硬链接运行时存储、FaceFusion 模型目录路由均已核对最终
+  rollout，并补充或沿用回归测试。
 
 ## 明确差距
 
@@ -135,8 +140,8 @@
 
 ## 后续恢复建议（按影响排序）
 
-1. 下一批继续用 rollout 回放核对 `facefusion/runner.py`、`facefusion.py`、
-   `settings_facefusion_upgrade.py` 与插件恢复差异，把 `pending` 文件逐步转为 `verified`。
+1. 文件级差距清单已清零；下一步风险主要是前端“可维护重建而非字节级原文件”、
+   媒体库拆分后的函数/路由兼容，以及已退役 Whisper 旧链路的源码缺失。
 2. 继续核对拆分后的 actor 路由兼容，确认历史 `/api/media-library/actors*` 调用
    都能通过当前 `endpoints/actors.py` 得到原版行为。
 3. 把 Whisper 旧链路的 `.py` 源码从历史会话/反编译中重建，或以文档形式明确退役。

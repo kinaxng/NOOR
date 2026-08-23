@@ -22,7 +22,10 @@ async def _sync_external_jobs(job_id: str | None = None) -> None:
 
 @router.post("", response_model=JobResponse)
 async def create_job(job_data: JobCreate):
-    return await job_manager.enqueue(job_data)
+    job_type = job_data.job_type or "lada"
+    if job_type not in {"lada", "lada_restore", "facefusion_restore"}:
+        raise HTTPException(status_code=400, detail="Unsupported job type")
+    return await job_manager.enqueue(job_data, job_type=job_type)
 
 
 @router.get("", response_model=JobListResponse)

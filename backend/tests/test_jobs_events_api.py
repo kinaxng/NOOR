@@ -45,6 +45,9 @@ class _JobsManager:
     async def cleanup_orphaned_jobs(self):
         return 1
 
+    async def enqueue(self, job_data, job_type="lada"):
+        return _job("queued")
+
 
 def test_jobs_api_contract(monkeypatch):
     manager = _JobsManager()
@@ -79,6 +82,24 @@ def test_jobs_api_contract(monkeypatch):
     cleaned = client.post("/api/jobs/cleanup")
     assert cleaned.status_code == 200
     assert cleaned.json() == 1
+
+    created = client.post("/api/jobs", json={
+        "emby_item_id": "item-1",
+        "emby_item_name": "示例作品",
+        "input_path": "/tmp/source.mp4",
+        "job_type": "facefusion_restore",
+    })
+    assert created.status_code == 200
+    assert created.json()["id"] == "job-1"
+
+    unsupported = client.post("/api/jobs", json={
+        "emby_item_id": "item-2",
+        "emby_item_name": "不支持的任务",
+        "input_path": "/tmp/source.mp4",
+        "job_type": "whisper",
+    })
+    assert unsupported.status_code == 400
+    assert unsupported.json()["detail"] == "Unsupported job type"
 
 
 class _TerminalQueue:

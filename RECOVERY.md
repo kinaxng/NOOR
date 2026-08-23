@@ -267,9 +267,10 @@ the recovered bytecode modules remain unchanged.
   layer for the separate overrides file.
 - Whisper settings now expose a storage-root contract (`model_root_dir`,
   `runtime_root_dir`, `database_url`, `database_path`) without retired Reazon fields.
-- `forensics/version-gap-audit.md` reports no missing indexed paths. 32 paths remain
-  `pending` until the remaining components are verified against original rollout
-  evidence; runtime and derived data remain outside the commit.
+- `forensics/version-gap-audit.md` reports no missing indexed paths and no remaining
+  `pending` paths: all 130 indexed paths are marked verified against the preserved
+  rollout evidence, bytecode contracts, or focused regression tests. Runtime and
+  derived data remain outside the commit.
 - Runtime cleanup, data/runtime path helpers, database migration, LADA Python paths,
   GPU Guard, Whisper timing refinement, local subtitle-library indexing, and directory
   browsing were checked against the original rollout. The restored local subtitle index
@@ -277,8 +278,9 @@ the recovered bytecode modules remain unchanged.
   `subtitle_index.db`; settings-directory browsing accepts all final model/runtime
   roots instead of only two legacy paths.
 - Job/events API contract tests now cover task listing/detail/cancel/delete/cleanup and
-  the SSE connected/done sequence. GPU Guard regression tests cover NOOR process
-  protection and restricting cleanup to NOOR plus model-server processes.
+  the SSE connected/done sequence, including the original job-type allowlist for
+  `POST /api/jobs`. GPU Guard regression tests cover NOOR process protection and
+  restricting cleanup to NOOR plus model-server processes.
 - LADA runner, settings helpers, settings status helpers, and core job models were
   checked against the final rollout: LADA now uses the NOOR Python environment,
   split cache/TMPDIR layout, and `--temporary-directory`; settings helpers use the
@@ -288,6 +290,12 @@ the recovered bytecode modules remain unchanged.
   rollout names and merge semantics. LADA settings inspection, database startup
   migration, plugin store paths, and embedded FaceFusion source patches are also
   covered by regression tests and marked verified.
+- The final rollout paths for jobs, plugin background tasks, runtime cleanup,
+  hardlink runtime storage, FaceFusion model routing, recommendation/subscription
+  cover refresh, JavDB magnet refresh and recent-series directory, qBittorrent
+  API-key auth, and plugin runtime cache/data routing were replayed and verified.
+  `forensics/version-gap-audit.md` now reports 130 verified and 0 pending indexed
+  paths; only the documented intentional differences remain.
 - JavDB plugin manifest now matches the original capability contract, including
   `dashboard_widget`; the overview page again renders the `JAVDB 推荐` widget and
   the recommendation center reports the merged candidate-pool stats (currently

@@ -19,7 +19,7 @@ async def test_upgrade_lada_native_reinstall_uses_imported_sys(monkeypatch: pyte
         calls.append(list(args))
         if args[:3] == ["git", "rev-parse", "--abbrev-ref"]:
             return SimpleNamespace(returncode=0, stdout="main\n", stderr="")
-        if args[:4] == ["git", "fetch", "--tags", "origin"]:
+        if args[:3] == ["git", "fetch", "--tags"]:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if args[:3] == ["git", "pull", "--ff-only"]:
             return SimpleNamespace(returncode=0, stdout="updated", stderr="")
