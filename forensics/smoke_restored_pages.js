@@ -113,6 +113,53 @@ async function main() {
     errors.push(`media detail: ${error.message}`)
   }
 
+  try {
+    await page.goto('http://127.0.0.1:5173/plugins/mteam-plugin', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    })
+    await new Promise((done) => setTimeout(done, 2000))
+    await page.evaluate(() => {
+      const tab = [...document.querySelectorAll('button')].find((element) => element.textContent.trim() === '片单')
+      tab?.click()
+    })
+    await new Promise((done) => setTimeout(done, 2000))
+    const opened = await page.evaluate(() => {
+      const add = [...document.querySelectorAll('button')].find((element) => element.textContent === '+' || element.title === '添加片单')
+      add?.click()
+      return Boolean(add)
+    })
+    await new Promise((done) => setTimeout(done, 600))
+    const modalTitle = await page.evaluate(() => document.querySelector('.noor-plugin-modal__title')?.innerText || '')
+    if (!opened || modalTitle !== '添加片单') errors.push('mteam sdk modal did not open')
+  } catch (error) {
+    errors.push(`mteam modal: ${error.message}`)
+  }
+
+  try {
+    await page.goto('http://127.0.0.1:5173/plugins/qbittorrent', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    })
+    await new Promise((done) => setTimeout(done, 2000))
+    await page.evaluate(() => {
+      const settings = [...document.querySelectorAll('button')].find((element) => element.textContent.trim() === '设置')
+      settings?.click()
+    })
+    await new Promise((done) => setTimeout(done, 600))
+    const settingsTitle = await page.evaluate(() => document.querySelector('.noor-plugin-modal__title')?.innerText || '')
+    const categoryOpened = await page.evaluate(() => {
+      const create = [...document.querySelectorAll('button')].find((element) => element.textContent.trim() === '新建分类')
+      create?.click()
+      return Boolean(create)
+    })
+    await new Promise((done) => setTimeout(done, 600))
+    const categoryTitle = await page.evaluate(() => document.querySelector('.noor-plugin-modal__title')?.innerText || '')
+    if (settingsTitle !== 'qB 设置' || !categoryOpened || categoryTitle !== '新建分类') errors.push('qbittorrent sdk modal did not open')
+  } catch (error) {
+    errors.push(`qbittorrent modal: ${error.message}`)
+  }
+
   console.log(`HTTP_ERRORS ${JSON.stringify(bad.slice(0, 30))}`)
   console.log(`CONSOLE_ERRORS ${JSON.stringify(errors.slice(0, 40))}`)
   await browser.close()
