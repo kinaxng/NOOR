@@ -395,7 +395,7 @@
   移动端 fallback 配置项；源码不包含原版运行配置里的真实 token/cookie。
 - 新增 `backend/tests/test_xunlei_remote_plugin.py` 覆盖账号常量/签名、请求头、
   JWT 过期、残留文件安全删除、显式保存路径 fail-closed 和插件配置字段。
-- 本轮验证：后端全量 `pytest` 237 项通过，迅雷插件 `compileall` 通过，
+- 本轮验证：后端全量 `pytest` 238 项通过，迅雷插件 `compileall` 通过，
   插件校验仅剩已知 capability/CSS 前缀警告。
 
 ## MediaDetailPanel 原版最终形态恢复（2026-08-23）
@@ -433,5 +433,7 @@
   其余公开函数、类、请求模型和兼容别名均已由当前拆分模块提供。
 - 剩余差异全部为私有 helper 的内部命名，不影响外部导入或原版路由契约；
   已由 `backend/tests/test_actor_routes.py` 与媒体库路由测试继续锁定。
+- 新增 `backend/tests/test_media_library_symbol_parity.py`，用 AST 解析原版最终
+  回放文件并断言全部原版公开顶层符号已由当前拆分模块提供，防止兼容层再退化。
 - `current-byte-level-matches.tsv` 已更新到 32 个字节级匹配文件，
   `MediaDetailPanel.vue` 与 `BaseToast.vue` 均登记证据来源。
