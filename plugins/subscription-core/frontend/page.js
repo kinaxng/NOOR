@@ -107,9 +107,14 @@ export async function mount(root, sdk = {}) {
     checking: false,
     error: '',
     stats: {},
+    defaults: { mode: 'loose', require_cracked: false, require_subtitle: false },
     items: [],
     events: [],
+    filter: 'all',
+    keyword: '',
+    expanded: new Set(),
     formOpen: false,
+    editingId: '',
     form: { code: '', title: '', mode: 'loose', require_cracked: false, require_subtitle: false },
   }
   const apiPost = async (action, payload = {}) => {
@@ -121,6 +126,7 @@ export async function mount(root, sdk = {}) {
     <div class="sub-page">
       <div data-role="topbar"></div>
       <div data-role="notice"></div>
+      <div data-role="filter"></div>
       <div data-role="form"></div>
       <div class="sub-layout">
         <section data-role="items" class="sub-list"></section>
@@ -145,8 +151,8 @@ export async function mount(root, sdk = {}) {
       badge(`洗版 ${state.stats.upgrade || 0}`, 'warning'),
       badge(`已匹配 ${state.stats.matched || 0}`, 'success'),
     ]
-    const createBtn = sdk.ui?.button ? sdk.ui.button({ label: '新建订阅', tone: 'primary', onClick: () => { state.formOpen = !state.formOpen; render() } }) : h('button', '', '新建订阅')
-    if (!sdk.ui?.button) createBtn.onclick = () => { state.formOpen = !state.formOpen; render() }
+    const createBtn = sdk.ui?.button ? sdk.ui.button({ label: '新建订阅', tone: 'primary', onClick: () => { state.formOpen = !state.formOpen; state.editingId = ''; state.form = { code: '', title: '', mode: state.defaults.mode || 'loose', require_cracked: !!state.defaults.require_cracked, require_subtitle: !!state.defaults.require_subtitle }; render() } }) : h('button', '', '新建订阅')
+    if (!sdk.ui?.button) createBtn.onclick = () => { state.formOpen = !state.formOpen; state.editingId = ''; state.form = { code: '', title: '', mode: state.defaults.mode || 'loose', require_cracked: !!state.defaults.require_cracked, require_subtitle: !!state.defaults.require_subtitle }; render() }
     const checkBtn = sdk.ui?.button ? sdk.ui.button({ label: state.checking ? '检测中…' : '手动检测', disabled: state.checking, onClick: checkAll }) : h('button', '', state.checking ? '检测中…' : '手动检测')
     if (!sdk.ui?.button) checkBtn.onclick = checkAll
     const bar = sdk.ui?.topBar ? sdk.ui.topBar({ tabs: stats, actions: [createBtn, checkBtn] }) : null
@@ -168,15 +174,62 @@ export async function mount(root, sdk = {}) {
     if (state.error) host.append(sdk.ui?.notice ? sdk.ui.notice({ text: state.error, tone: 'error' }) : h('div', 'sub-notice is-error', state.error))
   }
 
+  function renderFilter() {
+    const host = $('filter')
+    host.innerHTML = ''
+    const modes = [
+      ['all', '全部'],
+      ['subscribe', '订阅'],
+      ['upgrade', '洗版'],
+      ['matched', '已匹配'],
+    ]
+    const filterWrap = h('div', 'sub-filter')
+    const modesWrap = h('div', 'sub-filter__modes')
+    for (const [value, label] of modes) {
+      const btn = h('button', `sub-filter__mode${state.filter === value ? ' is-active' : ''}`, label)
+      btn.onclick = () => { state.filter = value; renderItems() }
+      modesWrap.appendChild(btn)
+    }
+    const search = h('input', 'sub-filter__search')
+    search.type = 'search'
+    search.placeholder = '搜索番号、标题或来源'
+    search.value = state.keyword
+    search.oninput = () => { state.keyword = String(search.value || '').trim(); renderItems() }
+    filterWrap.append(modesWrap, search)
+    host.appendChild(filterWrap)
+  }
+
+  function openCreateForm() {
+    state.formOpen = true
+    state.editingId = ''
+    state.form = { code: '', title: '', mode: state.defaults.mode || 'loose', require_cracked: !!state.defaults.require_cracked, require_subtitle: !!state.defaults.require_subtitle }
+    render()
+  }
+
+  function openEdit(item) {
+    state.formOpen = true
+    state.editingId = item.id
+    state.form = {
+      code: item.code || '',
+      title: item.title || '',
+      mode: item.mode || 'loose',
+      require_cracked: !!item.require_cracked,
+      require_subtitle: !!item.require_subtitle,
+    }
+    render()
+  }
+
   function renderForm() {
     const host = $('form')
     host.innerHTML = ''
     if (!state.formOpen) return
     const panel = h('section', 'sub-panel sub-form')
+    const heading = state.editingId ? '编辑订阅' : '新建订阅 / 洗版'
+    const hint = state.editingId ? '修改监控规则后保存，媒体库已有则自动归类为洗版。' : '媒体库已有则自动归类为洗版，否则为订阅。'
     panel.innerHTML = `
-      <div class="sub-panel__head"><strong>新建订阅 / 洗版</strong><span>媒体库已有则自动归类为洗版，否则为订阅。</span></div>
+      <div class="sub-panel__head"><strong>${esc(heading)}</strong><span>${esc(hint)}</span></div>
       <div class="sub-form-grid">
-        <label><span>番号</span><input data-field="code" placeholder="DASS-927" value="${esc(state.form.code)}"></label>
+        <label><span>番号</span><input data-field="code" placeholder="DASS-927" value="${esc(state.form.code)}" ${state.editingId ? 'disabled' : ''}></label>
         <label><span>标题</span><input data-field="title" placeholder="可选" value="${esc(state.form.title)}"></label>
         <label><span>模式</span><select data-field="mode"><option value="loose">宽松订阅</option><option value="strict">严格订阅</option></select></label>
         <div class="sub-checks">
@@ -184,16 +237,21 @@ export async function mount(root, sdk = {}) {
           <label><input data-field="require_subtitle" type="checkbox" ${state.form.require_subtitle ? 'checked' : ''}> 中字</label>
         </div>
       </div>
-      <div class="sub-form-actions"><button data-action="save" type="button">保存订阅</button></div>
+      <div class="sub-form-actions">
+        <button type="button" data-action="cancel">取消</button>
+        <button type="button" data-action="save">保存订阅</button>
+      </div>
     `
     panel.querySelector('[data-field="mode"]').value = state.form.mode
     panel.querySelectorAll('[data-field]').forEach(input => {
+      if (input.disabled) return
       input.oninput = input.onchange = () => {
         const key = input.dataset.field
         state.form[key] = input.type === 'checkbox' ? input.checked : input.value
       }
     })
-    panel.querySelector('[data-action="save"]').onclick = createSubscription
+    panel.querySelector('[data-action="cancel"]').onclick = () => { state.formOpen = false; state.editingId = ''; render() }
+    panel.querySelector('[data-action="save"]').onclick = state.editingId ? updateSubscription : createSubscription
     host.appendChild(panel)
   }
 
@@ -205,7 +263,75 @@ export async function mount(root, sdk = {}) {
     if (item.require_subtitle) out.push(badge('中字', 'success'))
     if (item.status === 'matched') out.push(badge('已匹配', 'success'))
     else if (item.status === 'active') out.push(badge('监控中', 'info'))
+    if ((item.cleanup_suggestion || {}).status === 'pending') out.push(badge('待处理旧版', 'danger'))
     return out
+  }
+
+  function sourceText(item) {
+    const source = item?.last_source || item?.source || {}
+    const parts = []
+    if (source?.page === 'library') parts.push('媒体库')
+    else if (source?.page === 'detail') parts.push('作品详情')
+    else if (source?.page === 'resource') parts.push('资源搜索')
+    else if (source?.page === 'recommend') parts.push('推荐中心')
+    else if (source?.page === 'manual') parts.push('手动添加')
+    if (source?.provider) parts.push(String(source.provider))
+    if (source?.action) parts.push(String(source.action))
+    if (source?.url) parts.push(String(source.url))
+    return parts.join(' · ')
+  }
+
+  function qualityText(item, best) {
+    if (!best) return ''
+    const improvement = Number(best.improvement ?? item.candidate_profile?.improvement ?? 0)
+    const required = Number(best.required_improvement ?? item.candidate_profile?.required_improvement ?? 0)
+    if (item.type === 'upgrade') {
+      return improvement >= required ? '达到洗版条件' : `还需提升 ${Math.max(0, required - improvement)} 分`
+    }
+    if (best.score) return `匹配度 ${Number(best.score || 0)} 分`
+    return '可用候选'
+  }
+
+  function renderCompare(item) {
+    const current = item.current_profile || {}
+    const candidate = item.candidate_profile || {}
+    if (!current.path && !candidate.provider) return ''
+    const box = h('div', 'sub-compare')
+    const currentBlock = h('div', 'sub-compare__col')
+    currentBlock.appendChild(h('strong', '', '当前版本'))
+    currentBlock.appendChild(row('评分', current.score != null ? `${current.score} 分` : '-'))
+    currentBlock.appendChild(row('规格', resolutionLabel(current.resolution_rank)))
+    currentBlock.appendChild(row('大小', current.size_bytes ? fmtSize(current.size_bytes) : '-'))
+    currentBlock.appendChild(row('中字', current.has_subtitle ? '是' : '否'))
+    currentBlock.appendChild(row('破解', current.is_cracked ? '是' : '否'))
+    if (current.path) currentBlock.appendChild(row('路径', current.path))
+    const candidateBlock = h('div', 'sub-compare__col')
+    candidateBlock.appendChild(h('strong', '', '最佳候选'))
+    if (candidate.provider) {
+      candidateBlock.appendChild(row('来源', candidate.provider))
+      candidateBlock.appendChild(row('评分', candidate.score != null ? `${candidate.score} 分` : '-'))
+      candidateBlock.appendChild(row('规格', resolutionLabel(candidate.resolution_rank)))
+      candidateBlock.appendChild(row('大小', candidate.size_bytes ? fmtSize(candidate.size_bytes) : '-'))
+      candidateBlock.appendChild(row('中字', candidate.has_subtitle ? '是' : '否'))
+      candidateBlock.appendChild(row('破解', candidate.is_cracked ? '是' : '否'))
+      candidateBlock.appendChild(row('说明', candidate.reason || candidate.title || ''))
+    } else {
+      candidateBlock.appendChild(h('span', 'sub-compare__empty', '暂无匹配资源'))
+    }
+    box.append(currentBlock, candidateBlock)
+    return box
+  }
+
+  function row(label, value) {
+    const line = h('div', 'sub-compare__row')
+    line.innerHTML = `<span>${esc(label)}</span><strong>${esc(String(value || '-'))}</strong>`
+    return line
+  }
+
+  function resolutionLabel(rank) {
+    const labels = ['未知', '480p', '720p', '1080p', '2160p', '4K']
+    const n = Number(rank || 0)
+    return labels[n] || '未知'
   }
 
   function renderItems() {
@@ -216,10 +342,24 @@ export async function mount(root, sdk = {}) {
       return
     }
     if (!state.items.length) {
-      host.append(h('div', 'sub-empty', '暂无订阅。可以从 JavDB 作品页接入，或在这里手动新建番号订阅。'))
+      host.append(h('div', 'sub-empty', '暂无订阅。请从 JavDB 作品页、详情页或资源搜索结果中接入订阅。'))
       return
     }
-    for (const item of state.items) {
+    const visibleItems = state.items.filter(item => {
+      if (state.filter === 'subscribe' && item.type !== 'subscribe') return false
+      if (state.filter === 'upgrade' && item.type !== 'upgrade') return false
+      if (state.filter === 'matched' && item.status !== 'matched') return false
+      if (state.keyword) {
+        const text = `${item.code || ''} ${item.title || ''} ${sourceText(item)} ${item.current_file_path || ''}`.toLowerCase()
+        if (!text.includes(state.keyword.toLowerCase())) return false
+      }
+      return true
+    })
+    if (!visibleItems.length) {
+      host.append(h('div', 'sub-empty', '当前筛选条件下没有订阅。'))
+      return
+    }
+    for (const item of visibleItems) {
       const card = h('article', 'sub-card')
       const best = item.best_resource || null
       const cover = h('button', 'sub-card__cover')
@@ -232,17 +372,29 @@ export async function mount(root, sdk = {}) {
         () => refreshStoredImageCandidates(sdk, item),
       )
       card.innerHTML = `
-        <div class="sub-card__main">
+        <div class="sub-card__head">
           <div class="sub-card__title"><strong>${esc(item.code)}</strong><span>${esc(item.title || '')}</span></div>
-          <div class="sub-card__badges"></div>
-          <div class="sub-card__meta">上次检测：${fmtDate(item.last_checked_at)}${item.current_file_path ? ` · 当前：${esc(item.current_file_path)}` : ''}</div>
-          ${best ? `<div class="sub-best"><strong>最佳候选</strong><span>${esc(best.provider_label || best.provider)} · ${esc(best.title || '')} · ${fmtSize(best.size_bytes)} · ${best.score || 0} 分</span></div>` : '<div class="sub-best is-empty">暂无匹配资源</div>'}
+          <div class="sub-card__actions"><button data-action="detail" type="button">${state.expanded.has(item.id) ? '收起' : '详情'}</button>${(item.cleanup_suggestion || {}).status === 'pending' ? '<button data-action="ack-cleanup" type="button">已处理旧版</button>' : ''}<button data-action="edit" type="button">编辑</button><button data-action="check" type="button">检测</button><button data-action="delete" type="button">取消</button></div>
         </div>
-        <div class="sub-card__actions"><button data-action="check" type="button">检测</button><button data-action="delete" type="button">删除</button></div>
+        <div class="sub-card__main">
+          <div class="sub-card__badges"></div>
+          <div class="sub-card__meta">上次检测：${fmtDate(item.last_checked_at)}${sourceText(item) ? ` · 来源：${esc(sourceText(item))}` : ''}${item.current_file_path ? ` · 当前：${esc(item.current_file_path)}` : ''}</div>
+          ${best ? `<div class="sub-best"><strong>最佳候选</strong><span>${esc(best.provider_label || best.provider)} · ${esc(best.title || '')} · ${fmtSize(best.size_bytes)}</span><small>${esc(qualityText(item, best))}</small></div>` : '<div class="sub-best is-empty">暂无匹配资源</div>'}
+          ${item.last_submit_error ? `<div class="sub-best is-error"><strong>${item.last_submit_error_kind === 'downloader_quota_limited' ? '等待重试' : item.last_submit_error_kind === 'upgrade_not_improved' ? '未达洗版条件' : '推送异常'}</strong><span>${esc(item.last_submit_error)}${item.retry_after_at ? ` · 下次尝试：${fmtDate(item.retry_after_at)}` : ''}</span></div>` : ''}
+          ${state.expanded.has(item.id) ? renderCompare(item) : ''}
+        </div>
       `
       card.prepend(cover)
       const bHost = card.querySelector('.sub-card__badges')
       itemBadges(item).forEach(x => bHost.appendChild(x))
+      card.querySelector('[data-action="detail"]').onclick = () => {
+        if (state.expanded.has(item.id)) state.expanded.delete(item.id)
+        else state.expanded.add(item.id)
+        renderItems()
+      }
+      const ackCleanupBtn = card.querySelector('[data-action="ack-cleanup"]')
+      if (ackCleanupBtn) ackCleanupBtn.onclick = () => ackCleanup(item.id)
+      card.querySelector('[data-action="edit"]').onclick = () => openEdit(item)
       card.querySelector('[data-action="check"]').onclick = () => checkOne(item.id)
       card.querySelector('[data-action="delete"]').onclick = () => deleteOne(item.id)
       host.appendChild(card)
@@ -266,6 +418,7 @@ export async function mount(root, sdk = {}) {
   function render() {
     renderTopbar()
     renderNotice()
+    renderFilter()
     renderForm()
     renderItems()
     renderEvents()
@@ -280,6 +433,7 @@ export async function mount(root, sdk = {}) {
       state.stats = data.stats || {}
       state.items = data.items || []
       state.events = data.events || []
+      state.defaults = data.defaults || state.defaults
     } catch (e) {
       state.error = e?.message || '读取订阅失败'
     } finally {
@@ -292,11 +446,24 @@ export async function mount(root, sdk = {}) {
     try {
       const data = await apiPost('create', state.form)
       state.formOpen = false
+      state.editingId = ''
       state.form = { code: '', title: '', mode: 'loose', require_cracked: false, require_subtitle: false }
       notify('success', data.created ? '订阅已创建' : '订阅已存在')
       await load()
     } catch (e) {
       notify('error', e?.message || '创建失败')
+    }
+  }
+
+  async function updateSubscription() {
+    try {
+      await apiPost('update', { id: state.editingId, ...state.form })
+      state.formOpen = false
+      state.editingId = ''
+      notify('success', '订阅已更新')
+      await load()
+    } catch (e) {
+      notify('error', e?.message || '更新失败')
     }
   }
 
@@ -317,7 +484,7 @@ export async function mount(root, sdk = {}) {
 
   async function checkOne(id) {
     try {
-      await apiPost('check_once', { id })
+      await apiPost('check_once', { id, force: true })
       notify('success', '检测完成')
       await load()
     } catch (e) {
@@ -325,7 +492,49 @@ export async function mount(root, sdk = {}) {
     }
   }
 
+  async function ackCleanup(id) {
+    try {
+      await apiPost('ack_cleanup', { id })
+      notify('success', '已确认旧版本处理建议')
+      await load()
+    } catch (e) {
+      notify('error', e?.message || '确认失败')
+    }
+  }
+
   async function deleteOne(id) {
+    const item = state.items.find(entry => entry.id === id)
+    const ok = sdk.ui?.confirm
+      ? await sdk.ui.confirm({ title: '取消订阅', message: `确认取消 ${item?.code || '这个订阅'}？`, confirmText: '取消订阅', danger: true })
+      : true
+    if (!ok) return
+    try {
+      await apiPost('delete', { id })
+      notify('success', '订阅已删除')
+      await load()
+    } catch (e) {
+      notify('error', e?.message || '删除失败')
+    }
+  }
+
+  await load()
+      } catch (e) {
+        notify('error', e?.message || '删除失败')
+      }
+    }
+    if (sdk.ui?.confirm) {
+      sdk.ui.confirm({ title: '取消订阅', text: `确认取消 ${item?.code || '这个订阅'}？`, danger: true, onConfirm: remove })
+      return
+    }
+    await remove()
+  }
+
+  await load()
+      } catch (e) {
+        notify('error', e?.message || '删除失败')
+      }
+    } }) : null
+    if (confirm) return
     try {
       await apiPost('delete', { id })
       notify('success', '订阅已删除')

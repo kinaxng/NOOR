@@ -47,3 +47,23 @@
 @keyframes sub-pulse { to { background-position: -200% 0; } }
 @media (max-width: 980px) { .sub-layout { grid-template-columns: 1fr; } .sub-form-grid { grid-template-columns: 1fr; } .sub-card { grid-template-columns: 9.5rem minmax(0, 1fr); } .sub-card__actions { grid-column: 2; } }
 @media (max-width: 620px) { .sub-card { grid-template-columns: 1fr; } .sub-card__actions { grid-column: auto; } }
+
+.sub-filter { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
+.sub-filter__modes { display: inline-flex; align-items: center; gap: .3rem; padding: .22rem; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; background: rgba(255,255,255,.035); }
+.sub-filter__mode { min-height: 28px; padding: 0 .8rem; border: 0; border-radius: 999px; background: transparent; color: rgba(255,255,255,.58); font-size: .72rem; font-weight: 750; cursor: pointer; }
+.sub-filter__mode.is-active { background: rgba(0,117,255,.18); color: #fff; }
+.sub-filter__search { min-width: 14rem; height: 34px; padding: 0 .8rem; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: rgba(255,255,255,.045); color: #fff; }
+.sub-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; min-width: 0; }
+.sub-card__actions { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.sub-card__actions button, .sub-form-actions button { min-height: 32px; padding: 0 .8rem; border-radius: .6rem; border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.045); color: rgba(255,255,255,.78); font-weight: 750; cursor: pointer; }
+.sub-best small { color: rgba(255,255,255,.5); font-size: .7rem; }
+.sub-best.is-error { color: rgba(255,255,255,.7); background: rgba(239,68,68,.1); }
+.sub-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin-top: .15rem; }
+.sub-compare__col { min-width: 0; display: grid; gap: .32rem; padding: .6rem .7rem; border-radius: .65rem; background: rgba(255,255,255,.035); }
+.sub-compare__col > strong { color: #fff; font-size: .74rem; }
+.sub-compare__empty { color: rgba(255,255,255,.36); font-size: .74rem; }
+.sub-compare__row { min-width: 0; display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: .5rem; align-items: baseline; }
+.sub-compare__row span { color: rgba(255,255,255,.42); font-size: .68rem; }
+.sub-compare__row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255,255,255,.82); font-size: .72rem; font-weight: 700; }
+.sub-form-actions { gap: .45rem; }
+@media (max-width: 760px) { .sub-compare { grid-template-columns: 1fr; } .sub-filter__search { width: 100%; } }
