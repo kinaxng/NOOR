@@ -110,7 +110,9 @@ class PluginDownloadPayload(BaseModel):
 
 class ResourceSearchPayload(BaseModel):
     query: dict[str, Any] = Field(default_factory=dict)
+    providers: list[str] = Field(default_factory=list)
     limit_per_plugin: int = Field(24, ge=1, le=100)
+    requested_downloader_id: str = ''
 
 
 class ResourceResolvePayload(BaseModel):
@@ -287,12 +289,13 @@ async def _get_core_background_tasks() -> list[dict[str, Any]]:
 async def list_plugins():
     if not runtime._manifests:
         await runtime.reload_plugins()
-    return {'items': runtime.list_plugins()}
+    return runtime.list_plugins()
 
 
 @router.post('/reload')
 async def reload_plugins():
-    return {'items': await runtime.reload_plugins()}
+    items = await runtime.reload_plugins()
+    return {'ok': True, 'count': len(items)}
 
 
 @router.get('/background/tasks')
@@ -304,9 +307,15 @@ async def get_background_tasks():
 
 @router.post('/resources/search')
 async def search_resources(payload: ResourceSearchPayload):
-    groups = await runtime.search_resources(payload.query, limit_per_plugin=payload.limit_per_plugin)
+    result = await runtime.search_resources(
+        payload.query,
+        provider_ids=payload.providers,
+        limit_per_plugin=payload.limit_per_plugin,
+        requested_downloader_id=payload.requested_downloader_id,
+    )
+    groups = result.get('groups') if isinstance(result, dict) else result
     items: list[dict[str, Any]] = []
-    for group in groups:
+    for group in groups or []:
         if not isinstance(group, dict):
             continue
         provider = str(group.get('provider') or '')
@@ -318,7 +327,11 @@ async def search_resources(payload: ResourceSearchPayload):
             row.setdefault('provider', provider)
             row.setdefault('provider_label', provider_name)
             items.append(row)
-    return {'groups': groups, 'items': items}
+    return {
+        'groups': groups,
+        'items': items,
+        'downloaders': result.get('downloaders') if isinstance(result, dict) else [],
+    }
 
 
 @router.post('/resources/resolve-download')
@@ -393,11 +406,20 @@ async def push_plugin_rss_item(plugin_id: str, payload: FeedPushPayload):
 
 @router.delete('/{plugin_id}/images/cache')
 async def clear_plugin_image_cache(plugin_id: str):
-    handler = runtime._handlers.get(plugin_id)
+    handler = runtime.get_handler(plugin_id)
     callback = getattr(handler, 'clear_image_cache', None) if handler is not None else None
     if not callable(callback):
         raise HTTPException(status_code=404, detail='Plugin image cache not supported')
     return callback()
+
+
+@router.delete('/{plugin_id}')
+async def uninstall_plugin(plugin_id: str):
+    try:
+        await runtime.uninstall_plugin(plugin_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {'ok': True}
 
 
 @router.post('/{plugin_id}/downloads')

@@ -89,10 +89,11 @@ def _groups_to_scopes(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
 @router.post('/resources')
 async def global_search(payload: GlobalSearchRequest) -> dict[str, Any]:
     keyword = payload.query.strip() or payload.keyword.strip() or payload.code.strip()
-    groups = await runtime.search_resources(
+    result = await runtime.search_resources(
         {'keyword': keyword, 'q': keyword, 'code': payload.code.strip() or keyword, 'number': payload.code.strip() or keyword, 'limit': payload.limit},
         limit_per_plugin=payload.limit,
     )
+    groups = result.get('groups') if isinstance(result, dict) else result
     return {'query': keyword, 'groups': groups, 'total': sum(len(group.get('items', [])) for group in groups)}
 
 

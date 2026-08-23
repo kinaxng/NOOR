@@ -12,7 +12,7 @@ def _app() -> FastAPI:
     return app
 
 
-def test_plugin_manager_reads_items_payload(monkeypatch):
+def test_plugin_manager_returns_array(monkeypatch):
     async def fake_reload():
         return []
 
@@ -20,7 +20,7 @@ def test_plugin_manager_reads_items_payload(monkeypatch):
     monkeypatch.setattr(plugins.runtime, "reload_plugins", fake_reload)
     response = TestClient(_app()).get("/api/plugins")
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    assert response.json() == []
 
 
 def test_legacy_enable_disable_routes_forward_to_runtime(monkeypatch):
@@ -100,8 +100,16 @@ def test_market_install_route_forwards_to_runtime(monkeypatch):
 
 
 def test_resource_search_returns_groups_and_flat_items(monkeypatch):
-    async def fake_search_resources(query: dict, *, limit_per_plugin: int):
+    async def fake_search_resources(
+        query: dict,
+        *,
+        provider_ids: list[str] | None = None,
+        limit_per_plugin: int,
+        requested_downloader_id: str = "",
+    ):
         assert query == {"code": "AAA-001"}
+        assert provider_ids == []
+        assert requested_downloader_id == ""
         assert limit_per_plugin == 6
         return [
             {
