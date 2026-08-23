@@ -63,7 +63,6 @@ const activeNavName = computed(() => {
     const plugin = enabledPagePlugins.value.find(p => route.path === p.route || route.path.startsWith(`${p.route}/`))
     return plugin?.contributions?.sidebar?.label || plugin?.name || '插件'
   }
-  if (route.name === 'actor-detail') return t('files.actors.title')
   if (route.path.startsWith('/search/resources')) return '资源搜索'
   if (route.path === '/plugins') return '插件'
   return navItems.value.find(n => route.path === n.path || route.path.startsWith(`${n.path}/`))?.name || t('nav.settings')
