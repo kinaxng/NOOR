@@ -245,6 +245,9 @@ the recovered bytecode modules remain unchanged.
 - The recovered settings contract, Whisper single-chain modules, and FaceFusion
   runner/API modules were marked verified against the preserved bytecode, final
   parameter defaults, and current test coverage.
+- Gfriends was verified as the final avatar-library helper: it no longer takes over
+  every avatar, and its plugin page/plugin host expose searchable candidate avatars
+  for actor editing.
 
 ## Recovery Consistency (2026-08-23)
 

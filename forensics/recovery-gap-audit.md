@@ -54,6 +54,8 @@
   候选池显示 `总数+今日增量`，卡片支持订阅、详情面板和刷新后封面回退。
 - 后端高置信模块已登记为 verified：设置契约/更新、FaceFusion runner/API、
   Whisper engine/orchestrator/strategy/runtime tier，以及对应测试。
+- Gfriends 已核对为头像库辅助插件：不再全局接管头像，只在演员资料编辑时提供
+  候选头像查询与选择。
 
 ## 本轮一致性收敛（2026-08-23）
 

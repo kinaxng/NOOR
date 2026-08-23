@@ -85,7 +85,6 @@
 | `backend/app/plugins/store.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_database_paths.py` | 1 | pending | 2ceba68 Move default database into data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_facefusion_embedded_source.py` | 1 | pending | 70f5263 Keep FaceFusion runtime data outside source | 24f438b Restore configured FaceFusion model routing |
-| `backend/tests/test_gfriends_plugin.py` | 1 | pending | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_media_library_hardlinks.py` | 1 | pending | ddbf4c0 Move hardlink groups into runtime data | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_plugin_store_paths.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_settings_api.py` | 1 | pending | 106df4b Prefer bundled LADA python path | 558869c Restore settings contract and media library API tests |
@@ -101,12 +100,8 @@
 | `frontend/src/composables/useJobPresentation.ts` | 1 | pending | 806de25 Add FaceFusion crack processing integration | ee05cd1 Recover original frontend dashboard |
 | `frontend/src/router/index.ts` | 1 | pending | 4f1b075 Move hardlinks under files section | 2c31f4a Restore JavDB sidebar workspace |
 | `frontend/src/style.css` | 1 | pending | c2b5111 Show database path in storage settings | 6ff12d0 Recover original routed application shell |
-| `frontend/src/views/PluginHost.vue` | 1 | pending | 194662f Make Gfriends an avatar library helper | 8e11c67 Restore plugin pill select controls |
 | `frontend/src/views/settings/SettingsIndex.vue` | 1 | pending | 7219ca2 Split FaceFusion settings into dedicated tab | 8296a65 Restore local subtitle library settings |
 | `plugins/avdb/backend.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | 219325a Restore configurable AVDB provider |
-| `plugins/gfriends/frontend/page.js` | 1 | pending | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
-| `plugins/gfriends/frontend/style.css` | 1 | pending | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
-| `plugins/gfriends/plugin.json` | 1 | pending | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
 | `plugins/javdb/backend.py` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
 | `plugins/javdb/frontend/page.js` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
 | `plugins/javdb/frontend/style.css` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
@@ -148,7 +143,12 @@
 | `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | 0ab32de Verify FaceFusion upgrade content patch |
 | `frontend/src/components/noor/SubtitlePanel.vue` | 3 | verified | 0184022 Add Whisper runtime tier selection | ad7302e Recover plugin-based subtitle providers |
 | `backend/app/pipeline/whisper/runtime_tier.py` | 1 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
+| `backend/tests/test_gfriends_plugin.py` | 1 | verified | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
+| `frontend/src/views/PluginHost.vue` | 1 | verified | 194662f Make Gfriends an avatar library helper | 8e11c67 Restore plugin pill select controls |
 | `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | c734bb5 Restore recommendation center icons |
+| `plugins/gfriends/frontend/page.js` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
+| `plugins/gfriends/frontend/style.css` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
+| `plugins/gfriends/plugin.json` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
 | `plugins/qbittorrent/plugin.json` | 1 | verified | fd44ab3 Support qBittorrent API key auth | 81940de Restore original plugin service icons |
 | `plugins/subscription-core/frontend/page.js` | 1 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 587ea15 Restore subscription cover persistence |
 | `plugins/xunlei-remote/plugin.json` | 1 | verified | 15f6ac8 Add Xunlei residual task restore | 81940de Restore original plugin service icons |
