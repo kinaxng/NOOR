@@ -63,7 +63,7 @@
 | `plugins/av-recommend/frontend/page.js` | 3 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/qbittorrent/backend.py` | 3 | verified | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | verified | 7d9120d Simplify Xunlei residual cleanup flow | ba4a75e Restore final UI details and plugin runtime data paths |
-| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 3445bac Restore app startup cover blur sync |
+| `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | eab9436 Stabilize recovery route OpenAPI IDs and archive Jobs verification |
 | `backend/app/api/endpoints/media_library_item_detail.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/settings_helpers.py` | 2 | verified | 106df4b Prefer bundled LADA python path | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/settings_status_helpers.py` | 2 | verified | a382063 Add FaceFusion model management settings tab | 76ea151 Restore final LADA runtime and settings helpers |
