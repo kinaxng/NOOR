@@ -1,15 +1,11 @@
-Chunk ID: b5c317
-Wall time: 0.0001 seconds
-Process exited with code 0
-Original token count: 5950
-Output:
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import BaseIcon from '../components/noor/BaseIcon.vue'
-import { createDownloaderDialogContext } from '../composables/useDownloaderDialog'
 import { useToast } from '../composables/useToast'
+import { createDownloaderDialogContext } from '../composables/useDownloaderDialog'
+import { openSubscriptionDialog } from '../composables/useSubscriptionDialog'
 
 type ResourceItem = {
   provider: string
@@ -30,6 +26,32 @@ type ResourceItem = {
   query_key?: string
 }
 
+type CatalogSearchItem = {
+  id: string
+  source?: string
+  source_label?: string
+  type?: string
+  title: string
+  subtitle?: string
+  description?: string
+  image?: string | null
+  badges?: { label: string, tone?: string }[]
+  action?: { route?: string, payload?: Record<string, any> }
+}
+
+type MediaLibraryItem = {
+  id?: string
+  name?: string
+  path?: string
+  poster_path?: string
+  fanart_path?: string
+  backdrop_path?: string
+  date_created?: string
+  nfo?: Record<string, any>
+  tags?: Record<string, any>
+  subtitle_count?: number
+}
+
 type ResourceGroup = {
   provider: string
   provider_label: string
@@ -40,48 +62,61 @@ type ResourceGroup = {
   max_items?: number
 }
 
+type WorkResult = {
+  code: string
+  title: string
+  cover_url?: string
+  fanart_url?: string
+  resources: ResourceItem[]
+  providers: ResourceGroup[]
+  media_item?: MediaLibraryItem
+  catalog_item?: CatalogSearchItem
+  in_library: boolean
+  features: {
+    has_subtitle: boolean
+    is_cracked: boolean
+    is_private_tracker: boolean
+    has_direct_url: boolean
+  }
+}
+
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const downloads = createDownloaderDialogContext('resource-search')
 const query = ref(String(route.query.q || ''))
 const loading = ref(false)
 const error = ref('')
 const groups = ref<ResourceGroup[]>([])
+const mediaItems = ref<MediaLibraryItem[]>([])
+const catalogItems = ref<CatalogSearchItem[]>([])
 const activeProvider = ref('all')
 const displayLimitPerProvider = 24
 const providerLoading = ref<Record<string, boolean>>({})
 const providerReachedEnd = ref<Record<string, boolean>>({})
+const pushingResources = ref<Record<string, boolean>>({})
 let seq = 0
 
 const total = computed(() => groups.value.reduce((sum, group) => sum + (group.items?.length || 0), 0))
-const visibleGroups = computed(() => activeProvider.value === 'all'
-  ? groups.value.map(group => ({ ...group, items: (group.items || []).slice(0, displayLimitPerProvider) }))
-  : groups.value.filter(group => group.provider === activeProvider.value))
-const visibleTotal = computed(() => visibleGroups.value.reduce((sum, group) => sum + (group.items?.length || 0), 0))
+const works = computed(() => aggregateWorks(groups.value, mediaItems.value, catalogItems.value))
+const visibleWorks = computed(() => {
+  if (activeProvider.value === 'all') return works.value
+  if (activeProvider.value === 'library') return works.value.filter(work => work.in_library)
+  return works.value.filter(work => work.providers.some(provider => provider.provider === activeProvider.value))
+})
+const visibleTotal = computed(() => visibleWorks.value.length)
+const providerSummary = computed(() => groups.value
+  .filter(group => (group.items?.length || 0) > 0)
+  .map(group => `${group.provider_label || group.provider} ${group.items?.length || 0}`)
+  .join(' · '))
 const providerOptions = computed(() => [
-  { id: 'all', label: '全部来源', count: total.value },
+  { id: 'all', label: '全部作品', count: works.value.length },
+  ...(mediaItems.value.length ? [{ id: 'library', label: '已入库', count: mediaItems.value.length }] : []),
   ...groups.value.map(group => ({ id: group.provider, label: group.provider_label || group.provider, count: group.items?.length || 0 })),
 ])
 const subtitleCount = computed(() => groups.value.flatMap(group => group.items || []).filter(item => item.features?.has_subtitle).length)
 const ptCount = computed(() => groups.value.flatMap(group => group.items || []).filter(item => item.features?.is_private_tracker || item.requirements?.accepts_private_tracker).length)
 const directCount = computed(() => groups.value.flatMap(group => group.items || []).filter(item => item.url).length)
 const codeHint = computed(() => extractCode(query.value))
-
-function normalizeGroup(raw: any): ResourceGroup {
-  const provider = String(raw?.provider || '')
-  const providerLabel = String(raw?.provider_label || provider)
-  return {
-    ...raw,
-    provider,
-    provider_label: providerLabel,
-    items: (Array.isArray(raw?.items) ? raw.items : []).map((item: any) => ({
-      ...item,
-      provider: String(item?.provider || provider),
-      provider_label: String(item?.provider_label || providerLabel),
-    })),
-  }
-}
 
 function extractCode(value: string) {
   const match = String(value || '').match(/\b(FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,8}[-_ ]?\d{2,7}|\d{6}[-_]\d{2,5})\b/i)
@@ -92,6 +127,41 @@ function extractCode(value: string) {
   const compact = raw.match(/^([A-Z]{2,8})(\d{2,7})$/)
   if (compact) return `${compact[1]}-${compact[2]}`
   return raw
+}
+
+
+function mediaCode(item: MediaLibraryItem) {
+  const nfo = item.nfo || {}
+  return extractCode(`${nfo.num || ''} ${item.name || ''} ${nfo.title || ''} ${nfo.originaltitle || ''}`) || String(nfo.num || item.name || item.id || '媒体')
+}
+
+function mediaTitle(item: MediaLibraryItem) {
+  const nfo = item.nfo || {}
+  return String(nfo.title || item.name || nfo.originaltitle || mediaCode(item))
+}
+
+function mediaCover(item: MediaLibraryItem) {
+  return item.backdrop_path || item.fanart_path || item.poster_path || ''
+}
+
+function catalogCode(item: CatalogSearchItem) {
+  const payload = item.action?.payload || {}
+  return String(payload.query_key || payload.code || '').trim() || extractCode(`${item.title || ''} ${item.subtitle || ''} ${item.id || ''}`) || item.title
+}
+
+function catalogRoute(item: CatalogSearchItem) {
+  return item.action?.route || ''
+}
+
+function mediaWorkBadges(work: WorkResult) {
+  const tags = work.media_item?.tags || {}
+  const out = [{ label: '已入库', tone: 'success' }]
+  if (tags.has_chinese) out.push({ label: '中字', tone: 'success' })
+  if (tags.is_cracked) out.push({ label: '破解', tone: 'warning' })
+  if (tags.release_type) out.push({ label: String(tags.release_type), tone: 'info' })
+  const subtitles = Number(work.media_item?.subtitle_count || 0)
+  if (subtitles) out.push({ label: `字幕 ${subtitles}`, tone: 'info' })
+  return out
 }
 
 function formatSize(value?: number) {
@@ -106,6 +176,143 @@ function formatSize(value?: number) {
   return index >= 2 ? `${size.toFixed(1)} ${units[index]}` : `${Math.round(size)} ${units[index]}`
 }
 
+function resourceKey(item: ResourceItem) {
+  return `${item.provider}:${item.id || ''}:${item.url || ''}:${item.title || ''}`
+}
+
+function providerLabel(provider: string) {
+  return groups.value.find(group => group.provider === provider)?.provider_label || provider
+}
+
+function workKeyFromItem(item: ResourceItem) {
+  return item.query_key || extractCode(`${item.title || ''} ${item.subtitle || ''} ${item.id || ''}`) || `${item.provider}:${item.id || item.title}`
+}
+
+function cleanWorkTitle(item: ResourceItem, code: string) {
+  const title = String(item.title || '').trim()
+  if (!title) return code || '未知作品'
+  if (code && title.toUpperCase() === code.toUpperCase()) return code
+  if (item.provider === 'javdb' && code && title.toUpperCase().startsWith(`${code.toUpperCase()} `)) return title
+  if (item.provider === 'javdb' && !/\.(torrent|mp4|mkv|avi|torrent)$/i.test(title)) return title
+  return code || title
+}
+
+function aggregateWorks(sourceGroups: ResourceGroup[], libraryItems: MediaLibraryItem[], catalogSourceItems: CatalogSearchItem[]) {
+  const map = new Map<string, WorkResult>()
+  for (const media of libraryItems || []) {
+    const code = mediaCode(media)
+    const key = code || String(media.id || media.name || '')
+    if (!key) continue
+    map.set(key, {
+      code,
+      title: mediaTitle(media),
+      cover_url: mediaCover(media),
+      fanart_url: mediaCover(media),
+      resources: [],
+      providers: [],
+      media_item: media,
+      in_library: true,
+      features: {
+        has_subtitle: !!media.tags?.has_chinese,
+        is_cracked: !!media.tags?.is_cracked,
+        is_private_tracker: false,
+        has_direct_url: false,
+      },
+    })
+  }
+
+  for (const catalog of catalogSourceItems || []) {
+    const code = catalogCode(catalog)
+    const key = code || String(catalog.id || catalog.title || '')
+    if (!key) continue
+    const existing = map.get(key)
+    if (existing) {
+      existing.catalog_item = catalog
+      if (!existing.cover_url && catalog.image) existing.cover_url = catalog.image
+      if (!existing.fanart_url && catalog.image) existing.fanart_url = catalog.image
+      continue
+    }
+    map.set(key, {
+      code,
+      title: catalog.title || code,
+      cover_url: catalog.image || '',
+      fanart_url: catalog.image || '',
+      resources: [],
+      providers: [],
+      catalog_item: catalog,
+      in_library: (catalog.badges || []).some(badge => badge.label === '已入库'),
+      features: {
+        has_subtitle: (catalog.badges || []).some(badge => badge.label === '中字'),
+        is_cracked: (catalog.badges || []).some(badge => badge.label === '破解'),
+        is_private_tracker: false,
+        has_direct_url: false,
+      },
+    })
+  }
+
+  for (const group of sourceGroups) {
+    for (const item of group.items || []) {
+      const code = workKeyFromItem(item)
+      const key = code || resourceKey(item)
+      const existing = map.get(key) || {
+        code,
+        title: cleanWorkTitle(item, code),
+        cover_url: item.cover_url,
+        fanart_url: item.cover_url,
+        resources: [],
+        providers: [],
+        in_library: false,
+        features: {
+          has_subtitle: false,
+          is_cracked: false,
+          is_private_tracker: false,
+          has_direct_url: false,
+        },
+      }
+      if (!existing.cover_url && item.cover_url) existing.cover_url = item.cover_url
+      if (item.provider === 'javdb' && existing.title === existing.code && item.title && !/\.(torrent|mp4|mkv|avi|torrent)$/i.test(item.title)) {
+        existing.title = cleanWorkTitle(item, code)
+      }
+      existing.resources.push(item)
+      existing.features.has_subtitle = existing.features.has_subtitle || !!item.features?.has_subtitle
+      existing.features.is_cracked = existing.features.is_cracked || !!item.features?.is_cracked
+      existing.features.is_private_tracker = existing.features.is_private_tracker || !!(item.features?.is_private_tracker || item.requirements?.accepts_private_tracker)
+      existing.features.has_direct_url = existing.features.has_direct_url || !!item.url
+      map.set(key, existing)
+    }
+  }
+  for (const work of map.values()) {
+    const providerMap = new Map<string, ResourceGroup>()
+    for (const item of work.resources) {
+      const provider = item.provider || 'unknown'
+      const group = providerMap.get(provider) || {
+        provider,
+        provider_label: providerLabel(provider),
+        total: 0,
+        items: [],
+      }
+      group.items.push(item)
+      group.total = group.items.length
+      providerMap.set(provider, group)
+    }
+    work.providers = [...providerMap.values()].sort((a, b) => providerOrder(a.provider) - providerOrder(b.provider))
+    work.resources.sort((a, b) => providerOrder(a.provider) - providerOrder(b.provider) || Number(b.size_bytes || 0) - Number(a.size_bytes || 0))
+  }
+  return [...map.values()].sort((a, b) => {
+    const aExact = a.code && a.code === codeHint.value
+    const bExact = b.code && b.code === codeHint.value
+    if (aExact !== bExact) return aExact ? -1 : 1
+    return b.resources.length - a.resources.length || a.code.localeCompare(b.code, 'zh-CN')
+  })
+}
+
+function providerOrder(provider: string) {
+  if (provider === 'avdb') return 0
+  if (provider === 'mteam-plugin') return 1
+  if (provider === 'javdb') return 2
+  return 9
+}
+
 function badges(item: ResourceItem) {
   const out = [{ label: item.provider_label || item.provider, tone: 'primary' }]
   if (item.features?.has_subtitle) out.push({ label: '中字', tone: 'success' })
@@ -117,18 +324,47 @@ function badges(item: ResourceItem) {
   return out
 }
 
+function dedupeBadges(items: Array<{ label: string, tone: string }>) {
+  const seen = new Set<string>()
+  const out: Array<{ label: string, tone: string }> = []
+  for (const item of items) {
+    const key = item.label
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out
+}
+
+function workBadges(work: WorkResult) {
+  const out = work.in_library ? mediaWorkBadges(work) : []
+  if (work.catalog_item && !work.in_library) out.push(...(work.catalog_item.badges || []).filter(badge => ['JavDB', '已入库', '中字', '破解'].includes(badge.label)).map(badge => ({ label: badge.label, tone: badge.tone || 'info' })))
+  if (work.in_library && work.catalog_item) out.push({ label: 'JavDB', tone: 'primary' })
+  if (work.resources.length) out.push({ label: `${work.resources.length} 资源`, tone: 'primary' })
+  if (work.features.has_subtitle) out.push({ label: '中字', tone: 'success' })
+  if (work.features.is_cracked) out.push({ label: '破解', tone: 'warning' })
+  if (work.features.is_private_tracker) out.push({ label: 'PT', tone: 'danger' })
+  if (work.features.has_direct_url) out.push({ label: '可推送', tone: 'info' })
+  return dedupeBadges(out)
+}
+
 function toneClass(tone: string) {
   return `resource-search-badge--${tone || 'info'}`
 }
 
-function targetRoute(item: ResourceItem) {
-  const key = item.query_key || extractCode(`${item.title} ${item.subtitle || ''}`)
-  if ((item.provider === 'javdb' || item.provider === 'avdb') && key) return `/plugins/javdb?code=${encodeURIComponent(key)}`
-  if (item.provider) return `/plugins/${item.provider}`
+function targetRoute(itemOrWork: ResourceItem | WorkResult) {
+  const key = 'resources' in itemOrWork
+    ? itemOrWork.code
+    : itemOrWork.query_key || extractCode(`${itemOrWork.title} ${itemOrWork.subtitle || ''}`)
+  if ('resources' in itemOrWork && itemOrWork.in_library) return `/library?q=${encodeURIComponent(key || itemOrWork.code)}`
+  if ('resources' in itemOrWork && itemOrWork.catalog_item && catalogRoute(itemOrWork.catalog_item)) return catalogRoute(itemOrWork.catalog_item)
+  if (key) return `/plugins/javdb?code=${encodeURIComponent(key)}`
+  if (!('resources' in itemOrWork) && itemOrWork.provider) return `/plugins/${itemOrWork.provider}`
   return '/plugins'
 }
 
-function itemSourceText(item: ResourceItem) {
+function itemSourceText(item: ResourceItem | null) {
+  if (!item) return ''
   const pieces = []
   if (item.file_count) pieces.push(`${item.file_count} 文件`)
   if (item.compatible_downloaders?.length) pieces.push(`可用下载器 ${item.compatible_downloaders.length}`)
@@ -136,35 +372,85 @@ function itemSourceText(item: ResourceItem) {
   return pieces.join(' · ')
 }
 
-async function openItem(item: ResourceItem) {
-  await router.push(targetRoute(item))
+function libraryRoute(work: WorkResult) {
+  return `/library?q=${encodeURIComponent(work.code)}`
 }
 
-async function downloadItem(item: ResourceItem) {
+function javdbRoute(work: WorkResult) {
+  return catalogRoute(work.catalog_item || {} as CatalogSearchItem) || `/plugins/javdb?code=${encodeURIComponent(work.code)}`
+}
+
+async function openWork(work: WorkResult) {
+  await router.push(targetRoute(work))
+}
+
+async function openLibrary(work: WorkResult) {
+  await router.push(libraryRoute(work))
+}
+
+async function openJavdb(work: WorkResult) {
+  await router.push(javdbRoute(work))
+}
+
+async function subscribeWork(work: WorkResult) {
   try {
-    const response = await api.post('/plugins/resources/resolve-download', {
+    await openSubscriptionDialog({
+      code: work.code,
+      title: work.title || work.code,
+      cover_url: work.cover_url || work.fanart_url || '',
+      fanart_url: work.fanart_url || work.cover_url || '',
+      sourcePlugin: 'global-resource-search',
+      sourceLabel: '全局资源搜索',
+      sourceRoute: route.fullPath,
+      sourceContext: 'resource-search',
+      defaultMode: 'loose',
+      requireCracked: false,
+      requireSubtitle: false,
+      onSuccess: result => toast.success(result?.created ? '订阅已创建' : '订阅已存在'),
+    })
+  } catch (e: any) {
+    toast.error(e?.response?.data?.detail || e?.message || '订阅失败')
+  }
+}
+
+async function pushResource(item: ResourceItem) {
+  const key = resourceKey(item)
+  if (pushingResources.value[key]) return
+  pushingResources.value = { ...pushingResources.value, [key]: true }
+  try {
+    const resolved = await api.post('/plugins/resources/resolve-download', {
       provider_id: item.provider,
       item,
-    })
-    const resolved = response.data || {}
-    const resolvedItem = resolved.item || item
-    const resolvedUrl = resolved.url || resolvedItem.url
-    const downloaderIds = Array.isArray(resolvedItem.compatible_downloaders)
-      ? resolvedItem.compatible_downloaders.filter(Boolean)
-      : []
-    const downloaderId = resolvedItem.preferred_downloader || downloaderIds[0]
-    if (!downloaderId) throw new Error('没有兼容的下载器')
-    if (!resolvedUrl) throw new Error('资源链接解析失败')
-    await downloads.open({
-      downloaderId,
+    }).then(resp => resp.data)
+    const resolvedItem = resolved?.item || item
+    const url = resolved?.url || resolvedItem?.url
+    const downloaderIds = Array.from(new Set([
+      resolvedItem?.preferred_downloader,
+      ...(Array.isArray(resolvedItem?.compatible_downloaders) ? resolvedItem.compatible_downloaders : []),
+    ].filter(Boolean).map(String)))
+    if (!downloaderIds.length) throw new Error('没有兼容的下载器')
+    if (!url) throw new Error('资源链接解析失败')
+    const workTitle = resolvedItem.query_key || extractCode(`${resolvedItem.title || ''} ${resolvedItem.subtitle || ''}`) || query.value
+    await createDownloaderDialogContext(item.provider).open({
+      downloaderId: resolvedItem?.preferred_downloader || downloaderIds[0],
       downloaderIds,
-      url: resolvedUrl,
-      title: item.title,
-      rename: item.title,
-      itemTitle: item.title,
+      url,
+      magnet: url,
+      title: workTitle,
+      itemTitle: workTitle,
+      name: workTitle,
+      rename: workTitle,
+      titleOptions: [
+        { key: 'work', label: '作品番号', value: workTitle, hint: '优先使用作品番号，避免资源文件名污染标题。' },
+        resolvedItem.title && resolvedItem.title !== workTitle ? { key: 'resource', label: '资源原名', value: resolvedItem.title, hint: '使用资源插件返回的原始资源名。' } : null,
+      ].filter(Boolean),
+      titleMode: 'work',
+      sourcePluginId: item.provider,
     })
-  } catch (error: any) {
-    toast.error(error?.response?.data?.detail || error?.message || '推送失败')
+  } catch (e: any) {
+    toast.error(e?.response?.data?.detail || e?.message || '打开推送卡片失败')
+  } finally {
+    pushingResources.value = { ...pushingResources.value, [key]: false }
   }
 }
 
@@ -210,7 +496,7 @@ async function loadMoreProvider(group: ResourceGroup) {
       providers: [group.provider],
       limit_per_plugin: displayLimitPerProvider,
     })
-    const nextGroup = normalizeGroup((resp.data?.groups || [])[0] || {})
+    const nextGroup = (resp.data?.groups || [])[0]
     const incoming = Array.isArray(nextGroup?.items) ? nextGroup.items : []
     const target = groups.value.find(item => item.provider === group.provider)
     if (!target) return
@@ -239,6 +525,8 @@ async function search() {
   const current = ++seq
   if (!q) {
     groups.value = []
+    mediaItems.value = []
+    catalogItems.value = []
     error.value = ''
     activeProvider.value = 'all'
     return
@@ -258,12 +546,19 @@ async function search() {
       payload.code = code
       payload.number = code
     }
-    const resp = await api.post('/plugins/resources/search', {
-      query: payload,
-      limit_per_plugin: displayLimitPerProvider,
-    })
+    const [resourceResp, mediaResp, catalogResp] = await Promise.all([
+      api.post('/plugins/resources/search', {
+        query: payload,
+        limit_per_plugin: displayLimitPerProvider,
+      }),
+      api.get('/media-library/items', { params: { q, limit: 24, offset: 0 } }).catch(() => ({ data: { items: [] } })),
+      api.get('/search', { params: { q, scope: 'catalog', limit: 24 } }).catch(() => ({ data: { scopes: [] } })),
+    ])
     if (current !== seq) return
-    groups.value = (resp.data?.groups || []).map(normalizeGroup)
+    groups.value = resourceResp.data?.groups || []
+    mediaItems.value = Array.isArray(mediaResp.data?.items) ? mediaResp.data.items : []
+    const catalogScope = Array.isArray(catalogResp.data?.scopes) ? catalogResp.data.scopes.find((scope: any) => scope?.key === 'catalog') : null
+    catalogItems.value = Array.isArray(catalogScope?.items) ? catalogScope.items : []
     if (activeProvider.value !== 'all' && !groups.value.some(group => group.provider === activeProvider.value)) {
       activeProvider.value = 'all'
     }
@@ -271,6 +566,8 @@ async function search() {
     if (current !== seq) return
     error.value = e?.response?.data?.detail || e?.message || '资源搜索失败'
     groups.value = []
+    mediaItems.value = []
+    catalogItems.value = []
   } finally {
     if (current === seq) loading.value = false
   }
@@ -310,8 +607,8 @@ onUnmounted(() => {
     <header class="resource-search-hero">
       <div class="resource-search-hero__main">
         <p class="resource-search-eyebrow">全局资源搜索</p>
-        <h1>资源结果</h1>
-        <p>主程序统一聚合资源类插件，结果按来源拆分，点击后进入对应作品或插件页面。</p>
+        <h1>作品资源结果</h1>
+        <p>主程序统一聚合资源类插件，先按作品归并，再在作品下展示可推送资源。</p>
       </div>
       <form class="resource-search-box" @submit.prevent="submit">
         <BaseIcon name="search" class="resource-search-box__icon" />
@@ -322,12 +619,12 @@ onUnmounted(() => {
 
     <section class="resource-search-summary">
       <div class="resource-search-stat">
-        <span>资源</span>
-        <strong>{{ total }}</strong>
+        <span>作品</span>
+        <strong>{{ works.length }}</strong>
       </div>
       <div class="resource-search-stat">
-        <span>来源</span>
-        <strong>{{ groups.length }}</strong>
+        <span>资源</span>
+        <strong>{{ total }}</strong>
       </div>
       <div class="resource-search-stat">
         <span>中字</span>
@@ -360,7 +657,7 @@ onUnmounted(() => {
       <div class="resource-search-status">
         <span v-if="loading"><BaseIcon name="loading" class="resource-search-spin" /> 搜索中…</span>
         <span v-else-if="error" class="is-error">{{ error }}</span>
-        <span v-else-if="query">{{ codeHint || query }} · 当前 {{ visibleTotal }} 条</span>
+        <span v-else-if="query">{{ codeHint || query }} · 当前 {{ visibleTotal }} 部作品<span v-if="providerSummary"> · {{ providerSummary }}</span></span>
         <span v-else>输入关键词开始搜索资源插件。</span>
       </div>
     </div>
@@ -382,51 +679,77 @@ onUnmounted(() => {
       <span>可以尝试输入完整番号，或确认对应资源插件已启用。</span>
     </div>
 
-    <section v-for="group in visibleGroups" :key="group.provider" class="resource-search-group">
-      <div class="resource-search-group__head">
-        <div>
-          <strong>{{ group.provider_label || group.provider }}</strong>
-          <span>{{ group.provider }}</span>
-        </div>
-        <em>{{ group.items.length }} 条</em>
-      </div>
+    <section v-else class="resource-search-group">
       <div class="resource-search-grid">
-        <article v-for="item in group.items" :key="`${group.provider}:${item.id}`" class="resource-search-card" tabindex="0" @click="openItem(item)" @keydown.enter="openItem(item)">
-          <div class="resource-search-cover" :class="{ 'has-image': !!item.cover_url }">
-            <img v-if="item.cover_url" :src="item.cover_url" alt="" loading="lazy" />
-            <BaseIcon v-else name="download" />
-          </div>
-          <div class="resource-search-main">
-            <strong>{{ item.title }}</strong>
-            <span v-if="item.subtitle">{{ item.subtitle }}</span>
-            <small>{{ itemSourceText(item) || item.source_url || item.url || '资源插件结果' }}</small>
-          </div>
-          <div class="resource-search-badges">
-            <span v-for="badge in badges(item)" :key="badge.label" class="resource-search-badge" :class="toneClass(badge.tone)">{{ badge.label }}</span>
-          </div>
-          <div class="resource-search-card__actions">
-            <button v-if="item.url || item.source_url" type="button" class="resource-search-download" @click.stop="downloadItem(item)">
-              <BaseIcon name="download" />
-              <span>推送下载</span>
+        <article v-for="work in visibleWorks" :key="work.code" class="resource-search-work-card">
+          <div class="resource-search-work-card__media">
+            <button type="button" class="resource-search-cover resource-search-work-cover" :class="{ 'has-image': !!work.cover_url }" @click="openWork(work)">
+              <img v-if="work.cover_url" :src="work.cover_url" alt="" loading="lazy" />
+              <BaseIcon v-else name="download" />
             </button>
-            <button type="button" class="resource-search-open" @click.stop="openItem(item)" title="打开来源">
-              <BaseIcon name="chevronRight" />
-            </button>
+            <div class="resource-search-work-info">
+              <button type="button" class="resource-search-work-title" @click="openWork(work)">
+                <strong>{{ work.code }}</strong>
+              </button>
+              <div class="resource-search-badges">
+                <span v-for="badge in workBadges(work)" :key="badge.label" class="resource-search-badge" :class="toneClass(badge.tone)">{{ badge.label }}</span>
+              </div>
+              <div class="resource-search-work-actions" :class="{ 'resource-search-work-actions--triple': work.in_library, 'resource-search-work-actions--split': !work.in_library }">
+                <button type="button" class="resource-search-inline-action" @click="openJavdb(work)">JavDB</button>
+                <button type="button" class="resource-search-inline-action" @click="subscribeWork(work)">{{ work.in_library ? '洗版' : '订阅' }}</button>
+                <button v-if="work.in_library" type="button" class="resource-search-inline-action" @click="openLibrary(work)">媒体库</button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="work.resources.length" class="resource-search-resource-list resource-search-resource-list--mixed">
+            <div
+              v-for="item in work.resources"
+              :key="resourceKey(item)"
+              class="resource-search-resource-row"
+            >
+              <div class="resource-search-resource-row__main">
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.subtitle || itemSourceText(item) || item.url || '资源插件结果' }}</span>
+                <div class="resource-search-badges">
+                  <span v-for="badge in badges(item)" :key="badge.label" class="resource-search-badge" :class="toneClass(badge.tone)">{{ badge.label }}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="resource-search-push-btn"
+                :disabled="pushingResources[resourceKey(item)]"
+                :title="pushingResources[resourceKey(item)] ? '推送中' : '推送下载'"
+                @click="pushResource(item)"
+              >
+                <BaseIcon v-if="pushingResources[resourceKey(item)]" name="loading" class="resource-search-spin" />
+                <BaseIcon v-else name="download" />
+                <span>{{ pushingResources[resourceKey(item)] ? '推送中' : '推送' }}</span>
+              </button>
+            </div>
+          </div>
+          <div v-else class="resource-search-library-only">
+            <BaseIcon name="library" />
+            <span>该作品已在媒体库中，点击左侧封面或标题进入媒体库。</span>
           </div>
         </article>
       </div>
-      <button v-if="hasMoreForGroup(group)" type="button" class="resource-search-more-row" @click="loadMoreProvider(group)">
+    </section>
+
+    <section v-for="group in groups.filter(group => hasMoreForGroup(group))" :key="`more:${group.provider}`" class="resource-search-more-section">
+      <button type="button" class="resource-search-more-row" @click="loadMoreProvider(group)">
         <BaseIcon v-if="providerLoading[group.provider]" name="loading" class="resource-search-spin" />
         <BaseIcon v-else name="chevronRight" />
-        <span>{{ activeProvider === 'all' ? '更多结果' : ((group.items?.length || 0) >= 100 ? '已加载 100 条' : '加载更多') }}</span>
+        <span>{{ activeProvider === 'all' ? `更多 ${group.provider_label || group.provider} 结果` : ((group.items?.length || 0) >= 100 ? '已加载 100 条' : '加载更多') }}</span>
         <em v-if="activeProvider !== 'all'">{{ group.items.length }} / 100</em>
       </button>
     </section>
+
   </div>
 </template>
 
 <style scoped>
-.resource-search-page { display: grid; gap: 1rem; }
+.resource-search-page { display: grid; gap: 1rem; min-width: 0; }
 .resource-search-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(22rem, 38rem); gap: 1rem; align-items: end; padding: 1rem; border: 1px solid var(--color-glass-border); background: linear-gradient(135deg, rgba(255,255,255,.045), rgba(255,255,255,.018)); box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 14px 32px rgba(0,0,0,.18); }
 .resource-search-eyebrow { margin: 0 0 .35rem; color: var(--color-text-muted); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 750; }
 .resource-search-hero h1 { margin: 0; color: #fff; font-size: clamp(1.45rem, 2.2vw, 2rem); line-height: 1.15; }
@@ -457,12 +780,45 @@ onUnmounted(() => {
 .resource-search-group__head div { display: grid; gap: .12rem; }
 .resource-search-group__head strong { color: #fff; font-size: 1rem; }
 .resource-search-group__head span, .resource-search-group__head em { color: var(--color-text-muted); font-size: .74rem; font-style: normal; font-weight: 750; }
-.resource-search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(31rem, 1fr)); gap: .65rem; }
+.resource-search-grid { display: grid; grid-template-columns: 1fr; gap: .8rem; }
+.resource-search-work-card { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(24rem, 36rem) minmax(0, 1fr); gap: .9rem; padding: .75rem; border: 1px solid var(--color-glass-border); background: rgba(255,255,255,.018); box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.12); }
+.resource-search-work-card__media { min-width: 0; display: grid; gap: .7rem; align-content: start; }
+.resource-search-work-cover { width: 100%; border: 0; padding: 0; color: var(--color-text-muted); }
+.resource-search-work-cover img { width: 100%; height: 100%; object-fit: cover; }
+.resource-search-work-title { min-width: 0; display: grid; gap: .2rem; text-align: left; color: inherit; }
+.resource-search-work-title strong { color: #fff; font-size: 1rem; line-height: 1.2; }
+.resource-search-work-title span { color: rgba(255,255,255,.78); font-size: .82rem; line-height: 1.38; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.resource-search-work-info { min-width: 0; display: flex; flex-direction: column; gap: .5rem; }
+.resource-search-work-source { color: var(--color-text-muted); font-size: .74rem; line-height: 1.45; }
+.resource-search-work-actions { display: grid; grid-template-columns: 1fr; align-items: center; gap: .45rem; margin-top: .15rem; }
+.resource-search-work-actions--split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.resource-search-work-actions--triple { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.resource-search-inline-action { height: 30px; padding: 0 .75rem; border-radius: var(--radius-button); border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: var(--color-text-secondary); font-size: .74rem; font-weight: 750; }
+.resource-search-inline-action:hover { border-color: rgba(0,117,255,.28); background: rgba(0,117,255,.11); color: #fff; }
+.resource-search-resource-list { min-width: 0; display: grid; gap: .6rem; align-content: start; }
+.resource-search-resource-list--mixed { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
+.resource-search-library-only { min-height: 7rem; display: flex; align-items: center; justify-content: center; gap: .55rem; padding: 1rem; border: 1px solid rgba(34,197,94,.16); border-radius: .85rem; background: rgba(34,197,94,.06); color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; }
+.resource-search-library-only svg, .resource-search-library-only :deep(svg) { width: 1.1rem; height: 1.1rem; color: #86efac; }
+.resource-search-provider-block { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
+.resource-search-provider-block + .resource-search-provider-block { padding-top: .55rem; border-top: 1px solid rgba(255,255,255,.07); }
+.resource-search-provider-block__head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: .75rem; color: var(--color-text-muted); font-size: .72rem; }
+.resource-search-provider-block__head strong { color: rgba(255,255,255,.78); font-size: .78rem; }
+.resource-search-resource-row { position: relative; min-width: 0; min-height: 6.4rem; display: grid; align-items: stretch; gap: .55rem; padding: .65rem .65rem 2.75rem .65rem; border: 1px solid rgba(255,255,255,.055); border-radius: .8rem; background: rgba(255,255,255,.035); }
+.resource-search-resource-row__main { min-width: 0; display: grid; gap: .28rem; align-content: start; }
+.resource-search-resource-row__main strong { color: rgba(255,255,255,.92); font-size: .78rem; line-height: 1.32; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.resource-search-resource-row__main span { color: var(--color-text-muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resource-search-resource-row .resource-search-badges { grid-column: auto; min-height: 0; }
+.resource-search-push-btn { position: absolute; right: .55rem; bottom: .55rem; min-width: 3.45rem; height: 1.85rem; display: inline-flex; align-items: center; justify-content: center; gap: .3rem; padding: 0 .55rem; border-radius: .55rem; border: 1px solid rgba(0,117,255,.28); background: rgba(0,117,255,.16); color: #fff; font-size: .72rem; font-weight: 800; white-space: nowrap; overflow: hidden; }
+.resource-search-push-btn svg, .resource-search-push-btn :deep(svg) { width: .88rem; height: .88rem; flex: 0 0 auto; }
+.resource-search-push-btn span { display: inline; }
+.resource-search-push-btn:disabled { opacity: .6; cursor: wait; }
+
+.resource-search-more-section { display: grid; }
 .resource-search-more-row { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: .45rem; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.035); color: var(--color-text-secondary); font-size: .8rem; font-weight: 750; }
 .resource-search-more-row:hover { border-color: rgba(0,117,255,.24); background: rgba(0,117,255,.1); color: #fff; }
 .resource-search-more-row svg, .resource-search-more-row :deep(svg) { width: 1rem; height: 1rem; }
 .resource-search-more-row em { color: var(--color-text-muted); font-style: normal; font-weight: 650; }
-.resource-search-card { position: relative; min-width: 0; display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: .8rem; align-items: stretch; padding: .65rem; border: 1px solid var(--color-glass-border); background: var(--color-bg-surface); color: inherit; text-align: left; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.14); transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); cursor: pointer; }
+.resource-search-card { position: relative; min-width: 0; display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: .8rem; align-items: stretch; padding: .65rem 2.35rem .65rem .65rem; border: 1px solid var(--color-glass-border); background: var(--color-bg-surface); color: inherit; text-align: left; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px rgba(0,0,0,.14); transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); }
 .resource-search-card:hover { transform: translateY(-1px); border-color: rgba(0,117,255,.28); background: var(--color-bg-elevated); }
 .resource-search-cover { aspect-ratio: 2184 / 1468; display: flex; align-items: center; justify-content: center; overflow: hidden; background: rgba(255,255,255,.05); color: var(--color-text-muted); }
 .resource-search-cover img { width: 100%; height: 100%; object-fit: cover; }
@@ -478,12 +834,7 @@ onUnmounted(() => {
 .resource-search-badge--warning { background: rgba(245,158,11,.16); color: #fcd34d; }
 .resource-search-badge--danger { background: rgba(239,68,68,.15); color: #fca5a5; }
 .resource-search-badge--info { background: rgba(148,163,184,.12); color: #cbd5e1; }
-.resource-search-card__actions { grid-column: 2 / 3; display: flex; align-items: center; justify-content: flex-end; gap: .4rem; }
-.resource-search-download,.resource-search-open { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; border: 1px solid rgba(0,117,255,.25); border-radius: var(--radius-button); background: rgba(0,117,255,.12); color: #dbeafe; font-size: .72rem; font-weight: 750; }
-.resource-search-download { padding: 0 .7rem; }
-.resource-search-open { width: 30px; }
-.resource-search-download:hover,.resource-search-open:hover { border-color: rgba(0,117,255,.5); background: rgba(0,117,255,.22); color: #fff; }
-.resource-search-download svg,.resource-search-open svg,.resource-search-download :deep(svg),.resource-search-open :deep(svg) { width: .9rem; height: .9rem; }
+.resource-search-card__arrow { position: absolute; right: .75rem; top: 50%; width: 1rem; height: 1rem; color: var(--color-text-muted); transform: translateY(-50%); }
 .resource-search-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(31rem, 1fr)); gap: .65rem; }
 .resource-search-card.is-skeleton { pointer-events: none; }
 .resource-search-card.is-skeleton .resource-search-cover, .resource-search-card.is-skeleton strong, .resource-search-card.is-skeleton span, .resource-search-card.is-skeleton small { position: relative; overflow: hidden; color: transparent; background: rgba(255,255,255,.055); }
@@ -492,7 +843,9 @@ onUnmounted(() => {
 .resource-search-card.is-skeleton small { width: 44%; height: .75rem; }
 .resource-search-card.is-skeleton .resource-search-cover::after, .resource-search-card.is-skeleton strong::after, .resource-search-card.is-skeleton span::after, .resource-search-card.is-skeleton small::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); animation: resource-search-shimmer 1.2s infinite; }
 @keyframes resource-search-shimmer { to { transform: translateX(100%); } }
+@media (max-width: 1280px) { .resource-search-work-card { grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); } }
 @media (max-width: 1100px) { .resource-search-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } .resource-search-toolbar, .resource-search-hero { grid-template-columns: 1fr; } .resource-search-status { justify-content: flex-start; white-space: normal; } }
-@media (max-width: 760px) { .resource-search-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-search-grid, .resource-search-skeleton-grid { grid-template-columns: 1fr; } .resource-search-card { grid-template-columns: 7rem minmax(0,1fr); } }
-@media (max-width: 560px) { .resource-search-hero { padding: .8rem; } .resource-search-card { grid-template-columns: 1fr; } .resource-search-badges,.resource-search-card__actions { grid-column: 1 / -1; } }
+@media (max-width: 980px) { .resource-search-work-card { grid-template-columns: 1fr; } .resource-search-provider-block { grid-template-columns: repeat(3, minmax(0, 1fr)); } .resource-search-resource-list--mixed { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .resource-search-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-search-skeleton-grid { grid-template-columns: 1fr; } .resource-search-card { grid-template-columns: 7rem minmax(0,1fr); } .resource-search-provider-block { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-search-resource-list--mixed { grid-template-columns: 1fr; } .resource-search-resource-row { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .resource-search-hero { padding: .8rem; } .resource-search-box { grid-template-columns: auto minmax(0, 1fr); height: auto; min-height: 44px; padding: .38rem .45rem .38rem .85rem; } .resource-search-box button { grid-column: 1 / -1; width: 100%; } .resource-search-work-card { padding: .6rem; } .resource-search-work-card__media { grid-template-columns: 1fr; } .resource-search-work-actions, .resource-search-work-actions--split, .resource-search-work-actions--triple { grid-template-columns: 1fr; } .resource-search-card { grid-template-columns: 1fr; padding-right: .65rem; } .resource-search-provider-block, .resource-search-resource-list--mixed { grid-template-columns: 1fr; } .resource-search-badges { grid-column: 1 / -1; } .resource-search-card__arrow { display: none; } }
 </style>
