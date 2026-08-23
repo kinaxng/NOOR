@@ -23,6 +23,13 @@
 - 插件管理页 `PluginManager.vue`：当前 1530 行，覆盖已安装/市场/配置/测试/卸载等入口。
 - FaceFusion 面板 `FaceFusionPanel.vue`：当前 2898 行，包含默认面板、全宽面板、
   模型选择、参考人脸、源脸库、预览和后续 face tracker score。
+  - FaceFusion 设置页 `FaceFusionSettings.vue`：当前 1722 行，已核对原版最终会话，
+  包含完整默认参数、执行/处理器/遮罩/预览选项、模型管理、固定换脸标签开关与
+  face tracker score。
+  - `LadaPanel.vue`：当前 294 行，已核对为拆出 `FaceFusionPanel.vue` 后的纯 LADA
+  面板，不再包含 FF 双 tab 残留。
+  - 媒体库首页 `Home.vue`：当前 735 行，已核对原版最后一次换脸标签提交；保留
+  FF/LADA/字幕/详情/删除面板入口、Emby webhook 同步与移动端响应式样式。
 - 演员管理/详情页：与 `2a7fe62` 中按历史工作区源码恢复的版本一致。
 - 媒体库页面：Emby 数据可读，549 位演员、作品列表、破解/中字/流出/无码标签可用。
 - 前端构建通过，后端 `pytest` 134 项通过。
@@ -51,13 +58,14 @@
 6. 尚未找到的原始完整快照：
    - 完整 Vue 组件树没有单一可信的“最终原文件”副本。
    - `App.recovered-full.vue` 是旧单文件 UI，不能直接替换当前组件化前端。
-   - 每个组件都应按 rollout 证据逐文件核对，已核对完 `ResourceSearch`，
-     其余按 commit 频率优先级是 i18n、FaceFusionPanel、ActorManagementView、
-     FaceFusionSettings、LadaPanel、ActorDetailView。
+   - 每个组件都应按 rollout 证据逐文件核对，已核对完 `ResourceSearch`、
+     `FaceFusionSettings`、`LadaPanel`、`Home`；下一批是 i18n、
+     `ActorManagementView`、`ActorDetailView` 和 `FaceFusionPanel` 的后续修订。
 
 ## 后续恢复建议（按影响排序）
 
-1. 继续用 rollout 回放恢复 `FaceFusionSettings.vue`、`LadaPanel.vue`、`Home.vue`。
+1. 下一批继续用 rollout 回放核对 `i18n`、`ActorManagementView`、`ActorDetailView`
+   和 `FaceFusionPanel` 的后续修订。
 2. 补充后端原单模块拆分的兼容层，让旧路由/旧函数名仍可被插件调用。
 3. 把 Whisper 旧链路的 `.py` 源码从历史会话/反编译中重建，或以文档形式明确退役。
 4. 每恢复一个模块，更新本文件并提交，避免再次丢失。
