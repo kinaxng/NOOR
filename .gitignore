@@ -11,12 +11,11 @@ data/actor_merge_ignored_ghosts.json
 data/actor_merge_backups/
 data/facefusion_settings.json
 data/plugin_cache/
+data/av_recommend/
+data/subscription_core/
 .env
 frontend/node_modules/
 frontend/dist/
-data/av_recommend/candidate_pool.json
-data/av_recommend/title_profile.json
-data/av_recommend/feedback.json
 data/noor.db
 forensics/reconstructed-manager-20260625.py
 data/runtime/
