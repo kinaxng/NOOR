@@ -39,7 +39,7 @@ async function mount() {
   if (!host.value || !props.pluginId) return
   try {
     const mod = await loadPluginRendererModule(props.pluginId)
-    if (current !== token || !host.value) return
+    if (current !== token || !host.value || !documentVisible.value) return
     const fn = props.slotName === 'sidebar' ? mod.renderSidebarWidget : mod.renderDashboardWidget
     if (typeof fn !== 'function') return
     const sdk = makePluginSdk(props.pluginId) as any
