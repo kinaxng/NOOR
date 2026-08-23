@@ -79,6 +79,10 @@
   `forensics/recovered-sources/final-session-diffs/` 收录 `App.vue`、
   `WhisperSettings.vue`、`MediaDetailPanel.vue` 的原始 `git diff` 片段，
   并生成 SHA256SUMS；这些文件用于继续核对当前重建是否覆盖最终提交。
+- 用最终差异核对当前实现：`WhisperSettings.vue` 已覆盖 runtime tier、模型后端、
+  VAD/timing refiner、NOOR 环境依赖来源与旧链路移除；`MediaDetailPanel.vue`
+  已覆盖 Emby stream 优先/本地 hardlink 回退和标签去重；`App.vue` 已覆盖全局
+  搜索、封面模糊快捷键、前端诊断日志与启动时 `/settings/ui` 全局模糊同步。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
   `operation_id`，消除 FastAPI OpenAPI 重复操作名告警；后端全量测试仍为
   216 项通过。
