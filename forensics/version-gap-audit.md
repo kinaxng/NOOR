@@ -20,14 +20,14 @@
 | `plugins/av-recommend/frontend/page.js` | 3 | pending | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/qbittorrent/backend.py` | 3 | pending | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | pending | 7d9120d Simplify Xunlei residual cleanup flow | ba4a75e Restore final UI details and plugin runtime data paths |
-| `backend/app` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | 8417294 Restore runtime path and subtitle library contracts |
+| `backend/app` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/endpoints/media_library_item_detail.py` | 2 | pending | c3b736f Separate uncensored media tagging from cracked titles | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/settings_whisper.py` | 2 | pending | 0184022 Add Whisper runtime tier selection | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/whisper.py` | 2 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `backend/app/core/facefusion_paths.py` | 2 | pending | 91c8a29 Show configured FaceFusion model directory | 24f438b Restore configured FaceFusion model routing |
 | `backend/app/main.py` | 2 | pending | 43acc3a Add NOOR runtime cleanup task | 8296a65 Restore local subtitle library settings |
 | `backend/app/pipeline/whisper/types.py` | 2 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
-| `backend/tests` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | 8417294 Restore runtime path and subtitle library contracts |
+| `backend/tests` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_settings_updates.py` | 2 | pending | d9f5a73 Derive AI storage defaults from data dir | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | pending | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `frontend/src` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | ba4a75e Restore final UI details and plugin runtime data paths |
@@ -39,23 +39,10 @@
 | `backend/app/api/endpoints/media_library_hardlinks.py` | 1 | pending | ddbf4c0 Move hardlink groups into runtime data | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/jobs.py` | 1 | pending | 806de25 Add FaceFusion crack processing integration | 7a9f55e Restore external plugin task integration |
 | `backend/app/api/plugins.py` | 1 | pending | 43acc3a Add NOOR runtime cleanup task | f47907b Restore plugin runtime, resource search, and plugin manager |
-| `backend/app/api/settings_lada.py` | 1 | pending | 106df4b Prefer bundled LADA python path | 03fa0b9 Recover LADA settings inspection |
-| `backend/app/core/database.py` | 1 | pending | 2ceba68 Move default database into data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/app/pipeline/facefusion` | 1 | pending | 806de25 Add FaceFusion crack processing integration | b3dd5ac Restore FaceFusion upstream revision tracking |
 | `backend/app/pipeline/facefusion/source` | 1 | pending | 217a5e8 Embed FaceFusion runtime in NOOR | b3dd5ac Restore FaceFusion upstream revision tracking |
-| `backend/app/pipeline/facefusion/source/NOOR_UPSTREAM.json` | 1 | pending | 0f6ed10 Track FaceFusion upstream revision | b3dd5ac Restore FaceFusion upstream revision tracking |
-| `backend/app/pipeline/facefusion/source/facefusion/content_analyser.py` | 1 | pending | 6c51a5c Skip FaceFusion content analysis for NOOR jobs | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/app/pipeline/facefusion/source/facefusion/download.py` | 1 | pending | 5779f51 Wait for FaceFusion model downloads before validation | 7f4828b Restore FaceFusion model management |
-| `backend/app/pipeline/facefusion/source/facefusion/execution.py` | 1 | pending | 70f5263 Keep FaceFusion runtime data outside source | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/app/pipeline/whisper/__init__.py` | 1 | pending | 20f4ce8 Remove remaining Whisper legacy UI remnants | 9f68a60 Recover final Whisper single-chain architecture |
-| `backend/app/pipeline/whisper/japanese_post.py` | 1 | pending | 20f4ce8 Remove remaining Whisper legacy UI remnants | 1df5030 Recover Whisper Japanese postprocessing |
-| `backend/app/plugins/store.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests/test_facefusion_embedded_source.py` | 1 | pending | 70f5263 Keep FaceFusion runtime data outside source | 24f438b Restore configured FaceFusion model routing |
 | `backend/tests/test_media_library_hardlinks.py` | 1 | pending | ddbf4c0 Move hardlink groups into runtime data | 558869c Restore settings contract and media library API tests |
-| `backend/tests/test_plugin_store_paths.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_settings_api.py` | 1 | pending | 106df4b Prefer bundled LADA python path | 558869c Restore settings contract and media library API tests |
-| `backend/tests/test_settings_status_helpers.py` | 1 | pending | 9716085 Store task runtime files under data dir | 558869c Restore settings contract and media library API tests |
-| `backend/tests/test_whisper_engine_cache.py` | 1 | pending | f176af3 Cover Whisper HuggingFace root layout | 9f68a60 Recover final Whisper single-chain architecture |
 | `plugins/avdb/backend.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/javdb/backend.py` | 1 | pending | 2225f1e feat(javdb): add recent series directory | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/javdb/frontend/page.js` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
@@ -99,24 +86,24 @@
 | `backend/app/api/local_library.py` | 3 | verified | 2ecda9d Migrate legacy subtitle indexes | 8417294 Restore runtime path and subtitle library contracts |
 | `backend/app/api/settings_directories.py` | 3 | verified | 41153cc Simplify AI storage path settings | 8417294 Restore runtime path and subtitle library contracts |
 | `backend/app/pipeline/facefusion/preview.py` | 3 | verified | 6a71cd1 Skip FaceFusion content blur in previews | 616866a Preserve recovered NOOR backend artifacts |
-| `backend/app/pipeline/lada/runner.py` | 3 | verified | 106df4b Prefer bundled LADA python path | eef5d36 Recover LADA task runner |
+| `backend/app/pipeline/lada/runner.py` | 3 | verified | 106df4b Prefer bundled LADA python path | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/pipeline/whisper/strategy.py` | 3 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
-| `backend/tests/test_env_backed_library_configs.py` | 3 | verified | 2ecda9d Migrate legacy subtitle indexes | 8417294 Restore runtime path and subtitle library contracts |
+| `backend/tests/test_env_backed_library_configs.py` | 3 | verified | 2ecda9d Migrate legacy subtitle indexes | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | 0ab32de Verify FaceFusion upgrade content patch |
 | `frontend/src/components/noor/SubtitlePanel.vue` | 3 | verified | 0184022 Add Whisper runtime tier selection | ad7302e Recover plugin-based subtitle providers |
-| `backend/app/api/settings_helpers.py` | 2 | verified | 106df4b Prefer bundled LADA python path | 9f68a60 Recover final Whisper single-chain architecture |
-| `backend/app/api/settings_status_helpers.py` | 2 | verified | a382063 Add FaceFusion model management settings tab | 558869c Restore settings contract and media library API tests |
+| `backend/app/api/settings_helpers.py` | 2 | verified | 106df4b Prefer bundled LADA python path | 76ea151 Restore final LADA runtime and settings helpers |
+| `backend/app/api/settings_status_helpers.py` | 2 | verified | a382063 Add FaceFusion model management settings tab | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/api/settings_whisper_models.py` | 2 | verified | ed23bfe Fix Whisper HuggingFace cache detection | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/app/core/gpu_guard.py` | 2 | verified | 6a760cc Let GPU guard stop model server processes | dd3422d Restore GPU guard and FaceFusion reference worker |
 | `backend/app/core/lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/app/core/models.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | 53ea009 Recover core data models from bytecode |
+| `backend/app/core/models.py` | 2 | verified | c3b736f Separate uncensored media tagging from cracked titles | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/app/pipeline/facefusion/preview_worker.py` | 2 | verified | 6a71cd1 Skip FaceFusion content blur in previews | 616866a Preserve recovered NOOR backend artifacts |
 | `backend/app/pipeline/whisper/timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
 | `backend/app/tasks/job_phases.py` | 2 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 7a9f55e Restore external plugin task integration |
 | `backend/app/tasks/manager_helpers.py` | 2 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_lada_paths.py` | 2 | verified | 65d39f1 Align Docker runtime paths | 9f74125 Recover core runtime and embedded FaceFusion |
-| `backend/tests/test_lada_runner_cancel.py` | 2 | verified | e436cc0 Split LADA runtime cache directories | 558869c Restore settings contract and media library API tests |
+| `backend/tests/test_lada_runner_cancel.py` | 2 | verified | e436cc0 Split LADA runtime cache directories | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_runtime_cleanup.py` | 2 | verified | 1a02e32 Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
@@ -127,14 +114,27 @@
 | `frontend/src/views/settings/LadaSettings.vue` | 2 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | 6ff12d0 Recover original routed application shell |
 | `frontend/src/views/settings/WhisperSettings.vue` | 2 | verified | 0184022 Add Whisper runtime tier selection | ba4a75e Restore final UI details and plugin runtime data paths |
 | `backend/app/api/runtime_cleanup.py` | 1 | verified | 43acc3a Add NOOR runtime cleanup task | 7b84f07 Recover NOOR runtime cleanup background task |
+| `backend/app/api/settings_lada.py` | 1 | verified | 106df4b Prefer bundled LADA python path | 03fa0b9 Recover LADA settings inspection |
+| `backend/app/core/database.py` | 1 | verified | 2ceba68 Move default database into data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/app/core/database_paths.py` | 1 | verified | 2ceba68 Move default database into data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/app/core/runtime_cleanup.py` | 1 | verified | 43acc3a Add NOOR runtime cleanup task | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/app/pipeline/facefusion/reference_faces_worker.py` | 1 | verified | 39c918e Add FaceFusion reference face gallery | dd3422d Restore GPU guard and FaceFusion reference worker |
+| `backend/app/pipeline/facefusion/source/NOOR_UPSTREAM.json` | 1 | verified | 0f6ed10 Track FaceFusion upstream revision | b3dd5ac Restore FaceFusion upstream revision tracking |
+| `backend/app/pipeline/facefusion/source/facefusion/content_analyser.py` | 1 | verified | 6c51a5c Skip FaceFusion content analysis for NOOR jobs | 9f74125 Recover core runtime and embedded FaceFusion |
+| `backend/app/pipeline/facefusion/source/facefusion/download.py` | 1 | verified | 5779f51 Wait for FaceFusion model downloads before validation | 7f4828b Restore FaceFusion model management |
+| `backend/app/pipeline/facefusion/source/facefusion/execution.py` | 1 | verified | 70f5263 Keep FaceFusion runtime data outside source | 9f74125 Recover core runtime and embedded FaceFusion |
+| `backend/app/pipeline/whisper/__init__.py` | 1 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 9f68a60 Recover final Whisper single-chain architecture |
+| `backend/app/pipeline/whisper/japanese_post.py` | 1 | verified | 20f4ce8 Remove remaining Whisper legacy UI remnants | 1df5030 Recover Whisper Japanese postprocessing |
 | `backend/app/pipeline/whisper/runtime_tier.py` | 1 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
+| `backend/app/plugins/store.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_database_paths.py` | 1 | verified | 2ceba68 Move default database into data dir | 9f74125 Recover core runtime and embedded FaceFusion |
+| `backend/tests/test_facefusion_embedded_source.py` | 1 | verified | 70f5263 Keep FaceFusion runtime data outside source | 24f438b Restore configured FaceFusion model routing |
 | `backend/tests/test_gfriends_plugin.py` | 1 | verified | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
+| `backend/tests/test_plugin_store_paths.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | 9f74125 Recover core runtime and embedded FaceFusion |
+| `backend/tests/test_settings_status_helpers.py` | 1 | verified | 9716085 Store task runtime files under data dir | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_settings_whisper_models.py` | 1 | verified | 7f76e42 Restrict Whisper model deletion to configured storage | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_task_runtime_paths.py` | 1 | verified | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
+| `backend/tests/test_whisper_engine_cache.py` | 1 | verified | f176af3 Cover Whisper HuggingFace root layout | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/App.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | e297426 Restore actor detail navigation identity |
 | `frontend/src/components/noor/AppSidebar.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | d8b8188 Recover frontend application shell components |
 | `frontend/src/components/noor/BaseIcon.vue` | 1 | verified | 9f62658 Refine actor detail navigation and actions | ba4a75e Restore final UI details and plugin runtime data paths |

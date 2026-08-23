@@ -77,17 +77,17 @@ class JapanesePostProcessor:
         if not segments:
             return result
 
-        # Pass 1: 净化 - 清理文本
-        segments = self._pass1_sanitize(segments)
+        # 文本净化
+        segments = self._sanitize_segments(segments)
 
-        # Pass 2: 层级断句
-        segments = self._pass2_split(segments)
+        # 层级断句
+        segments = self._split_segments(segments)
 
-        # Pass 3: 孤立助词合并
-        segments = self._pass3_particle_merge(segments)
+        # 孤立助词合并
+        segments = self._merge_particles(segments)
 
-        # Pass 4: 微小片段合并
-        segments = self._pass4_tiny_merge(segments)
+        # 微小片段合并
+        segments = self._merge_tiny_segments(segments)
 
         # Pass 5: 格式化
         segments = self._pass5_format(segments)
@@ -104,7 +104,7 @@ class JapanesePostProcessor:
             metadata={**result.metadata, "post_processed": True}
         )
 
-    def _pass1_sanitize(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
+    def _sanitize_segments(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
         """移除填充词和噪音"""
         for seg in segments:
             text = seg.text.strip()
@@ -119,7 +119,7 @@ class JapanesePostProcessor:
         segments = [s for s in segments if s.text.strip()]
         return segments
 
-    def _pass2_split(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
+    def _split_segments(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
         """按日语句式结构层级断句"""
         result = []
         for seg in segments:
@@ -185,7 +185,7 @@ class JapanesePostProcessor:
 
         return sub_segments
 
-    def _pass3_particle_merge(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
+    def _merge_particles(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
         """将孤立助词与前一个片段合并"""
         merged = []
         i = 0
@@ -211,7 +211,7 @@ class JapanesePostProcessor:
 
         return merged
 
-    def _pass4_tiny_merge(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
+    def _merge_tiny_segments(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
         """合并时长过短的片段"""
         if len(segments) < 2:
             return segments
@@ -252,6 +252,67 @@ class JapanesePostProcessor:
 
         # 移除空片段
         return [s for s in segments if s.text.strip()]
+
+
+class SubtitleSafetyPostProcessor:
+    """Language-neutral subtitle cleanup for direct translated subtitles."""
+
+    def __init__(
+        self,
+        max_segment_duration: float = 20.0,
+        max_merge_gap: float = 2.0,
+        overlap_gap: float = 0.05,
+    ):
+        self.max_segment_duration = max_segment_duration
+        self.max_merge_gap = max_merge_gap
+        self.overlap_gap = overlap_gap
+
+    def process(self, result: TranscriptionResult) -> TranscriptionResult:
+        segments = [s for s in result.segments if (s.text or "").strip() and s.end_time > s.start_time]
+        if not segments:
+            return result
+
+        normalized: list[SubtitleSegment] = []
+        previous_end = 0.0
+        for seg in sorted(segments, key=lambda item: (item.start_time, item.end_time)):
+            start = max(seg.start_time, previous_end + self.overlap_gap if normalized else seg.start_time)
+            end = max(start + 0.1, seg.end_time)
+            if self.max_segment_duration > 0 and end - start > self.max_segment_duration:
+                end = start + self.max_segment_duration
+            normalized.append(SubtitleSegment(
+                index=len(normalized) + 1,
+                start_time=start,
+                end_time=end,
+                text=re.sub(r"\s+", " ", seg.text).strip(),
+                words=list(seg.words or []),
+            ))
+            previous_end = end
+
+        merged: list[SubtitleSegment] = []
+        for seg in normalized:
+            if not merged:
+                merged.append(seg)
+                continue
+            prev = merged[-1]
+            gap = seg.start_time - prev.end_time
+            merged_duration = seg.end_time - prev.start_time
+            if 0 <= gap <= self.max_merge_gap and merged_duration <= self.max_segment_duration:
+                prev.text = f"{prev.text} {seg.text}".strip()
+                prev.end_time = seg.end_time
+                prev.words.extend(seg.words or [])
+            else:
+                merged.append(seg)
+
+        for index, seg in enumerate(merged, start=1):
+            seg.index = index
+
+        return TranscriptionResult(
+            segments=merged,
+            language=result.language,
+            duration=result.duration,
+            source=result.source,
+            metadata={**result.metadata, "safety_post_processed": True},
+        )
 
 
 class RecommendedSubtitlePostProcessor:

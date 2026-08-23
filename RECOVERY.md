@@ -251,7 +251,7 @@ the recovered bytecode modules remain unchanged.
 
 ## Recovery Consistency (2026-08-23)
 
-- Backend `compileall` is clean and the full test suite currently passes: 211 passed.
+- Backend `compileall` is clean and the full test suite currently passes: 213 passed.
 - Frontend production build passes with `npm run build`.
 - The task manager is restored to the full queue contract: persisted queued-job
   recovery, phase/SSE state, queued and running cancellation, dependent activation
@@ -267,7 +267,7 @@ the recovered bytecode modules remain unchanged.
   layer for the separate overrides file.
 - Whisper settings now expose a storage-root contract (`model_root_dir`,
   `runtime_root_dir`, `database_url`, `database_path`) without retired Reazon fields.
-- `forensics/version-gap-audit.md` reports no missing indexed paths. 45 paths remain
+- `forensics/version-gap-audit.md` reports no missing indexed paths. 32 paths remain
   `pending` until the remaining components are verified against original rollout
   evidence; runtime and derived data remain outside the commit.
 - Runtime cleanup, data/runtime path helpers, database migration, LADA Python paths,
@@ -284,6 +284,10 @@ the recovered bytecode modules remain unchanged.
   split cache/TMPDIR layout, and `--temporary-directory`; settings helpers use the
   data-dir model fallback and final ChickenRice model catalogue; `JobCreate` keeps
   the `job_type` API field.
+- Whisper Japanese post-processing and safety post-processing now match the final
+  rollout names and merge semantics. LADA settings inspection, database startup
+  migration, plugin store paths, and embedded FaceFusion source patches are also
+  covered by regression tests and marked verified.
 - JavDB plugin manifest now matches the original capability contract, including
   `dashboard_widget`; the overview page again renders the `JAVDB 推荐` widget and
   the recommendation center reports the merged candidate-pool stats (currently

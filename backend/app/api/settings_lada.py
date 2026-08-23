@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
+from app.core.lada_paths import build_lada_python_env
+
 
 LADA_ENCODING_PRESETS = [
     {"id": "hevc-nvidia-gpu-hq", "name": "HEVC (H.265) - High Quality", "desc": "Nvidia GPU, High Quality, Medium File Size"},
@@ -58,7 +60,7 @@ result = {
 print(json.dumps(result))
 """
     try:
-        env = {**os.environ, "LADA_MODEL_WEIGHTS_DIR": model_weights_dir}
+        env = build_lada_python_env({**os.environ, "LADA_MODEL_WEIGHTS_DIR": model_weights_dir})
         cp = subprocess.run([python_executable_fn(), "-c", lada_model_script], capture_output=True, text=True, timeout=10, env=env)
         if cp.returncode == 0:
             import json

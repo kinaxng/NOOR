@@ -72,7 +72,7 @@
   `reazon_nemo` 等已退役链路字段。
 - 设置页存储契约改为返回 `model_root_dir`、`runtime_root_dir`、
   `database_url`、`database_path`，前端不再依赖已移除的 Reazon 字段。
-- 文件级差距清单已重新生成：当前无 `missing` 路径；45 个路径仍为
+- 文件级差距清单已重新生成：当前无 `missing` 路径；32 个路径仍为
   `pending`，需要在后续逐文件核对后转 `verified`。
 - JavDB 插件清单已按原版会话恢复：补回 `dashboard_widget`、下载器绑定、
   `resource_search`、RSS/知识图谱等能力；浏览器验证概览页的 `JAVDB 推荐`
@@ -91,13 +91,17 @@
   `runtime/subtitle_library/subtitle_index.db`，并会从三个历史位置复制最强旧索引；
   原 `data/subtitle_index.db` 不再是运行路径。
 - 任务/事件 API 新增契约测试：覆盖任务列表/详情/取消/删除/清理以及 SSE
-  connected/done 序列；后端全量测试更新为 211 项通过。文件级差距清单当前为
-  85 个 `verified`、45 个 `pending`、0 个 `missing`。
+  connected/done 序列；后端全量测试更新为 213 项通过。文件级差距清单当前为
+  98 个 `verified`、32 个 `pending`、0 个 `missing`。
 - 继续核对 LADA/设置/模型契约：`pipeline/lada/runner.py` 恢复最终 NOOR Python
   环境、LADA model/cache/temp 分离和 `--temporary-directory`；
   `settings_helpers.py` 恢复 `NOOR_DATA_DIR` 模型回退、最终 ChickenRice/VAD 模型
   清单和 LADA 环境注入；`settings_status_helpers.py` 清理旧根路径引用；
   `core/models.py` 补回 `JobCreate.job_type` 字段。
+- 继续核对 Whisper/设置/FF 源码契约：`japanese_post.py` 恢复最终方法名与
+  `SubtitleSafetyPostProcessor` 合并语义；`settings_lada.py` 恢复 LADA Python 环境
+  注入；`database.py`、`plugins/store.py` 和内置 FaceFusion 补丁源码已按最终
+  rollout/测试转 `verified`。
 
 ## 明确差距
 
