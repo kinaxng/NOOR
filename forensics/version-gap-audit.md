@@ -37,6 +37,7 @@
 | `backend/app/api/settings_updates.py` | 11 | verified | 301d3d8 feat(facefusion): expose face tracker score | 6ba66c2 Recover original session reads and storage env contracts |
 | `backend/app/api/facefusion.py` | 9 | verified | 301d3d8 feat(facefusion): expose face tracker score | 24f438b Restore configured FaceFusion model routing |
 | `frontend/src/views/ActorDetailView.vue` | 8 | verified | 3bf46cc Allow removing actor provider IDs | 2a7fe62 Restore exact historical actor workspace sources |
+| `.env.example` | 7 | verified | 81e3e41 Move optional Whisper models to model volume | - |
 | `backend/app/tasks/manager.py` | 7 | verified | 0184022 Add Whisper runtime tier selection | 5702300 Restore full job manager queue and worker isolation |
 | `backend/tests/test_core_config_storage_defaults.py` | 7 | verified | ebb5c7e Apply Whisper preprocessing runtime paths | 6ba66c2 Recover original session reads and storage env contracts |
 | `frontend/src/views/settings/SystemSettings.vue` | 7 | verified | 2aa83bb Derive MDC-NG actor mapping file from root path | a0beb88 Avoid blocking system settings on Emby libraries |

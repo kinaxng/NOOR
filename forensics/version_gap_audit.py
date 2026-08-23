@@ -18,6 +18,7 @@ INDEX = ROOT / "forensics" / "original-commit-index.json"
 OUTPUT = ROOT / "forensics" / "version-gap-audit.md"
 
 VERIFIED = {
+    ".env.example",
     "backend/app",
     "backend/app/api/endpoints/media_library_hardlinks.py",
     "backend/app/api/endpoints/media_library_item_detail.py",
@@ -183,7 +184,7 @@ INTENTIONAL = {
     "docs/DEV_DOCKER_ALIGNMENT.md",
 }
 
-ORIGIN_PREFIXES = ("backend/", "frontend/", "plugins/", "forensics/")
+ORIGIN_PREFIXES = ("backend/", "frontend/", "plugins/", "forensics/", ".env.example")
 
 
 def git_last_subject(path: str) -> str:

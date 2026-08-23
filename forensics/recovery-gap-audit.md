@@ -74,6 +74,9 @@
   Whisper engine/orchestrator/strategy/runtime tier，以及对应测试。
 - Gfriends 已核对为头像库辅助插件：不再全局接管头像，只在演员资料编辑时提供
   候选头像查询与选择。
+- `.env.example` 已从 2026-06-29 原始会话的完整 `sed -n '1,180p'` 输出恢复，
+  并按当天后续两笔提交（FaceFusion 模型卷、可选 Whisper 模型卷）应用到最终态；
+  当前文件与证据重建结果逐字节一致。
 
 ## 本轮一致性收敛（2026-08-23）
 
