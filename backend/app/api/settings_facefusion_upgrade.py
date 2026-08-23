@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -17,6 +18,7 @@ from app.core.facefusion_paths import resolve_embedded_facefusion_source
 
 
 FACEFUSION_UPSTREAM_REPO = "https://github.com/facefusion/facefusion.git"
+FACEFUSION_UPSTREAM_MANIFEST = "NOOR_UPSTREAM.json"
 FACEFUSION_SYNC_EXCLUDES = {
     ".git",
     ".github",
@@ -29,6 +31,7 @@ FACEFUSION_SYNC_EXCLUDES = {
     ".vscode",
     "__pycache__",
     "facefusion.ini",
+    FACEFUSION_UPSTREAM_MANIFEST,
     "temp",
 }
 
@@ -58,6 +61,55 @@ def get_facefusion_version(source_dir: Path | None = None) -> str | None:
         return str(version) if version else None
     except Exception:
         return None
+
+
+def get_facefusion_upstream_manifest(source_dir: Path | None = None) -> dict[str, Any]:
+    source_dir = source_dir or get_facefusion_source_dir()
+    manifest_path = source_dir / FACEFUSION_UPSTREAM_MANIFEST
+    if not manifest_path.exists():
+        return {}
+    try:
+        value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_facefusion_upstream_manifest(
+    source_dir: Path,
+    *,
+    revision: str | None,
+    version: str | None,
+    updated_at: str | None,
+) -> None:
+    revision_value = revision or "unknown"
+    manifest = {
+        "repo": FACEFUSION_UPSTREAM_REPO,
+        "revision": revision_value,
+        "short_revision": revision_value[:12] if revision_value != "unknown" else "unknown",
+        "version": version,
+        "updated_at": updated_at,
+    }
+    (source_dir / FACEFUSION_UPSTREAM_MANIFEST).write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _git_stdout(cwd: Path, args: list[str], timeout: int = 15) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
 
 
 def _package_version(package_name: str) -> str | None:
@@ -97,8 +149,13 @@ def get_facefusion_installation_info(settings: Any) -> dict[str, Any]:
     source_dir = get_facefusion_source_dir()
     is_docker = os.path.exists("/.dockerenv")
     runtime_info = get_facefusion_runtime_info()
+    upstream_manifest = get_facefusion_upstream_manifest(source_dir)
     return {
         "version": get_facefusion_version(source_dir),
+        "upstream_manifest": upstream_manifest,
+        "upstream_revision": upstream_manifest.get("revision"),
+        "upstream_short_revision": upstream_manifest.get("short_revision"),
+        "upstream_updated_at": upstream_manifest.get("updated_at"),
         "runtime_versions": runtime_info["versions"],
         "execution_providers": runtime_info["execution_providers"],
         "python_executable": runtime_info["python_executable"],
@@ -288,16 +345,26 @@ def upgrade_facefusion_source(settings: Any, log_mgr: Any) -> dict[str, Any]:
 
     try:
         _validate_facefusion_source(clone_dir)
+        upstream_revision = _git_stdout(clone_dir, ["rev-parse", "HEAD"])
+        upstream_commit_time = _git_stdout(clone_dir, ["show", "-s", "--format=%cI", "HEAD"])
         shutil.copytree(source_dir, backup_dir, symlinks=True, ignore=shutil.ignore_patterns("__pycache__", ".caches", ".jobs", "temp"))
         _replace_source_from_clone(clone_dir, source_dir)
         _apply_noor_facefusion_patch(source_dir)
         _validate_facefusion_source(source_dir)
         after_version = get_facefusion_version(source_dir)
+        write_facefusion_upstream_manifest(
+            source_dir,
+            revision=upstream_revision,
+            version=after_version,
+            updated_at=upstream_commit_time,
+        )
         log_mgr.add_log("success", f"[FaceFusion] 升级完成 — {before_version or '未知'} -> {after_version or '未知'}")
         return {
             "success": True,
             "before_version": before_version,
             "version": after_version,
+            "upstream_revision": upstream_revision,
+            "upstream_updated_at": upstream_commit_time,
             "source_dir": str(source_dir),
             "upstream_repo": FACEFUSION_UPSTREAM_REPO,
         }
