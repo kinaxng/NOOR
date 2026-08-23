@@ -216,6 +216,16 @@
   `/files/hardlinks?q=` 路由搜索参数。原版 MDC 专有 `mdcManualAvailable` /
   `reorganizeSource` 已替换为通用 `loadHardlinkSourceActions` /
   `runHardlinkSourceAction`。
+
+- JavDB 详情样式补齐：`plugins/javdb/frontend/style.css` 此前只恢复到
+  `javdb-gallery-nav--next`，详情面板实际使用的原版尾部样式缺失。本轮从
+  `original-read-snapshots` 与 `all-original-read-snapshots` 证据补回
+  `javdb-gallery-nav--next` hover、`javdb-detail-section`、`javdb-detail-hero*`、
+  `javdb-detail-overview`、`javdb-overview-card*`、`javdb-detail-section__*`、
+  `javdb-resource-providers`、`javdb-resource-pill`、`javdb-resource-group*`、
+  `javdb-detail-meta`、`javdb-meta-row/label`、`javdb-magnets`、
+  `javdb-magnet-row/info/name/meta` 与 `javdb-no-data`；`page.js` 详情/资源
+  渲染段与原版 2026-06-24 快照一致，前端生产构建通过。
 - 后端媒体库旧兼容层已收敛：`media_library.py` 补回原版拆分前的公共函数名
   （演员资料、重名、映射、TMDB 补全、批量合并、删除链等）和旧请求模型导出；
   `actors.py` 恢复 4 条旧映射路由。`test_actor_routes.py` 的 OpenAPI 路由一致性
