@@ -316,6 +316,13 @@ the recovered bytecode modules remain unchanged.
   intentionally retired Whisper and subtitle-search chains and are documented as
   `intentional` in the recovery audit.
 
+- Static API-reference audit found no route gaps: all 96 frontend/plugin references
+  resolve against static routes or the dynamic plugin action route. The recovered
+  backend starts successfully on a test port; health, settings, plugins, and jobs
+  endpoints return 200, and OpenAPI exposes 150 paths. Component function-entry
+  comparison also found no missing behavior after accounting for intentional moves
+  such as downloader dialog helpers and local subtitle settings.
+
 ## Hardlink Source Actions Recovery (2026-08-23)
 
 - `HardlinkView.vue` now loads `hardlink_source_actions` contributions from all

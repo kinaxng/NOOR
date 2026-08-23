@@ -257,6 +257,15 @@
   `settings_helpers.py` 的 `parse_custom_config` / `module_installed`、
   `subtitles.py` 的 `_search_xunlei` 外无缺失。这些符号属于已退役的
   Whisper custom pipeline 与旧内嵌迅雷字幕链，按 `intentional` 处理，不恢复。
+- 对前端/插件中的 96 个静态 API 调用做路由映射比对：常规路径和动态插件
+  `/api/plugins/{plugin_id}/actions/{action}` 均能匹配后端路由；
+  `/api/actions/*` 只是 `pluginFetch` 的插件内相对前缀。恢复后端实际启动后，
+  `/api/health`、`/api/settings`、`/api/plugins`、`/api/jobs` 均返回 200，
+  OpenAPI 暴露 150 条路径。
+- 前端函数入口快照比对未发现实际缺失：Dashboard 的旧 `fetchMetrics` 已迁移为
+  插件 widget 指标，PluginHost 下载器逻辑已迁移到 `useDownloaderDialog`，
+  SystemSettings 本地字幕库已迁移到 `LocalSubtitleLibrarySettings`，
+  ResourceSearch 的旧 `openItem` 由当前 `openWork` 等价覆盖。
 
 ## 明确差距
 
