@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.api.endpoints import media_library, media_library_recovery
+from app.api.endpoints import media_library
 from app.api.endpoints.media_library_helpers import SUBTITLE_EXTS
 from app.core.models import Job
 from app.knowledge.codes import extract_video_code_candidates
@@ -254,32 +254,16 @@ async def rebuild_knowledge_index(db: AsyncSession, *, max_items: int | None = N
         config = media_library._load_config()
         if config.get("server_url") and config.get("api_key"):
             enabled = {value.strip() for value in str(config.get("enabled_library_ids") or "").split(",") if value.strip()}
-            use_recovery_adapter = False
-            try:
-                libraries = await media_library._list_libraries(config)
-                targets = [library for library in libraries if not enabled or library.get("id") in enabled]
-            except Exception:
-                # Some Emby installations reject Library/MediaFolders while
-                # their authenticated user Items API remains fully available.
-                use_recovery_adapter = True
-                targets = [{"id": value} for value in enabled] or [{"id": None}]
+            libraries = await media_library._list_libraries(config)
+            targets = [library for library in libraries if not enabled or library.get("id") in enabled]
             remaining = max_items
             for library in targets:
                 if remaining is not None and remaining <= 0:
                     break
                 offset = 0
                 while True:
-                    if use_recovery_adapter:
-                        page_limit = min(remaining, 500) if remaining is not None else 500
-                        items, total = await media_library_recovery._fetch_items(
-                            config,
-                            library_id=library.get("id"),
-                            limit=page_limit,
-                            offset=offset,
-                        )
-                    else:
-                        page_limit = remaining or 2000
-                        items, total = await media_library._list_items(config, library["id"], limit=page_limit, offset=offset, force_refresh=False)
+                    page_limit = remaining or 2000
+                    items, total = await media_library._list_items(config, library["id"], limit=page_limit, offset=offset, force_refresh=False)
                     stats["total"] = max_items or max(int(stats.get("total") or 0), int(total or 0))
                     if not items:
                         break
@@ -287,7 +271,7 @@ async def rebuild_knowledge_index(db: AsyncSession, *, max_items: int | None = N
                         if remaining is not None and remaining <= 0:
                             break
                         try:
-                            detail = item if use_recovery_adapter else await media_library._get_item(config, item["id"])
+                            detail = await media_library._get_item(config, item["id"])
                         except Exception:
                             detail = None
                         item_stats = await _index_media_item(repo, item, detail)
@@ -303,8 +287,6 @@ async def rebuild_knowledge_index(db: AsyncSession, *, max_items: int | None = N
                     if remaining is not None and remaining <= 0:
                         break
                     if offset >= int(total or 0) or len(items) < page_limit:
-                        break
-                    if not use_recovery_adapter:
                         break
         await checkpoint("jobs", "读取任务历史", 78)
         stats["tasks"] = await _index_jobs(repo)

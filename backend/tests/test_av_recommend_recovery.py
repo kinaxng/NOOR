@@ -56,6 +56,10 @@ def test_live_library_codes_prefers_original_media_library_adapter(monkeypatch):
     asyncio.run(_run_live_library_codes_prefers_original_media_library_adapter(monkeypatch))
 
 
+def test_live_library_codes_warns_without_recovery_fallback(monkeypatch):
+    asyncio.run(_run_live_library_codes_warns_without_recovery_fallback(monkeypatch))
+
+
 def test_recommend_crack_signal_ignores_title_only_keywords():
     backend = _load_backend()
 
@@ -149,6 +153,37 @@ async def _run_live_library_codes_prefers_original_media_library_adapter(monkeyp
 
     assert codes == {"MIDA-669"}
     assert warning == ""
+
+
+async def _run_live_library_codes_warns_without_recovery_fallback(monkeypatch):
+    backend = _load_backend()
+    backend._LIVE_LIBRARY_CODES_CACHE.update({"ts": 0, "key": "", "codes": set(), "warning": ""})
+
+    import app.api.endpoints.media_library as media_library
+    import app.api.endpoints.media_library_helpers as media_library_helpers
+
+    media_config = {
+        "server_url": "http://emby",
+        "api_key": "key",
+        "user_id": "u",
+        "enabled_library_ids": "3",
+    }
+    monkeypatch.setattr(media_library_helpers, "load_config", lambda: media_config)
+    monkeypatch.setattr(media_library, "_list_libraries", async_fake_list_libraries)
+
+    async def fail_list_items(*args, **kwargs):
+        raise RuntimeError("emby unavailable")
+
+    monkeypatch.setattr(media_library, "_list_items", fail_list_items)
+
+    codes, warning = await backend._live_library_codes({"library_exclusion_scan_limit": 100}, force=True)
+
+    assert codes == set()
+    assert "实时媒体库排除失败" in warning
+
+
+async def async_fake_list_libraries(config):
+    return [{"id": "3", "name": "Movies"}]
 
 
 async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):

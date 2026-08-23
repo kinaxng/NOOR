@@ -384,7 +384,7 @@ async def _live_library_codes(config: dict[str, Any], *, force: bool = False) ->
     if not force and _LIVE_LIBRARY_CODES_CACHE.get("key") == cache_key and now - float(_LIVE_LIBRARY_CODES_CACHE.get("ts") or 0) < 300:
         return set(_LIVE_LIBRARY_CODES_CACHE.get("codes") or set()), str(_LIVE_LIBRARY_CODES_CACHE.get("warning") or "")
     try:
-        from app.api.endpoints import media_library, media_library_recovery
+        from app.api.endpoints import media_library
         from app.api.endpoints.media_library_helpers import load_config
 
         media_config = load_config()
@@ -394,44 +394,22 @@ async def _live_library_codes(config: dict[str, Any], *, force: bool = False) ->
         limit = max(100, min(int(config.get("library_exclusion_scan_limit") or 5000), 20000))
         page_limit = 500
         codes: set[str] = set()
-        use_recovery_adapter = False
         targets: list[dict[str, Any]] = []
         if enabled:
             targets = [{"id": value} for value in enabled]
         else:
-            try:
-                targets = await media_library._list_libraries(media_config)
-            except Exception:
-                use_recovery_adapter = True
-                targets = [{"id": None}]
+            targets = await media_library._list_libraries(media_config)
         for library in targets:
             library_id = library.get("id")
             offset = 0
             while len(codes) < limit:
-                if use_recovery_adapter:
-                    items, _ = await media_library_recovery._fetch_items(
-                        media_config,
-                        library_id=library_id,
-                        limit=min(page_limit, limit - len(codes)),
-                        offset=offset,
-                    )
-                else:
-                    try:
-                        items, _ = await media_library._list_items(
-                            media_config,
-                            library_id=library_id,
-                            limit=min(page_limit, limit - len(codes)),
-                            offset=offset,
-                            force_refresh=force,
-                        )
-                    except Exception:
-                        use_recovery_adapter = True
-                        items, _ = await media_library_recovery._fetch_items(
-                            media_config,
-                            library_id=library_id,
-                            limit=min(page_limit, limit - len(codes)),
-                            offset=offset,
-                        )
+                items, _ = await media_library._list_items(
+                    media_config,
+                    library_id=library_id,
+                    limit=min(page_limit, limit - len(codes)),
+                    offset=offset,
+                    force_refresh=force,
+                )
                 if not items:
                     break
                 for item in items:
