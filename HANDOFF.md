@@ -71,6 +71,8 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Converged plugin API calls in `av-recommend`, `mteam-plugin`, and `subscription-core` frontends onto `sdk.api.plugin()` with a raw fetch fallback; plugin validation no longer reports `PLUGIN_API_SHOULD_USE_SDK`.
 - Migrated M-Team's add-album dialog to `sdk.ui.modal`; the shared NOOR modal shell is verified in the browser.
 - Migrated qBittorrent's category, settings, and task-removal dialogs to `sdk.ui.modal`; the shared modal shell and category editor are verified in the browser.
+- Restored the original qBittorrent management page shape: NOOR topbar tabs, original search card, new-task modal, task time column, 10-per-page pagination, and the original 8-second polling fallback are back. The page now opens a live WebSocket when the plugin SDK exposes `net.webSocket`, sends `overview` updates every 4 seconds, and falls back to polling on any socket failure.
+- Restored the original generic plugin WebSocket route `/{plugin_id}/ws/{action}` in `backend/app/api/plugins.py`; noisy overview/metrics streams remain excluded from system logs. `test_plugin_compat_api.py` now locks the route with a WebSocket round trip.
 - Converted `av-graph` and `subscription-core` CSS to NOOR design tokens for surface/border/radius colors.
 - Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
 - Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.

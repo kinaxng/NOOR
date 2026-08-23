@@ -51,6 +51,19 @@ def test_legacy_test_route_forwards_to_plugin_action(monkeypatch):
     assert response.json()["action"] == "test"
 
 
+def test_plugin_websocket_overview_forwards_to_runtime(monkeypatch):
+    async def fake_handle_action(plugin_id: str, action: str, payload: dict | None = None):
+        return {"ok": True, "plugin_id": plugin_id, "action": action, "payload": payload}
+
+    monkeypatch.setattr(plugins.runtime, "handle_action", fake_handle_action)
+    client = TestClient(_app())
+
+    with client.websocket_connect("/api/plugins/qbittorrent/ws/overview?interval=2") as websocket:
+        data = websocket.receive_json()
+
+    assert data == {"ok": True, "plugin_id": "qbittorrent", "action": "overview", "payload": {}}
+
+
 def test_market_items_route_forwards_to_runtime(monkeypatch):
     async def fake_items():
         return [{"id": "demo", "repo_url": "https://example.test/repo"}]

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -402,6 +403,39 @@ async def push_plugin_rss_item(plugin_id: str, payload: FeedPushPayload):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.websocket('/{plugin_id}/ws/{action}')
+async def plugin_action_ws(websocket: WebSocket, plugin_id: str, action: str):
+    await websocket.accept()
+    should_log = not _is_noisy_plugin_action(action)
+    if should_log:
+        _plugin_log('info', plugin_id, f'WebSocket 已连接 action={action}')
+    try:
+        interval = float(websocket.query_params.get('interval') or 5)
+    except Exception:
+        interval = 5.0
+    interval = max(2.0, min(interval, 30.0))
+    try:
+        while True:
+            try:
+                data = await runtime.handle_action(plugin_id, action, {})
+            except Exception as exc:
+                data = {'ok': False, 'error': str(exc)}
+            try:
+                await websocket.send_json(data)
+            except WebSocketDisconnect:
+                if should_log:
+                    _plugin_log('info', plugin_id, f'WebSocket 已断开 action={action}')
+                return
+            except Exception as exc:
+                if should_log:
+                    _plugin_log('warning', plugin_id, f'WebSocket 发送中断 action={action} error={exc}')
+                return
+            await asyncio.sleep(interval)
+    except WebSocketDisconnect:
+        if should_log:
+            _plugin_log('info', plugin_id, f'WebSocket 已断开 action={action}')
 
 
 @router.delete('/{plugin_id}/images/cache')
