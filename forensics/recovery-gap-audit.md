@@ -49,6 +49,21 @@
 - `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
 - 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 260 项通过。
 
+## 第二遍证据复核（2026-08-24）
+
+- 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
+  `original-path-inventory.tsv`：未发现可新增登记的字节级匹配，
+  `forensics/current-byte-level-matches.tsv` 仍是当前全部字节级证据集合。
+- 将 `forensics/extracted-packs-work/` 中恢复出的 4 个 Git pack 解码并核对
+  提交标题：全部属于 ngx_brotli、OpenClaw/memory-lancedb skill、个人主页
+  workflow 等无关仓库，与 NOOR 原版提交索引不一致；结论归档为
+  `forensics/raw-pack-provenance.md`，后续不再把该组 pack 当作 NOOR 源码线索。
+- 再次确认运行主路径没有挂载恢复期媒体库 fallback：
+  `main.py` 只注册当前原版适配器和 actor 路由，
+  `media_library_recovery.py` 保留为兼容/测试证据文件但不参与 App 启动。
+- 验证：后端全量 `pytest` 260 项通过、前端生产构建通过、
+  `forensics/smoke_restored_pages.js` 无 HTTP 4xx/5xx、无 console error。
+
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。
 

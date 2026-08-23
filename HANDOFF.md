@@ -38,6 +38,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Removed the recovery override from `main.py`; media library now uses the original Emby adapter routes. Emby calls in the media library were hardened with `trust_env=False` so the host system proxy cannot turn LAN Emby requests into 502s.
 - Restored media-library NFO lookup for exact video stems such as `DVAJ-727-C.nfo`; detail responses now also expose `original_title`, `overview`, `provider_ids`, and `directors` again.
 - Added a reproducible browser smoke at `forensics/smoke_restored_pages.js`; it covers main routes, actor routes, media detail, JavDB actor routing, recommendation/subscription/qBittorrent pages, and resource search. Current run has no HTTP 4xx/5xx and no console errors.
+- Second evidence pass: rehashed current source against the original read snapshots, Vite source maps, browser cache snapshots, and full path inventory. No new byte-level matches were found beyond `forensics/current-byte-level-matches.tsv`; the recovered raw Git packs were also decoded and are unrelated to NOOR (`forensics/raw-pack-provenance.md`).
 - Verification: frontend production build passes; backend full pytest passes with `260 passed, 1 warning`; media-library libraries/items/detail, qBittorrent overview, FaceFusion preview metadata, source image library, Emby webhook system log, and full-mode recommendation responses all returned healthy results.
 
 # Hard Rules
