@@ -61,7 +61,7 @@
 | `backend/tests/test_env_backed_library_configs.py` | 3 | verified | 2ecda9d Migrate legacy subtitle indexes | 76ea151 Restore final LADA runtime and settings helpers |
 | `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | 0ab32de Verify FaceFusion upgrade content patch |
 | `frontend/src/components/noor/SubtitlePanel.vue` | 3 | verified | 0184022 Add Whisper runtime tier selection | ad7302e Recover plugin-based subtitle providers |
-| `plugins/av-recommend/frontend/page.js` | 3 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
+| `plugins/av-recommend/frontend/page.js` | 3 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | b7bc555 Converge plugin frontend API calls onto sdk |
 | `plugins/qbittorrent/backend.py` | 3 | verified | c0dc3b8 Keep qBittorrent password auth compatible | 01af6da Restore downloader connection tests |
 | `plugins/xunlei-remote/frontend/style.css` | 3 | verified | 7d9120d Simplify Xunlei residual cleanup flow | ba4a75e Restore final UI details and plugin runtime data paths |
 | `backend/app` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 184d3dc Align legacy media library private signatures |
@@ -141,7 +141,7 @@
 | `frontend/src/style.css` | 1 | verified | c2b5111 Show database path in storage settings | 6ba66c2 Recover original session reads and storage env contracts |
 | `frontend/src/views/PluginHost.vue` | 1 | verified | 194662f Make Gfriends an avatar library helper | 2b366a1 Skip plugin pages without frontend entry |
 | `frontend/src/views/settings/SettingsIndex.vue` | 1 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | 8296a65 Restore local subtitle library settings |
-| `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | 7e565dd Unify recommendation resource quality features |
+| `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | b7bc555 Converge plugin frontend API calls onto sdk |
 | `plugins/avdb/backend.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/gfriends/frontend/page.js` | 1 | verified | 194662f Make Gfriends an avatar library helper | 2ccee44 Return empty state for disabled plugin reads |
 | `plugins/gfriends/frontend/style.css` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
@@ -151,5 +151,5 @@
 | `plugins/javdb/frontend/style.css` | 1 | verified | 2225f1e feat(javdb): add recent series directory | 93019d3 Restore JavDB detail and resource list styles |
 | `plugins/mteam-plugin/backend.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | ba4a75e Restore final UI details and plugin runtime data paths |
 | `plugins/qbittorrent/plugin.json` | 1 | verified | fd44ab3 Support qBittorrent API key auth | 81940de Restore original plugin service icons |
-| `plugins/subscription-core/frontend/page.js` | 1 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | 587ea15 Restore subscription cover persistence |
+| `plugins/subscription-core/frontend/page.js` | 1 | verified | 8ecd4a3 Add fallback image loading for recommendation cards | b7bc555 Converge plugin frontend API calls onto sdk |
 | `plugins/xunlei-remote/plugin.json` | 1 | verified | 15f6ac8 Add Xunlei residual task restore | 428385f Restore Xunlei account and mobile remote links |

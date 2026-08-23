@@ -28,6 +28,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Unified recommendation resource quality features: resource enrichment now separates real uncensored resources from cracked/leak signals, exposes `has_uncensored`, and returns a consistent `resource_summary.quality_score`.
 - Converged plugin API calls in `av-recommend`, `mteam-plugin`, and `subscription-core` frontends onto `sdk.api.plugin()` with a raw fetch fallback; plugin validation no longer reports `PLUGIN_API_SHOULD_USE_SDK`.
 - Migrated M-Team's add-album dialog to `sdk.ui.modal`; the shared NOOR modal shell is verified in the browser.
+- Migrated qBittorrent's category, settings, and task-removal dialogs to `sdk.ui.modal`; the shared modal shell and category editor are verified in the browser.
 - Converted `av-graph` and `subscription-core` CSS to NOOR design tokens for surface/border/radius colors.
 - Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
 - Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.
@@ -429,6 +430,5 @@ Notes:
 
 - Gfriends direct resolve for `波多野結衣` returns a correct URL ending in `AI-Fix-波多野結衣.jpg?t=1607433807`.
 - Frontend build passed after adding `sdk.avatar.resolve()` and JavDB avatar override.
-- Plugin validation has no errors; remaining output is design/API advice only:
-  - `qBittorrent` custom-modal migration advice
+- Plugin validation is clean: `scripts/noor-plugin validate plugins` reports all official plugins as OK.
   - `mteam-plugin` and `qbittorrent` custom modal migration advice

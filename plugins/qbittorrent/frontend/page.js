@@ -82,6 +82,46 @@ export async function mount(el, sdk = {}) {
 
   const $ = role => el.querySelector(`[data-role="${role}"]`)
   const tbody = $('tbody'), stateBox = $('state'), summary = $('summary'), version = $('version'), scope = $('scope'), smallFilter = $('smallFilter'), connection = $('connection'), settings = $('settings'), refresh = $('refresh'), search = $('search'), category = $('category'), detail = $('detail'), confirmRoot = $('confirm')
+  const qbButton = (label, className = '', onClick = null) => {
+    const b = document.createElement('button')
+    b.className = ['qb-btn', className].filter(Boolean).join(' ')
+    b.textContent = label
+    if (onClick) b.onclick = onClick
+    return b
+  }
+  const renderModal = ({ title, content, footer = [], onClose }) => {
+    confirmRoot.innerHTML = ''
+    const close = () => onClose?.()
+    if (sdk.ui?.modal) {
+      const modal = sdk.ui.modal({ title, content, footer, closeOnMask: false, onClose: close })
+      confirmRoot.appendChild(modal.el)
+      return modal
+    }
+    const mask = document.createElement('div')
+    mask.className = 'qb-modal-mask'
+    const panel = document.createElement('div')
+    panel.className = 'qb-modal'
+    const head = document.createElement('div')
+    head.className = 'qb-modal-title'
+    const h = document.createElement('h3')
+    h.textContent = title
+    const closeBtn = qbButton('关闭', 'qb-icon-btn', close)
+    head.append(h, closeBtn)
+    const body = document.createElement('div')
+    body.className = 'qb-modal-body'
+    body.appendChild(content)
+    panel.append(head, body)
+    if (footer.length) {
+      const actions = document.createElement('div')
+      actions.className = 'qb-modal-actions'
+      footer.forEach(node => actions.appendChild(node))
+      panel.appendChild(actions)
+    }
+    mask.appendChild(panel)
+    confirmRoot.appendChild(mask)
+    mask.onclick = event => { if (event.target === mask) close() }
+    return mask
+  }
   const filterButtons = Array.from(el.querySelectorAll('[data-filter]'))
   const sortButtons = Array.from(el.querySelectorAll('[data-sort]'))
   const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]))
@@ -277,27 +317,31 @@ export async function mount(el, sdk = {}) {
   function renderCategoryEditor() {
     const ce = state.categoryEditor
     if (ce.deleting) {
-      confirmRoot.innerHTML = `<div class="qb-modal-mask"><div class="qb-modal"><h3>删除分类</h3><p>只删除 qB 分类，不删除下载任务和文件。</p><div class="qb-modal-name">${esc(ce.deleting)}</div><div class="qb-modal-actions"><button data-role="cancel" class="qb-btn">取消</button><button data-role="ok" class="qb-btn qb-btn--danger">删除</button></div></div></div>`
-      confirmRoot.querySelector('[data-role="cancel"]').onclick = () => { ce.deleting = ''; render() }
-      confirmRoot.querySelector('[data-role="ok"]').onclick = () => removeCategory(ce.deleting)
+      const content = document.createElement('div')
+      content.innerHTML = `<p>只删除 qB 分类，不删除下载任务和文件。</p><div class="qb-modal-name">${esc(ce.deleting)}</div>`
+      const close = () => { ce.deleting = ''; render() }
+      renderModal({ title: '删除分类', content, footer: [qbButton('取消', '', close), qbButton('删除', 'qb-btn--danger', () => removeCategory(ce.deleting))], onClose: close })
       return true
     }
     if (!ce.open) return false
-    confirmRoot.innerHTML = `<div class="qb-modal-mask"><div class="qb-modal qb-modal--category"><h3>${ce.mode === 'edit' ? '编辑分类路径' : '新建分类'}</h3><label class="qb-modal-field"><span>分类名称</span><input data-role="catName" class="qb-input" value="${esc(ce.name)}" ${ce.mode === 'edit' ? 'readonly' : ''}></label><label class="qb-modal-field"><span>保存路径</span><input data-role="catPath" class="qb-input" value="${esc(ce.savePath)}" placeholder="/downloads/av"></label><div class="qb-modal-actions"><button data-role="cancel" class="qb-btn">取消</button><button data-role="ok" class="qb-btn qb-btn--primary">保存</button></div></div></div>`
-    const name = confirmRoot.querySelector('[data-role="catName"]')
-    const path = confirmRoot.querySelector('[data-role="catPath"]')
+    const content = document.createElement('div')
+    content.innerHTML = `<label class="qb-modal-field"><span>分类名称</span><input data-role="catName" class="qb-input" value="${esc(ce.name)}" ${ce.mode === 'edit' ? 'readonly' : ''}></label><label class="qb-modal-field"><span>保存路径</span><input data-role="catPath" class="qb-input" value="${esc(ce.savePath)}" placeholder="/downloads/av"></label>`
+    const name = content.querySelector('[data-role="catName"]')
+    const path = content.querySelector('[data-role="catPath"]')
     name.oninput = e => { ce.name = e.target.value }
     path.oninput = e => { ce.savePath = e.target.value }
-    confirmRoot.querySelector('[data-role="cancel"]').onclick = () => { ce.open = false; render() }
-    confirmRoot.querySelector('[data-role="ok"]').onclick = () => saveCategory()
+    const close = () => { ce.open = false; render() }
+    renderModal({ title: ce.mode === 'edit' ? '编辑分类路径' : '新建分类', content, footer: [qbButton('取消', '', close), qbButton('保存', 'qb-btn--primary', () => saveCategory())], onClose: close })
     return true
   }
 
   function renderSettings() {
     if (!state.settingsOpen) return false
-    confirmRoot.innerHTML = `<div class="qb-modal-mask"><div class="qb-modal qb-modal--settings"><div class="qb-modal-title"><h3>qB 设置</h3><button data-role="closeSettings" class="qb-icon-btn">关闭</button></div><div class="qb-setting-section"><h4>分类路径</h4>${categoryManagerHtml()}</div></div></div>`
-    confirmRoot.querySelector('[data-role="closeSettings"]').onclick = () => { state.settingsOpen = false; render() }
-    bindCategoryManager(confirmRoot)
+    const content = document.createElement('div')
+    content.innerHTML = `<div class="qb-setting-section"><h4>分类路径</h4>${categoryManagerHtml()}</div>`
+    bindCategoryManager(content)
+    const close = () => { state.settingsOpen = false; render() }
+    renderModal({ title: 'qB 设置', content, onClose: close })
     return true
   }
 
@@ -307,13 +351,14 @@ export async function mount(el, sdk = {}) {
     if (renderSettings()) return
     if (!state.confirmDeleteHash) return
     const torrent = state.torrents.find(t => t.hash === state.confirmDeleteHash)
-    confirmRoot.innerHTML = `<div class="qb-modal-mask"><div class="qb-modal"><h3>移除下载任务</h3><p>将从 qBittorrent 中移除任务，不删除已下载文件。</p><div class="qb-modal-name">${esc(torrent?.name || state.confirmDeleteHash)}</div><div class="qb-modal-actions"><button data-role="cancel" class="qb-btn">取消</button><button data-role="ok" class="qb-btn qb-btn--danger">移除任务</button></div></div></div>`
-    confirmRoot.querySelector('[data-role="cancel"]').onclick = () => { state.confirmDeleteHash = ''; render() }
-    confirmRoot.querySelector('[data-role="ok"]').onclick = () => {
+    const content = document.createElement('div')
+    content.innerHTML = `<p>将从 qBittorrent 中移除任务，不删除已下载文件。</p><div class="qb-modal-name">${esc(torrent?.name || state.confirmDeleteHash)}</div>`
+    const close = () => { state.confirmDeleteHash = ''; render() }
+    renderModal({ title: '移除下载任务', content, footer: [qbButton('取消', '', close), qbButton('移除任务', 'qb-btn--danger', () => {
       const hash = state.confirmDeleteHash
       state.confirmDeleteHash = ''
       runAction('delete', hash, true)
-    }
+    })], onClose: close })
   }
 
   function render() {
