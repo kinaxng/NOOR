@@ -121,9 +121,9 @@
 - `History.vue` 已按“5 月原版源码 + June/July rollout 补丁回放”恢复，补回
   原版任务日志展开、评分/诊断摘要、任务元数据与日志尾部查看功能；当前文件
   恢复为 714 行以上，前端生产构建通过。
-- `Jobs.vue` 已补回原版 Whisper 推荐链路诊断面板：对齐、large-v3/Qwen 补救、
-  降级、hardening、清理统计与逐段原因；`api/types.ts` 同步恢复
-  `RecommendedDiagnostics` / `RecommendedDiagnosticsSegment` 契约。
+- `Jobs.vue` 已按 2026-06-13 原版分段源码 + 8 个后台任务成功补丁重建为 821 行
+  最终原版，并对照 2026-07-08 原版片段确认后台任务 UI；链路诊断面板已在
+  2026-05-04 原版会话中从 `Jobs.vue` 移除，诊断契约仍保留在 `History.vue`。
 - `MediaDetailPanel.vue` 已补回原版标签过滤和播放地址策略：标签会排除番号、
   片商、系列、演员名等重复项；预览优先使用 Emby `stream_url`，失败后回退
   本地 hardlink 预览接口。
