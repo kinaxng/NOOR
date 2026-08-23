@@ -196,6 +196,8 @@ the recovered bytecode modules remain unchanged.
   remain unavailable as source artifacts; they must continue to be recreated from
   verified behavior rather than treated as byte-for-byte recovery.
 
+- 已恢复 App 启动时系统封面模糊同步：前端读取 `GET /settings/ui`，后端恢复对应读取路由。
+
 ## Validated Recovery Progress (2026-08-11)
 
 - The isolated frontend and backend are running at `http://192.168.31.3:5173/` and

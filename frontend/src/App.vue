@@ -16,7 +16,7 @@ import { usePlugins } from './composables/usePlugins'
 import api from './api'
 
 const route = useRoute()
-const { blurEnabled, globalBlurEnabled, browserBlurEnabled, toggleBrowserBlur } = useBlurCover()
+const { blurEnabled, globalBlurEnabled, browserBlurEnabled, syncGlobalBlur, toggleBrowserBlur } = useBlurCover()
 const { currentLang, switchLang, t, i18nVersion, _currentLang, _initialized } = useI18n()
 const jobsStore = useJobsStore()
 const { show: showSystemLog, toggle: toggleSystemLog } = useSystemLog()
@@ -257,6 +257,10 @@ onUnmounted(() => {
 
 onMounted(() => {
   loadPlugins()
+  api.get('/settings/ui').then(resp => {
+    const value = resp.data?.cover_blur_enabled
+    if (typeof value === 'boolean') syncGlobalBlur(value)
+  }).catch(() => {})
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('error', handleWindowError)
   window.addEventListener('unhandledrejection', handleUnhandledRejection)

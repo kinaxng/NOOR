@@ -295,6 +295,12 @@ async def update_network_config(config: NetworkConfig):
         raise HTTPException(status_code=500, detail=f"Failed to save .env: {exc}")
 
 
+@router.get("/ui")
+async def get_ui_config():
+    value = _ui_settings()
+    return {"ui": {"cover_blur_enabled": bool(value.get("cover_blur", False))}}
+
+
 @router.put("/ui")
 async def update_ui_config(config: UiConfig):
     value = _ui_settings()

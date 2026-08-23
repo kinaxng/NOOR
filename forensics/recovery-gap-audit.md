@@ -124,6 +124,11 @@
   订阅/推荐的封面刷新、硬链接运行时存储、FaceFusion 模型目录路由均已核对最终
   rollout，并补充或沿用回归测试。
 
+- 恢复 App 启动时的系统封面模糊同步：`App.vue` 挂载后读取
+  `/settings/ui` 并通过 `syncGlobalBlur` 应用服务端全局开关；后端补回
+  `GET /api/settings/ui`，返回 `{"ui": {"cover_blur_enabled": bool}}`，
+  与设置页 PUT 契约一致。新增 `test_settings_api.py` 两条读取契约测试。
+
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。

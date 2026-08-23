@@ -6,6 +6,18 @@ import pytest
 
 from app.api import settings as settings_api
 
+@pytest.mark.asyncio
+async def test_get_ui_config_returns_cover_blur_contract(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings_api, "_ui_settings", lambda: {"cover_blur": True})
+    assert await settings_api.get_ui_config() == {"ui": {"cover_blur_enabled": True}}
+
+
+@pytest.mark.asyncio
+async def test_get_ui_config_defaults_to_false(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings_api, "_ui_settings", lambda: {})
+    assert await settings_api.get_ui_config() == {"ui": {"cover_blur_enabled": False}}
+
+
 
 @pytest.mark.asyncio
 async def test_upgrade_lada_native_reinstall_uses_imported_sys(monkeypatch: pytest.MonkeyPatch):
