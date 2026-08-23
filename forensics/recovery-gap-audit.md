@@ -12,6 +12,8 @@
 - 原始提交索引：`forensics/original-commit-index.json`
 - 原始符号索引：`forensics/original-symbol-index.json`
 - 前端快照：`forensics/frontend-snapshots/`
+- 原始 HANDOFF：`forensics/original-handoff.md`（并已恢复到 `/home/kinax/HANDOFF.md`）
+- 原镜像 Vite 内联 source map：`forensics/raw-vite-sourcemaps/`
 - 恢复后端字节码：`backend/app/**/*.pyc`（只作证据，不作为运行源码）
 - 预接管完整备份：`/.1panel_clash/files/0ccfe0c069554d47be2eb71f8e92f7fd/noor-full-pre-takeover-20260412-160609.tar.gz`
   （含 `.git`、完整源码，作为原版早期基准）
@@ -147,7 +149,12 @@
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。
-   - 文件路径齐全，但部分文件内容仍是可维护重建，不是字节级原文件。
+   - 文件路径齐全，且已有 120 份 Vite source map 原文件、浏览器缓存快照和
+     `forensics/original-handoff.md` 作为磁盘/缓存级证据。
+   - 当前 `Home.vue`、`Dashboard.vue`、`AppSidebar.vue`、`SystemLogPanel.vue`
+     等已与最新 source map 证据字节一致；`FaceFusionPanel.vue` 在证据之上只多
+     最终 `face_tracker_score` 提交。
+   - 其余部分文件内容仍是可维护重建，不是字节级原文件。
    - 例如 i18n 曾漏掉 `settings.whisper.testFailed`，本次已补回中英文键。
    - 静态扫描 `frontend/src` 中 687 个 `t()` 引用后，补回英文缺失键
      `dashboard.welcome.message`；当前中英文静态引用键均无缺失。
