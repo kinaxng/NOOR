@@ -522,4 +522,7 @@ def __getattr__(name: str):
     from app.api.endpoints import media_library_helpers as helper_api
     if hasattr(helper_api, name):
         return getattr(helper_api, name)
+    from app.api.endpoints import media_library_actor_compat as compat_api
+    if hasattr(compat_api, name):
+        return getattr(compat_api, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
