@@ -7,6 +7,8 @@ import subprocess
 import threading
 
 from app.core.config import get_settings
+from app.core.lada_paths import build_lada_python_env
+from app.core.runtime_paths import ensure_directory
 from app.tasks.job_phases import get_phase_label
 
 
@@ -21,11 +23,25 @@ LADA_PROGRESS_PHASE_ORDER = (
 )
 
 
-def _build_lada_env(lada_model_dir: str) -> dict:
+def _build_lada_env(lada_model_dir: str, lada_cache_dir: str = "", lada_temp_dir: str = "") -> dict:
     """Build environment dict with LADA_MODEL_WEIGHTS_DIR set."""
-    env = os.environ.copy()
+    env = build_lada_python_env()
     if lada_model_dir:
         env["LADA_MODEL_WEIGHTS_DIR"] = lada_model_dir
+    if lada_cache_dir:
+        cache_root = ensure_directory(lada_cache_dir)
+        xdg_cache_dir = ensure_directory(os.path.join(cache_root, "xdg"))
+        torch_cache_dir = ensure_directory(os.path.join(cache_root, "torch"))
+        cuda_cache_dir = ensure_directory(os.path.join(cache_root, "cuda"))
+        ort_cache_dir = ensure_directory(os.path.join(cache_root, "onnxruntime"))
+        tensorrt_cache_dir = ensure_directory(os.path.join(ort_cache_dir, "tensorrt"))
+        env["XDG_CACHE_HOME"] = xdg_cache_dir
+        env["TORCH_HOME"] = torch_cache_dir
+        env["CUDA_CACHE_PATH"] = cuda_cache_dir
+        env["ORT_CACHE_DIR"] = ort_cache_dir
+        env["ORT_TENSORRT_CACHE_PATH"] = tensorrt_cache_dir
+    if lada_temp_dir:
+        env["TMPDIR"] = ensure_directory(lada_temp_dir)
     return env
 
 
@@ -65,6 +81,8 @@ async def run_lada_restoration(
     """Run lada-cli restoration using a dedicated thread pool executor."""
     settings = get_settings()
     lada_model_dir = job_settings.get("lada_model_dir", settings.lada_model_dir) or ""
+    lada_cache_dir = ensure_directory(job_settings.get("lada_cache_dir", settings.lada_cache_dir) or "")
+    lada_temp_dir = ensure_directory(job_settings.get("lada_temp_dir", settings.lada_temp_dir) or "")
 
     lada_cli_path = job_settings.get("lada_cli_path", settings.lada_cli_path).strip()
     if " " in lada_cli_path:
@@ -90,6 +108,7 @@ async def run_lada_restoration(
         "--max-clip-length", str(
             job_settings.get("max_clip_length", settings.lada_max_clip_length or 180)
         ),
+        "--temporary-directory", lada_temp_dir,
     ])
 
     lada_fp16 = job_settings.get("fp16", settings.lada_fp16)
@@ -111,7 +130,7 @@ async def run_lada_restoration(
         detail="启动 LADA CLI，准备检测视频中的马赛克区域",
     ))
 
-    env = _build_lada_env(lada_model_dir)
+    env = _build_lada_env(lada_model_dir, lada_cache_dir, lada_temp_dir)
     result = {"returncode": None, "lines": [], "cancelled": False}
     proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
     proc_lock = threading.Lock()

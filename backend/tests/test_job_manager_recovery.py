@@ -36,6 +36,16 @@ def _job_data(name: str = "test-job") -> JobCreate:
     )
 
 
+def test_job_create_contract_accepts_job_type():
+    assert _job_data().job_type is None
+    assert JobCreate(
+        emby_item_id="emby-1",
+        emby_item_name="typed",
+        input_path="/tmp/input.mp4",
+        job_type="whisper",
+    ).job_type == "whisper"
+
+
 @pytest.mark.asyncio
 async def test_create_job_initializes_phase_state(job_db):
     manager = JobManager()

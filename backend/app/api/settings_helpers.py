@@ -14,7 +14,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from app.core.config import DEFAULT_LADA_MODEL_WEIGHTS_DIR, PROJECT_ROOT, get_settings
+from app.core.config import DEFAULT_NOOR_DATA_DIR, PROJECT_ROOT, get_settings
+from app.core.lada_paths import build_lada_python_env, resolve_lada_repo_path as _resolve_lada_repo_path
 
 
 logger = logging.getLogger(__name__)
@@ -35,11 +36,11 @@ WHISPER_MODELS = {
     "anime-whisper": {"name": "Anime-Whisper", "size": "~3GB", "type": "transformers", "repo": "litagin/anime-whisper", "description": "Optimized for anime vocals, Japanese"},
     "large-v3": {"name": "Large V3", "size": "~3GB", "type": "faster-whisper"},
     "whisper-vad-onnx": {
-        "name": "Whisper VAD ONNX",
-        "size": "~600MB",
-        "type": "onnx",
+        "name": "Whisper-VAD ONNX",
+        "size": "~250MB",
+        "type": "onnx-vad",
         "repo": "TransWithAI/Whisper-Vad-EncDec-ASMR-onnx",
-        "description": "Optional Whisper-based VAD backend",
+        "description": "Smart VAD chunk detector for Whisper subtitle pipeline",
     },
 }
 
@@ -89,7 +90,10 @@ def update_env_value(key: str, value: str) -> None:
 
 
 def get_lada_model_weights_dir_from_env(env_data: dict[str, str]) -> str:
-    return env_data.get(LADA_MODEL_WEIGHTS_ENV) or DEFAULT_LADA_MODEL_WEIGHTS_DIR
+    if env_data.get(LADA_MODEL_WEIGHTS_ENV):
+        return env_data[LADA_MODEL_WEIGHTS_ENV]
+    data_dir = Path(env_data.get("NOOR_DATA_DIR") or DEFAULT_NOOR_DATA_DIR)
+    return str(data_dir / "models" / "lada")
 
 
 def python_executable() -> str:
@@ -102,11 +106,7 @@ def lada_cli_base_cmd(cli_path: Optional[str] = None) -> list[str]:
 
 
 def resolve_lada_repo_path() -> Optional[Path]:
-    candidates = [PROJECT_ROOT / "backend" / "app" / "pipeline" / "lada", PROJECT_ROOT / "lada"]
-    for candidate in candidates:
-        if (candidate / ".git").exists():
-            return candidate
-    return None
+    return _resolve_lada_repo_path()
 
 
 def get_whisper_feature_flags() -> dict:
@@ -141,7 +141,13 @@ def get_lada_version_info() -> dict:
         pass
     if not version:
         try:
-            result = subprocess.run([python_executable(), "-c", "import lada; print(getattr(lada, 'VERSION', ''))"], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(
+                [python_executable(), "-c", "import lada; print(getattr(lada, 'VERSION', ''))"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=build_lada_python_env(),
+            )
             if result.returncode == 0 and result.stdout.strip():
                 version = result.stdout.strip()
         except Exception:

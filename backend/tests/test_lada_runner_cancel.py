@@ -6,7 +6,26 @@ from pathlib import Path
 
 import pytest
 
+from app.pipeline.lada import runner
 from app.pipeline.lada.runner import LADA_PROGRESS_PHASE_ORDER, run_lada_restoration
+
+
+def test_lada_runner_build_env_uses_final_cache_layout(monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "build_lada_python_env", lambda: {"PATH": "/bin"})
+
+    env = runner._build_lada_env(
+        "/models/lada",
+        str(tmp_path / "cache"),
+        str(tmp_path / "temp"),
+    )
+
+    assert env["LADA_MODEL_WEIGHTS_DIR"] == "/models/lada"
+    assert env["XDG_CACHE_HOME"] == str(tmp_path / "cache" / "xdg")
+    assert env["TORCH_HOME"] == str(tmp_path / "cache" / "torch")
+    assert env["CUDA_CACHE_PATH"] == str(tmp_path / "cache" / "cuda")
+    assert env["ORT_CACHE_DIR"] == str(tmp_path / "cache" / "onnxruntime")
+    assert env["ORT_TENSORRT_CACHE_PATH"] == str(tmp_path / "cache" / "onnxruntime" / "tensorrt")
+    assert env["TMPDIR"] == str(tmp_path / "temp")
 
 
 @pytest.mark.asyncio

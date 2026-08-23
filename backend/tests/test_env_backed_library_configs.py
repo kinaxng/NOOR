@@ -121,3 +121,19 @@ def test_subtitle_index_migrates_strongest_legacy_database(monkeypatch: pytest.M
     assert target.is_file()
     assert local_library._subtitle_index_count(target) == 1
     assert local_library._legacy_index_db_candidates()[0] == legacy
+
+
+def test_lada_model_weights_fallback_uses_noor_data_dir():
+    assert settings_helpers.get_lada_model_weights_dir_from_env({}) == "/home/kinax/noor-restored/data/models/lada"
+    assert settings_helpers.get_lada_model_weights_dir_from_env({"NOOR_DATA_DIR": "/noor-data"}) == "/noor-data/models/lada"
+    assert settings_helpers.get_lada_model_weights_dir_from_env({"LADA_MODEL_WEIGHTS_DIR": "/external/lada"}) == "/external/lada"
+
+
+def test_whisper_model_catalogue_is_final_single_chain_contract():
+    models = settings_helpers.WHISPER_MODELS
+
+    assert "chickenrice-zh" in models
+    assert models["whisper-vad-onnx"]["type"] == "onnx-vad"
+    assert models["whisper-vad-onnx"]["size"] == "~250MB"
+    assert "reazonspeech-nemo-v2" not in models
+    assert "kotoba-whisper-v2.2" not in models

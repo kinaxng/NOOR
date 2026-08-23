@@ -251,7 +251,7 @@ the recovered bytecode modules remain unchanged.
 
 ## Recovery Consistency (2026-08-23)
 
-- Backend `compileall` is clean and the full test suite currently passes: 203 passed.
+- Backend `compileall` is clean and the full test suite currently passes: 211 passed.
 - Frontend production build passes with `npm run build`.
 - The task manager is restored to the full queue contract: persisted queued-job
   recovery, phase/SSE state, queued and running cancellation, dependent activation
@@ -267,7 +267,7 @@ the recovered bytecode modules remain unchanged.
   layer for the separate overrides file.
 - Whisper settings now expose a storage-root contract (`model_root_dir`,
   `runtime_root_dir`, `database_url`, `database_path`) without retired Reazon fields.
-- `forensics/version-gap-audit.md` reports no missing indexed paths. 53 paths remain
+- `forensics/version-gap-audit.md` reports no missing indexed paths. 45 paths remain
   `pending` until the remaining components are verified against original rollout
   evidence; runtime and derived data remain outside the commit.
 - Runtime cleanup, data/runtime path helpers, database migration, LADA Python paths,
@@ -279,6 +279,11 @@ the recovered bytecode modules remain unchanged.
 - Job/events API contract tests now cover task listing/detail/cancel/delete/cleanup and
   the SSE connected/done sequence. GPU Guard regression tests cover NOOR process
   protection and restricting cleanup to NOOR plus model-server processes.
+- LADA runner, settings helpers, settings status helpers, and core job models were
+  checked against the final rollout: LADA now uses the NOOR Python environment,
+  split cache/TMPDIR layout, and `--temporary-directory`; settings helpers use the
+  data-dir model fallback and final ChickenRice model catalogue; `JobCreate` keeps
+  the `job_type` API field.
 - JavDB plugin manifest now matches the original capability contract, including
   `dashboard_widget`; the overview page again renders the `JAVDB 推荐` widget and
   the recommendation center reports the merged candidate-pool stats (currently

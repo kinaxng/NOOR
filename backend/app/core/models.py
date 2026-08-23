@@ -95,6 +95,7 @@ class JobCreate(BaseModel):
     emby_item_name: str
     input_path: str
     settings: JobSettings = Field(default_factory=JobSettings)
+    job_type: Optional[str] = None
     chain_id: Optional[str] = None
     depends_on_task_id: Optional[str] = None
     parent_task_id: Optional[str] = None

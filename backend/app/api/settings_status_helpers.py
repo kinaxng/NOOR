@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.core.config import PROJECT_ROOT
 from app.core.runtime_paths import data_path
 
 
