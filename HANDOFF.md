@@ -25,6 +25,14 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Restored the Whisper translator to the original final behavior: native Ollama
+  `/api/chat` plus full `/v1/chat` / `/v1/chat/completions` endpoint preservation,
+  structured JSON output, local collapse of nonverbal/repetitive subtitle cues,
+  and sanitization of runaway translation loops. Regression tests cover native
+  Ollama, structured output, non-dialogue prefiltering, single unnumbered replies,
+  and repetitive translation cleanup. Verification: backend full `pytest` passes
+  with `291 passed, 8 skipped`, frontend production build passes, plugin validation
+  remains all `NOOR_PLUGIN_OK`, and restored-page smoke reports no HTTP/console errors.
 - Corrected the forensic read-snapshot audit and regression contract. The original
   snapshots through `2026-07-25` are the authoritative evidence set; the
   `2026-08-23` recovery reads are not original final source. The contract now
