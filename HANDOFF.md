@@ -360,7 +360,7 @@ Recommended next implementation order:
    - unify resource quality schema across AVDB/M-Team/JavDB
    - score new-model uncensored/cracked/subtitle/size/source more consistently
 5. Add recommendation settings:
-   - candidate sources on/off
+   - candidate sources on/off: done as `candidate_latest_enabled` / `candidate_rankings_enabled` / `candidate_recommend_enabled` / `candidate_videos_enabled`
    - exploration ratio: done in `plugins/av-recommend/plugin.json` and backend `_apply_recommendation_controls`
    - subtitle/cracked preference strength: done as `prefer_subtitle_strength` / `prefer_cracked_strength`
    - minimum confidence threshold: done as `minimum_confidence_threshold`

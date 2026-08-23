@@ -97,6 +97,30 @@ def test_preference_strength_preserves_legacy_behavior():
     assert backend._preference_strength({"strength": 999}, "strength", "legacy") == 100
 
 
+def test_candidate_pool_requests_respects_source_toggles():
+    backend = _load_backend()
+
+    default = backend._candidate_pool_requests({"full_scan_pages": 2})
+    assert [item[0] for item in default] == ["latest", "rankings", "rankings", "rankings", "recommend", "videos", "videos"]
+
+    disabled = backend._candidate_pool_requests({
+        "full_scan_pages": 2,
+        "candidate_latest_enabled": False,
+        "candidate_rankings_enabled": False,
+        "candidate_recommend_enabled": False,
+        "candidate_videos_enabled": False,
+    })
+    assert disabled == []
+
+    only_videos = backend._candidate_pool_requests({
+        "full_scan_pages": 2,
+        "candidate_latest_enabled": False,
+        "candidate_rankings_enabled": False,
+        "candidate_recommend_enabled": False,
+    })
+    assert [item[0] for item in only_videos] == ["videos", "videos"]
+
+
 async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     backend = _load_backend()
 

@@ -978,6 +978,8 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
         from app.plugins.runtime import runtime
         if not runtime.is_enabled("javdb"):
             return [], ["JavDB 插件未启用，暂时无法生成候选推荐。"]
+        if not config.get("candidate_latest_enabled", True):
+            return [], ["最新更新候选源已关闭，请切换到完整推荐。"]
         candidate_limit = max(12, min(int(config.get("candidate_limit") or 48), 120))
         detail_limit = max(0, min(int(config.get("detail_limit") or 36), 80))
         requests = [
@@ -1045,6 +1047,24 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
         return [], [f"候选拉取失败：{exc}"]
 
 
+def _candidate_pool_requests(config: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+    pages = max(1, min(int(config.get("full_scan_pages") or 5), 30))
+    requests: list[tuple[str, str, dict[str, Any]]] = []
+    if config.get("candidate_latest_enabled", True):
+        requests.append(("latest", "最新更新", {"page": 1, "limit": 48, "type": "all", "filter_by": "magnets", "sort_by": "update"}))
+    if config.get("candidate_rankings_enabled", True):
+        requests.extend([
+            ("rankings", "日榜", {"page": 1, "limit": 24, "period": "daily", "type": 0}),
+            ("rankings", "周榜", {"page": 1, "limit": 24, "period": "weekly", "type": 0}),
+            ("rankings", "月榜", {"page": 1, "limit": 24, "period": "monthly", "type": 0}),
+        ])
+    if config.get("candidate_recommend_enabled", True):
+        requests.append(("recommend", "JavDB 推荐", {"page": 1, "limit": 24}))
+    if config.get("candidate_videos_enabled", True):
+        requests.extend(("videos", f"完整库 P{page}", {"page": page, "limit": 80, "sort": "update", "order": "desc"}) for page in range(1, pages + 1))
+    return requests
+
+
 async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
     from app.plugins.runtime import runtime
 
@@ -1059,16 +1079,9 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
         _save_pool(pool)
 
     pages = max(1, min(int(config.get("full_scan_pages") or 5), 30))
-    requests: list[tuple[str, str, dict[str, Any]]] = [
-        ("latest", "最新更新", {"page": 1, "limit": 48, "type": "all", "filter_by": "magnets", "sort_by": "update"}),
-        ("rankings", "日榜", {"page": 1, "limit": 24, "period": "daily", "type": 0}),
-        ("rankings", "周榜", {"page": 1, "limit": 24, "period": "weekly", "type": 0}),
-        ("rankings", "月榜", {"page": 1, "limit": 24, "period": "monthly", "type": 0}),
-        ("recommend", "JavDB 推荐", {"page": 1, "limit": 24}),
-    ]
-    requests.extend(("videos", f"完整库 P{page}", {"page": page, "limit": 80, "sort": "update", "order": "desc"}) for page in range(1, pages + 1))
+    requests = _candidate_pool_requests(config)
     scanned = added = updated = 0
-    warnings: list[str] = []
+    warnings: list[str] = ["所有候选源已关闭"] if not requests else []
     try:
         for action, label, request_payload in requests:
             try:
