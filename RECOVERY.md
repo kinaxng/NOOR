@@ -309,6 +309,13 @@ the recovered bytecode modules remain unchanged.
   `sdk.toast?.[type] || sdk.toast?.info || sdk.toast?.success` is used instead of the
   older `alert(msg)` fallback, which also resolves the plugin validator false positive.
 
+- Ran a top-level symbol audit across 27 modules that have both preserved `.pyc`
+  and current `.py` sources. Only legacy custom-pipeline and inline Xunlei subtitle
+  helpers are missing (`CustomPipelineConfig`, `_assert_custom_pipeline_supported`,
+  `parse_custom_config`, `module_installed`, `_search_xunlei`); those belong to
+  intentionally retired Whisper and subtitle-search chains and are documented as
+  `intentional` in the recovery audit.
+
 ## Hardlink Source Actions Recovery (2026-08-23)
 
 - `HardlinkView.vue` now loads `hardlink_source_actions` contributions from all

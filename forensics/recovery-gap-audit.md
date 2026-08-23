@@ -252,6 +252,11 @@
   仅恢复文档，不恢复或改动 Docker 运行源码。
 - M-Team 页面按最终 rollout 恢复为纯 SDK toast，去掉旧版 `alert(msg)` 兜底；
   插件验证不再出现 `BROWSER_DIALOG_FORBIDDEN` 误报。
+- 对 27 个同时存在原始 `.pyc` 与当前 `.py` 的模块做顶层符号比对：除
+  `settings.py` 的 `CustomPipelineConfig` / `_assert_custom_pipeline_supported`、
+  `settings_helpers.py` 的 `parse_custom_config` / `module_installed`、
+  `subtitles.py` 的 `_search_xunlei` 外无缺失。这些符号属于已退役的
+  Whisper custom pipeline 与旧内嵌迅雷字幕链，按 `intentional` 处理，不恢复。
 
 ## 明确差距
 
