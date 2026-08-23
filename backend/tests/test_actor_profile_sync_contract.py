@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
@@ -318,6 +319,13 @@ def test_actor_delete_failure_includes_diagnostics(monkeypatch, tmp_path):
         text = "locked"
         is_error = True
 
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError(
+                "HTTP 500",
+                request=httpx.Request("DELETE", "http://emby.test/emby/Items/123"),
+                response=httpx.Response(500, text=self.text),
+            )
+
     class Client:
         async def __aenter__(self):
             return self
@@ -339,3 +347,57 @@ def test_actor_delete_failure_includes_diagnostics(monkeypatch, tmp_path):
     assert exc.value.detail["body"] == "locked"
     assert exc.value.detail["diagnostics_before"]["actor_id"] == "123"
     assert exc.value.detail["diagnostics_after"]["actor_id"] == "123"
+
+
+def test_actor_delete_uses_emby_fallback_after_direct_delete_405(monkeypatch, tmp_path):
+    monkeypatch.setattr(actors, "_require_config", lambda: {"server_url": "http://emby.test", "api_key": "k"})
+    monkeypatch.setattr(actors, "_profile_overrides_path", lambda: tmp_path / "actor_profile_overrides.json")
+    monkeypatch.setattr(actors, "_actor_merge_ignored_ghosts_path", lambda: tmp_path / "actor_merge_ignored_ghosts.json")
+
+    async def fake_diagnostics(config, actor_id):
+        return {"ok": True, "actor_id": actor_id, "person_exists": True, "related_total": 0, "blockers": []}
+
+    calls: list[str] = []
+
+    class Response:
+        def __init__(self, status_code: int, text: str = ""):
+            self.status_code = status_code
+            self.text = text
+            self.is_error = status_code >= 400
+
+        def raise_for_status(self):
+            if self.is_error:
+                raise httpx.HTTPStatusError(
+                    f"HTTP {self.status_code}",
+                    request=httpx.Request("DELETE", "http://emby.test/emby/Items/123"),
+                    response=httpx.Response(self.status_code, text=self.text),
+                )
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def delete(self, url, **kwargs):
+            calls.append(f"DELETE {url}")
+            return Response(405, "method not allowed")
+
+        async def post(self, url, **kwargs):
+            calls.append(f"POST {url}")
+            return Response(200)
+
+        async def get(self, url, **kwargs):
+            calls.append(f"GET {url}")
+            return Response(404)
+
+    monkeypatch.setattr(actors, "_actor_delete_diagnostics", fake_diagnostics)
+    monkeypatch.setattr(actors.httpx, "AsyncClient", lambda *args, **kwargs: Client())
+
+    result = actors.asyncio.run(actors.delete_actor("123"))
+
+    assert result["ok"] is True
+    assert result["actor_id"] == "123"
+    assert any(call.startswith("POST http://emby.test/emby/Items/Delete") for call in calls)
+    assert any(call.startswith("GET http://emby.test/emby/Items/123") for call in calls)

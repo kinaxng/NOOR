@@ -1816,20 +1816,26 @@ async def set_actor_avatar_from_url(actor_id: str, req: ActorAvatarUrlRequest, l
 async def delete_actor(actor_id: str):
     config = _require_config()
     diagnostics_before = await _actor_delete_diagnostics(config, actor_id)
-    async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
-        response = await client.delete(f"{_base_url(config)}/emby/Items/{quote(actor_id)}", headers=_headers(config))
-        if response.is_error:
-            diagnostics_after = await _actor_delete_diagnostics(config, actor_id)
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "message": f"Emby 删除演员失败: HTTP {response.status_code}",
-                    "status_code": response.status_code,
-                    "body": response.text[:1000],
-                    "diagnostics_before": diagnostics_before,
-                    "diagnostics_after": diagnostics_after,
-                },
-            )
+    try:
+        async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+            await _emby_delete_item(client, config, actor_id)
+            if await _emby_item_exists(client, config, actor_id):
+                raise RuntimeError("Emby 删除接口返回成功，但该演员仍可通过 Items 查询到")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        diagnostics_after = await _actor_delete_diagnostics(config, actor_id)
+        detail: dict[str, Any] = {
+            "message": f"Emby 删除演员失败: {exc}",
+            "diagnostics_before": diagnostics_before,
+            "diagnostics_after": diagnostics_after,
+        }
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+            detail.update({
+                "status_code": exc.response.status_code,
+                "body": exc.response.text[:1000],
+            })
+        raise HTTPException(status_code=502, detail=detail) from exc
     overrides = _load_profile_overrides()
     overrides.pop(str(actor_id), None)
     _save_profile_overrides(overrides)

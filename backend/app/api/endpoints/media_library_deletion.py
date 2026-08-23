@@ -4,6 +4,7 @@ Reconstructed from the preserved media-library router bytecode.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from pathlib import Path
@@ -62,11 +63,10 @@ def directory_matches_target_videos(dir_path: Path, target_files: set[Path]) -> 
         return False
     try:
         video_files = set()
-        for child in dir_path.iterdir():
-            if child.is_dir():
-                return False
-            if child.suffix.lower() in VIDEO_EXTS:
-                video_files.add(child.resolve())
+        for child in dir_path.rglob("*"):
+            if not child.is_file() or child.suffix.lower() not in VIDEO_EXTS:
+                continue
+            video_files.add(child.resolve())
         return bool(video_files) and video_files == target_in_dir
     except OSError:
         return False
@@ -151,3 +151,104 @@ def preview_delete_targets(delete_dirs: set[Path], delete_files: set[Path]) -> d
         if nfo_path.exists():
             planned_files.append(str(nfo_path))
     return {"planned_dirs": planned_dirs, "planned_files": planned_files}
+
+
+def path_matches_hardlink_entry(target: Path, entry: dict) -> bool:
+    try:
+        resolved = target.resolve()
+    except Exception:
+        resolved = target
+    source_path = entry.get("source_path")
+    if source_path:
+        try:
+            if Path(source_path).resolve() == resolved:
+                return True
+        except Exception:
+            pass
+    for hardlink_path in entry.get("hardlink_paths") or []:
+        try:
+            if Path(hardlink_path).resolve() == resolved:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def delete_plan_from_hardlink_entry(
+    entry: dict,
+    *,
+    code: str | None,
+    source_roots: list[Path],
+    hardlink_roots: list[Path],
+) -> tuple[set[Path], set[Path]]:
+    source_path = Path(entry["source_path"]).resolve() if entry.get("source_path") else None
+    if source_path:
+        assert_safe_path(source_path, source_roots + hardlink_roots, label="主文件路径")
+    hardlink_paths: list[Path] = []
+    for hardlink_path in entry.get("hardlink_paths") or []:
+        path = Path(hardlink_path).resolve()
+        assert_safe_path(path, source_roots + hardlink_roots, label="硬链接路径")
+        hardlink_paths.append(path)
+    return collect_chain_delete_targets(
+        source_path,
+        hardlink_paths,
+        code=code,
+        source_roots=source_roots,
+        hardlink_roots=hardlink_roots,
+    )
+
+
+def find_inode_chain_for_path(target: Path, roots: list[Path]) -> list[Path]:
+    try:
+        target_stat = target.stat()
+    except OSError:
+        return []
+    inode_key = (target_stat.st_ino, target_stat.st_dev)
+    matches: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        try:
+            for dirpath, _dirnames, filenames in os.walk(root):
+                for filename in filenames:
+                    if Path(filename).suffix.lower() not in VIDEO_EXTS:
+                        continue
+                    path = Path(dirpath) / filename
+                    try:
+                        stat = path.stat()
+                    except (OSError, PermissionError):
+                        continue
+                    if (stat.st_ino, stat.st_dev) != inode_key:
+                        continue
+                    resolved = path.resolve()
+                    if resolved not in seen:
+                        seen.add(resolved)
+                        matches.append(resolved)
+        except (OSError, PermissionError):
+            continue
+    return matches
+
+
+def delete_plan_from_inode_chain(
+    target: Path,
+    *,
+    code: str | None,
+    source_roots: list[Path],
+    hardlink_roots: list[Path],
+) -> tuple[set[Path], set[Path]]:
+    roots = source_roots + hardlink_roots
+    matches = find_inode_chain_for_path(target, roots)
+    if not matches:
+        return set(), {target}
+    source_path = next((path for path in matches if is_under_roots(path, source_roots)), None)
+    if source_path is None and is_under_roots(target, source_roots):
+        source_path = target
+    hardlink_paths = [path for path in matches if path != source_path]
+    return collect_chain_delete_targets(
+        source_path,
+        hardlink_paths,
+        code=code,
+        source_roots=source_roots,
+        hardlink_roots=hardlink_roots,
+    )

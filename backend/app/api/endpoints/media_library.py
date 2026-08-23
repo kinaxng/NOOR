@@ -15,7 +15,7 @@ from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _AD
 from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
 from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl as _fetch_emby_item_info, hardlink_groups_path_impl, load_hardlink_groups_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
 from app.api.endpoints.media_library_listing import apply_filter_and_paginate as _apply_filter_and_paginate, deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, item_variant_penalty as _item_variant_penalty, merge_group_metadata as _merge_group_metadata, pick_group_representative as _pick_group_representative
-from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
+from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, delete_plan_from_hardlink_entry as _delete_plan_from_hardlink_entry, delete_plan_from_inode_chain as _delete_plan_from_inode_chain, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, find_inode_chain_for_path as _find_inode_chain_for_path, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, path_matches_hardlink_entry as _path_matches_hardlink_entry, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
 from app.api.endpoints.media_library_streaming import parse_range_header as _parse_range_header, iter_file_range as _iter_file_range
 from app.api.system import SystemLogManager, _webhook_source, _webhook_summary
 
@@ -41,6 +41,42 @@ def _bump_sync_state(*,webhook:bool=False)->dict:
 def _ensure_webhook_token(config:dict)->dict:
  if str(config.get('webhook_token') or '').strip():return config
  next_config=dict(config);next_config['webhook_token']=secrets.token_urlsafe(24);_save_config(next_config);return _load_config()
+
+
+async def _media_item_delete_plan(item_id: str, config: dict) -> tuple[str, set[Path], set[Path]]:
+    try:
+        item = await _get_item(config, item_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"获取媒体项目失败: {exc}") from exc
+    if not item:
+        raise HTTPException(status_code=404, detail=f"未找到媒体项目: {item_id}")
+    file_path = str(item.get("file_path") or "").strip()
+    if not file_path:
+        raise HTTPException(status_code=400, detail="媒体项目没有可删除的文件路径")
+    source_roots, hardlink_roots = _allowed_scan_roots(config)
+    if not source_roots and not hardlink_roots:
+        raise HTTPException(status_code=400, detail="未配置扫描组路径，无法执行删除")
+    target = Path(file_path).resolve()
+    _assert_safe_path(target, source_roots + hardlink_roots, label="媒体文件路径")
+    groups = _enrich_hardlink_groups(_load_hardlink_groups()).get("groups") or []
+    for group in groups:
+        for entry in group.get("entries") or []:
+            if not _path_matches_hardlink_entry(target, entry):
+                continue
+            delete_dirs, delete_files = _delete_plan_from_hardlink_entry(
+                entry,
+                code=group.get("code") or _extract_code_from_path(str(target)),
+                source_roots=source_roots,
+                hardlink_roots=hardlink_roots,
+            )
+            return str(group.get("code") or item.get("name") or target.name), delete_dirs, delete_files
+    delete_dirs, delete_files = _delete_plan_from_inode_chain(
+        target,
+        code=_extract_code_from_path(str(target)),
+        source_roots=source_roots,
+        hardlink_roots=hardlink_roots,
+    )
+    return str(item.get("name") or target.name), delete_dirs, delete_files
 
 class HardlinkDeleteRequest(BaseModel):
  file_path:str; remove_nfo:bool=True; dry_run:bool=False
@@ -242,49 +278,38 @@ async def preview_hardlink_file(request:Request,path:str=Query(...)):
  start,end=parsed;return StreamingResponse(_iter_file_range(target,start,end),status_code=206,media_type=media_type,headers={'Accept-Ranges':'bytes','Content-Range':f'bytes {start}-{end}/{size}','Content-Length':str(end-start+1)})
 @router.post('/hardlinks/delete-hardlink')
 async def delete_hardlink_file(req:HardlinkDeleteRequest):
- config=_load_config();_,roots=_allowed_scan_roots(config);path=Path(req.file_path).resolve();_assert_safe_path(path,roots,'硬链接文件')
+ config=_load_config();sources,hardlinks=_allowed_scan_roots(config);path=Path(req.file_path).resolve();_assert_safe_path(path,sources+hardlinks,'硬链接文件')
  if not path.exists():raise HTTPException(404,'文件不存在')
- if req.dry_run:return {'dry_run':True,'planned_files':[str(path)]+([str(path.with_suffix('.nfo'))] if req.remove_nfo and path.with_suffix('.nfo').exists() else [])}
- return {'deleted_files':_remove_file_and_sibling_nfo(path,remove_nfo=req.remove_nfo)}
+ if req.dry_run:return {'ok':True,'dry_run':True,'planned_files':[str(path)]+([str(path.with_suffix('.nfo'))] if req.remove_nfo and path.with_suffix('.nfo').exists() else [])}
+ result={'ok':True,'deleted_files':_remove_file_and_sibling_nfo(path,remove_nfo=req.remove_nfo)}
+ if not result['deleted_files']:raise HTTPException(400,'未删除任何文件')
+ return result
 @router.post('/hardlinks/delete-source-chain')
 async def delete_source_chain(req:SourceChainDeleteRequest):
- config=_load_config();sources,hardlinks=_allowed_scan_roots(config);source=Path(req.source_path).resolve();_assert_safe_path(source,sources,'源文件');paths=[Path(x).resolve() for x in req.hardlink_paths]
- for path in paths:_assert_safe_path(path,hardlinks,'硬链接文件')
+ config=_load_config();sources,hardlinks=_allowed_scan_roots(config);source=Path(req.source_path).resolve();_assert_safe_path(source,sources+hardlinks,'主文件路径');paths=[Path(x).resolve() for x in req.hardlink_paths]
+ for path in paths:_assert_safe_path(path,sources+hardlinks,'硬链接路径')
  dirs,files=_collect_chain_delete_targets(source,paths,code=req.code,source_roots=sources,hardlink_roots=hardlinks)
- return {'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else _execute_delete_targets(dirs,files)
+ result={'ok':True,'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else {'ok':True,**_execute_delete_targets(dirs,files)}
+ return result
 @router.post('/items/delete-chain')
 async def delete_item_chain(req:ItemChainDeleteRequest):
- config=_load_config();_configured(config);sources,hardlinks=_allowed_scan_roots(config)
- item=await _get_item(config,req.item_id)
- if not item:raise HTTPException(404,f'未找到媒体项目: {req.item_id}')
- paths=[]
- current=item.get('file_path')
- if current:paths.append(Path(current).resolve())
- for sibling in item.get('siblings') or []:
-  sibling_path=sibling.get('file_path')
-  if sibling_path:paths.append(Path(sibling_path).resolve())
- deduped=[]
- for path in paths:
-  if path not in deduped:deduped.append(path)
- if not deduped:raise HTTPException(400,'该作品没有可删除的本地文件路径')
- all_roots=sources+hardlinks
- for path in deduped:_assert_safe_path(path,all_roots,'作品文件')
- code=(item.get('tags') or {}).get('code') or item.get('name') or req.item_id
- dirs,files=_collect_chain_delete_targets(None,deduped,code=code,source_roots=sources,hardlink_roots=hardlinks)
- result={'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else _execute_delete_targets(dirs,files)
- result['code']=code;result['item_id']=req.item_id
- if not req.dry_run:_bump_sync_state()
+ config=_load_config();_configured(config)
+ code,delete_dirs,delete_files=await _media_item_delete_plan(req.item_id,config)
+ if req.dry_run:return {'ok':True,'dry_run':True,'code':code,**_preview_delete_targets(delete_dirs,delete_files)}
+ result={'ok':True,'code':code,**_execute_delete_targets(delete_dirs,delete_files)}
+ result['sync_state']=_bump_sync_state()
  return result
 @router.post('/hardlinks/delete-group')
 async def delete_hardlink_group(req:GroupDeleteRequest):
  config=_load_config();sources,hardlinks=_allowed_scan_roots(config);dirs=set();files=set()
  for entry in req.entries:
   source=Path(entry.source_path).resolve() if entry.source_path else None
-  if source:_assert_safe_path(source,sources,'源文件')
+  if source:_assert_safe_path(source,sources+hardlinks,'主文件路径')
   paths=[Path(x).resolve() for x in entry.hardlink_paths]
-  for path in paths:_assert_safe_path(path,hardlinks,'硬链接文件')
+  for path in paths:_assert_safe_path(path,sources+hardlinks,'硬链接路径')
   d,f=_collect_chain_delete_targets(source,paths,code=req.code,source_roots=sources,hardlink_roots=hardlinks);dirs.update(d);files.update(f)
- return {'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else _execute_delete_targets(dirs,files)
+ result={'ok':True,'dry_run':True,**_preview_delete_targets(dirs,files)} if req.dry_run else {'ok':True,**_execute_delete_targets(dirs,files)}
+ return result
 
 # Compatibility re-exports for code written against the pre-split media_library API.
 def sort_key(item: dict) -> tuple:
