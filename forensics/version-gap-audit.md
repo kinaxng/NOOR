@@ -89,7 +89,7 @@
 | `backend/tests/test_settings_whisper_runtime.py` | 2 | verified | a2195c3 Ignore empty Whisper cache dirs | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_whisper_strategy.py` | 2 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | verified | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
-| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | a8f7ea1 Restore final App and History evidence |
+| `frontend/src` | 2 | verified | 14a3cc3 Add experimental Whisper timing refiner | 7b146a9 Restore plugin control panel collapse contract |
 | `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
 | `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
 | `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
@@ -138,7 +138,7 @@
 | `frontend/src/composables/useJobPresentation.ts` | 1 | verified | 806de25 Add FaceFusion crack processing integration | ee05cd1 Recover original frontend dashboard |
 | `frontend/src/router/index.ts` | 1 | verified | 4f1b075 Move hardlinks under files section | 2c31f4a Restore JavDB sidebar workspace |
 | `frontend/src/style.css` | 1 | verified | c2b5111 Show database path in storage settings | 6ba66c2 Recover original session reads and storage env contracts |
-| `frontend/src/views/PluginHost.vue` | 1 | verified | 194662f Make Gfriends an avatar library helper | a84cffa Restore frontend TypeScript strict config |
+| `frontend/src/views/PluginHost.vue` | 1 | verified | 194662f Make Gfriends an avatar library helper | 7b146a9 Restore plugin control panel collapse contract |
 | `frontend/src/views/settings/SettingsIndex.vue` | 1 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | 8296a65 Restore local subtitle library settings |
 | `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | 6ba66c2 Recover original session reads and storage env contracts |
 | `plugins/avdb/backend.py` | 1 | verified | d5826f0 Route plugin data through runtime storage | ba4a75e Restore final UI details and plugin runtime data paths |
