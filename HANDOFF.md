@@ -1,6 +1,6 @@
 # NOOR Project Handoff
 
-Last updated: 2026-06-10 Asia/Shanghai
+Last updated: 2026-08-24 Asia/Shanghai
 
 ## Recovery Note (2026-08-23)
 
@@ -21,7 +21,14 @@ Last updated: 2026-06-10 Asia/Shanghai
 - Do not restore retired subscription/wash recommendation modes, online actor
   mapping upload, or the old Whisper multi-chain source.
 
-## Hard Rules
+### Latest Recovery Update (2026-08-24)
+
+- File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
+- Stopped hidden sidebar widget polling. The desktop and mobile sidebars no longer mount the widget-system renderer simultaneously, and plugin widgets pause when the browser tab is hidden. System metrics sampling is also throttled for 1 second on the backend.
+- Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
+- Verification: frontend production build passes; backend full pytest passes with `240 passed, 1 warning`.
+
+# Hard Rules
 
 - Recovery workspace: `/home/kinax/noor-restored`
 - Frontend dev server: Vite on `5173`
