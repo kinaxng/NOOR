@@ -113,7 +113,7 @@
   和 `main.ts` 恢复原版后不触发 `vue-tsc` 未使用变量错误。
 
 - 字节级匹配扫描：新增 `forensics/current-byte-level-matches.tsv`，当前
-  32 个前端文件已与 Vite source map、浏览器缓存或早期会话证据完全一致；其中
+  43 个前后端路径已与 Vite source map、浏览器缓存、早期会话证据或完整读取快照完全一致；其中
   `JobCard`、`JobChainPanel`、`MediaCard`、`VuiProgress`、`History`、
   `LadaSettings` 本次按证据补回仅有的空行/换行差异，已恢复字节级一致。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
@@ -391,7 +391,7 @@
   期望的 WhisperSettings/i18n 状态不在备份中，说明该备份不是 rollout 的精确
   起点。因此“全历史线性回放”不能直接成立；后续应改为按文件使用会话内的
   原始读取快照作为 pre-patch seed，再回放该文件后续成功补丁。
-- 当前恢复树字节级直接匹配证据仍为 32 个路径（`current-byte-level-matches.tsv`），
+- 当前恢复树字节级直接匹配证据为 43 个路径（`current-byte-level-matches.tsv`），
   另有大量文件已按源 map/缓存/会话 diff 核对为等价恢复，但不是磁盘原文件。
 - 本轮验证：后端 `pytest` 228 项通过、前端 `vue-tsc && vite build` 通过、
   插件校验仅剩余已知警告。
@@ -462,7 +462,7 @@
   已由 `backend/tests/test_actor_routes.py` 与媒体库路由测试继续锁定。
 - 新增 `backend/tests/test_media_library_symbol_parity.py`，用 AST 解析原版最终
   回放文件并断言全部原版公开顶层符号已由当前拆分模块提供，防止兼容层再退化。
-- `current-byte-level-matches.tsv` 已更新到 32 个字节级匹配文件，
+- `current-byte-level-matches.tsv` 已更新到 43 个字节级匹配文件，
   `MediaDetailPanel.vue` 与 `BaseToast.vue` 均登记证据来源。
 
 ## 字节级匹配登记复核（2026-08-23）
