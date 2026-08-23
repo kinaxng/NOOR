@@ -13,7 +13,7 @@
 - `RecommendedDiagnostics` / `RecommendedDiagnosticsSegment` 在原版读取快照和
   Vite 缓存快照中都有证据，已恢复 `frontend/src/api/types.ts`，避免与
   恢复后的 `History.vue` / 任务历史类型契约脱节。
-- 当前验证：`frontend` 生产构建通过；后端全量 `pytest` 239 项通过
+- 当前验证：`frontend` 生产构建通过；后端全量 `pytest` 240 项通过
   （命令需带 `PYTHONPATH=backend`）。
 
 ## 本轮收敛（2026-08-24）
@@ -25,7 +25,8 @@
 - `PluginWidgetRenderer.vue` 增加标签页 `visibilitychange` 保护：页面切到
   后台时卸载插件 widget 并清理轮询/AbortController，回到前台再重新挂载，
   避免隐藏标签继续占用 CPU、网络和 `nvidia-smi`。
-- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 239 项通过。
+- `widget-system` 后端给 metrics 增加 1 秒结果缓存，多个可见标签页重复请求时不再每次触发 `nvidia-smi` 和 `psutil.cpu_percent(interval=0.1)`。
+- 本轮验证：`frontend` 生产构建通过；后端全量 `pytest` 240 项通过。
 
 本文件只记录 `noor-restored` 与删除前 NOOR 的差距。它不代替 `RECOVERY.md`，
 只用于回答“现在为什么还不能说已经恢复原样”。
@@ -596,7 +597,7 @@
   `.xunlei-restore` 等误报。
 - 新增 `backend/tests/test_plugin_validation_tool.py`，断言官方插件目录
   校验时不再出现未知 type、未知 capability 或 CSS 前缀误报。
-- 全量后端测试更新为 `239 passed`；`./scripts/noor-plugin validate plugins`
+- 全量后端测试更新为 `240 passed`；`./scripts/noor-plugin validate plugins`
   剩余仅 API SDK 建议、自定义弹窗建议和 design token 建议，不再把正式
   插件类型/能力当未知项。
 
@@ -636,4 +637,4 @@
 - 已按原版恢复多选状态、批量加入源脸、已使用图片禁用再次选择、删除缓存图时
   同步清理选中状态；默认面板与全宽面板的图片库都保留删除按钮，并增加原版
   `is-active` 选中样式。
-- 验证：`vue-tsc && vite build` 通过；后端全量 `pytest` 仍为 `239 passed`。
+- 验证：`vue-tsc && vite build` 通过；后端全量 `pytest` 仍为 `240 passed`。

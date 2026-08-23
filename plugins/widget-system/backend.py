@@ -12,6 +12,8 @@ from app.plugins.contracts import DashboardWidget, PluginTestResult
 
 _last_disk_read_bytes: int | None = None
 _last_disk_read_at: float | None = None
+_METRICS_CACHE_TTL = 1.0
+_metrics_cache: dict[str, Any] = {"at": 0.0, "value": None}
 
 
 def _safe_float(value: Any) -> float:
@@ -80,8 +82,12 @@ def _read_disk_rate() -> float:
 
 
 def build_metrics_payload() -> dict[str, Any]:
+    now = time.monotonic()
+    cached = _metrics_cache.get("value")
+    if cached is not None and now - float(_metrics_cache.get("at") or 0.0) < _METRICS_CACHE_TTL:
+        return cached
     memory = psutil.virtual_memory()
-    return {
+    payload = {
         "gpu": _read_gpu_info(),
         "cpu_mem": {
             "cpu_util": psutil.cpu_percent(interval=0.1),
@@ -91,6 +97,9 @@ def build_metrics_payload() -> dict[str, Any]:
             "disk_read": _read_disk_rate(),
         },
     }
+    _metrics_cache["value"] = payload
+    _metrics_cache["at"] = now
+    return payload
 
 
 async def test(config: dict[str, Any]) -> PluginTestResult:
