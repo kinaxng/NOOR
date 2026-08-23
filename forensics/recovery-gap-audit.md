@@ -193,12 +193,17 @@
   覆盖 617 个唯一状态行、114 个源码路径，补上 `dd000a8` 那次 710 文件 checkpoint
   未记录 `staged_paths` 的路径缺口；Docker、运行时数据与插件缓存路径按恢复策略保留
   在清单中但不作为本地源码恢复目标。
+- 进一步从所有 diff/status/stat 输出汇总出 `forensics/original-path-inventory.tsv`
+  （572 个相对源码/文档路径），覆盖早期组件化架构、旧 Whisper 多链、旧测试名和
+  最终已删除文件，便于以后按时间戳判断某个路径是历史版本还是最终版。
 - 清单核对后，真正的源码/测试缺失项都已确认不是最终版缺口：`SidebarMetrics.vue`、
   `SystemMetricsCard.vue`、`useSidebarMetrics.ts` 是已被组件化插件槽位取代的旧实现；
   `test_core_config.py`、`test_knowledge_core.py`、`test_settings_lada_upgrade.py`、
   `test_whisper_api.py`、`test_whisper_frontend_profile_sync.py` 对应职责已由
   `test_core_config_storage_defaults.py`、`test_knowledge_codes.py`、
-  `test_settings_lada_recovery.py`、当前 Whisper 契约测试覆盖。
+  `test_settings_lada_recovery.py`、当前 Whisper 契约测试覆盖；
+  `whisper/merge.py`、`enhancer.py`、`preprocess.py`、旧 decoupled 链是最终版有意
+  删除或收敛后的历史路径。
 
 ## 明确差距
 

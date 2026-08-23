@@ -207,9 +207,10 @@ the recovered bytecode modules remain unchanged.
   新增回放证据已归档到 `forensics/recovered-sources/`。
 
 - 2026-08-23 新增原始 `git status` 路径清单
-  `forensics/original-status-inventory.tsv`，补上了原版 710 文件 checkpoint 的路径
-  记录缺口；清单中的旧组件和旧测试名已逐一核销为更名/退役项，当前恢复树不因此产生
-  新的源码缺失。
+  `forensics/original-status-inventory.tsv`，并汇总全部 diff/status/stat 输出为
+  `forensics/original-path-inventory.tsv`，补上了原版 710 文件 checkpoint 的路径
+  记录缺口；清单中的旧组件、旧测试名和已收敛 Whisper 链已逐一核销为更名/退役项，
+  当前恢复树不因此产生新的最终版源码缺失。
 
 ## Validated Recovery Progress (2026-08-11)
 
