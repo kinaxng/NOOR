@@ -35,6 +35,9 @@ Last updated: 2026-08-24 Asia/Shanghai
   add-selected behavior, and current `FaceFusionSettings.vue` retains
   `badgeAlwaysVisible` / `faceTrackerScore`; do not overwrite them with the older
   raw source-map versions.
+- Verification after the audit correction: recovery-workspace backend full
+  `pytest` passes with `290 passed, 1 warning`, and the frontend production build
+  passes.
 - Expanded byte-level original-source matches from the pre-takeover backup: stable backend/frontend config, tooling, docs, and UI files that were unchanged in the original commit index now have 53 verified rows in `forensics/current-byte-level-matches.tsv`. `test_forensic_byte_matches.py` still rechecks every row against the current tree.
 - Verification after the evidence expansion: recovery-workspace backend full `pytest` passes with `283 passed, 1 warning`, frontend production build passes, and plugin validation remains all `NOOR_PLUGIN_OK`.
 - Restored the subscription center original card workflow: source/quality metadata, expanded candidate comparison, edit mode, and old-version acknowledgment are back.
