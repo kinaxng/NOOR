@@ -628,11 +628,13 @@ class PluginRuntime:
                 for item in items:
                     if not isinstance(item, dict):
                         continue
-                    tasks.append({
+                    task = {
                         "plugin_id": plugin_id,
                         "plugin_name": manifest.get("name") or plugin_id,
                         **item,
-                    })
+                    }
+                    task.setdefault("enabled", True)
+                    tasks.append(task)
             except Exception as exc:
                 tasks.append({
                     "id": f"{plugin_id}.background_tasks",

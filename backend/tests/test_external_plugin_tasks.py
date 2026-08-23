@@ -103,3 +103,27 @@ def test_mdc_path_mapping_prefers_longest_explicit_prefix():
     assert mdc_manual._map_source_path(config, "/downloads/av/AAA-001") == "/data/special-av/AAA-001"
     assert mdc_manual._map_source_path(config, "/downloads/other/file") == "/data/downloads/other/file"
     assert mdc_manual._map_source_path(config, "/unmapped/file") == "/unmapped/file"
+
+
+@pytest.mark.asyncio
+async def test_plugin_background_tasks_default_to_enabled():
+    runtime = PluginRuntime()
+    runtime._manifests = {"demo": {"name": "Demo Plugin"}}
+    runtime._handlers = {
+        "demo": SimpleNamespace(background_tasks=lambda config: [
+            {"id": "demo.task", "title": "Demo Task", "status": "idle"},
+        ]),
+    }
+    runtime.is_enabled = lambda plugin_id: True
+    runtime.get_config = lambda plugin_id: {}
+
+    result = await runtime.get_background_tasks()
+
+    assert result == [{
+        "id": "demo.task",
+        "plugin_id": "demo",
+        "plugin_name": "Demo Plugin",
+        "title": "Demo Task",
+        "status": "idle",
+        "enabled": True,
+    }]
