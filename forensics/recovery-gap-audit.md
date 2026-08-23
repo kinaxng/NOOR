@@ -44,6 +44,10 @@
 - `settings_facefusion_upgrade.py`：已核对内置 FaceFusion 的版本/运行时信息、
   受控上游同步、NOOR 内容分析跳过补丁和 TensorRT 缓存补丁；并新增 3.8 风格
   源码与已补丁源码的回归测试。
+- 演员路由兼容已用 OpenAPI 契约测试锁定：前端使用的
+  `/api/media-library/actor/*`、`/api/media-library/actors/*` 均由当前
+  `endpoints/actors.py` 挂载，历史 `/actor/emby/:actorId` 会重定向到
+  `/actors/:actorId` 详情页。
 
 ## 本轮一致性收敛（2026-08-23）
 
