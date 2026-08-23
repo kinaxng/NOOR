@@ -1,0 +1,27 @@
+diff --git a/frontend/src/components/noor/MediaCard.vue b/frontend/src/components/noor/MediaCard.vue
+index 3b1dad0..a94e534 100644
+--- a/frontend/src/components/noor/MediaCard.vue
++++ b/frontend/src/components/noor/MediaCard.vue
+@@ -71,6 +71,10 @@ function handleDeleteClick() {
+   emit('deleteAction', props.item)
+ }
+ 
++function handleCrackBadgeClick() {
++  emit('quickAction', props.item)
++}
++
+ </script>
+ 
+ <template>
+@@ -131,9 +135,9 @@ function handleDeleteClick() {
+         <!-- Cracked tag -->
+         <button
+           v-if="!item.tags?.release_type"
+-          class="text-xs px-1.5 py-0.5 rounded transition-colors border"
++          class="text-xs px-1.5 py-0.5 rounded transition-colors cursor-pointer border"
+           :class="isCracked ? 'tag-cracked' : 'tag-cracked--none'"
+-          @click.stop="!isCracked && $emit('quickAction', item)"
++          @click.stop="handleCrackBadgeClick"
+         >
+           {{ crackedLabel }}
+         </button>

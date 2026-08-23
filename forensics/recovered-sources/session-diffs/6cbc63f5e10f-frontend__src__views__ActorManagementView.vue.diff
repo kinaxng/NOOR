@@ -1,0 +1,213 @@
+diff --git a/frontend/src/views/ActorManagementView.vue b/frontend/src/views/ActorManagementView.vue
+index 5034cc2..c6f2c11 100644
+--- a/frontend/src/views/ActorManagementView.vue
++++ b/frontend/src/views/ActorManagementView.vue
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { computed, onMounted, ref, watch } from 'vue'
++import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+ import { useRouter } from 'vue-router'
+ import api from '../api'
+ import BaseIcon from '../components/noor/BaseIcon.vue'
+@@ -34,6 +34,8 @@ const mergeExecuting = ref<Record<string, boolean>>({})
+ const batchMerging = ref(false)
+ const tmdbBackfillLoading = ref(false)
+ const tmdbBackfillApplying = ref(false)
++const tmdbBackfillProgress = ref<any | null>(null)
++const tmdbBackfillResult = ref<any | null>(null)
+ const selectedMergeTargets = ref<Record<string, string>>({})
+ const query = ref('')
+ const page = ref(1)
+@@ -51,8 +53,15 @@ const resultLabel = computed(() => {
+ const mappingStats = computed(() => mappingStatus.value?.stats || null)
+ const rejectedMatches = computed(() => mappingMatches.value?.rejected_matches || [])
+ const tmdbBackfillCandidates = computed(() => tmdbBackfill.value?.candidates || [])
++const tmdbBackfillProgressPercent = computed(() => {
++  const total = Number(tmdbBackfillProgress.value?.total || 0)
++  const processed = Number(tmdbBackfillProgress.value?.processed || 0)
++  if (!total) return tmdbBackfillApplying.value ? 2 : 0
++  return Math.max(2, Math.min(100, Math.round((processed / total) * 100)))
++})
+ 
+ let searchTimer: number | null = null
++let tmdbBackfillProgressTimer: number | null = null
+ 
+ function actorInitial(name: string) {
+   return (name || '?').trim().slice(0, 1).toUpperCase()
+@@ -241,6 +250,7 @@ async function previewMappingMatches() {
+ 
+ async function previewTmdbBackfill() {
+   tmdbBackfillLoading.value = true
++  if (!tmdbBackfillApplying.value) tmdbBackfillResult.value = null
+   try {
+     const resp = await api.get('/media-library/actors/tmdb-backfill/preview', {
+       params: { lang: actorNameLang.value },
+@@ -253,6 +263,29 @@ async function previewTmdbBackfill() {
+   }
+ }
+ 
++function stopTmdbBackfillProgressPolling() {
++  if (tmdbBackfillProgressTimer) {
++    window.clearInterval(tmdbBackfillProgressTimer)
++    tmdbBackfillProgressTimer = null
++  }
++}
++
++function startTmdbBackfillProgressPolling(progressKey: string) {
++  stopTmdbBackfillProgressPolling()
++  const poll = async () => {
++    try {
++      const resp = await api.get(`/media-library/actors/tmdb-backfill/progress/${encodeURIComponent(progressKey)}`)
++      tmdbBackfillProgress.value = resp.data || null
++      const status = String(resp.data?.status || '')
++      if (status === 'completed' || status === 'failed') stopTmdbBackfillProgressPolling()
++    } catch {
++      // The apply request still owns the final success/failure result.
++    }
++  }
++  void poll()
++  tmdbBackfillProgressTimer = window.setInterval(poll, 900)
++}
++
+ async function applyTmdbBackfill() {
+   const count = tmdbBackfill.value?.summary?.high_confidence_count || 0
+   if (!count || tmdbBackfillApplying.value) return
+@@ -264,13 +297,28 @@ async function applyTmdbBackfill() {
+   })
+   if (!ok) return
+   tmdbBackfillApplying.value = true
++  tmdbBackfillResult.value = null
++  tmdbBackfillProgress.value = {
++    status: 'running',
++    processed: 0,
++    total: count,
++    applied_count: 0,
++    skipped_count: 0,
++    current_actor: '',
++  }
++  const progressKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
++    ? crypto.randomUUID()
++    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
++  startTmdbBackfillProgressPolling(progressKey)
+   try {
+     const resp = await api.post('/media-library/actors/tmdb-backfill/apply', {
+       only_high_confidence: true,
+       dry_run: false,
++      progress_key: progressKey,
+     }, {
+       params: { lang: actorNameLang.value },
+     })
++    tmdbBackfillResult.value = resp.data || null
+     toast.success(t('files.actors.tmdbBackfillApplySuccess', { count: resp.data.applied_count || 0 }))
+     await previewTmdbBackfill()
+     loadActors()
+@@ -278,6 +326,7 @@ async function applyTmdbBackfill() {
+     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.tmdbBackfillApplyFailed'))
+   } finally {
+     tmdbBackfillApplying.value = false
++    stopTmdbBackfillProgressPolling()
+   }
+ }
+ 
+@@ -436,6 +485,10 @@ onMounted(() => {
+   loadActors()
+   loadMappingStatus()
+ })
++
++onUnmounted(() => {
++  stopTmdbBackfillProgressPolling()
++})
+ </script>
+ 
+ <template>
+@@ -502,13 +555,34 @@ onMounted(() => {
+             @click="applyTmdbBackfill"
+           >
+             <BaseIcon name="check" class="w-4 h-4" />
+-            {{ t('files.actors.tmdbBackfillApply') }}
++            {{ tmdbBackfillApplying ? t('files.actors.tmdbBackfillApplying') : t('files.actors.tmdbBackfillApply') }}
+           </VuiButton>
+-          <button type="button" class="duplicate-panel__close" @click="tmdbBackfill = null">
++          <button type="button" class="duplicate-panel__close" :disabled="tmdbBackfillApplying" @click="tmdbBackfill = null">
+             <BaseIcon name="close" />
+           </button>
+         </div>
+       </div>
++      <div v-if="tmdbBackfillApplying || tmdbBackfillResult" class="tmdb-backfill-progress">
++        <div class="tmdb-backfill-progress__head">
++          <strong>
++            {{ tmdbBackfillApplying ? t('files.actors.tmdbBackfillProgressRunning') : t('files.actors.tmdbBackfillProgressDone') }}
++          </strong>
++          <span>
++            {{ t('files.actors.tmdbBackfillProgressCounts', {
++              processed: tmdbBackfillProgress?.processed || tmdbBackfillResult?.applied_count || 0,
++              total: tmdbBackfillProgress?.total || tmdbBackfillResult?.applied_count || 0,
++              applied: tmdbBackfillProgress?.applied_count || tmdbBackfillResult?.applied_count || 0,
++              skipped: tmdbBackfillProgress?.skipped_count || tmdbBackfillResult?.skipped_count || 0,
++            }) }}
++          </span>
++        </div>
++        <div class="tmdb-backfill-progress__bar" role="progressbar" :aria-valuenow="tmdbBackfillProgressPercent" aria-valuemin="0" aria-valuemax="100">
++          <span :style="{ width: `${tmdbBackfillApplying ? tmdbBackfillProgressPercent : 100}%` }"></span>
++        </div>
++        <em v-if="tmdbBackfillApplying && tmdbBackfillProgress?.current_actor">
++          {{ t('files.actors.tmdbBackfillProgressCurrent', { name: tmdbBackfillProgress.current_actor }) }}
++        </em>
++      </div>
+       <div v-if="tmdbBackfillCandidates.length" class="tmdb-backfill-list">
+         <article v-for="item in tmdbBackfillCandidates" :key="`${item.actor_id}-${item.tmdb_id}`" class="tmdb-backfill-row" :class="{ 'is-review': item.confidence !== 'high' }">
+           <button type="button" class="tmdb-backfill-row__actor" @click="openActor(item.actor)">
+@@ -973,6 +1047,53 @@ onMounted(() => {
+   padding-right: 0.2rem;
+ }
+ 
++.tmdb-backfill-progress {
++  display: grid;
++  gap: 0.45rem;
++  padding: 0.65rem 0.75rem;
++  border: 1px solid rgba(0, 117, 255, 0.22);
++  border-radius: var(--radius-md);
++  background: rgba(0, 117, 255, 0.06);
++}
++
++.tmdb-backfill-progress__head {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  justify-content: space-between;
++  gap: 0.5rem;
++}
++
++.tmdb-backfill-progress__head strong {
++  color: var(--color-text-primary);
++  font-size: 0.82rem;
++  font-weight: 850;
++}
++
++.tmdb-backfill-progress__head span,
++.tmdb-backfill-progress em {
++  color: var(--color-text-muted);
++  font-size: 0.72rem;
++  font-style: normal;
++  font-weight: 750;
++}
++
++.tmdb-backfill-progress__bar {
++  width: 100%;
++  height: 0.45rem;
++  overflow: hidden;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, 0.08);
++}
++
++.tmdb-backfill-progress__bar span {
++  display: block;
++  height: 100%;
++  border-radius: inherit;
++  background: linear-gradient(90deg, rgba(0, 117, 255, 0.86), rgba(86, 211, 255, 0.9));
++  transition: width 0.24s ease;
++}
++
+ .tmdb-backfill-row {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);

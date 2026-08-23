@@ -1,0 +1,18 @@
+diff --git a/backend/app/api/settings_whisper_models.py b/backend/app/api/settings_whisper_models.py
+index 7f0fda7..ddf712a 100644
+--- a/backend/app/api/settings_whisper_models.py
++++ b/backend/app/api/settings_whisper_models.py
+@@ -33,12 +33,10 @@ def resolve_model_cache_candidates(whisper_model_dir: str, repo_id: str) -> list
+ 
+     # direct snapshot/cache root
+     _append(base / repo_cache_name)
+-    # base is already /.../hub
++    # base is a HuggingFace home, with hub nested under it
+     _append(base / "hub" / repo_cache_name)
+     # base is /.../models and hub is nested under it
+     _append(base / "huggingface" / "hub" / repo_cache_name)
+-    # base is already /.../huggingface
+-    _append(base / "hub" / repo_cache_name)
+ 
+     return candidates
+ 

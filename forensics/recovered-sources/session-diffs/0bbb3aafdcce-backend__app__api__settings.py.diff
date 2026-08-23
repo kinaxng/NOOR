@@ -1,0 +1,20 @@
+diff --git a/backend/app/api/settings.py b/backend/app/api/settings.py
+index 0c2fdeb..a6f7b2d 100644
+--- a/backend/app/api/settings.py
++++ b/backend/app/api/settings.py
+@@ -7,6 +7,7 @@ from app.core.config import (
+     clear_settings_cache,
+     PROJECT_ROOT,
+ )
++from app.core.lada_paths import build_lada_python_env
+ from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+ import os
+ import sys
+@@ -562,6 +563,7 @@ async def upgrade_lada():
+             capture_output=True,
+             text=True,
+             timeout=10,
++            env=build_lada_python_env(),
+         )
+         new_version = version_cp.stdout.strip() if version_cp.returncode == 0 else None
+ 

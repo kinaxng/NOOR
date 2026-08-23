@@ -1,0 +1,45 @@
+diff --git a/plugins/subscription-core/frontend/page.js b/plugins/subscription-core/frontend/page.js
+index 2ed08e9..71a625b 100644
+--- a/plugins/subscription-core/frontend/page.js
++++ b/plugins/subscription-core/frontend/page.js
+@@ -33,23 +33,24 @@ function imageCandidates(...values) {
+   values.forEach(push)
+   return out
+ }
+-async function loadJavdbImageCandidates(sdk, code) {
++async function refreshStoredImageCandidates(sdk, item) {
++  const code = item?.code || item?.number || item?.search_code
+   const text = String(code || '').trim()
+-  if (!text) return []
++  const id = String(item?.id || '').trim()
++  if (!text && !id) return []
+   try {
+     let payload
+     if (sdk.api?.post) {
+-      const resp = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code: text, refresh: true } })
++      const resp = await sdk.api.post('/plugins/subscription-core/actions/refresh_cover', { payload: { id, code: text } })
+       payload = resp.data
+     } else {
+-      payload = await fetch('/api/plugins/javdb/actions/video', {
++      payload = await fetch('/api/plugins/subscription-core/actions/refresh_cover', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ payload: { code: text, refresh: true } }),
++        body: JSON.stringify({ payload: { id, code: text } }),
+       }).then(r => r.json())
+     }
+-    const data = payload?.data || payload
+-    return imageCandidates(data?.cover_url, data?.thumb_url, data?.fanart_url, data?.previews, data?.preview_images)
++    return imageCandidates(payload?.image_candidates, payload?.cover_url, payload?.thumb_url, payload?.fanart_url)
+   } catch {
+     return []
+   }
+@@ -456,7 +457,7 @@ export async function mount(root, sdk = {}) {
+         card.querySelector('.sub-card__cover'),
+         imageCandidates(item.image_candidates, item.fanart_url, item.cover_url, item.thumb_url, item.image, best?.image_candidates, best?.fanart_url, best?.cover_url, best?.thumb_url, best?.image),
+         'NO IMAGE',
+-        () => loadJavdbImageCandidates(sdk, item.code || item.number),
++        () => refreshStoredImageCandidates(sdk, item),
+       )
+       const bHost = card.querySelector('.sub-card__badges')
+       itemBadges(item).forEach(x => bHost.appendChild(x))

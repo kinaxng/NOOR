@@ -1,0 +1,35 @@
+diff --git a/backend/tests/test_facefusion_upgrade.py b/backend/tests/test_facefusion_upgrade.py
+index 1a4515f..0e36425 100644
+--- a/backend/tests/test_facefusion_upgrade.py
++++ b/backend/tests/test_facefusion_upgrade.py
+@@ -5,8 +5,10 @@ from pathlib import Path
+ from app.api.settings_facefusion_upgrade import (
+     _apply_noor_facefusion_patch,
+     _replace_source_from_clone,
++    get_facefusion_upstream_manifest,
+     get_facefusion_runtime_info,
+     get_facefusion_version,
++    write_facefusion_upstream_manifest,
+ )
+ 
+ 
+@@ -79,3 +81,19 @@ def test_get_facefusion_runtime_info_includes_core_versions():
+     assert "numpy" in info["versions"]
+     assert isinstance(info["execution_providers"], list)
+     assert info["python_executable"]
++
++
++def test_facefusion_upstream_manifest_round_trip(tmp_path):
++    write_facefusion_upstream_manifest(
++        tmp_path,
++        revision="1234567890abcdef",
++        version="4.0.0",
++        updated_at="2026-06-30T12:00:00+08:00",
++    )
++
++    manifest = get_facefusion_upstream_manifest(tmp_path)
++    assert manifest["repo"] == "https://github.com/facefusion/facefusion.git"
++    assert manifest["revision"] == "1234567890abcdef"
++    assert manifest["short_revision"] == "1234567890ab"
++    assert manifest["version"] == "4.0.0"
++    assert manifest["updated_at"] == "2026-06-30T12:00:00+08:00"

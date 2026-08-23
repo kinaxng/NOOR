@@ -1,0 +1,68 @@
+diff --git a/frontend/src/views/settings/FaceFusionSettings.vue b/frontend/src/views/settings/FaceFusionSettings.vue
+index 8dd9c73..4fe3030 100644
+--- a/frontend/src/views/settings/FaceFusionSettings.vue
++++ b/frontend/src/views/settings/FaceFusionSettings.vue
+@@ -56,6 +56,9 @@ const nativeModelDir = ref('')
+ const resolvedFacefusionDir = ref('')
+ const facefusionSourceMode = ref('')
+ const facefusionVersion = ref('')
++const facefusionUpstreamRevision = ref('')
++const facefusionUpstreamShortRevision = ref('')
++const facefusionUpstreamUpdatedAt = ref('')
+ const facefusionRuntimeVersions = ref<Record<string, string | null>>({})
+ const facefusionExecutionProviders = ref<string[]>([])
+ const facefusionPythonExecutable = ref('')
+@@ -167,6 +170,9 @@ async function loadSettings() {
+     resolvedFacefusionDir.value = data.facefusion?.resolved_dir || ''
+     facefusionSourceMode.value = data.facefusion?.source_mode || ''
+     facefusionVersion.value = data.facefusion?.version || ''
++    facefusionUpstreamRevision.value = data.facefusion?.upstream_revision || ''
++    facefusionUpstreamShortRevision.value = data.facefusion?.upstream_short_revision || ''
++    facefusionUpstreamUpdatedAt.value = data.facefusion?.upstream_updated_at || ''
+     facefusionRuntimeVersions.value = data.facefusion?.runtime_versions || {}
+     facefusionExecutionProviders.value = data.facefusion?.execution_providers || []
+     facefusionPythonExecutable.value = data.facefusion?.python_executable || ''
+@@ -250,6 +256,9 @@ async function upgradeFaceFusion() {
+   try {
+     const resp = await api.post('/settings/facefusion/upgrade')
+     facefusionVersion.value = resp.data.version || ''
++    facefusionUpstreamRevision.value = resp.data.upstream_revision || ''
++    facefusionUpstreamShortRevision.value = (resp.data.upstream_revision || '').slice(0, 12)
++    facefusionUpstreamUpdatedAt.value = resp.data.upstream_updated_at || ''
+     toast.success(`FaceFusion 已升级到 ${resp.data.version || '未知版本'}`)
+     await loadSettings()
+   } catch (e: any) {
+@@ -407,6 +416,19 @@ async function saveDefaults() {
+             <input :value="facefusionUpstreamRepo" type="text" class="settings-input" readonly />
+           </FieldRow>
+ 
++          <FieldRow label="上游版本" description="最近一次通过 NOOR 升级记录的上游 commit">
++            <div class="facefusion-upstream-grid">
++              <div class="facefusion-version-item">
++                <span>Commit</span>
++                <strong :title="facefusionUpstreamRevision">{{ facefusionUpstreamShortRevision || facefusionUpstreamRevision || '未知' }}</strong>
++              </div>
++              <div class="facefusion-version-item">
++                <span>Updated</span>
++                <strong>{{ facefusionUpstreamUpdatedAt || '未知' }}</strong>
++              </div>
++            </div>
++          </FieldRow>
++
+           <FieldRow label="外部 FaceFusion 目录" description="留空使用 NOOR 内置源码；填写时目录下应存在 facefusion.py">
+             <input v-model="facefusionDir" type="text" placeholder="留空使用 NOOR 内置 FaceFusion" class="settings-input" />
+           </FieldRow>
+@@ -920,6 +942,13 @@ async function saveDefaults() {
+   width: 100%;
+ }
+ 
++.facefusion-upstream-grid {
++  display: grid;
++  grid-template-columns: minmax(8rem, 0.8fr) minmax(12rem, 1.2fr);
++  gap: 0.5rem;
++  width: 100%;
++}
++
+ .facefusion-version-item {
+   min-width: 0;
+   padding: 0.625rem 0.75rem;

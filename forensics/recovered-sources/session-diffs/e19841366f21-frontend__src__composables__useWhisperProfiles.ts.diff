@@ -1,0 +1,126 @@
+diff --git a/frontend/src/composables/useWhisperProfiles.ts b/frontend/src/composables/useWhisperProfiles.ts
+index a30685d..29ed9c0 100644
+--- a/frontend/src/composables/useWhisperProfiles.ts
++++ b/frontend/src/composables/useWhisperProfiles.ts
+@@ -1,7 +1,9 @@
+ export type WhisperModelBackend = 'chickenrice-zh' | 'anime-whisper' | 'large-v3'
+ export type WhisperStrategyMode = WhisperModelBackend
++export type WhisperRuntimeTier = 'gpu_standard' | 'gpu_low_vram' | 'cpu'
+ 
+ export type WhisperTranslationOverrides = {
++  runtime_tier?: string
+   vad_backend?: string
+   timing_refiner?: string
+   translate_enabled?: boolean
+@@ -14,6 +16,7 @@ export type WhisperTranslationOverrides = {
+ 
+ export type WhisperEditableDefaults = {
+   model_backend: WhisperModelBackend
++  runtime_tier: WhisperRuntimeTier
+   vad_backend: string
+   timing_refiner: string
+   translate_enabled: boolean
+@@ -30,6 +33,19 @@ export const WHISPER_MODEL_BACKENDS: WhisperModelBackend[] = [
+   'large-v3',
+ ]
+ 
++export const WHISPER_RUNTIME_TIERS: WhisperRuntimeTier[] = [
++  'gpu_standard',
++  'gpu_low_vram',
++  'cpu',
++]
++
++export function normalizeWhisperRuntimeTier(value?: string | null): WhisperRuntimeTier {
++  const normalized = String(value || '').trim().toLowerCase().replace('-', '_')
++  if (normalized === 'gpu_low_vram' || normalized === 'low_vram' || normalized === 'int8_float16') return 'gpu_low_vram'
++  if (normalized === 'cpu' || normalized === 'cpu_int8') return 'cpu'
++  return 'gpu_standard'
++}
++
+ export function normalizeWhisperModelBackend(value?: string | null): WhisperModelBackend {
+   const normalized = String(value || '').trim().toLowerCase()
+   if (normalized === 'anime' || normalized === 'anime-whisper') return 'anime-whisper'
+@@ -41,13 +57,15 @@ export function isDirectWhisperTranslationBackend(modelBackend?: string | null)
+   return normalizeWhisperModelBackend(modelBackend) === 'chickenrice-zh'
+ }
+ 
+-export function buildWhisperProfile(modelBackend: WhisperModelBackend = 'chickenrice-zh') {
++export function buildWhisperProfile(modelBackend: WhisperModelBackend = 'chickenrice-zh', runtimeTier: WhisperRuntimeTier = 'gpu_standard') {
+   const backend = normalizeWhisperModelBackend(modelBackend)
++  const runtime_tier = normalizeWhisperRuntimeTier(runtimeTier)
+   if (backend === 'anime-whisper') {
+     return {
+       strategy: 'chickenrice',
+       subtitle_profile: 'standard',
+       model_backend: 'anime-whisper',
++      runtime_tier,
+       whisper_task: 'transcribe',
+       model: 'anime-whisper',
+       pipeline_mode: 'anime',
+@@ -67,6 +85,7 @@ export function buildWhisperProfile(modelBackend: WhisperModelBackend = 'chicken
+       strategy: 'chickenrice',
+       subtitle_profile: 'standard',
+       model_backend: 'large-v3',
++      runtime_tier,
+       whisper_task: 'transcribe',
+       model: 'large-v3',
+       pipeline_mode: 'faster',
+@@ -85,6 +104,7 @@ export function buildWhisperProfile(modelBackend: WhisperModelBackend = 'chicken
+     strategy: 'chickenrice',
+     subtitle_profile: 'standard',
+     model_backend: 'chickenrice-zh',
++    runtime_tier,
+     whisper_task: 'translate',
+     model: 'chickenrice-zh',
+     pipeline_mode: 'faster',
+@@ -111,10 +131,11 @@ export function buildWhisperProfileWithTranslation(
+   modelBackend: WhisperModelBackend,
+   overrides: WhisperTranslationOverrides = {},
+ ) {
+-  const profile = buildWhisperProfile(modelBackend)
++  const profile = buildWhisperProfile(modelBackend, normalizeWhisperRuntimeTier(overrides.runtime_tier))
+   const directTranslate = profile.model_backend === 'chickenrice-zh'
+   return {
+     ...profile,
++    runtime_tier: normalizeWhisperRuntimeTier(overrides.runtime_tier || (profile as any).runtime_tier),
+     vad_backend: overrides.vad_backend || (profile as any).vad_backend || 'energy',
+     timing_refiner: overrides.timing_refiner || (profile as any).timing_refiner || 'none',
+     translate_to: directTranslate || overrides.translate_enabled == false ? '' : (overrides.translate_to || ''),
+@@ -129,6 +150,7 @@ export function resolveWhisperEditableDefaults(payload?: Record<string, any> | n
+   const whisper = payload || {}
+   return {
+     model_backend: normalizeWhisperModelBackend(whisper.model_backend || whisper.model || whisper.strategy),
++    runtime_tier: normalizeWhisperRuntimeTier(whisper.runtime_tier),
+     vad_backend: whisper.vad_backend || 'energy',
+     timing_refiner: whisper.timing_refiner || 'none',
+     translate_enabled: !!whisper.translate_to,
+@@ -140,6 +162,29 @@ export function resolveWhisperEditableDefaults(payload?: Record<string, any> | n
+   }
+ }
+ 
++export function getWhisperRuntimeTierMeta(runtimeTier: WhisperRuntimeTier) {
++  const tier = normalizeWhisperRuntimeTier(runtimeTier)
++  if (tier === 'gpu_low_vram') {
++    return {
++      titleKey: 'settings.whisper.runtimeTier.gpuLowVram.title',
++      descKey: 'settings.whisper.runtimeTier.gpuLowVram.desc',
++      badgeKey: 'settings.whisper.runtimeTier.gpuLowVram.badge',
++    }
++  }
++  if (tier === 'cpu') {
++    return {
++      titleKey: 'settings.whisper.runtimeTier.cpu.title',
++      descKey: 'settings.whisper.runtimeTier.cpu.desc',
++      badgeKey: 'settings.whisper.runtimeTier.cpu.badge',
++    }
++  }
++  return {
++    titleKey: 'settings.whisper.runtimeTier.gpuStandard.title',
++    descKey: 'settings.whisper.runtimeTier.gpuStandard.desc',
++    badgeKey: 'settings.whisper.runtimeTier.gpuStandard.badge',
++  }
++}
++
+ export function getWhisperModelBackendMeta(modelBackend: WhisperModelBackend) {
+   const backend = normalizeWhisperModelBackend(modelBackend)
+   if (backend === 'anime-whisper') {

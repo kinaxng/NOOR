@@ -1,0 +1,76 @@
+diff --git a/frontend/src/views/ActorDetailView.vue b/frontend/src/views/ActorDetailView.vue
+index 88e026b..1908e61 100644
+--- a/frontend/src/views/ActorDetailView.vue
++++ b/frontend/src/views/ActorDetailView.vue
+@@ -39,6 +39,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
+ const page = ref(1)
+ const pageSize = 48
+ const total = ref(0)
++let actorLoadSeq = 0
+ const form = ref({
+   name: '',
+   sort_name: '',
+@@ -131,6 +132,7 @@ function birthdayLabel() {
+ 
+ async function loadActor() {
+   if (!actorId.value) return
++  const seq = ++actorLoadSeq
+   loading.value = true
+   try {
+     const resp = await api.get(`/media-library/actor/${encodeURIComponent(actorId.value)}`, {
+@@ -139,6 +141,7 @@ async function loadActor() {
+     actor.value = resp.data.actor || null
+     syncForm(actor.value)
+     editMode.value = false
++    void enrichActorFromTmdb(seq)
+   } catch (error: any) {
+     actor.value = null
+     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.detailLoadFailed'))
+@@ -147,6 +150,47 @@ async function loadActor() {
+   }
+ }
+ 
++function mergeMissingActorMetadata(current: MediaActor, proposal: any): MediaActor {
++  const nextExternalUrls = {
++    ...(proposal?.external_urls || {}),
++    ...(current.external_urls || {}),
++  }
++  const nextProviderIds = {
++    ...(current.provider_ids || {}),
++    ...(proposal?.provider_ids || {}),
++  }
++  return {
++    ...current,
++    tmdb_id: current.tmdb_id || proposal?.tmdb_id,
++    imdb_id: current.imdb_id || proposal?.imdb_id,
++    provider_ids: nextProviderIds,
++    external_urls: nextExternalUrls,
++    birthday: current.birthday || proposal?.birthday,
++    deathday: current.deathday || proposal?.deathday,
++    place_of_birth: current.place_of_birth || proposal?.place_of_birth,
++    gender: current.gender || proposal?.gender,
++    known_for_department: current.known_for_department || proposal?.known_for_department,
++    popularity: current.popularity ?? proposal?.popularity,
++    homepage: current.homepage || proposal?.homepage || nextExternalUrls.homepage,
++    overview: current.overview || proposal?.overview,
++  }
++}
++
++async function enrichActorFromTmdb(seq: number) {
++  if (!actorId.value || !actor.value || editMode.value) return
++  if (!actor.value.tmdb_id && !actor.value.imdb_id) return
++  try {
++    const resp = await api.post(`/media-library/actor/${encodeURIComponent(actorId.value)}/metadata/tmdb-preview`, null, {
++      params: { lang: currentLang.value },
++    })
++    if (seq !== actorLoadSeq || !actor.value || editMode.value) return
++    actor.value = mergeMissingActorMetadata(actor.value, resp.data?.proposal || {})
++    syncForm(actor.value)
++  } catch {
++    // TMDB enrichment is best-effort; the saved Emby/NOOR profile remains usable.
++  }
++}
++
+ async function loadMovies() {
+   if (!actorId.value) return
+   moviesLoading.value = true

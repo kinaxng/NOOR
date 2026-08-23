@@ -1,0 +1,42 @@
+diff --git a/backend/tests/test_whisper_preprocess.py b/backend/tests/test_whisper_preprocess.py
+index 6a164da..f1d17ee 100644
+--- a/backend/tests/test_whisper_preprocess.py
++++ b/backend/tests/test_whisper_preprocess.py
+@@ -1,8 +1,36 @@
++import os
+ from pathlib import Path
+ 
+ import pytest
+ 
+-from app.pipeline.whisper.preprocess import AudioPreprocessError, preprocess_audio
++from app.pipeline.whisper.preprocess import AudioPreprocessError, _apply_audio_separator_runtime_env, preprocess_audio
++
++
++def test_audio_separator_runtime_env_uses_dedicated_model_dir(monkeypatch, tmp_path: Path):
++    model_dir = tmp_path / "models" / "whisper" / "audio-separator"
++    cache_dir = tmp_path / "runtime" / "whisper" / "cache"
++    temp_dir = tmp_path / "runtime" / "whisper" / "temp"
++    keys = ("AUDIO_SEPARATOR_MODEL_DIR", "HF_HOME", "HF_HUB_CACHE", "TORCH_HOME", "XDG_CACHE_HOME", "TMPDIR")
++    original_env = {key: os.environ.get(key) for key in keys}
++
++    try:
++        for key in keys:
++            monkeypatch.delenv(key, raising=False)
++
++        _apply_audio_separator_runtime_env(model_dir=model_dir, cache_dir=cache_dir, temp_dir=temp_dir)
++
++        assert os.environ["AUDIO_SEPARATOR_MODEL_DIR"] == str(model_dir)
++        assert os.environ["HF_HOME"] == str(model_dir)
++        assert os.environ["HF_HUB_CACHE"] == str(model_dir / "hub")
++        assert os.environ["TORCH_HOME"] == str(cache_dir / "torch")
++        assert os.environ["XDG_CACHE_HOME"] == str(cache_dir)
++        assert os.environ["TMPDIR"] == str(temp_dir)
++    finally:
++        for key, value in original_env.items():
++            if value is None:
++                os.environ.pop(key, None)
++            else:
++                os.environ[key] = value
+ 
+ 
+ def test_preprocess_audio_none_passthrough(tmp_path: Path):

@@ -1,0 +1,22 @@
+diff --git a/backend/app/pipeline/whisper/orchestrator.py b/backend/app/pipeline/whisper/orchestrator.py
+index 484a647..89e1c39 100644
+--- a/backend/app/pipeline/whisper/orchestrator.py
++++ b/backend/app/pipeline/whisper/orchestrator.py
+@@ -434,7 +434,16 @@ class WhisperPipeline:
+             elif mode == PipelineMode.TRANSFORMERS:
+                 repo_id = "kotoba-tech/kotoba-whisper-v2.2"
+             elif mode == PipelineMode.FASTER:
+-                repo_id = "Systran/faster-whisper-tiny"
++                repo_id_map = {
++                    "chickenrice-zh": "chickenrice0721/whisper-large-v2-translate-zh-v0.2-st-ct2",
++                    "large-v3": "Systran/faster-whisper-large-v3",
++                    "large-v3-turbo": "Systran/faster-whisper-large-v3-turbo",
++                    "tiny": "Systran/faster-whisper-tiny",
++                    "base": "Systran/faster-whisper-base",
++                    "small": "Systran/faster-whisper-small",
++                    "medium": "Systran/faster-whisper-medium",
++                }
++                repo_id = repo_id_map.get(self.config.model.value, f"Systran/faster-whisper-{self.config.model.value}")
+             elif mode == PipelineMode.BALANCED:
+                 repo_id = "Systran/faster-whisper-large-v3"
+             elif mode == PipelineMode.QWEN:

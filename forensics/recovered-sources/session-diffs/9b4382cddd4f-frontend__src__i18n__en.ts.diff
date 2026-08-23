@@ -1,0 +1,21 @@
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index 6b377ea..e1bbcf3 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -28,9 +28,16 @@ export const en: Record<string, string> = {
+   'nav.library': 'Library',
+   'nav.jobs': 'Jobs',
+   'nav.history': 'History',
++  'nav.files': 'Files',
+   'nav.hardlinks': 'Hardlinks',
+   'nav.settings': 'Settings',
+ 
++  // Files
++  'files.title': 'Files',
++  'files.tab.hardlinks': 'Hardlinks',
++  'files.tab.actors': 'Actor Management',
++  'files.actors.empty': 'Actor management is not connected yet',
++
+   // Toolbar
+   'toolbar.blurOn': 'Enable cover blur (H)',
+   'toolbar.blurOff': 'Disable cover blur (H)',

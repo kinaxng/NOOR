@@ -1,0 +1,349 @@
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 223e5db..dc4d1b8 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { ref, computed, onMounted, watch } from 'vue'
++import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+ import { useRoute } from 'vue-router'
+ import { RouterView } from 'vue-router'
+ import BaseToast from './components/noor/BaseToast.vue'
+@@ -7,14 +7,16 @@ import ConfirmDialog from './components/noor/ConfirmDialog.vue'
+ import BaseIcon from './components/noor/BaseIcon.vue'
+ import AppSidebar from './components/noor/AppSidebar.vue'
+ import SystemLogPanel from './components/noor/SystemLogPanel.vue'
++import GlobalSearch from './components/noor/GlobalSearch.vue'
+ import { useBlurCover } from './composables/useBlurCover'
+ import { useI18n } from './composables/useI18n'
+ import { useJobsStore } from './stores/jobs'
+ import { useSystemLog } from './composables/useSystemLog'
+ import { usePlugins } from './composables/usePlugins'
++import api from './api'
+ 
+ const route = useRoute()
+-const { blurEnabled, toggleBlur } = useBlurCover()
++const { blurEnabled, globalBlurEnabled, browserBlurEnabled, toggleBrowserBlur } = useBlurCover()
+ const { currentLang, switchLang, t, i18nVersion, _currentLang, _initialized } = useI18n()
+ const jobsStore = useJobsStore()
+ const { show: showSystemLog, toggle: toggleSystemLog } = useSystemLog()
+@@ -22,6 +24,7 @@ const { enabledPagePlugins, loadPlugins } = usePlugins()
+ 
+ const sidebarCollapsed = ref(false)
+ const mobileSidebarOpen = ref(false)
++const globalSearchOpen = ref(false)
+ 
+ // Computed that always returns true but establishes reactive tracking of i18nVersion
+ // This forces Vue to re-render App.vue template when language changes
+@@ -60,6 +63,7 @@ const activeNavName = computed(() => {
+     const plugin = enabledPagePlugins.value.find(p => route.path === p.route || route.path.startsWith(`${p.route}/`))
+     return plugin?.contributions?.sidebar?.label || plugin?.name || '插件'
+   }
++  if (route.path.startsWith('/search/resources')) return '资源搜索'
+   if (route.path === '/plugins') return '插件'
+   return navItems.value.find(n => route.path === n.path || route.path.startsWith(`${n.path}/`))?.name || t('nav.settings')
+ })
+@@ -69,7 +73,8 @@ const blurTitle = computed(() => {
+   void _initialized.value
+   void currentLang.value
+   void i18nVersion.value
+-  return blurEnabled.value ? t('toolbar.blurOff') : t('toolbar.blurOn')
++  if (!globalBlurEnabled.value) return t('toolbar.blurUnavailable')
++  return browserBlurEnabled.value ? t('toolbar.blurOff') : t('toolbar.blurOn')
+ })
+ const langTitle = computed(() => {
+   void _currentLang.value
+@@ -90,12 +95,172 @@ function toggleSidebar() {
+   sidebarCollapsed.value = !sidebarCollapsed.value
+ }
+ 
++function handleGlobalKeydown(event: KeyboardEvent) {
++  const target = event.target as HTMLElement | null
++  const tagName = target?.tagName?.toLowerCase()
++  const isEditable = !!target?.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select'
++  if (isEditable) return
++
++  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
++    event.preventDefault()
++    globalSearchOpen.value = true
++    return
++  }
++
++  if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'h') {
++    event.preventDefault()
++    toggleBrowserBlur()
++  }
++}
++
++function reportClientDiagnostic(level: 'info' | 'warning' | 'error', message: string, stack?: string) {
++  if (!showSystemLog.value) return
++  const text = String(message || '').trim()
++  if (!text) return
++  if (isLifecycleCancelDiagnostic(text) || (stack && isLifecycleCancelDiagnostic(stack))) return
++  void api.post('/system/logs/client', {
++    level,
++    source: 'frontend',
++    message: text,
++    stack: stack ? String(stack).slice(0, 8000) : undefined,
++    route: window.location.pathname + window.location.search,
++  }).catch(() => {})
++}
++
++function isLifecycleCancelDiagnostic(value: unknown) {
++  const text = String(value || '').toLowerCase()
++  if (!text) return false
++  return [
++    'aborterror',
++    'err_canceled',
++    'operation was aborted',
++    'request aborted',
++    'request canceled',
++    'request cancelled',
++    'is unmounted',
++    'plugin unmounted',
++    'cancelederror',
++  ].some(token => text.includes(token))
++}
++
++function shouldLogMainApi(url?: string, level: 'info' | 'warning' | 'error' = 'info') {
++  const value = String(url || '').toLowerCase()
++  if (!value) return false
++  if (value.includes('/system/logs')) return false
++  if (value.includes('/system/metrics')) return false
++  if (value.includes('/plugins/')) return false
++  if (value.includes('/events')) return false
++  if (value.includes('/jobs') && value.includes('/logs')) return false
++  if (level !== 'info') return true
++  return false
++}
++
++function installMainApiDiagnostics() {
++  const requestId = api.interceptors.request.use((config: any) => {
++    config.metadata = { startedAt: performance.now() }
++    return config
++  })
++  const responseId = api.interceptors.response.use(
++    (response: any) => {
++      const startedAt = response.config?.metadata?.startedAt
++      const cost = typeof startedAt === 'number' ? Math.round(performance.now() - startedAt) : 0
++      const url = response.config?.url || ''
++      if (showSystemLog.value && cost >= 1500 && shouldLogMainApi(url, 'warning')) {
++        reportClientDiagnostic('warning', `[main-api] slow ${String(response.config?.method || 'GET').toUpperCase()} ${url} status=${response.status} cost=${cost}ms`)
++      }
++      return response
++    },
++    (error: any) => {
++      const config = error?.config || {}
++      const startedAt = config?.metadata?.startedAt
++      const cost = typeof startedAt === 'number' ? Math.round(performance.now() - startedAt) : 0
++      const url = config?.url || ''
++      const message = error?.response?.data?.detail || error.message || 'request failed'
++      if (showSystemLog.value && shouldLogMainApi(url, 'error') && !isLifecycleCancelDiagnostic(message) && !isLifecycleCancelDiagnostic(error?.code) && !isLifecycleCancelDiagnostic(error?.name)) {
++        const status = error?.response?.status ? ` status=${error.response.status}` : ''
++        reportClientDiagnostic('error', `[main-api] ${String(config?.method || 'GET').toUpperCase()} ${url} failed${status} cost=${cost}ms error=${message}`)
++      }
++      return Promise.reject(error)
++    },
++  )
++  return () => {
++    api.interceptors.request.eject(requestId)
++    api.interceptors.response.eject(responseId)
++  }
++}
++
++let uninstallMainApiDiagnostics: null | (() => void) = null
++
++function normalizeDiagnosticMessage(value: unknown) {
++  if (value instanceof Error) return { message: value.message, stack: value.stack }
++  if (typeof value === 'string') return { message: value }
++  try {
++    return { message: JSON.stringify(value) }
++  } catch {
++    return { message: String(value) }
++  }
++}
++
++function handleWindowError(event: ErrorEvent) {
++  if (isLifecycleCancelDiagnostic(event.message) || isLifecycleCancelDiagnostic(event.error?.message) || isLifecycleCancelDiagnostic(event.error?.name)) return
++  reportClientDiagnostic('error', event.message || 'Window error', event.error?.stack || `${event.filename}:${event.lineno}:${event.colno}`)
++}
++
++function handleUnhandledRejection(event: PromiseRejectionEvent) {
++  const detail = normalizeDiagnosticMessage(event.reason)
++  if (isLifecycleCancelDiagnostic(detail.message) || isLifecycleCancelDiagnostic(detail.stack) || isLifecycleCancelDiagnostic((event.reason as any)?.name) || isLifecycleCancelDiagnostic((event.reason as any)?.code)) return
++  reportClientDiagnostic('error', `Unhandled promise rejection: ${detail.message}`, detail.stack)
++}
++
++const originalConsoleWarn = console.warn.bind(console)
++const originalConsoleError = console.error.bind(console)
++
++function installConsoleDiagnostics() {
++  console.warn = (...args: unknown[]) => {
++    originalConsoleWarn(...args)
++    const message = args.map(arg => normalizeDiagnosticMessage(arg).message).join(' ')
++    if (isLifecycleCancelDiagnostic(message)) return
++    reportClientDiagnostic('warning', `[console.warn] ${message}`)
++  }
++  console.error = (...args: unknown[]) => {
++    originalConsoleError(...args)
++    const normalized = args.map(arg => normalizeDiagnosticMessage(arg))
++    const message = normalized.map(item => item.message).join(' ')
++    const stack = normalized.find(item => item.stack)?.stack
++    if (isLifecycleCancelDiagnostic(message) || isLifecycleCancelDiagnostic(stack)) return
++    reportClientDiagnostic('error', `[console.error] ${message}`, stack)
++  }
++}
++
++function uninstallConsoleDiagnostics() {
++  console.warn = originalConsoleWarn
++  console.error = originalConsoleError
++}
++
+ watch(blurEnabled, (enabled) => {
+   document.body.classList.toggle('noor-blur-images', enabled)
+ }, { immediate: true })
+ 
++watch(() => route.fullPath, (to, from) => {
++  if (!from || to === from) return
++  reportClientDiagnostic('info', `[main-route] ${from} -> ${to}`)
++})
++
++onUnmounted(() => {
++  window.removeEventListener('keydown', handleGlobalKeydown)
++  window.removeEventListener('error', handleWindowError)
++  window.removeEventListener('unhandledrejection', handleUnhandledRejection)
++  uninstallMainApiDiagnostics?.()
++  uninstallConsoleDiagnostics()
++})
++
+ onMounted(() => {
+   loadPlugins()
++  window.addEventListener('keydown', handleGlobalKeydown)
++  window.addEventListener('error', handleWindowError)
++  window.addEventListener('unhandledrejection', handleUnhandledRejection)
++  installConsoleDiagnostics()
++  uninstallMainApiDiagnostics = installMainApiDiagnostics()
+   // Don't auto-poll; only poll when user opens the log panel
+ })
+ </script>
+@@ -120,8 +285,11 @@ onMounted(() => {
+ 
+     <!-- Main Content Area -->
+     <main
+-      class="transition-all duration-300"
+-      :class="sidebarCollapsed ? 'lg:ml-[120px]' : 'lg:ml-[274px]'"
++      class="app-main transition-all duration-300"
++      :class="[
++        sidebarCollapsed ? 'lg:ml-[76px]' : 'lg:ml-[274px]',
++        showSystemLog ? 'app-main--with-log' : '',
++      ]"
+     >
+       <!-- Top Navbar -->
+       <header
+@@ -145,14 +313,25 @@ onMounted(() => {
+ 
+         <!-- Right: Controls -->
+         <div class="flex items-center gap-2 md:gap-3">
++          <!-- Global Search -->
++          <button
++            @click="globalSearchOpen = true"
++            class="navbar-search-trigger"
++            title="全局搜索 Ctrl/⌘ K"
++          >
++            <BaseIcon name="search" class="w-4 h-4" />
++            <span class="navbar-search-trigger__text">搜索</span>
++            <span class="navbar-search-trigger__kbd">⌘K</span>
++          </button>
++
+           <!-- Blur toggle -->
+           <button
+-            @click="toggleBlur"
++            @click="toggleBrowserBlur"
+             class="navbar-icon-btn"
+-            :class="{ 'navbar-icon-btn--active': blurEnabled }"
++            :class="{ 'navbar-icon-btn--active': browserBlurEnabled }"
+             :title="blurTitle"
+           >
+-            <BaseIcon :name="blurEnabled ? 'eye-off' : 'eye'" class="w-4 h-4" />
++            <BaseIcon :name="browserBlurEnabled ? 'eye-off' : 'eye'" class="w-4 h-4" />
+           </button>
+ 
+           <!-- Language toggle -->
+@@ -197,10 +376,23 @@ onMounted(() => {
+ 
+     <!-- System Log Panel -->
+     <SystemLogPanel />
++
++    <!-- Global Search -->
++    <GlobalSearch :open="globalSearchOpen" @close="globalSearchOpen = false" />
+   </div>
+ </template>
+ 
+ <style scoped>
++.app-main {
++  min-width: 0;
++}
++
++@media (min-width: 1024px) {
++  .app-main--with-log {
++    margin-right: 380px;
++  }
++}
++
+ .navbar-search {
+   display: flex;
+   align-items: center;
+@@ -242,6 +434,53 @@ onMounted(() => {
+   color: rgba(255, 255, 255, 0.4);
+ }
+ 
++.navbar-search-trigger {
++  width: 2.375rem;
++  height: 2.375rem;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: .5rem;
++  padding: 0;
++  border: 1px solid rgba(255,255,255,.08);
++  border-radius: var(--radius-md);
++  background: rgba(255,255,255,.05);
++  color: rgba(255,255,255,.52);
++  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
++}
++.navbar-search-trigger:hover {
++  background: rgba(255,255,255,.09);
++  color: rgba(255,255,255,.82);
++  border-color: rgba(255,255,255,.12);
++}
++.navbar-search-trigger__text {
++  flex: 1;
++  text-align: left;
++  font-size: .78rem;
++  display: none;
++}
++.navbar-search-trigger__kbd {
++  display: none;
++  border: 1px solid rgba(255,255,255,.08);
++  border-radius: .42rem;
++  padding: .08rem .32rem;
++  color: rgba(255,255,255,.34);
++  font-size: .62rem;
++}
++@media (min-width: 768px) {
++  .navbar-search-trigger {
++    width: auto;
++    min-width: 10rem;
++    justify-content: flex-start;
++    padding: 0 .72rem;
++  }
++
++  .navbar-search-trigger__text,
++  .navbar-search-trigger__kbd {
++    display: inline-flex;
++  }
++}
++
+ .navbar-icon-btn {
+   position: relative;
+   width: 2.375rem;

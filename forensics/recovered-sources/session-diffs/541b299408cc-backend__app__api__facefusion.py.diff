@@ -1,0 +1,258 @@
+diff --git a/backend/app/api/facefusion.py b/backend/app/api/facefusion.py
+index 95f6507..53f154e 100644
+--- a/backend/app/api/facefusion.py
++++ b/backend/app/api/facefusion.py
+@@ -1,7 +1,13 @@
+ from __future__ import annotations
+ 
++import ast
++import os
++import threading
++from contextlib import suppress
+ from pathlib import Path
+ from typing import Any
++from urllib.error import HTTPError, URLError
++from urllib.request import Request, urlopen
+ from uuid import uuid4
+ 
+ import cv2
+@@ -18,7 +24,9 @@ router = APIRouter(prefix="/api/facefusion", tags=["facefusion"])
+ 
+ FACEFUSION_SOURCE_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+ FACEFUSION_DEEP_SWAPPER_MODEL_EXTENSIONS = {".dfm", ".onnx", ".pth", ".pt"}
+-FACEFUSION_DEFAULT_DEEP_SWAPPER_MODELS = ["iperov/elon_musk_224"]
++FACEFUSION_DEEP_SWAPPER_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
++_deep_swapper_download_lock = threading.Lock()
++_deep_swapper_downloads: dict[str, dict[str, Any]] = {}
+ 
+ 
+ class FaceFusionPreviewRequest(BaseModel):
+@@ -35,6 +43,10 @@ class FaceFusionPreviewMetadataRequest(BaseModel):
+     input_path: str
+ 
+ 
++class FaceFusionDeepSwapperDownloadRequest(BaseModel):
++    model_id: str
++
++
+ def _preview_root() -> Path:
+     cache_dir = get_settings().facefusion_cache_dir
+     if cache_dir:
+@@ -54,6 +66,139 @@ def _deep_swapper_custom_root() -> Path:
+     return source.source_dir / ".assets" / "models" / "custom"
+ 
+ 
++def _deep_swapper_choices_path() -> Path:
++    source = resolve_facefusion_source(get_settings().facefusion_dir)
++    return source.source_dir / "facefusion" / "processors" / "modules" / "deep_swapper" / "choices.py"
++
++
++def _known_deep_swapper_model_ids() -> list[str]:
++    choices_path = _deep_swapper_choices_path()
++    try:
++        tree = ast.parse(choices_path.read_text(encoding="utf-8"))
++    except OSError as exc:
++        raise RuntimeError(f"无法读取 Deep Swapper 模型列表: {choices_path}") from exc
++
++    for node in tree.body:
++        if not isinstance(node, ast.Assign):
++            continue
++        if not any(isinstance(target, ast.Name) and target.id == "deep_swapper_models" for target in node.targets):
++            continue
++        try:
++            values = ast.literal_eval(node.value)
++        except (ValueError, SyntaxError) as exc:
++            raise RuntimeError("无法解析 Deep Swapper 模型列表") from exc
++        return [str(item) for item in values if isinstance(item, str) and "/" in item]
++    return []
++
++
++def _deep_swapper_builtin_paths(model_id: str) -> tuple[Path, Path]:
++    scope, name = _split_builtin_model_id(model_id)
++    source = resolve_facefusion_source(get_settings().facefusion_dir)
++    model_root = source.source_dir / ".assets" / "models" / scope
++    return model_root / f"{name}.dfm", model_root / f"{name}.hash"
++
++
++def _split_builtin_model_id(model_id: str) -> tuple[str, str]:
++    parts = [part.strip() for part in model_id.split("/", 1)]
++    if len(parts) != 2 or not parts[0] or not parts[1] or parts[0] == "custom":
++        raise HTTPException(status_code=400, detail="非法 Deep 模型 ID")
++    return parts[0], parts[1]
++
++
++def _deep_swapper_download_status(model_id: str) -> dict[str, Any]:
++    with _deep_swapper_download_lock:
++        return dict(_deep_swapper_downloads.get(model_id) or {})
++
++
++def _set_deep_swapper_download_status(model_id: str, **updates: Any) -> None:
++    with _deep_swapper_download_lock:
++        current = dict(_deep_swapper_downloads.get(model_id) or {})
++        current.update(updates)
++        _deep_swapper_downloads[model_id] = current
++
++
++def _deep_swapper_download_urls(model_id: str, suffix: str) -> list[str]:
++    scope, name = _split_builtin_model_id(model_id)
++    repo = f"facefusion/deepfacelive-models-{scope}"
++    filename = f"{name}{suffix}"
++    endpoints: list[str] = []
++    settings = get_settings()
++    if settings.hf_mirror:
++        endpoints.append(settings.hf_mirror.rstrip("/"))
++    if os.environ.get("HF_ENDPOINT"):
++        endpoints.append(os.environ["HF_ENDPOINT"].rstrip("/"))
++    endpoints.extend(["https://hf-mirror.com", "https://huggingface.co"])
++
++    urls: list[str] = []
++    for endpoint in endpoints:
++        url = f"{endpoint}/{repo}/resolve/main/{filename}"
++        if url not in urls:
++            urls.append(url)
++    return urls
++
++
++def _download_file_with_progress(model_id: str, urls: list[str], target_path: Path, progress_start: int, progress_end: int) -> None:
++    target_path.parent.mkdir(parents=True, exist_ok=True)
++    temp_path = target_path.with_suffix(f"{target_path.suffix}.part")
++    token = os.environ.get("HF_TOKEN")
++    last_error = ""
++
++    for url in urls:
++        try:
++            headers = {"User-Agent": "NOOR FaceFusion Model Downloader"}
++            if token:
++                headers["Authorization"] = f"Bearer {token}"
++            request = Request(url, headers=headers)
++            with urlopen(request, timeout=30) as response, temp_path.open("wb") as handle:
++                total = int(response.headers.get("Content-Length") or 0)
++                downloaded = 0
++                while True:
++                    chunk = response.read(FACEFUSION_DEEP_SWAPPER_DOWNLOAD_CHUNK_SIZE)
++                    if not chunk:
++                        break
++                    handle.write(chunk)
++                    downloaded += len(chunk)
++                    if total:
++                        progress = progress_start + int((progress_end - progress_start) * min(downloaded / total, 1))
++                        _set_deep_swapper_download_status(
++                            model_id,
++                            status="running",
++                            progress=progress,
++                            message=f"正在下载 {target_path.name} · {downloaded / 1024 / 1024:.1f}/{total / 1024 / 1024:.1f} MB",
++                        )
++            temp_path.replace(target_path)
++            return
++        except (HTTPError, URLError, TimeoutError, OSError) as exc:
++            last_error = str(exc)
++            with suppress(FileNotFoundError):
++                temp_path.unlink()
++            continue
++
++    raise RuntimeError(last_error or "下载失败")
++
++
++def _download_deep_swapper_model(model_id: str) -> None:
++    model_path, hash_path = _deep_swapper_builtin_paths(model_id)
++    try:
++        settings = get_settings()
++        settings.apply_network_env()
++        _set_deep_swapper_download_status(model_id, status="running", progress=2, message="准备下载 Deep 模型")
++        _download_file_with_progress(model_id, _deep_swapper_download_urls(model_id, ".dfm"), model_path, 5, 92)
++        with suppress(Exception):
++            _set_deep_swapper_download_status(model_id, status="running", progress=94, message="正在下载 hash")
++            _download_file_with_progress(model_id, _deep_swapper_download_urls(model_id, ".hash"), hash_path, 94, 98)
++        stat = model_path.stat()
++        _set_deep_swapper_download_status(
++            model_id,
++            status="completed",
++            progress=100,
++            message="下载完成",
++            size=stat.st_size,
++        )
++    except Exception as exc:
++        _set_deep_swapper_download_status(model_id, status="failed", progress=0, message=str(exc))
++
++
+ def _safe_model_stem(filename: str) -> str:
+     stem = Path(filename or "model").stem.strip()
+     safe = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in stem)
+@@ -97,6 +242,31 @@ def _deep_swapper_model_payload(path: Path) -> dict[str, Any]:
+         "source": "custom",
+         "size": stat.st_size,
+         "updated_at": stat.st_mtime,
++        "downloaded": True,
++        "downloading": False,
++        "progress": 100,
++    }
++
++
++def _deep_swapper_builtin_payload(model_id: str) -> dict[str, Any]:
++    model_path, hash_path = _deep_swapper_builtin_paths(model_id)
++    downloaded = model_path.is_file() and model_path.stat().st_size > 0
++    status = _deep_swapper_download_status(model_id)
++    size = model_path.stat().st_size if downloaded else status.get("size")
++    return {
++        "id": model_id,
++        "name": model_id,
++        "filename": model_path.name,
++        "path": str(model_path) if downloaded else "",
++        "hash_path": str(hash_path) if hash_path.exists() else "",
++        "source": "known",
++        "size": size,
++        "updated_at": model_path.stat().st_mtime if downloaded else None,
++        "downloaded": downloaded,
++        "downloading": status.get("status") == "running",
++        "download_status": status.get("status") or ("completed" if downloaded else "missing"),
++        "progress": 100 if downloaded else int(status.get("progress") or 0),
++        "message": status.get("message") or ("已下载" if downloaded else "未下载"),
+     }
+ 
+ 
+@@ -109,24 +279,32 @@ async def list_facefusion_deep_swapper_models():
+         for path in sorted(custom_root.iterdir(), key=lambda item: item.name.lower())
+         if path.is_file() and path.suffix.lower() in FACEFUSION_DEEP_SWAPPER_MODEL_EXTENSIONS
+     ]
+-    builtin_models = [
+-        {
+-            "id": model_id,
+-            "name": model_id,
+-            "filename": "",
+-            "path": "",
+-            "source": "builtin",
+-            "size": None,
+-            "updated_at": None,
+-        }
+-        for model_id in FACEFUSION_DEFAULT_DEEP_SWAPPER_MODELS
+-    ]
++    known_models = [_deep_swapper_builtin_payload(model_id) for model_id in _known_deep_swapper_model_ids()]
+     return {
+         "success": True,
+-        "models": [*custom_models, *builtin_models],
++        "models": [*custom_models, *known_models],
+     }
+ 
+ 
++@router.post("/deep-swapper-models/download")
++async def download_facefusion_deep_swapper_model(req: FaceFusionDeepSwapperDownloadRequest):
++    model_id = (req.model_id or "").strip()
++    if model_id not in set(_known_deep_swapper_model_ids()):
++        raise HTTPException(status_code=404, detail="Deep 模型不存在")
++    model_path, _ = _deep_swapper_builtin_paths(model_id)
++    if model_path.is_file() and model_path.stat().st_size > 0:
++        _set_deep_swapper_download_status(model_id, status="completed", progress=100, message="已下载", size=model_path.stat().st_size)
++        return {"success": True, "message": "模型已存在", "model": _deep_swapper_builtin_payload(model_id)}
++
++    status = _deep_swapper_download_status(model_id)
++    if status.get("status") == "running":
++        return {"success": True, "message": "模型下载已在运行", "model": _deep_swapper_builtin_payload(model_id)}
++
++    _set_deep_swapper_download_status(model_id, status="running", progress=0, message="等待下载")
++    threading.Thread(target=_download_deep_swapper_model, args=(model_id,), daemon=True).start()
++    return {"success": True, "message": "模型下载已开始", "model": _deep_swapper_builtin_payload(model_id)}
++
++
+ @router.post("/deep-swapper-models")
+ async def upload_facefusion_deep_swapper_model(file: UploadFile = File(...)):
+     original_name = Path(file.filename or "model").name

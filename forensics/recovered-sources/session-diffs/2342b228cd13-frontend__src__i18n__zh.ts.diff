@@ -1,0 +1,13 @@
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index cd602fe..a8f7d39 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -540,7 +540,7 @@ export const zh: Record<string, string> = {
+   'settings.storage.databasePath': '数据库文件',
+   'settings.storage.databasePathHint': '当前 SQLite 数据库位置；默认跟随 NOOR 数据目录，只读显示',
+   'settings.storage.facefusionModelDir': 'FaceFusion 模型目录',
+-  'settings.storage.facefusionModelDirHint': '预留给 FaceFusion 模型迁移；当前宿主机 FF 仍优先使用自身 .assets/models',
++  'settings.storage.facefusionModelDirHint': 'NOOR 内置 FaceFusion 的模型目录；运行时会映射到源码 .assets/models',
+   'settings.storage.whisperCacheDir': 'Whisper 缓存目录',
+   'settings.storage.whisperTempDir': 'Whisper 临时目录',
+   'settings.storage.ladaCacheDir': 'LADA 缓存目录',

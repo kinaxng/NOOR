@@ -1,0 +1,130 @@
+diff --git a/backend/app/api/endpoints/media_library.py b/backend/app/api/endpoints/media_library.py
+index 8036c68..4913fe4 100644
+--- a/backend/app/api/endpoints/media_library.py
++++ b/backend/app/api/endpoints/media_library.py
+@@ -60,6 +60,8 @@ from app.api.endpoints.media_library_hardlinks import (
+     scan_single_group_impl,
+ )
+ 
++_ACTOR_TMDB_BACKFILL_PROGRESS: dict[str, dict[str, Any]] = {}
++
+ router = APIRouter(prefix="/api/media-library", tags=["media-library"])
+ 
+ _items_cache: dict[str, tuple[list[dict], float]] = {}
+@@ -123,6 +125,7 @@ class ActorTmdbBackfillRequest(BaseModel):
+     actor_ids: list[str] | None = None
+     only_high_confidence: bool = True
+     dry_run: bool = False
++    progress_key: str | None = None
+ 
+ 
+ class ActorProfileUpdateRequest(BaseModel):
+@@ -2253,26 +2256,63 @@ async def _apply_actor_tmdb_backfill(
+     allowed_ids = {str(actor_id) for actor_id in (req.actor_ids or []) if str(actor_id).strip()}
+     applied = []
+     skipped = []
++    candidates = []
+     for item in preview.get("candidates") or []:
+         actor_id = str(item.get("actor_id") or "")
+         if allowed_ids and actor_id not in allowed_ids:
+             continue
++        candidates.append(item)
++    progress_key = str(req.progress_key or "").strip()
++    if progress_key:
++        _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key] = {
++            "ok": True,
++            "status": "running",
++            "processed": 0,
++            "total": len(candidates),
++            "applied_count": 0,
++            "skipped_count": 0,
++            "current_actor": "",
++            "started_at": time.time(),
++            "updated_at": time.time(),
++        }
++    for item in candidates:
++        actor_id = str(item.get("actor_id") or "")
++        if progress_key:
++            _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key].update({
++                "current_actor": item.get("display_name") or item.get("actor_name") or actor_id,
++                "updated_at": time.time(),
++            })
+         if req.only_high_confidence and item.get("confidence") != "high":
+             skipped.append({**item, "skip_reason": "not_high_confidence"})
+-            continue
+-        if item.get("conflict_actors"):
++        elif item.get("conflict_actors"):
+             skipped.append({**item, "skip_reason": "conflict"})
+-            continue
+-        if not req.dry_run:
+-            provider_ids = dict((item.get("actor") or {}).get("provider_ids") or {})
+-            provider_ids["Tmdb"] = str(item.get("tmdb_id") or "")
+-            await _update_actor_profile(
+-                config,
+-                actor_id,
+-                ActorProfileUpdateRequest(provider_ids=provider_ids),
+-                lang=lang,
+-            )
+-        applied.append(item)
++        else:
++            if not req.dry_run:
++                provider_ids = dict((item.get("actor") or {}).get("provider_ids") or {})
++                provider_ids["Tmdb"] = str(item.get("tmdb_id") or "")
++                await _update_actor_profile(
++                    config,
++                    actor_id,
++                    ActorProfileUpdateRequest(provider_ids=provider_ids),
++                    lang=lang,
++                )
++            applied.append(item)
++        if progress_key:
++            _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key].update({
++                "processed": len(applied) + len(skipped),
++                "applied_count": len(applied),
++                "skipped_count": len(skipped),
++                "updated_at": time.time(),
++            })
++    if progress_key:
++        _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key].update({
++            "status": "completed",
++            "current_actor": "",
++            "processed": len(applied) + len(skipped),
++            "applied_count": len(applied),
++            "skipped_count": len(skipped),
++            "updated_at": time.time(),
++        })
+     return {
+         "ok": True,
+         "dry_run": req.dry_run,
+@@ -3426,6 +3466,15 @@ async def apply_actor_tmdb_backfill(req: ActorTmdbBackfillRequest, lang: str | N
+     try:
+         result = await _apply_actor_tmdb_backfill(config, req, lang=lang)
+     except Exception as exc:
++        progress_key = str(req.progress_key or "").strip()
++        if progress_key:
++            _ACTOR_TMDB_BACKFILL_PROGRESS[progress_key] = {
++                **_ACTOR_TMDB_BACKFILL_PROGRESS.get(progress_key, {}),
++                "ok": False,
++                "status": "failed",
++                "error": str(exc),
++                "updated_at": time.time(),
++            }
+         raise HTTPException(status_code=502, detail=f"应用演员 TMDB ID 补全失败: {exc}")
+     if not req.dry_run:
+         _bump_sync_state()
+@@ -3437,6 +3486,15 @@ async def apply_actor_tmdb_backfill(req: ActorTmdbBackfillRequest, lang: str | N
+     return result
+ 
+ 
++@router.get("/actors/tmdb-backfill/progress/{progress_key}")
++async def get_actor_tmdb_backfill_progress(progress_key: str):
++    key = str(progress_key or "").strip()
++    progress = _ACTOR_TMDB_BACKFILL_PROGRESS.get(key)
++    if not progress:
++        return {"ok": True, "status": "idle", "processed": 0, "total": 0, "applied_count": 0, "skipped_count": 0}
++    return progress
++
++
+ @router.get("/actors/mapping/merge-plan")
+ async def get_actor_mapping_merge_plan(
+     mapping_id: str,

@@ -1,0 +1,137 @@
+diff --git a/DOCKER.md b/DOCKER.md
+index caf7ccc..3b77746 100644
+--- a/DOCKER.md
++++ b/DOCKER.md
+@@ -23,7 +23,9 @@
+          ▲
+          │ docker-compose
+          ▼
+-  volumes: /volume1/models (宿主机模型目录)
++  volumes:
++    /volume1/models (宿主机大模型目录)
++    ./data -> /app/data (NOOR 数据 / 缓存 / 状态)
+ ```
+ 
+ ---
+@@ -98,8 +100,7 @@ Docker 版直接挂宿主机模型根目录，不要求仓库内存在 `models/`
+ mkdir -p /volume1/models
+ mkdir -p /volume1/models/lada_model_weights
+ mkdir -p /volume1/models/huggingface
+-# 如需启用音频预处理，再额外准备：
+-# mkdir -p /volume1/models/audio-separator
++mkdir -p ./data
+ ```
+ 
+ ### 2. 配置环境变量
+@@ -123,17 +124,14 @@ MODELS_DIR=/volume1/models
+ INSTALL_NEMO=false
+ FULL_RUNTIME_IMAGE=nvidia/cuda:12.8.1-runtime-ubuntu24.04
+ MEDIA_ROOT=/home/kinax/Videos
+-TMP_DIR=./tmp
+-CACHE_DIR=./cache
+ 
+ # 视频文件（宿主机目录在容器内保留相同绝对路径）
+ #
+ # MEDIA_ROOT 最好填写 downloads / media / 硬链接目录的共同上级
+ MEDIA_ROOT=/home/kinax/Videos
+ 
+-# 大量临时文件 / 缓存建议独立映射
+-TMP_DIR=./tmp
+-CACHE_DIR=./cache
++# NOOR 自身数据根。Docker 内固定为 /app/data，由宿主机 ./data 持久化。
++NOOR_DATA_DIR=./data
+ ```
+ 
+ 说明：
+@@ -141,12 +139,12 @@ CACHE_DIR=./cache
+ - Docker 版默认只让用户配置少数几个**宿主机目录级**挂载：
+   - `MODELS_DIR`
+   - `MEDIA_ROOT`
+-  - `TMP_DIR`
+-  - `CACHE_DIR`
++- NOOR 自身数据库、插件数据、任务日志、状态文件、运行缓存和临时文件统一放在 `./data`，容器内路径为 `/app/data`
+ - `MODELS_DIR` / `MEDIA_ROOT` 会按**原绝对路径**挂进容器，不再改写成 `/app/...` 或 `/Videos`
+ - 业务配置也可以直接预填在同一个 `.env`，例如 Emby/Jellyfin、Whisper、LADA、媒体库路径映射
+-- `audio-separator`、LADA 权重、Whisper / transformers / torch 缓存的**容器内子路径**已经在镜像里固定，不再要求用户逐项填写
+-- Reazon / NeMo 不是当前 Docker 生产默认链路，因此不再在 `.env.example` 里暴露对应路径
++- LADA 权重默认仍从 `MODELS_DIR/lada_model_weights` 读取；Whisper 模型可指向 `MODELS_DIR`
++- Whisper / LADA / FaceFusion 的运行缓存和临时目录默认落在 `/app/data/runtime/...`
++- Reazon / NeMo 与 audio-separator 的模型目录默认落在 `/app/data/models/whisper/...`
+ 
+ 升级说明：Docker 模式下建议通过更新镜像并重建容器来升级 LADA，不建议在运行中的容器内直接执行 `git pull / pip install`。
+ 
+@@ -209,7 +207,7 @@ docker compose logs -f   # 查看日志
+ 建议：
+ - 把 `MEDIA_ROOT` 指向所有媒体相关目录的共同上级
+ - 容器里会继续使用这个绝对路径，因此设置页里填写的源目录 / 输出目录 / 硬链接扫描目录可以直接复用宿主机路径
+-- 把 `TMP_DIR` / `CACHE_DIR` 放到空间更充足的盘
++- 确保宿主机 `./data` 所在磁盘空间充足；任务日志、数据库、插件缓存和运行临时文件都会落在这里
+ 
+ ### 5. 验证 GPU 可用性
+ 
+@@ -240,9 +238,10 @@ noor/
+ ├── .env.example             # 单一环境变量示例
+ ├── .dockerignore            # 构建忽略
+ ├── data/
+-│   └── noor.db              # SQLite 数据库
+-├── tmp/                     # 临时文件（Whisper / LADA / ffmpeg 中间文件）
+-├── cache/                   # HF / torch / matplotlib 等运行缓存
++│   ├── noor.db              # SQLite 数据库
++│   ├── plugin_cache/        # 插件缓存
++│   ├── runtime/             # 任务日志 / 状态 / 临时文件 / 运行缓存
++│   └── models/              # NOOR 管理的小型/实验模型
+ ├── backend/
+ │   ├── app/                 # WebUI 代码
+ │   └── ...
+@@ -266,7 +265,7 @@ cp -r /your-source/lada_model_weights /volume1/models/
+ 
+ ### Whisper / Reazon / Audio Separator 模型
+ 
+-Whisper / transformers 相关缓存会写到 `$HF_HOME`（默认 `/app/cache/huggingface/`）。
++Whisper / transformers 模型目录由 `WHISPER_MODEL_DIR` / `HF_HOME` 控制。当前 compose 默认把 HuggingFace 缓存放在 `${MODELS_DIR}/huggingface`，运行缓存放在 `/app/data/runtime/whisper/cache`。
+ 
+ 也可以手动预下载：
+ 
+@@ -274,20 +273,20 @@ Whisper / transformers 相关缓存会写到 `$HF_HOME`（默认 `/app/cache/hug
+ docker compose exec backend bash
+ python3 -c "
+ from huggingface_hub import snapshot_download
+-snapshot_download(repo_id='Systran/faster-whisper-large-v3', cache_dir='/app/models/huggingface')
++snapshot_download(repo_id='Systran/faster-whisper-large-v3', cache_dir='/volume1/models/huggingface')
+ "
+ ```
+ 
+ 如果使用 Reazon / NeMo 或音频分离，直接把对应文件放到：
+ 
+-- `/volume1/models/reazon`
+-- `/volume1/models/audio-separator`
++- `./data/models/whisper/reazon`
++- `./data/models/whisper/audio-separator`
+ 
+ 容器内会自动映射为：
+ 
+-- `REAZON_MODEL_DIR=/app/models/reazon`
+-- `REAZON_NEMO_MODEL_PATH=/app/models/reazon/reazonspeech-nemo-v2.nemo`
+-- `AUDIO_SEPARATOR_MODEL_DIR=/app/models/audio-separator`
++- `REAZON_MODEL_DIR=/app/data/models/whisper/reazon`
++- `REAZON_NEMO_MODEL_PATH=/app/data/models/whisper/reazon/reazonspeech-nemo-v2.nemo`
++- `AUDIO_SEPARATOR_MODEL_DIR=/app/data/models/whisper/audio-separator`
+ 
+ ---
+ 
+@@ -342,12 +341,12 @@ docker inspect noor-backend-1 | grep -A5 Runtime
+ chmod -R 755 ./models
+ ```
+ 
+-### Q: `Permission denied: /app/tmp`
++### Q: `Permission denied: /app/data`
+ 
+-宿主机 `./tmp` 目录需要可写：
++宿主机 `./data` 目录需要可写：
+ 
+ ```bash
+-chmod 777 tmp/
++chmod -R 755 data/
+ ```
+ 
+ ---

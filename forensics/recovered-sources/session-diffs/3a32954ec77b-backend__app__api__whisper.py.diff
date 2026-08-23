@@ -1,0 +1,24 @@
+diff --git a/backend/app/api/whisper.py b/backend/app/api/whisper.py
+index 67e791b..1a8b368 100644
+--- a/backend/app/api/whisper.py
++++ b/backend/app/api/whisper.py
+@@ -127,7 +127,6 @@ def assert_audio_preprocess_runtime_ready(config: dict) -> None:
+ async def create_whisper_task(request: WhisperRequest):
+     """创建 Whisper 任务"""
+     from app.core.models import JobCreate, JobSettings
+-    from app.api.settings import _assert_custom_pipeline_supported
+ 
+     # 验证视频路径
+     local_video_path = map_emby_path_to_local(request.video_path)
+@@ -168,11 +167,6 @@ async def create_whisper_task(request: WhisperRequest):
+         "translate_style": request.translate_style,
+     }
+     whisper_config = apply_whisper_strategy(whisper_config, resolved_strategy)
+-    _assert_custom_pipeline_supported(
+-        whisper_config.get("pipeline_mode"),
+-        whisper_config.get("pass1_pipeline"),
+-        whisper_config.get("pass2_pipeline"),
+-    )
+     assert_audio_preprocess_runtime_ready(whisper_config)
+ 
+     # 从路径提取视频名称

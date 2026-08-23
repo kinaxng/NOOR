@@ -1,0 +1,119 @@
+diff --git a/backend/app/api/endpoints/media_library.py b/backend/app/api/endpoints/media_library.py
+index c9ec51c..ad55130 100644
+--- a/backend/app/api/endpoints/media_library.py
++++ b/backend/app/api/endpoints/media_library.py
+@@ -99,6 +99,7 @@ class MediaItemDeleteRequest(BaseModel):
+ class ActorMappingMergeRequest(BaseModel):
+     mapping_id: str
+     target_name: str | None = None
++    target_actor_id: str | None = None
+     dry_run: bool = False
+ 
+ 
+@@ -1162,18 +1163,34 @@ async def _preview_actor_mapping_matches(
+     }
+ 
+ 
+-def _actor_group_target_name(group: dict, target_name: str | None = None, *, lang: str | None = None) -> str:
++def _actor_group_target_name(
++    group: dict,
++    target_name: str | None = None,
++    *,
++    lang: str | None = None,
++    target_actor_id: str | None = None,
++) -> str:
+     explicit = str(target_name or "").strip()
+     if explicit:
+         return explicit
++    selected_id = str(target_actor_id or "").strip()
++    if selected_id:
++        for actor in group.get("actors") or []:
++            if str(actor.get("id") or "").strip() == selected_id:
++                selected_name = str(actor.get("name") or actor.get("display_name") or "").strip()
++                if selected_name:
++                    return selected_name
+     fallback = str(group.get("display_name") or group.get("canonical_name") or group.get("jp") or group.get("zh_cn") or "").strip()
+     return _localized_mapping_name(group, fallback, lang).strip()
+ 
+ 
+-def _actor_group_source_ids(group: dict) -> list[str]:
++def _actor_group_source_ids(group: dict, *, target_actor_id: str | None = None) -> list[str]:
++    selected_id = str(target_actor_id or "").strip()
+     out: list[str] = []
+     for actor in group.get("actors") or []:
+         actor_id = str(actor.get("id") or "").strip()
++        if selected_id and actor_id == selected_id:
++            continue
+         if actor_id and actor_id not in out:
+             out.append(actor_id)
+     return out
+@@ -1301,14 +1318,18 @@ async def _build_actor_mapping_merge_plan(
+     mapping_id: str,
+     *,
+     target_name: str | None = None,
++    target_actor_id: str | None = None,
+     lang: str | None = None,
+ ) -> dict:
+     group = await _find_actor_mapping_group(config, mapping_id, lang=lang)
+-    target = _actor_group_target_name(group, target_name, lang=lang)
++    target = _actor_group_target_name(group, target_name, lang=lang, target_actor_id=target_actor_id)
+     if not target:
+         raise HTTPException(status_code=400, detail="无法确定目标演员名")
+-    source_ids = _actor_group_source_ids(group)
+-    if len(source_ids) < 2:
++    source_ids = _actor_group_source_ids(group, target_actor_id=target_actor_id)
++    if target_actor_id:
++        if len(source_ids) < 1:
++            raise HTTPException(status_code=400, detail="当前映射组没有需要合并到目标的演员")
++    elif len(source_ids) < 2:
+         raise HTTPException(status_code=400, detail="当前映射组不足两位演员，无需合并")
+ 
+     movies_by_id: dict[str, dict] = {}
+@@ -1346,6 +1367,7 @@ async def _build_actor_mapping_merge_plan(
+     return {
+         "mapping_id": mapping_id,
+         "target_name": target,
++        "target_actor_id": str(target_actor_id or "").strip() or None,
+         "group": group,
+         "source_actor_ids": source_ids,
+         "source_counts": source_counts,
+@@ -1360,7 +1382,13 @@ async def _execute_actor_mapping_merge(
+     *,
+     lang: str | None = None,
+ ) -> dict:
+-    plan = await _build_actor_mapping_merge_plan(config, req.mapping_id, target_name=req.target_name, lang=lang)
++    plan = await _build_actor_mapping_merge_plan(
++        config,
++        req.mapping_id,
++        target_name=req.target_name,
++        target_actor_id=req.target_actor_id,
++        lang=lang,
++    )
+     source_ids = set(plan["source_actor_ids"])
+     target_name = str(plan["target_name"])
+     updated: list[dict] = []
+@@ -1953,13 +1981,23 @@ async def get_actor_mapping_matches(
+ async def get_actor_mapping_merge_plan(
+     mapping_id: str,
+     target_name: str | None = None,
++    target_actor_id: str | None = None,
+     lang: str | None = None,
+ ):
+     config = _load_config()
+     if not config.get("server_url") or not config.get("api_key"):
+         raise HTTPException(status_code=503, detail=_ADAPTER_NOT_ACTIVATED)
+     try:
+-        return {"ok": True, **await _build_actor_mapping_merge_plan(config, mapping_id, target_name=target_name, lang=lang)}
++        return {
++            "ok": True,
++            **await _build_actor_mapping_merge_plan(
++                config,
++                mapping_id,
++                target_name=target_name,
++                target_actor_id=target_actor_id,
++                lang=lang,
++            ),
++        }
+     except HTTPException:
+         raise
+     except Exception as exc:

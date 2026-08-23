@@ -1,0 +1,59 @@
+diff --git a/backend/app/api/facefusion.py b/backend/app/api/facefusion.py
+index 72d66c3..f883daf 100644
+--- a/backend/app/api/facefusion.py
++++ b/backend/app/api/facefusion.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ from pathlib import Path
+ from typing import Any
+ 
++import cv2
+ from fastapi import APIRouter, HTTPException
+ from fastapi.responses import FileResponse
+ from pydantic import BaseModel, ConfigDict, Field
+@@ -24,6 +25,10 @@ class FaceFusionPreviewRequest(BaseModel):
+     preview_resolution: str = "768x768"
+ 
+ 
++class FaceFusionPreviewMetadataRequest(BaseModel):
++    input_path: str
++
++
+ def _preview_root() -> Path:
+     cache_dir = get_settings().facefusion_cache_dir
+     if cache_dir:
+@@ -31,6 +36,35 @@ def _preview_root() -> Path:
+     return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "previews"
+ 
+ 
++@router.post("/preview/metadata")
++async def get_facefusion_preview_metadata(payload: FaceFusionPreviewMetadataRequest):
++    input_path = Path(payload.input_path)
++    if not input_path.exists():
++        raise HTTPException(status_code=404, detail="目标文件不存在")
++
++    capture = cv2.VideoCapture(str(input_path))
++    try:
++        if not capture.isOpened():
++            return {
++                "success": True,
++                "frame_total": 0,
++                "fps": None,
++                "duration": None,
++                "is_video": False,
++            }
++        frame_total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
++        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
++        return {
++            "success": True,
++            "frame_total": max(0, frame_total),
++            "fps": fps or None,
++            "duration": (frame_total / fps) if frame_total and fps else None,
++            "is_video": True,
++        }
++    finally:
++        capture.release()
++
++
+ @router.post("/preview")
+ async def create_facefusion_preview(payload: FaceFusionPreviewRequest):
+     input_path = Path(payload.input_path)

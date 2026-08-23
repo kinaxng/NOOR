@@ -1,0 +1,185 @@
+diff --git a/frontend/src/components/noor/FaceFusionPanel.vue b/frontend/src/components/noor/FaceFusionPanel.vue
+index e0c9795..820446b 100644
+--- a/frontend/src/components/noor/FaceFusionPanel.vue
++++ b/frontend/src/components/noor/FaceFusionPanel.vue
+@@ -639,6 +639,18 @@ function toggleLibraryImage(image: { id: string; name: string; path: string; pre
+   if (previewUrl.value) previewStale.value = true
+ }
+ 
++async function deleteLibraryImage(image: { id: string; path: string }) {
++  try {
++    await api.delete(`/facefusion/source-images/${encodeURIComponent(image.id)}`)
++    sourceLibraryImages.value = sourceLibraryImages.value.filter(item => item.id !== image.id)
++    uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== image.path)
++    if (previewUrl.value) previewStale.value = true
++    toast.success('图片已删除')
++  } catch (e: any) {
++    toast.error(e.response?.data?.detail || '图片删除失败')
++  }
++}
++
+ async function loadFaceFusionPreviewMetadata() {
+   previewMetadataLoading.value = true
+   try {
+@@ -1231,15 +1243,12 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ 
+                     <div class="facefusion-native-workspace__lower">
+                       <section class="facefusion-native-column facefusion-native-column--source">
+-                        <div class="facefusion-native-group facefusion-native-group--file">
+-                          <h3>选择文件</h3>
+-                          <FilePathSelector
+-                            :file-path="detail?.file_path"
+-                            :sibling-paths="detail?.siblings"
+-                            v-model="selectedSubmitPath"
+-                            @update:model-value="selectedSubmitId = allSubmitPaths.find(p => p.path === $event)?.id || detail?.id || ''"
+-                          />
+-                        </div>
++                        <FilePathSelector
++                          :file-path="detail?.file_path"
++                          :sibling-paths="detail?.siblings"
++                          v-model="selectedSubmitPath"
++                          @update:model-value="selectedSubmitId = allSubmitPaths.find(p => p.path === $event)?.id || detail?.id || ''"
++                        />
+ 
+                         <div class="facefusion-native-group facefusion-native-group--noor">
+                           <div class="facefusion-native-group__head">
+@@ -1276,17 +1285,18 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                             </div>
+                             <div v-if="!sourceLibraryLoading && !sourceLibraryImages.length" class="facefusion-source-library__empty">暂无缓存图片</div>
+                             <div v-else class="facefusion-source-library__grid">
+-                              <button
++                              <div
+                                 v-for="image in sourceLibraryImages"
+                                 :key="image.id"
+-                                type="button"
+                                 class="facefusion-source-library__item"
+                                 :class="{ 'is-used': isSourceSelected(image.path) }"
+-                                @click="toggleLibraryImage(image)"
+                               >
+-                                <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
+-                                <span>{{ isSourceSelected(image.path) ? '移除' : '使用' }}</span>
+-                              </button>
++                                <button type="button" class="facefusion-source-library__use" @click="toggleLibraryImage(image)">
++                                  <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
++                                  <span>{{ isSourceSelected(image.path) ? '移除' : '使用' }}</span>
++                                </button>
++                                <button type="button" class="facefusion-source-library__delete" title="删除图片" @click.stop="deleteLibraryImage(image)">×</button>
++                              </div>
+                             </div>
+                           </div>
+                         </div>
+@@ -1449,17 +1459,18 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                       </div>
+                       <div v-if="!sourceLibraryLoading && !sourceLibraryImages.length" class="facefusion-source-library__empty">暂无缓存图片</div>
+                       <div v-else class="facefusion-source-library__grid">
+-                        <button
++                        <div
+                           v-for="image in sourceLibraryImages"
+                           :key="image.id"
+-                          type="button"
+                           class="facefusion-source-library__item"
+                           :class="{ 'is-used': isSourceSelected(image.path) }"
+-                          @click="toggleLibraryImage(image)"
+                         >
+-                          <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
+-                          <span>{{ isSourceSelected(image.path) ? '移除' : '使用' }}</span>
+-                        </button>
++                          <button type="button" class="facefusion-source-library__use" @click="toggleLibraryImage(image)">
++                            <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
++                            <span>{{ isSourceSelected(image.path) ? '移除' : '使用' }}</span>
++                          </button>
++                          <button type="button" class="facefusion-source-library__delete" title="删除图片" @click.stop="deleteLibraryImage(image)">×</button>
++                        </div>
+                       </div>
+                     </div>
+                   </div>
+@@ -1959,18 +1970,20 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ .facefusion-native-group {
+   display: grid;
+   gap: 0.75rem;
+-  padding: 0 0 0.9rem;
+-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
++  padding: 0.85rem;
++  border-radius: 0.8rem;
++  border: 1px solid rgba(255, 255, 255, 0.08);
++  background: rgba(255, 255, 255, 0.026);
+ }
+ 
+ .facefusion-native-group--noor {
+-  border-bottom-color: rgba(0, 117, 255, 0.18);
++  border-color: rgba(0, 117, 255, 0.18);
++  background: rgba(0, 117, 255, 0.055);
+ }
+ 
+ .facefusion-native-group--preview {
+   width: min(100%, 56rem);
+-  padding: 0;
+-  border-bottom: 0;
++  padding: 0.75rem;
+ }
+ 
+ .facefusion-native-group--preview .facefusion-preview {
+@@ -2454,16 +2467,23 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   border-radius: 0.6rem;
+   border: 1px solid rgba(255, 255, 255, 0.1);
+   background: rgba(255, 255, 255, 0.04);
++}
++
++.facefusion-source-library__use {
++  position: absolute;
++  inset: 0;
++  overflow: hidden;
++  border-radius: inherit;
+   cursor: pointer;
+ }
+ 
+-.facefusion-source-library__item img {
++.facefusion-source-library__use img {
+   width: 100%;
+   height: 100%;
+   object-fit: cover;
+ }
+ 
+-.facefusion-source-library__item span {
++.facefusion-source-library__use span {
+   position: absolute;
+   left: 0.35rem;
+   right: 0.35rem;
+@@ -2480,12 +2500,36 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   backdrop-filter: blur(10px);
+ }
+ 
++.facefusion-source-library__delete {
++  position: absolute;
++  top: 0.35rem;
++  right: 0.35rem;
++  z-index: 2;
++  display: inline-grid;
++  width: 1.45rem;
++  height: 1.45rem;
++  place-items: center;
++  border-radius: 999px;
++  border: 1px solid rgba(255, 255, 255, 0.22);
++  background: rgba(7, 12, 22, 0.76);
++  color: var(--color-text-primary);
++  font-size: 1rem;
++  line-height: 1;
++  cursor: pointer;
++  backdrop-filter: blur(10px);
++}
++
++.facefusion-source-library__delete:hover {
++  border-color: rgba(255, 99, 99, 0.65);
++  background: rgba(180, 35, 35, 0.82);
++}
++
+ .facefusion-source-library__item.is-used {
+   border-color: rgba(0, 117, 255, 0.72);
+   box-shadow: 0 0 0 2px rgba(0, 117, 255, 0.22);
+ }
+ 
+-.facefusion-source-library__item.is-used span {
++.facefusion-source-library__item.is-used .facefusion-source-library__use span {
+   background: rgba(0, 117, 255, 0.82);
+ }
+ 

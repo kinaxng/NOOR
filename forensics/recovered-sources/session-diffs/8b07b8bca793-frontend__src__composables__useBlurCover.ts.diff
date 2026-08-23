@@ -1,0 +1,84 @@
+diff --git a/frontend/src/composables/useBlurCover.ts b/frontend/src/composables/useBlurCover.ts
+index bf09fdc..101fffd 100644
+--- a/frontend/src/composables/useBlurCover.ts
++++ b/frontend/src/composables/useBlurCover.ts
+@@ -1,42 +1,52 @@
+ import { ref, computed } from 'vue'
+ 
+-const STORAGE_KEY = 'lada-blur-cover'
++const GLOBAL_STORAGE_KEY = 'noor-cover-blur-global'
++const BROWSER_STORAGE_KEY = 'noor-cover-blur-browser'
++const LEGACY_STORAGE_KEY = 'lada-blur-cover'
+ 
+-// Persisted master setting
+-const masterEnabled = ref<boolean>(
+-  localStorage.getItem(STORAGE_KEY) === null
++function readBooleanStorage(key: string, fallback: boolean) {
++  const value = localStorage.getItem(key)
++  return value === null ? fallback : value === 'true'
++}
++
++const legacyValue = localStorage.getItem(LEGACY_STORAGE_KEY)
++const initialGlobalEnabled = localStorage.getItem(GLOBAL_STORAGE_KEY) === null && legacyValue !== null
++  ? legacyValue === 'true'
++  : readBooleanStorage(GLOBAL_STORAGE_KEY, true)
++
++// System Settings: global master switch.
++const globalBlurEnabled = ref<boolean>(initialGlobalEnabled)
++
++// Topbar: browser-local preference.
++const browserBlurEnabled = ref<boolean>(
++  localStorage.getItem(BROWSER_STORAGE_KEY) === null
+     ? true
+-    : localStorage.getItem(STORAGE_KEY) === 'true'
++    : readBooleanStorage(BROWSER_STORAGE_KEY, true)
+ )
+ 
+-// Runtime override from toolbar (not persisted)
+-const toolbarOverride = ref<boolean | null>(null)
+-
+ export function useBlurCover() {
+-  // Effective value: toolbar override > master setting
+-  const blurEnabled = computed(() =>
+-    toolbarOverride.value !== null ? toolbarOverride.value : masterEnabled.value
+-  )
+-
+-  // Toolbar: temporary toggle, does NOT persist
+-  function toggleBlur() {
+-    if (toolbarOverride.value === null) {
+-      toolbarOverride.value = !masterEnabled.value
+-    } else {
+-      toolbarOverride.value = !toolbarOverride.value
+-    }
++  const blurEnabled = computed(() => globalBlurEnabled.value && browserBlurEnabled.value)
++
++  function setGlobalBlur(value: boolean) {
++    globalBlurEnabled.value = value
++    localStorage.setItem(GLOBAL_STORAGE_KEY, String(value))
++  }
++
++  function setBrowserBlur(value: boolean) {
++    browserBlurEnabled.value = value
++    localStorage.setItem(BROWSER_STORAGE_KEY, String(value))
+   }
+ 
+-  // Settings: persist to localStorage
+-  function setBlur(value: boolean) {
+-    masterEnabled.value = value
+-    toolbarOverride.value = null
+-    localStorage.setItem(STORAGE_KEY, String(value))
++  function toggleBrowserBlur() {
++    setBrowserBlur(!browserBlurEnabled.value)
+   }
+ 
+   return {
+     blurEnabled,
+-    toggleBlur,
+-    setBlur,
++    globalBlurEnabled,
++    browserBlurEnabled,
++    setGlobalBlur,
++    setBrowserBlur,
++    toggleBrowserBlur,
+   }
+ }

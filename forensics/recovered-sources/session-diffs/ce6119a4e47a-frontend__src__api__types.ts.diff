@@ -1,0 +1,46 @@
+diff --git a/frontend/src/api/types.ts b/frontend/src/api/types.ts
+index 52ce546..13ff857 100644
+--- a/frontend/src/api/types.ts
++++ b/frontend/src/api/types.ts
+@@ -101,7 +101,7 @@ export interface JobSettings {
+ 
+ export interface Job {
+   id: string
+-  job_type?: 'lada' | 'whisper' | 'translate-srt' | 'whisper_transcribe' | 'subtitle_translate' | 'lada_restore'
++  job_type?: 'lada' | 'whisper' | 'translate-srt' | 'whisper_transcribe' | 'subtitle_translate' | 'lada_restore' | 'external_task'
+   emby_item_id: string
+   emby_item_name: string
+   input_path: string
+@@ -123,6 +123,32 @@ export interface Job {
+   completed_at?: string
+ }
+ 
++export interface BackgroundTaskRunAction {
++  plugin_id: string
++  action: string
++  payload?: Record<string, any>
++}
++
++export interface BackgroundTask {
++  id: string
++  plugin_id: string
++  plugin_name: string
++  title: string
++  status: 'running' | 'idle' | 'failed' | 'disabled' | string
++  enabled?: boolean
++  interval_minutes?: number
++  last_run_at?: string
++  last_started_at?: string
++  last_finished_at?: string
++  next_run_at?: string
++  progress?: number | null
++  summary?: string
++  detail?: string
++  metrics?: Record<string, number | string>
++  can_run?: boolean
++  run_action?: BackgroundTaskRunAction
++}
++
+ export interface WhisperExecutionMetadata {
+   strategy?: string
+   executor_key?: string

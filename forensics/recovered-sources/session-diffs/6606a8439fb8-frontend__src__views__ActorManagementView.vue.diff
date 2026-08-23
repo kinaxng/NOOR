@@ -1,0 +1,183 @@
+diff --git a/frontend/src/views/ActorManagementView.vue b/frontend/src/views/ActorManagementView.vue
+index 3f817d6..6ef615d 100644
+--- a/frontend/src/views/ActorManagementView.vue
++++ b/frontend/src/views/ActorManagementView.vue
+@@ -26,6 +26,7 @@ const mappingMatching = ref(false)
+ const mappingStatus = ref<any | null>(null)
+ const mappingMatches = ref<any | null>(null)
+ const showMappingMatches = ref(false)
++const showRejectedMatches = ref(false)
+ const mergePlans = ref<Record<string, any>>({})
+ const mergePlanLoading = ref<Record<string, boolean>>({})
+ const mergeExecuting = ref<Record<string, boolean>>({})
+@@ -44,6 +45,7 @@ const resultLabel = computed(() => {
+   return t('files.actors.resultCount', { count: total.value })
+ })
+ const mappingStats = computed(() => mappingStatus.value?.stats || null)
++const rejectedMatches = computed(() => mappingMatches.value?.rejected_matches || [])
+ 
+ let searchTimer: number | null = null
+ 
+@@ -125,6 +127,13 @@ function batchConflictCount() {
+   return (mappingMatches.value?.groups || []).filter((group: any) => group?.has_tmdb_conflict).length
+ }
+ 
++function rejectedReasonLabel(reason: string) {
++  if (reason === 'tmdb_conflict_alias') return t('files.actors.rejectedReasonTmdbConflict')
++  if (reason === 'ignored_empty_non_target_person') return t('files.actors.rejectedReasonIgnoredEmpty')
++  if (reason === 'ignored_person') return t('files.actors.rejectedReasonIgnoredPerson')
++  return reason || t('files.actors.rejectedReasonUnknown')
++}
++
+ async function loadActors() {
+   loading.value = true
+   try {
+@@ -193,6 +202,7 @@ async function clearMapping() {
+     mappingStatus.value = null
+     mappingMatches.value = null
+     showMappingMatches.value = false
++    showRejectedMatches.value = false
+     toast.success(t('files.actors.clearMappingSuccess'))
+   } catch (error: any) {
+     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.clearMappingFailed'))
+@@ -209,6 +219,7 @@ async function previewMappingMatches() {
+     })
+     mappingMatches.value = resp.data || null
+     showMappingMatches.value = true
++    showRejectedMatches.value = false
+   } catch (error: any) {
+     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingMatchFailed'))
+   } finally {
+@@ -420,12 +431,45 @@ onMounted(() => {
+             <BaseIcon name="check" class="w-4 h-4" />
+             {{ t('files.actors.batchMerge') }}
+           </VuiButton>
++          <VuiButton
++            v-if="rejectedMatches.length"
++            variant="outlined"
++            color="secondary"
++            size="small"
++            @click="showRejectedMatches = !showRejectedMatches"
++          >
++            <BaseIcon name="info" class="w-4 h-4" />
++            {{ showRejectedMatches ? t('files.actors.hideRejectedMatches') : t('files.actors.showRejectedMatches', { count: rejectedMatches.length }) }}
++          </VuiButton>
+           <button type="button" class="duplicate-panel__close" @click="showMappingMatches = false">
+             <BaseIcon name="close" />
+           </button>
+         </div>
+       </div>
+ 
++      <div v-if="showRejectedMatches" class="rejected-panel">
++        <article v-for="actor in rejectedMatches" :key="`${actor.id}-${actor.rejected_mapping_id}-${actor.rejected_reason}`" class="rejected-row">
++          <button type="button" class="rejected-row__actor" @click="openActor(actor)">
++            <span class="duplicate-member__avatar">
++              <img v-if="actor.image_url" :src="actor.image_url" :alt="actor.name" loading="lazy" />
++              <span v-else>{{ actorInitial(actor.name) }}</span>
++            </span>
++            <span class="duplicate-member__body">
++              <span>{{ actorRawName(actor) }}</span>
++              <em>
++                <template v-if="actorDisplayAlias(actor)">{{ actorDisplayAlias(actor) }}</template>
++                <template v-if="actor.tmdb_id"> · Emby TMDB {{ actor.tmdb_id }}</template>
++              </em>
++            </span>
++          </button>
++          <div class="rejected-row__mapping">
++            <strong>{{ actor.rejected_mapping_name || actor.rejected_mapping_id || '-' }}</strong>
++            <span>{{ rejectedReasonLabel(actor.rejected_reason) }}</span>
++            <em v-if="actor.rejected_mapping_tmdb_id">Mapping TMDB {{ actor.rejected_mapping_tmdb_id }}</em>
++          </div>
++        </article>
++      </div>
++
+       <div v-if="mappingMatches.groups?.length" class="duplicate-groups">
+         <article v-for="group in mappingMatches.groups" :key="group.mapping_id" class="duplicate-group" :class="{ 'has-conflict': group.has_tmdb_conflict }">
+           <div class="duplicate-group__title">
+@@ -701,6 +745,71 @@ onMounted(() => {
+   gap: 0.7rem;
+ }
+ 
++.rejected-panel {
++  display: grid;
++  gap: 0.55rem;
++  margin-bottom: 0.85rem;
++  padding: 0.7rem;
++  border: 1px solid rgba(255, 181, 71, 0.22);
++  border-radius: var(--radius-md);
++  background: rgba(255, 181, 71, 0.045);
++}
++
++.rejected-row {
++  display: grid;
++  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
++  gap: 0.65rem;
++  align-items: center;
++  padding: 0.55rem;
++  border: 1px solid var(--color-border-subtle);
++  border-radius: var(--radius-md);
++  background: rgba(255, 255, 255, 0.035);
++}
++
++.rejected-row__actor {
++  min-width: 0;
++  display: grid;
++  grid-template-columns: 2.5rem minmax(0, 1fr);
++  gap: 0.55rem;
++  align-items: center;
++  color: inherit;
++  text-align: left;
++}
++
++.rejected-row__mapping {
++  min-width: 0;
++  display: flex;
++  flex-wrap: wrap;
++  gap: 0.35rem;
++  align-items: center;
++  justify-content: flex-end;
++}
++
++.rejected-row__mapping strong,
++.rejected-row__mapping span,
++.rejected-row__mapping em {
++  max-width: 100%;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  padding: 0.18rem 0.45rem;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, 0.06);
++  color: var(--color-text-muted);
++  font-size: 0.7rem;
++  font-style: normal;
++  font-weight: 750;
++}
++
++.rejected-row__mapping strong {
++  color: var(--color-text-primary);
++}
++
++.rejected-row__mapping span {
++  background: rgba(255, 181, 71, 0.14);
++  color: rgb(255, 216, 154);
++}
++
+ .duplicate-group {
+   padding: 0.75rem;
+   border: 1px solid var(--color-border-subtle);
+@@ -1027,6 +1136,14 @@ onMounted(() => {
+     width: 100%;
+   }
+ 
++  .rejected-row {
++    grid-template-columns: 1fr;
++  }
++
++  .rejected-row__mapping {
++    justify-content: flex-start;
++  }
++
+   .actor-grid {
+     grid-template-columns: 1fr;
+   }

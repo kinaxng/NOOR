@@ -1,0 +1,28 @@
+diff --git a/backend/tests/test_lada_runner_cancel.py b/backend/tests/test_lada_runner_cancel.py
+index 89b06ea..8c1c360 100644
+--- a/backend/tests/test_lada_runner_cancel.py
++++ b/backend/tests/test_lada_runner_cancel.py
+@@ -27,6 +27,7 @@ parser.add_argument('--mosaic-detection-model')
+ parser.add_argument('--mosaic-restoration-model')
+ parser.add_argument('--encoding-preset')
+ parser.add_argument('--max-clip-length')
++parser.add_argument('--temporary-directory')
+ parser.add_argument('--fp16', action='store_true')
+ parser.add_argument('--no-fp16', action='store_true')
+ parser.add_argument('--detect-face-mosaics', action='store_true')
+@@ -97,6 +98,7 @@ parser.add_argument('--mosaic-detection-model')
+ parser.add_argument('--mosaic-restoration-model')
+ parser.add_argument('--encoding-preset')
+ parser.add_argument('--max-clip-length')
++parser.add_argument('--temporary-directory')
+ parser.add_argument('--fp16', action='store_true')
+ parser.add_argument('--no-fp16', action='store_true')
+ parser.add_argument('--detect-face-mosaics', action='store_true')
+@@ -173,6 +175,7 @@ parser.add_argument('--mosaic-detection-model')
+ parser.add_argument('--mosaic-restoration-model')
+ parser.add_argument('--encoding-preset')
+ parser.add_argument('--max-clip-length')
++parser.add_argument('--temporary-directory')
+ parser.add_argument('--fp16', action='store_true')
+ parser.add_argument('--no-fp16', action='store_true')
+ parser.add_argument('--detect-face-mosaics', action='store_true')

@@ -1,0 +1,22 @@
+diff --git a/backend/app/pipeline/facefusion/runner.py b/backend/app/pipeline/facefusion/runner.py
+index 7438022..709da0a 100644
+--- a/backend/app/pipeline/facefusion/runner.py
++++ b/backend/app/pipeline/facefusion/runner.py
+@@ -55,8 +55,15 @@ def _split_words(value: str | list[str] | None, fallback: list[str]) -> list[str
+ def _build_env(*, facefusion_cache_dir: str, facefusion_temp_dir: str) -> dict[str, str]:
+     env = os.environ.copy()
+     if facefusion_cache_dir:
+-        env["XDG_CACHE_HOME"] = facefusion_cache_dir
+-        env["ORT_TENSORRT_CACHE_PATH"] = facefusion_cache_dir
++        cache_root = Path(facefusion_cache_dir)
++        xdg_cache_dir = cache_root / "xdg"
++        tensorrt_cache_dir = cache_root / "onnxruntime" / "tensorrt"
++        cuda_cache_dir = cache_root / "cuda"
++        for path in (xdg_cache_dir, tensorrt_cache_dir, cuda_cache_dir):
++            path.mkdir(parents=True, exist_ok=True)
++        env["XDG_CACHE_HOME"] = str(xdg_cache_dir)
++        env["ORT_TENSORRT_CACHE_PATH"] = str(tensorrt_cache_dir)
++        env["CUDA_CACHE_PATH"] = str(cuda_cache_dir)
+     if facefusion_temp_dir:
+         env["TMPDIR"] = facefusion_temp_dir
+     return env

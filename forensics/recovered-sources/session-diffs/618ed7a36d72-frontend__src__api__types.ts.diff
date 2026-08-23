@@ -1,0 +1,13 @@
+diff --git a/frontend/src/api/types.ts b/frontend/src/api/types.ts
+index 3bde963..54c88de 100644
+--- a/frontend/src/api/types.ts
++++ b/frontend/src/api/types.ts
+@@ -99,6 +99,8 @@ export interface JobSettings {
+   translate_to?: string | null
+   source_path?: string
+   source_paths?: string[]
++  preview_mode?: string
++  preview_resolution?: string
+   execution_provider?: string
+   device_ids?: string
+   processors?: string

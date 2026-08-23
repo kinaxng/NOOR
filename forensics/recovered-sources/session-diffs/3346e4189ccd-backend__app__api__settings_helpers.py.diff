@@ -1,0 +1,36 @@
+diff --git a/backend/app/api/settings_helpers.py b/backend/app/api/settings_helpers.py
+index d8c4caf..4782761 100644
+--- a/backend/app/api/settings_helpers.py
++++ b/backend/app/api/settings_helpers.py
+@@ -13,6 +13,7 @@ from pathlib import Path
+ from typing import Optional
+ 
+ from app.core.config import DEFAULT_NOOR_DATA_DIR, PROJECT_ROOT, get_settings
++from app.core.lada_paths import build_lada_python_env, resolve_lada_repo_path as _resolve_lada_repo_path
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -132,14 +133,7 @@ def lada_cli_base_cmd(cli_path: Optional[str] = None) -> list[str]:
+ 
+ 
+ def resolve_lada_repo_path() -> Optional[Path]:
+-    candidates = [
+-        PROJECT_ROOT / "backend" / "app" / "pipeline" / "lada",
+-        PROJECT_ROOT / "lada",
+-    ]
+-    for candidate in candidates:
+-        if (candidate / ".git").exists():
+-            return candidate
+-    return None
++    return _resolve_lada_repo_path()
+ 
+ 
+ def module_installed(module_name: str) -> bool:
+@@ -256,6 +250,7 @@ def get_lada_version_info() -> dict:
+                 capture_output=True,
+                 text=True,
+                 timeout=5,
++                env=build_lada_python_env(),
+             )
+             if result.returncode == 0 and result.stdout.strip():
+                 version = result.stdout.strip()

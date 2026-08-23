@@ -1,0 +1,22 @@
+diff --git a/backend/app/pipeline/facefusion/runner.py b/backend/app/pipeline/facefusion/runner.py
+index 2979dc9..038aa5c 100644
+--- a/backend/app/pipeline/facefusion/runner.py
++++ b/backend/app/pipeline/facefusion/runner.py
+@@ -106,6 +106,17 @@ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tup
+     )
+     if processors:
+         cmd += ["--processors", *processors]
++    if "face_swapper" in processors:
++        cmd += ["--face-swapper-model", str(job_settings.get("face_swapper_model", settings.facefusion_face_swapper_model))]
++        cmd += ["--face-swapper-pixel-boost", str(job_settings.get("face_swapper_pixel_boost", settings.facefusion_face_swapper_pixel_boost))]
++        cmd += ["--face-swapper-weight", str(job_settings.get("face_swapper_weight", settings.facefusion_face_swapper_weight))]
++    if "face_enhancer" in processors:
++        cmd += ["--face-enhancer-model", str(job_settings.get("face_enhancer_model", settings.facefusion_face_enhancer_model))]
++        cmd += ["--face-enhancer-blend", str(job_settings.get("face_enhancer_blend", settings.facefusion_face_enhancer_blend))]
++        cmd += ["--face-enhancer-weight", str(job_settings.get("face_enhancer_weight", settings.facefusion_face_enhancer_weight))]
++    if "frame_enhancer" in processors:
++        cmd += ["--frame-enhancer-model", str(job_settings.get("frame_enhancer_model", settings.facefusion_frame_enhancer_model))]
++        cmd += ["--frame-enhancer-blend", str(job_settings.get("frame_enhancer_blend", settings.facefusion_frame_enhancer_blend))]
+ 
+     providers = _split_words(job_settings.get("execution_provider", settings.facefusion_execution_provider), [])
+     if providers:

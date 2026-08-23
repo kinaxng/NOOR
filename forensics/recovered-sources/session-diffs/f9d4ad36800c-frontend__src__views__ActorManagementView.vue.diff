@@ -1,0 +1,41 @@
+diff --git a/frontend/src/views/ActorManagementView.vue b/frontend/src/views/ActorManagementView.vue
+index 2ac8c02..ff71e57 100644
+--- a/frontend/src/views/ActorManagementView.vue
++++ b/frontend/src/views/ActorManagementView.vue
+@@ -1,5 +1,6 @@
+ <script setup lang="ts">
+ import { computed, onMounted, ref, watch } from 'vue'
++import { useRouter } from 'vue-router'
+ import api from '../api'
+ import BaseIcon from '../components/noor/BaseIcon.vue'
+ import VuiButton from '../components/ui/Button/VuiButton.vue'
+@@ -15,6 +16,7 @@ type SortOrder = 'Ascending' | 'Descending'
+ const { t, i18nVersion, currentLang } = useI18n()
+ const toast = useToast()
+ const { confirm } = useConfirm()
++const router = useRouter()
+ 
+ const actors = ref<MediaActor[]>([])
+ const loading = ref(false)
+@@ -318,9 +320,9 @@ function setSort(key: SortKey, order: SortOrder) {
+   loadActors()
+ }
+ 
+-function openEmby(actor: MediaActor) {
+-  if (!actor.emby_url) return
+-  window.open(actor.emby_url, '_blank', 'noopener,noreferrer')
++function openActor(actor: MediaActor) {
++  if (!actor.id) return
++  router.push(`/actors/${encodeURIComponent(actor.id)}`)
+ }
+ 
+ watch(query, () => {
+@@ -515,7 +517,7 @@ onMounted(() => {
+     </div>
+ 
+     <div v-else class="actor-grid">
+-      <article v-for="actor in actors" :key="actor.id" class="actor-card ui-card" @click="openEmby(actor)">
++      <article v-for="actor in actors" :key="actor.id" class="actor-card ui-card" @click="openActor(actor)">
+         <div class="actor-card__avatar">
+           <img v-if="actor.image_url" :src="actor.image_url" :alt="actorName(actor)" loading="lazy" />
+           <span v-else>{{ actorInitial(actorName(actor)) }}</span>

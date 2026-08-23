@@ -1,0 +1,13 @@
+diff --git a/frontend/src/views/PluginHost.vue b/frontend/src/views/PluginHost.vue
+index fb2cff1..1d2b6dc 100644
+--- a/frontend/src/views/PluginHost.vue
++++ b/frontend/src/views/PluginHost.vue
+@@ -972,7 +972,7 @@ function sdkFor(id: string) {
+       open: (options: any) => openSubscriptionDialog(options),
+     },
+     avatar: {
+-      resolve: (options: any = {}) => sdkPost('/plugins/gfriends/actions/resolve', { payload: options }).then((r: any) => r.data),
++      candidates: (options: any = {}) => sdkPost('/plugins/gfriends/actions/candidates', { payload: options }).then((r: any) => r.data),
+     },
+     ui: {
+       button: makeButton,

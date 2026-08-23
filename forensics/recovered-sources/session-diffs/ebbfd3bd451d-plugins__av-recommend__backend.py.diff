@@ -1,0 +1,130 @@
+diff --git a/plugins/av-recommend/backend.py b/plugins/av-recommend/backend.py
+index 3db651d..bb0916d 100644
+--- a/plugins/av-recommend/backend.py
++++ b/plugins/av-recommend/backend.py
+@@ -179,6 +179,8 @@ async def _library_profile() -> dict[str, Any]:
+         "genres": Counter(),
+         "tags": Counter(),
+         "studios": Counter(),
++        "series": Counter(),
++        "directors": Counter(),
+         "actor_category": Counter(),
+         "local_features": {},
+         "top_media": [],
+@@ -199,6 +201,8 @@ async def _library_profile() -> dict[str, Any]:
+             "genres": Counter(),
+             "tags": Counter(),
+             "studios": Counter(),
++            "series": Counter(),
++            "directors": Counter(),
+             "actor_category": Counter(),
+             "local_features": {},
+             "top_media": [_entity_payload(item) for item in media[:8]],
+@@ -238,6 +242,10 @@ async def _library_profile() -> dict[str, Any]:
+             elif rel in {"HAS_STUDIO", "HAS_LABEL"}:
+                 profile["studios"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+                 relations_by_media[edge.source_entity_id]["studios"].add(target.label)
++            elif rel == "IN_SERIES":
++                profile["series"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
++            elif rel == "HAS_DIRECTOR":
++                profile["directors"][target.label] += media_weights.get(edge.source_entity_id, 1.0)
+         for media_id, rels in relations_by_media.items():
+             weight = media_weights.get(media_id, 1.0)
+             for actor in rels["actors"]:
+@@ -272,6 +280,12 @@ def _names(items: Any) -> list[str]:
+     return out
+ 
+ 
++def _name_one(item: Any) -> str:
++    if isinstance(item, dict):
++        return str(item.get("name") or item.get("label") or item.get("title") or item.get("value") or "").strip()
++    return str(item or "").strip()
++
++
+ def _unique_names(items: Any, limit: int = 20) -> list[str]:
+     out: list[str] = []
+     seen: set[str] = set()
+@@ -378,6 +392,8 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
+                         item["actors"] = _names(data.get("actors"))
+                         item["categories"] = _names(data.get("categories"))
+                         item["maker"] = data.get("maker") or data.get("publisher") or ""
++                        item["series"] = _name_one(data.get("series"))
++                        item["director"] = _name_one(data.get("director"))
+                         item["cover_url"] = data.get("cover_url") or item.get("cover_url")
+                         item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
+                         item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
+@@ -412,6 +428,8 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
+     actors = _unique_names(item.get("actors") or [], 12)
+     categories = _unique_names(item.get("categories") or [], 16)
+     maker = str(item.get("maker") or "").strip()
++    series = _name_one(item.get("series"))
++    director = _name_one(item.get("director"))
+     score = 0.0
+     reasons: list[str] = []
+     personalized_score = 0.0
+@@ -423,6 +441,8 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
+     genre_counter: Counter = profile.get("genres") or Counter()
+     tag_counter: Counter = profile.get("tags") or Counter()
+     studio_counter: Counter = profile.get("studios") or Counter()
++    series_counter: Counter = profile.get("series") or Counter()
++    director_counter: Counter = profile.get("directors") or Counter()
+     actor_category_counter: Counter = profile.get("actor_category") or Counter()
+     media_count = max(int(profile.get("media_count") or 0), 1)
+ 
+@@ -523,6 +543,20 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
+         personalized_score += boost
+         reasons.append(f"厂牌匹配：{maker}")
+ 
++    if series and series_counter.get(series, 0):
++        count = float(series_counter.get(series, 0))
++        boost = min(14, 5 + math.log2(count + 1) * 4)
++        score += boost
++        personalized_score += boost
++        reasons.append(f"系列偏好：{series}")
++
++    if director and director_counter.get(director, 0):
++        count = float(director_counter.get(director, 0))
++        boost = min(8, 2 + math.log2(count + 1) * 2.5)
++        score += boost
++        personalized_score += boost
++        reasons.append(f"导演匹配：{director}")
++
+     magnets_count = int(item.get("magnets_count") or 0)
+     if magnets_count > 0:
+         boost = 6 + min(5, magnets_count)
+@@ -575,7 +609,7 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
+     # labels are broad labels and no actor/studio signal exists, keep them from
+     # floating to the top only because they have resources.
+     meaningful_categories = [x for x in categories if _generic_category_factor(x) >= 0.5]
+-    if media_count >= 10 and not actor_hits and not maker and not meaningful_categories:
++    if media_count >= 10 and not actor_hits and not maker and not series and not director and not meaningful_categories:
+         score -= 10
+         penalty_score += 10
+         reasons.append("标签过泛降权")
+@@ -611,6 +645,8 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
+         "actors": actors[:6],
+         "categories": categories[:8],
+         "maker": maker,
++        "series": series,
++        "director": director,
+         "score": score,
+         "personalized_score": round(personalized_score, 1),
+         "actionability_score": round(actionability_score, 1),
+@@ -894,6 +930,8 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
+             "top_genres": _top(profile.get("genres") or Counter(), 10),
+             "top_tags": _top(profile.get("tags") or Counter(), 10),
+             "top_studios": _top(profile.get("studios") or Counter(), 8),
++            "top_series": _top(profile.get("series") or Counter(), 8),
++            "top_directors": _top(profile.get("directors") or Counter(), 8),
+         },
+         "stats": {
+             "candidates": len(candidates),
+@@ -934,6 +972,8 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str,
+                 "top_genres": _top(profile.get("genres") or Counter(), 20),
+                 "top_tags": _top(profile.get("tags") or Counter(), 20),
+                 "top_studios": _top(profile.get("studios") or Counter(), 12),
++                "top_series": _top(profile.get("series") or Counter(), 12),
++                "top_directors": _top(profile.get("directors") or Counter(), 12),
+             },
+         }
+     if action == "feedback":

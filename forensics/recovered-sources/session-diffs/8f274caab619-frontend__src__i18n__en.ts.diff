@@ -1,0 +1,17 @@
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index cefddcc..b2090f5 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -59,6 +59,12 @@ export const en: Record<string, string> = {
+   'files.actors.mappingMatchFailed': 'Failed to match mapping',
+   'files.actors.mappingMatchesTitle': 'Mapping Match Candidates',
+   'files.actors.mappingMatchesSummary': '{candidates} candidates · {conflicts} conflicts · {rejected} rejected · {matched} matched · {unmatched} unmatched',
++  'files.actors.showRejectedMatches': 'Show rejected {count}',
++  'files.actors.hideRejectedMatches': 'Hide rejected',
++  'files.actors.rejectedReasonTmdbConflict': 'TMDB alias conflict',
++  'files.actors.rejectedReasonIgnoredEmpty': 'Ignored empty actor',
++  'files.actors.rejectedReasonIgnoredPerson': 'Ignored actor',
++  'files.actors.rejectedReasonUnknown': 'Unknown reason',
+   'files.actors.noMappingCandidates': 'No mapping merge candidates',
+   'files.actors.mappingImportedTotal': 'Imported',
+   'files.actors.mergeTarget': 'Target',

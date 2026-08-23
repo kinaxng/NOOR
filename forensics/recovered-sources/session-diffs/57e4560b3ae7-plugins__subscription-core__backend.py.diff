@@ -1,0 +1,49 @@
+diff --git a/plugins/subscription-core/backend.py b/plugins/subscription-core/backend.py
+index 9cbe0a0..eb9428c 100644
+--- a/plugins/subscription-core/backend.py
++++ b/plugins/subscription-core/backend.py
+@@ -1361,6 +1361,44 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str,
+         _event(data, sub_id, "info", "更新订阅设置", {k: payload.get(k) for k in payload.keys() if k != "id"})
+         _save(data)
+         return {"ok": True, "subscription": _public_subscription(sub)}
++    if action == "refresh_cover":
++        from app.plugins.runtime import runtime
++
++        code = str(payload.get("code") or "").strip()
++        sub_id = str(payload.get("id") or "").strip()
++        sub = None
++        if sub_id:
++            sub = next((s for s in data["subscriptions"] if s.get("id") == sub_id and s.get("status") != "deleted"), None)
++        if not sub and code:
++            target = _norm_code(code)
++            sub = next((s for s in data["subscriptions"] if s.get("status") != "deleted" and target in {_norm_code(v) for v in _subscription_code_values(s)}), None)
++        if not sub:
++            raise ValueError("订阅不存在")
++        lookup_code = code or str(sub.get("code") or sub.get("search_code") or "")
++        if not lookup_code:
++            raise ValueError("缺少番号")
++        if not runtime.is_enabled("javdb"):
++            raise ValueError("JavDB 插件未启用")
++        detail = await runtime.handle_action("javdb", "video", {"code": lookup_code, "refresh": True})
++        item = detail.get("data") if isinstance(detail, dict) else {}
++        if not isinstance(item, dict):
++            item = {}
++        cover_url = str(item.get("cover_url") or "")
++        thumb_url = str(item.get("thumb_url") or "")
++        fanart_url = cover_url or thumb_url
++        if cover_url:
++            sub["cover_url"] = cover_url
++        if thumb_url:
++            sub["thumb_url"] = thumb_url
++        if fanart_url:
++            sub["fanart_url"] = fanart_url
++        candidates = _image_candidates(item, item.get("previews"), item.get("preview_images"))
++        if candidates:
++            sub["image_candidates"] = candidates
++        sub["cover_refreshed_at"] = _now()
++        sub["updated_at"] = sub["cover_refreshed_at"]
++        _save(data)
++        return {"ok": True, "subscription": _public_subscription(sub), "cover_url": cover_url, "thumb_url": thumb_url, "fanart_url": fanart_url, "image_candidates": candidates}
+     if action == "delete":
+         sub_id = str(payload.get("id") or "")
+         sub = next((s for s in data["subscriptions"] if s.get("id") == sub_id), None)

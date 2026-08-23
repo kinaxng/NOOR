@@ -1,0 +1,56 @@
+diff --git a/backend/app/api/settings_facefusion_upgrade.py b/backend/app/api/settings_facefusion_upgrade.py
+index 3240ff3..b240440 100644
+--- a/backend/app/api/settings_facefusion_upgrade.py
++++ b/backend/app/api/settings_facefusion_upgrade.py
+@@ -210,13 +210,45 @@ def _apply_noor_facefusion_patch(source_dir: Path) -> None:
+     if not execution_path.exists():
+         raise RuntimeError("FaceFusion execution.py 不存在，无法套用 NOOR 缓存补丁")
+     text = execution_path.read_text(encoding="utf-8")
+-    if "ORT_TENSORRT_CACHE_PATH" in text:
++    if "ORT_TENSORRT_CACHE_PATH" not in text:
++        old = "return os.path.join('.caches', onnxruntime.get_version_string())"
++        new = "return os.getenv('ORT_TENSORRT_CACHE_PATH') or os.path.join('.caches', onnxruntime.get_version_string())"
++        if old not in text:
++            raise RuntimeError("FaceFusion TensorRT 缓存逻辑已变化，请手动检查 NOOR 补丁")
++        execution_path.write_text(text.replace(old, new), encoding="utf-8")
++
++    content_analyser_path = source_dir / "facefusion" / "content_analyser.py"
++    if not content_analyser_path.exists():
++        raise RuntimeError("FaceFusion content_analyser.py 不存在，无法套用 NOOR 内容分析补丁")
++    text = content_analyser_path.read_text(encoding="utf-8")
++    if "NOOR_FACEFUSION_SKIP_CONTENT_ANALYSIS" in text:
+         return
+-    old = "return os.path.join('.caches', onnxruntime.get_version_string())"
+-    new = "return os.getenv('ORT_TENSORRT_CACHE_PATH') or os.path.join('.caches', onnxruntime.get_version_string())"
+-    if old not in text:
+-        raise RuntimeError("FaceFusion TensorRT 缓存逻辑已变化，请手动检查 NOOR 补丁")
+-    execution_path.write_text(text.replace(old, new), encoding="utf-8")
++    if "import os\n" not in text:
++        text = text.replace("from functools import lru_cache\n", "from functools import lru_cache\nimport os\n", 1)
++    marker = "STREAM_COUNTER = 0\n"
++    helper = (
++        "STREAM_COUNTER = 0\n\n\n"
++        "def skip_content_analysis() -> bool:\n"
++        "\treturn os.getenv('NOOR_FACEFUSION_SKIP_CONTENT_ANALYSIS') == '1'\n"
++    )
++    if marker not in text:
++        raise RuntimeError("FaceFusion 内容分析结构已变化，请手动检查 NOOR 补丁")
++    text = text.replace(marker, helper, 1)
++    replacements = {
++        "def analyse_stream(vision_frame : VisionFrame, video_fps : Fps) -> bool:\n\tglobal STREAM_COUNTER\n\n":
++            "def analyse_stream(vision_frame : VisionFrame, video_fps : Fps) -> bool:\n\tglobal STREAM_COUNTER\n\n\tif skip_content_analysis():\n\t\treturn False\n\n",
++        "def analyse_frame(vision_frame : VisionFrame) -> bool:\n\treturn detect_nsfw(vision_frame)\n":
++            "def analyse_frame(vision_frame : VisionFrame) -> bool:\n\tif skip_content_analysis():\n\t\treturn False\n\treturn detect_nsfw(vision_frame)\n",
++        "def analyse_image(image_path : str) -> bool:\n\tvision_frame = read_image(image_path)\n":
++            "def analyse_image(image_path : str) -> bool:\n\tif skip_content_analysis():\n\t\treturn False\n\tvision_frame = read_image(image_path)\n",
++        "def analyse_video(video_path : str, trim_frame_start : int, trim_frame_end : int) -> bool:\n\tvideo_fps = detect_video_fps(video_path)\n":
++            "def analyse_video(video_path : str, trim_frame_start : int, trim_frame_end : int) -> bool:\n\tif skip_content_analysis():\n\t\treturn False\n\n\tvideo_fps = detect_video_fps(video_path)\n",
++    }
++    for old, new in replacements.items():
++        if old not in text:
++            raise RuntimeError("FaceFusion 内容分析结构已变化，请手动检查 NOOR 补丁")
++        text = text.replace(old, new, 1)
++    content_analyser_path.write_text(text, encoding="utf-8")
+ 
+ 
+ def _validate_facefusion_source(source_dir: Path, timeout: int = 45) -> None:

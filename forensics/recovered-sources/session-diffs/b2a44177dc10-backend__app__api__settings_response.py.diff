@@ -1,0 +1,55 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index e133580..75a3e2d 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -58,6 +58,7 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+         }
+     facefusion_dir = env_data.get("FACEFUSION_DIR", "/volume1/facefusion/facefusion")
+     facefusion_native_model_dir = str(Path(facefusion_dir) / ".assets" / "models")
++    resolved_lada_model_dir = settings.lada_model_dir or lada_model_weights_dir
+ 
+     return {
+         "emby": {
+@@ -69,24 +70,24 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             ),
+         },
+         "storage": {
+-            "source_dir": env_data.get("SOURCE_DIR", ""),
+-            "output_dir": env_data.get("OUTPUT_DIR", ""),
+-            "noor_data_dir": env_data.get("NOOR_DATA_DIR", settings.noor_data_dir),
+-            "database_url": env_data.get("DATABASE_URL", settings.database_url),
+-            "database_path": database_path_for_display(env_data.get("DATABASE_URL", settings.database_url)),
+-            "whisper_model_dir": env_data.get("WHISPER_MODEL_DIR", settings.whisper_model_dir),
+-            "whisper_cache_dir": env_data.get("WHISPER_CACHE_DIR", settings.whisper_cache_dir),
+-            "whisper_temp_dir": env_data.get("WHISPER_TEMP_DIR", settings.whisper_temp_dir),
+-            "audio_separator_model_dir": env_data.get("AUDIO_SEPARATOR_MODEL_DIR", settings.audio_separator_model_dir),
+-            "reazon_model_dir": env_data.get("REAZON_MODEL_DIR", settings.reazon_model_dir),
+-            "reazon_nemo_model_path": env_data.get("REAZON_NEMO_MODEL_PATH", settings.reazon_nemo_model_path),
+-            "lada_model_dir": lada_model_weights_dir,
+-            "lada_model_weights_dir": lada_model_weights_dir,
+-            "lada_cache_dir": env_data.get("LADA_CACHE_DIR", settings.lada_cache_dir),
+-            "lada_temp_dir": env_data.get("LADA_TEMP_DIR", settings.lada_temp_dir),
+-            "facefusion_model_dir": env_data.get("FACEFUSION_MODEL_DIR", settings.facefusion_model_dir),
+-            "facefusion_cache_dir": env_data.get("FACEFUSION_CACHE_DIR", settings.facefusion_cache_dir),
+-            "facefusion_temp_dir": env_data.get("FACEFUSION_TEMP_DIR", settings.facefusion_temp_dir),
++            "source_dir": settings.source_dir,
++            "output_dir": settings.output_dir,
++            "noor_data_dir": settings.noor_data_dir,
++            "database_url": settings.database_url,
++            "database_path": database_path_for_display(settings.database_url),
++            "whisper_model_dir": settings.whisper_model_dir,
++            "whisper_cache_dir": settings.whisper_cache_dir,
++            "whisper_temp_dir": settings.whisper_temp_dir,
++            "audio_separator_model_dir": settings.audio_separator_model_dir,
++            "reazon_model_dir": settings.reazon_model_dir,
++            "reazon_nemo_model_path": settings.reazon_nemo_model_path,
++            "lada_model_dir": resolved_lada_model_dir,
++            "lada_model_weights_dir": resolved_lada_model_dir,
++            "lada_cache_dir": settings.lada_cache_dir,
++            "lada_temp_dir": settings.lada_temp_dir,
++            "facefusion_model_dir": settings.facefusion_model_dir,
++            "facefusion_cache_dir": settings.facefusion_cache_dir,
++            "facefusion_temp_dir": settings.facefusion_temp_dir,
+         },
+         "lada": {
+             "cli_path": env_data.get("LADA_CLI_PATH", "python3 -m lada.cli.main"),

@@ -1,0 +1,20 @@
+diff --git a/plugins/av-recommend/backend.py b/plugins/av-recommend/backend.py
+index 99ea93b..0e83ff4 100644
+--- a/plugins/av-recommend/backend.py
++++ b/plugins/av-recommend/backend.py
+@@ -57,12 +57,10 @@ def _image_candidates(*items: Any) -> list[str]:
+                 inner = unquote(str(values[0] or "").strip())
+         raw = inner or text
+         candidates: list[str] = []
+-        if "tp.cmastd.com/" in raw:
+-            candidates.append(raw.replace("tp.cmastd.com/", "tp.spfcas.com/", 1))
+-        if raw not in candidates:
+-            candidates.append(raw)
+-        if inner and text not in candidates:
++        if inner and text:
+             candidates.append(text)
++        if raw:
++            candidates.append(raw)
+         return candidates
+ 
+     def push(value: Any) -> None:

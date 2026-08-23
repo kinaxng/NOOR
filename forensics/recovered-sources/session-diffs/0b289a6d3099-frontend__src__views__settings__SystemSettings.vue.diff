@@ -1,0 +1,126 @@
+diff --git a/frontend/src/views/settings/SystemSettings.vue b/frontend/src/views/settings/SystemSettings.vue
+index 1b0f0f3..12deba1 100644
+--- a/frontend/src/views/settings/SystemSettings.vue
++++ b/frontend/src/views/settings/SystemSettings.vue
+@@ -11,7 +11,7 @@ import BaseIcon from '../../components/noor/BaseIcon.vue'
+ import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+ 
+ const toast = useToast()
+-const { blurEnabled, setBlur } = useBlurCover()
++const { globalBlurEnabled, setGlobalBlur } = useBlurCover()
+ const { t } = useI18n()
+ 
+ const loading = ref(false)
+@@ -29,9 +29,9 @@ const availableLibraries = ref<{ id: string; name: string }[]>([])
+ const librariesLoaded = ref(false)
+ 
+ // Network settings
+-const accelerationMode = ref('mirror')
+ const httpProxy = ref('')
+ const githubMirror = ref('https://ghproxy.com')
++const githubToken = ref('')
+ const hfMirror = ref('https://hf-mirror.com')
+ const pipMirror = ref('https://pypi.tuna.tsinghua.edu.cn/simple')
+ const hfToken = ref('')
+@@ -69,9 +69,9 @@ async function loadSettings() {
+       const resp = await api.get('/settings')
+       const data = resp.data
+       if (data.network) {
+-        accelerationMode.value = data.network.acceleration_mode || 'mirror'
+         httpProxy.value = data.network.http_proxy || ''
+         githubMirror.value = data.network.github_mirror || 'https://ghproxy.com'
++        githubToken.value = data.network.github_token || ''
+         hfMirror.value = data.network.hf_mirror || 'https://hf-mirror.com'
+         pipMirror.value = data.network.pip_mirror || 'https://pypi.tuna.tsinghua.edu.cn/simple'
+         hfToken.value = data.network.hf_token || ''
+@@ -170,10 +170,16 @@ async function saveEmby() {
+ async function saveNetwork() {
+   networkSaving.value = true
+   try {
++    const effectiveMode = githubMirror.value || hfMirror.value || pipMirror.value
++      ? 'mirror'
++      : httpProxy.value
++        ? 'proxy'
++        : 'none'
+     await api.put('/settings/network', {
+-      acceleration_mode: accelerationMode.value,
++      acceleration_mode: effectiveMode,
+       http_proxy: httpProxy.value,
+       github_mirror: githubMirror.value,
++      github_token: githubToken.value,
+       hf_mirror: hfMirror.value,
+       pip_mirror: pipMirror.value,
+       hf_token: hfToken.value,
+@@ -271,9 +277,9 @@ function toggleLibrary(libId: string) {
+           <!-- Blur Toggle -->
+           <FieldRow :label="t('settings.ui.blur')" :description="t('settings.ui.blurDesc')">
+             <div class="flex items-center gap-3">
+-              <SettingsSwitch :model-value="blurEnabled" @update:model-value="setBlur" />
++              <SettingsSwitch :model-value="globalBlurEnabled" @update:model-value="setGlobalBlur" />
+               <span class="text-sm text-text-secondary">
+-                {{ blurEnabled ? t('settings.ui.blurEnabled') : t('settings.ui.blurDisabled') }}
++                {{ globalBlurEnabled ? t('settings.ui.blurEnabled') : t('settings.ui.blurDisabled') }}
+               </span>
+             </div>
+           </FieldRow>
+@@ -288,41 +294,31 @@ function toggleLibrary(libId: string) {
+ 
+       <!-- 网络加速 -->
+       <div class="settings-card">
+-        <div class="settings-card__head"><h2 class="settings-card__title">{{ t('settings.network.title') }}</h2><p class="settings-card__subtitle">配置下载与模型访问所使用的网络加速方式</p></div>
++        <div class="settings-card__head"><h2 class="settings-card__title">{{ t('settings.network.title') }}</h2><p class="settings-card__subtitle">镜像和 HTTP 代理可同时配置；执行时按镜像 → HTTP 代理 → 直连回退</p></div>
+ 
+         <div class="settings-form">
+-          <FieldRow :label="t('settings.network.mode')" :description="accelerationMode === 'none' ? t('settings.network.noneHint') : accelerationMode === 'proxy' ? t('settings.network.proxyHint2') : t('settings.network.mirrorHint')">
+-            <select v-model="accelerationMode" class="settings-input">
+-              <option value="none">{{ t('settings.network.mode.none') }}</option>
+-              <option value="proxy">{{ t('settings.network.mode.proxy') }}</option>
+-              <option value="mirror">{{ t('settings.network.mode.mirror') }}</option>
+-            </select>
++          <FieldRow :label="t('settings.network.githubMirror')" :description="t('settings.network.githubMirrorDesc')">
++            <input v-model="githubMirror" type="text" placeholder="https://ghproxy.com" class="settings-input" />
++          </FieldRow>
++          <FieldRow :label="t('settings.network.githubToken')" :description="t('settings.network.githubTokenDesc')">
++            <input v-model="githubToken" type="password" placeholder="github_pat_xxxxxxxxxxxx" class="settings-input" />
++          </FieldRow>
++          <FieldRow :label="t('settings.network.hfMirror')" :description="t('settings.network.hfMirrorDesc')">
++            <input v-model="hfMirror" type="text" placeholder="https://hf-mirror.com" class="settings-input" />
++          </FieldRow>
++          <FieldRow :label="t('settings.network.hfToken')" :description="t('settings.network.hfTokenDesc')">
++            <input v-model="hfToken" type="password" placeholder="hf_xxxxxxxxxxxx" class="settings-input" />
++          </FieldRow>
++          <FieldRow :label="t('settings.network.pipMirror')" :description="t('settings.network.pipMirrorDesc')">
++            <input v-model="pipMirror" type="text" placeholder="https://pypi.tuna.tsinghua.edu.cn/simple" class="settings-input" />
++          </FieldRow>
++          <FieldRow :label="t('settings.network.proxy')" :description="t('settings.network.proxyDesc')">
++            <input v-model="httpProxy" type="text" placeholder="http://127.0.0.1:7890" class="settings-input" />
+           </FieldRow>
+-
+-          <template v-if="accelerationMode === 'proxy'">
+-            <FieldRow :label="t('settings.network.proxy')" :description="t('settings.network.proxyDesc')">
+-              <input v-model="httpProxy" type="text" placeholder="http://127.0.0.1:7890" class="settings-input" />
+-            </FieldRow>
+-            <FieldRow :label="t('settings.network.hfToken')" :description="t('settings.network.hfTokenDesc')">
+-              <input v-model="hfToken" type="password" placeholder="hf_xxxxxxxxxxxx" class="settings-input" />
+-            </FieldRow>
+-          </template>
+-
+-          <template v-if="accelerationMode === 'mirror'">
+-            <FieldRow :label="t('settings.network.githubMirror')" :description="t('settings.network.githubMirrorDesc')">
+-              <input v-model="githubMirror" type="text" placeholder="https://ghproxy.com" class="settings-input" />
+-            </FieldRow>
+-            <FieldRow :label="t('settings.network.hfMirror')" :description="t('settings.network.hfMirrorDesc')">
+-              <input v-model="hfMirror" type="text" placeholder="https://hf-mirror.com" class="settings-input" />
+-            </FieldRow>
+-            <FieldRow :label="t('settings.network.pipMirror')" :description="t('settings.network.pipMirrorDesc')">
+-              <input v-model="pipMirror" type="text" placeholder="https://pypi.tuna.tsinghua.edu.cn/simple" class="settings-input" />
+-            </FieldRow>
+-          </template>
+ 
+           <div class="settings-card__actions settings-card__actions--end">
+             <VuiButton variant="contained" color="info" size="small" customClass="settings-save-btn" :loading="networkSaving" @click="saveNetwork">
+-              {{ networkSaving ? t('settings.saving') : t('settings.saveNetwork') }}
++              {{ networkSaving ? t('settings.saving') : t('common.save') }}
+             </VuiButton>
+           </div>
+         </div>

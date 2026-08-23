@@ -1,0 +1,126 @@
+diff --git a/backend/app/pipeline/whisper/translator.py b/backend/app/pipeline/whisper/translator.py
+index a234832..5674432 100644
+--- a/backend/app/pipeline/whisper/translator.py
++++ b/backend/app/pipeline/whisper/translator.py
+@@ -25,6 +25,35 @@ def _is_ollama_url(base_url: str) -> bool:
+     return False
+ 
+ 
++def _resolve_chat_completions_url(base_url: str) -> str:
++    """Resolve user configured OpenAI-compatible chat endpoint.
++
++    Users may enter either a service root, /v1, or a full chat endpoint. Keep a
++    full endpoint untouched so custom proxies can route /v1/chat themselves.
++    """
++    normalized = (base_url or "").rstrip("/")
++    lowered = normalized.lower()
++    if lowered.endswith("/v1/chat") or lowered.endswith("/v1/chat/completions"):
++        return normalized
++    if lowered.endswith("/v1"):
++        return f"{normalized}/chat/completions"
++    return f"{normalized}/v1/chat/completions"
++
++
++def _is_ollama_native_chat_url(base_url: str) -> bool:
++    return (base_url or "").rstrip("/").lower().endswith("/api/chat")
++
++
++def _resolve_ollama_root_url(base_url: str) -> str:
++    normalized = (base_url or "").rstrip("/")
++    lowered = normalized.lower()
++    if lowered.endswith("/api/chat"):
++        return normalized[:-len("/api/chat")]
++    if lowered.endswith("/api/generate"):
++        return normalized[:-len("/api/generate")]
++    return normalized
++
++
+ # 翻译风格提示词模板（系统提示词）
+ TRANSLATE_SYSTEM_PROMPTS = {
+     "adult_explicit": """#Role
+@@ -126,19 +155,38 @@ class OpenAILikeTranslator:
+ 
+         try:
+             with httpx.Client(timeout=self.timeout) as client:
+-                response = client.post(
+-                    f"{self.base_url.rstrip('/').removesuffix('/v1')}/v1/chat/completions",
+-                    headers=headers,
+-                    json=request_json,
+-                )
++                if _is_ollama_native_chat_url(self.base_url):
++                    response = client.post(
++                        self.base_url,
++                        headers={"Content-Type": "application/json"},
++                        json={
++                            "model": self.model,
++                            "messages": request_json["messages"],
++                            "stream": False,
++                            "think": False,
++                            "options": {
++                                "temperature": request_json["temperature"],
++                                "num_predict": request_json["max_tokens"],
++                            },
++                        },
++                    )
++                else:
++                    response = client.post(
++                        _resolve_chat_completions_url(self.base_url),
++                        headers=headers,
++                        json=request_json,
++                    )
+                 response.raise_for_status()
+                 result = response.json()
+-                message = result.get("choices", [{}])[0].get("message", {})
++                if _is_ollama_native_chat_url(self.base_url):
++                    message = result.get("message", {})
++                else:
++                    message = result.get("choices", [{}])[0].get("message", {})
+                 # 支持 Ollama qwen3.5 等思维模型的 reasoning 字段
+                 generated_text = message.get("content") or ""
+-                if not generated_text and message.get("reasoning"):
++                reasoning = message.get("reasoning") or message.get("thinking")
++                if not generated_text and reasoning:
+                     # reasoning 字段包含思考过程，尝试从中提取翻译结果
+-                    reasoning = message["reasoning"]
+                     generated_text = self._extract_from_reasoning(reasoning, len(texts))
+                 if not generated_text:
+                     raise RuntimeError(
+@@ -319,6 +367,7 @@ def check_translator_health(base_url: str, api_key: Optional[str] = None, model:
+     result = {"available": False, "message": "", "models": []}
+ 
+     base_url = base_url.rstrip("/")
++    ollama_root_url = _resolve_ollama_root_url(base_url)
+     headers = {}
+     if api_key:
+         headers["Authorization"] = f"Bearer {api_key}"
+@@ -326,16 +375,24 @@ def check_translator_health(base_url: str, api_key: Optional[str] = None, model:
+     try:
+         # 先尝试获取模型列表
+         with httpx.Client(timeout=10) as client:
+-            models_resp = client.get(
+-                f"{base_url}/v1/models",
+-                headers=headers,
+-            )
+-            if models_resp.status_code == 200:
+-                models_data = models_resp.json()
++            if _is_ollama_native_chat_url(base_url):
++                models_resp = client.get(f"{ollama_root_url}/api/tags")
++                models_data = models_resp.json() if models_resp.status_code == 200 else {}
++                available_models = [
++                    m["name"] for m in models_data.get("models", [])
++                    if not model or m["name"] == model or m["name"].startswith(model.split("-")[0])
++                ]
++            else:
++                models_resp = client.get(
++                    f"{base_url}/v1/models",
++                    headers=headers,
++                )
++                models_data = models_resp.json() if models_resp.status_code == 200 else {}
+                 available_models = [
+                     m["id"] for m in models_data.get("data", [])
+                     if not model or m["id"] == model or m["id"].startswith(model.split("-")[0])
+                 ]
++            if models_resp.status_code == 200:
+                 result["models"] = available_models[:10]
+     except Exception:
+         pass

@@ -1,0 +1,151 @@
+diff --git a/backend/app/api/endpoints/media_library.py b/backend/app/api/endpoints/media_library.py
+index b954867..620c15b 100644
+--- a/backend/app/api/endpoints/media_library.py
++++ b/backend/app/api/endpoints/media_library.py
+@@ -10,7 +10,7 @@ import mimetypes
+ import xml.etree.ElementTree as ET
+ from datetime import datetime, timezone
+ from pathlib import Path
+-from typing import Optional
++from typing import Any, Optional
+ from urllib.parse import quote
+ 
+ import httpx
+@@ -92,12 +92,137 @@ class MediaItemDeleteRequest(BaseModel):
+     dry_run: bool = False
+ 
+ 
++class ActorMappingImportRequest(BaseModel):
++    records: Any
++    replace: bool = False
++
++
+ def _normalize_actor_key(value: str | None) -> str:
+     if not value:
+         return ""
+     return re.sub(r"[\s\u3000・·._\-]+", "", value).lower()
+ 
+ 
++def _split_actor_names(value: Any) -> list[str]:
++    if value is None:
++        return []
++    if isinstance(value, list):
++        parts = value
++    else:
++        parts = re.split(r"[,，;；/|、\n\r\t]+", str(value or ""))
++    out: list[str] = []
++    for part in parts:
++        name = str(part or "").strip()
++        if name and name not in out:
++            out.append(name)
++    return out
++
++
++def _actor_mappings_path() -> Path:
++    path = data_path() / "media_actor_mappings.json"
++    path.parent.mkdir(parents=True, exist_ok=True)
++    return path
++
++
++def _load_actor_mappings() -> list[dict]:
++    path = _actor_mappings_path()
++    if not path.is_file():
++        return []
++    try:
++        import json
++
++        payload = json.loads(path.read_text(encoding="utf-8"))
++    except Exception:
++        return []
++    records = payload.get("records") if isinstance(payload, dict) else payload
++    if not isinstance(records, list):
++        return []
++    return [_normalize_actor_mapping(item) for item in records if isinstance(item, dict)]
++
++
++def _save_actor_mappings(records: list[dict]) -> None:
++    import json
++
++    normalized = [_normalize_actor_mapping(item) for item in records if isinstance(item, dict)]
++    payload = {
++        "version": 1,
++        "updated_at": datetime.now(timezone.utc).isoformat(),
++        "records": normalized,
++    }
++    path = _actor_mappings_path()
++    tmp = path.with_suffix(".tmp")
++    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
++    tmp.replace(path)
++
++
++def _normalize_actor_mapping(record: dict) -> dict:
++    name_jp = str(record.get("name_jp") or record.get("japanese") or record.get("ja") or record.get("name") or "").strip()
++    name_zh_cn = str(record.get("name_zh_cn") or record.get("simplified") or record.get("zh_cn") or "").strip()
++    name_zh_tw = str(record.get("name_zh_tw") or record.get("traditional") or record.get("zh_tw") or "").strip()
++    canonical = str(record.get("canonical_name") or record.get("primary") or name_jp or name_zh_cn or name_zh_tw or "").strip()
++    aliases = _split_actor_names(record.get("aliases") or record.get("alias") or record.get("other_name"))
++    names = []
++    for name in [canonical, name_jp, name_zh_cn, name_zh_tw, *aliases]:
++        if name and name not in names:
++            names.append(name)
++    key = str(record.get("id") or record.get("key") or _normalize_actor_key(canonical) or _normalize_actor_key(names[0] if names else "")).strip()
++    return {
++        "id": key,
++        "canonical_name": canonical or (names[0] if names else key),
++        "name_jp": name_jp,
++        "name_zh_cn": name_zh_cn,
++        "name_zh_tw": name_zh_tw,
++        "aliases": [name for name in aliases if name not in {canonical, name_jp, name_zh_cn, name_zh_tw}],
++        "names": names,
++        "avatar_url": str(record.get("avatar_url") or record.get("image_url") or record.get("avatar") or "").strip(),
++        "overview": str(record.get("overview") or record.get("bio") or record.get("description") or "").strip(),
++        "gender": str(record.get("gender") or "").strip(),
++        "tmdb_id": str(record.get("tmdb_id") or record.get("tmdb") or record.get("TMDB") or "").strip(),
++        "source": str(record.get("source") or "").strip(),
++    }
++
++
++def _actor_mapping_name_index(records: list[dict]) -> dict[str, dict]:
++    index: dict[str, dict] = {}
++    for record in records:
++        for name in record.get("names") or []:
++            key = _normalize_actor_key(name)
++            if key and key not in index:
++                index[key] = record
++    return index
++
++
++def _merge_actor_mapping_records(existing: list[dict], incoming: list[dict], *, replace: bool) -> list[dict]:
++    if replace:
++        return [_normalize_actor_mapping(item) for item in incoming]
++    merged: dict[str, dict] = {str(item.get("id") or ""): _normalize_actor_mapping(item) for item in existing}
++    name_index = _actor_mapping_name_index(list(merged.values()))
++    for item in incoming:
++        normalized = _normalize_actor_mapping(item)
++        key = str(normalized.get("id") or "")
++        matched = merged.get(key)
++        if not matched:
++            matched = next((name_index.get(_normalize_actor_key(name)) for name in normalized.get("names") or [] if _normalize_actor_key(name) in name_index), None)
++        if not matched:
++            merged[key] = normalized
++            for name in normalized.get("names") or []:
++                name_index[_normalize_actor_key(name)] = normalized
++            continue
++        for field in ("canonical_name", "name_jp", "name_zh_cn", "name_zh_tw", "avatar_url", "overview", "gender", "tmdb_id", "source"):
++            if normalized.get(field) and not matched.get(field):
++                matched[field] = normalized[field]
++        aliases = list(matched.get("aliases") or [])
++        names = list(matched.get("names") or [])
++        for name in normalized.get("names") or []:
++            if name not in names:
++                names.append(name)
++            if name != matched.get("canonical_name") and name not in aliases:
++                aliases.append(name)
++        matched["aliases"] = aliases
++        matched["names"] = names
++    return list(merged.values())
++
++
+ def _person_image_url(config: dict, person: dict) -> str | None:
+     person_id = person.get("Id")
+     if not person_id:

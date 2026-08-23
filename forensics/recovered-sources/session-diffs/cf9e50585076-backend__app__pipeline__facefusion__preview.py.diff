@@ -1,0 +1,12 @@
+diff --git a/backend/app/pipeline/facefusion/preview.py b/backend/app/pipeline/facefusion/preview.py
+index 4668fe7..7f36b38 100644
+--- a/backend/app/pipeline/facefusion/preview.py
++++ b/backend/app/pipeline/facefusion/preview.py
+@@ -103,6 +103,7 @@ def generate_facefusion_preview(
+         "frame_number": int(frame_number),
+         "preview_mode": preview_mode,
+         "preview_resolution": preview_resolution,
++        "skip_content_analysis": True,
+         "output_path": str(output_path),
+     }
+     try:

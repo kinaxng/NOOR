@@ -1,0 +1,36 @@
+diff --git a/frontend/src/components/noor/FaceFusionPanel.vue b/frontend/src/components/noor/FaceFusionPanel.vue
+index dd7efb6..ef18040 100644
+--- a/frontend/src/components/noor/FaceFusionPanel.vue
++++ b/frontend/src/components/noor/FaceFusionPanel.vue
+@@ -1962,11 +1962,17 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ 
+ .facefusion-native-workspace__lower {
+   display: grid;
+-  grid-template-columns: minmax(20rem, 0.85fr) minmax(24rem, 1fr);
++  width: 100%;
++  min-width: 0;
++  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1fr);
+   gap: 1rem;
+   align-items: start;
+ }
+ 
++.facefusion-native-workspace__lower > * {
++  min-width: 0;
++}
++
+ .facefusion-native-group {
+   display: grid;
+   gap: 0.75rem;
+@@ -2824,6 +2830,12 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   background: rgba(0, 117, 255, 0.1);
+ }
+ 
++@media (max-width: 1460px) {
++  .facefusion-native-workspace__lower {
++    grid-template-columns: minmax(0, 1fr);
++  }
++}
++
+ @media (max-width: 1180px) {
+   .facefusion-native-grid {
+     grid-template-columns: minmax(0, 1fr);

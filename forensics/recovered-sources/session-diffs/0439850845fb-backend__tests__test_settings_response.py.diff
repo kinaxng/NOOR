@@ -1,0 +1,13 @@
+diff --git a/backend/tests/test_settings_response.py b/backend/tests/test_settings_response.py
+index e11cc40..913b812 100644
+--- a/backend/tests/test_settings_response.py
++++ b/backend/tests/test_settings_response.py
+@@ -41,6 +41,8 @@ def test_build_settings_payload_maps_env_and_defaults(monkeypatch: pytest.Monkey
+     assert payload['emby']['server'] == 'http://emby'
+     assert payload['emby']['enabled_library_ids'] == ['1', '2']
+     assert payload['storage']['lada_model_dir'] == '/models/lada'
++    assert payload['facefusion']['native_model_dir'] == '/volume1/facefusion/facefusion/.assets/models'
++    assert payload['facefusion']['model_dir_mode'] == 'native_assets'
+     assert payload['lada']['version'] == '1.2.3'
+     assert payload['lada_defaults']['fp16'] is False
+     assert payload['lada_defaults']['max_clip_length'] == 240

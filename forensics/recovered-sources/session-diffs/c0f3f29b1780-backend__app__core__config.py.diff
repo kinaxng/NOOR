@@ -1,0 +1,13 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index 6678df1..34728a5 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -15,7 +15,7 @@ else:
+ ENV_FILE_PATH = Path(os.environ.get("NOOR_ENV_FILE", str(PROJECT_ROOT / ".env")))
+ 
+ DEFAULT_NOOR_DATA_DIR = str(PROJECT_ROOT / "data")
+-DEFAULT_REAZON_MODEL_DIR = str(PROJECT_ROOT / "data" / "models" / "whisper" / "reazon")
++DEFAULT_REAZON_MODEL_DIR = str(Path(DEFAULT_NOOR_DATA_DIR) / "models" / "whisper" / "reazon")
+ DEFAULT_REAZON_NEMO_MODEL_PATH = f"{DEFAULT_REAZON_MODEL_DIR}/reazonspeech-nemo-v2.nemo"
+ DEFAULT_FACEFUSION_DIR = "/volume1/facefusion/facefusion"
+ 

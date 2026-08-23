@@ -1,0 +1,241 @@
+diff --git a/frontend/src/views/Home.vue b/frontend/src/views/Home.vue
+index 2dcb8d8..db1ea3c 100644
+--- a/frontend/src/views/Home.vue
++++ b/frontend/src/views/Home.vue
+@@ -10,6 +10,8 @@ import VuiButton from '../components/ui/Button/VuiButton.vue'
+ import NoorPagination from '../components/ui/Pagination.vue'
+ import { useRouteTabs } from '../composables/useRouteTabs'
+ import { useToast } from '../composables/useToast'
++import { useConfirm } from '../composables/useConfirm'
++import api from '../api'
+ 
+ // Lazy-load panels that are only shown on demand
+ const AsyncMediaDetailPanel = defineAsyncComponent(() => import('../components/noor/MediaDetailPanel.vue'))
+@@ -20,6 +22,7 @@ import type { MediaItem } from '../api/types'
+ const { t, i18nVersion } = useI18n()
+ const mediaLibraryStore = useMediaLibraryStore()
+ const toast = useToast()
++const { confirm } = useConfirm()
+ const route = useRoute()
+ const router = useRouter()
+ 
+@@ -49,7 +52,7 @@ const filters = computed(() => {
+   ]
+ })
+ 
+-const searchQuery = ref(mediaLibraryStore.searchQuery)
++const searchQuery = ref(String(route.query.q || mediaLibraryStore.searchQuery || ''))
+ const searchPlaceholder = computed(() => {
+   void i18nVersion.value
+   return t('library.search.placeholder')
+@@ -74,6 +77,10 @@ function toggleImageMode() {
+   schedulePageSizeUpdate(true)
+ }
+ 
++function submitSearch() {
++  mediaLibraryStore.setSearch(searchQuery.value)
++}
++
+ function estimatePageSize() {
+   const el = gridEl.value
+   if (!el) return 18
+@@ -120,6 +127,7 @@ const subtitleVideoPath = ref('')
+ const subtitleVideoId = ref('')
+ const subtitleFolderPaths = ref<string[]>([])
+ let detailRequestToken = 0
++const deletingItemIds = ref(new Set<string>())
+ 
+ function resetPanelState(options: { keepSelectedVideo?: boolean } = {}) {
+   showDetailPanel.value = false
+@@ -174,7 +182,35 @@ async function refreshCurrentPage(forceRefresh = false) {
+   }
+ }
+ 
++function deletePlanDetails(plannedDirs: string[] = [], plannedFiles: string[] = []) {
++  return [
++    { label: `将删除文件夹 · ${plannedDirs.length}`, items: plannedDirs },
++    { label: `将删除文件 · ${plannedFiles.length}`, items: plannedFiles },
++  ].filter(section => section.items.length > 0)
++}
++
++function deleteResultDetails(result: any = {}) {
++  const deletedDirs = result.deleted_dirs || []
++  const deletedFiles = result.deleted_files || result.deleted_paths || []
++  const missingDirs = result.missing_dirs || []
++  const missingFiles = result.missing_files || []
++  return [
++    { label: `已删除文件夹 · ${deletedDirs.length}`, items: deletedDirs },
++    { label: `已删除文件 · ${deletedFiles.length}`, items: deletedFiles },
++    { label: `已跳过文件夹 · ${missingDirs.length}`, items: missingDirs },
++    { label: `已跳过文件 · ${missingFiles.length}`, items: missingFiles },
++  ].filter(section => section.items.length > 0)
++}
++
++function setDeletingItem(itemId: string, active: boolean) {
++  const next = new Set(deletingItemIds.value)
++  if (active) next.add(itemId)
++  else next.delete(itemId)
++  deletingItemIds.value = next
++}
++
+ onMounted(async () => {
++  applyRouteSearchQuery()
+   await ensureLibraryReady()
+   await nextTick()
+   schedulePageSizeUpdate(true)
+@@ -210,6 +246,14 @@ watch(searchQuery, (value) => {
+   }, 220)
+ })
+ 
++function applyRouteSearchQuery() {
++  const q = String(route.query.q || '')
++  if (q && q !== searchQuery.value) {
++    searchQuery.value = q
++    mediaLibraryStore.setSearch(q)
++  }
++}
++
+ function autoSelectLibrary(_filter: string | null) {
+   const preferredId = mediaLibraryStore.enabledLibraryIds[0]
+   const lib = (preferredId
+@@ -237,6 +281,10 @@ async function ensureLibraryReady() {
+ }
+ 
+ // Migrate old /library?filter=xxx links to path-based tabs.
++watch(() => route.query.q, () => {
++  applyRouteSearchQuery()
++})
++
+ watch(() => route.query.filter, (f) => {
+   const filter = String(f || '')
+   const valid = ['cracked', 'chinese', 'leaked', 'uncensored'].includes(filter)
+@@ -285,6 +333,51 @@ async function handleSubtitleAction(item: MediaItem) {
+   showSubtitlePanel.value = true
+ }
+ 
++async function handleDeleteAction(item: MediaItem) {
++  if (!item?.id || deletingItemIds.value.has(item.id)) return
++  setDeletingItem(item.id, true)
++  try {
++    const preview = await api.post('/media-library/items/delete-chain', {
++      item_id: item.id,
++      dry_run: true,
++    })
++    const plannedDirs: string[] = preview.data?.planned_dirs || []
++    const plannedFiles: string[] = preview.data?.planned_files || []
++    const code = preview.data?.code || item.nfo?.num || item.name || item.id
++    const ok = await confirm({
++      title: `删除作品 ${code}`,
++      message: `将删除该作品的所有硬链接、源文件及同名 nfo。计划删除 ${plannedDirs.length} 个文件夹、${plannedFiles.length} 个文件。`,
++      confirmText: '删除',
++      cancelText: '取消',
++      danger: true,
++      size: 'xl',
++      note: '文件夹仅在其中的视频文件全部属于本次删除计划时才会删除；源文件位于根目录时只删除文件本身，不删除根目录。',
++      details: deletePlanDetails(plannedDirs, plannedFiles),
++    })
++    if (!ok) return
++
++    const resp = await api.post('/media-library/items/delete-chain', {
++      item_id: item.id,
++    })
++    mediaLibraryStore.applyHardlinkDeleteResult(resp.data || {})
++    toast.success('作品删除成功')
++    await confirm({
++      title: `删除结果 ${resp.data?.code || code}`,
++      message: `已删除 ${(resp.data?.deleted_dirs || []).length} 个文件夹、${((resp.data?.deleted_files || resp.data?.deleted_paths || []) as string[]).length} 个文件。`,
++      confirmText: '关闭',
++      hideCancel: true,
++      danger: false,
++      size: 'xl',
++      details: deleteResultDetails(resp.data || {}),
++    })
++    await refreshCurrentPage(true)
++  } catch (error: any) {
++    toast.error(error?.response?.data?.detail || error?.message || '作品删除失败')
++  } finally {
++    setDeletingItem(item.id, false)
++  }
++}
++
+ function handleCloseDetail() {
+   detailRequestToken += 1
+   resetPanelState()
+@@ -320,7 +413,7 @@ function goPage(page: number) {
+           >
+             <BaseIcon :name="imageMode === 'backdrop' ? 'grid' : 'library'" class="h-4 w-4" />
+           </button>
+-          <div class="library-toolbar__search">
++          <form class="library-toolbar__search" @submit.prevent="submitSearch">
+             <BaseIcon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+             <input
+               v-model="searchQuery"
+@@ -328,7 +421,8 @@ function goPage(page: number) {
+               :placeholder="searchPlaceholder"
+               class="library-toolbar__search-input"
+             />
+-          </div>
++            <button type="submit" class="library-toolbar__search-btn">搜索</button>
++          </form>
+         </div>
+       </div>
+     </div>
+@@ -385,6 +479,7 @@ function goPage(page: number) {
+         @click="handleSelectVideo"
+         @quick-action="handleQuickAction"
+         @subtitle-action="handleSubtitleAction"
++        @delete-action="handleDeleteAction"
+       />
+     </div>
+ 
+@@ -477,6 +572,10 @@ function goPage(page: number) {
+   position: relative;
+   width: 100%;
+   max-width: 20rem;
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) auto;
++  align-items: center;
++  gap: 0.45rem;
+ }
+ 
+ .library-toolbar__search-input {
+@@ -491,6 +590,22 @@ function goPage(page: number) {
+   transition: var(--transition-fast);
+ }
+ 
++.library-toolbar__search-btn {
++  height: 38px;
++  padding: 0 0.9rem;
++  border-radius: var(--radius-lg);
++  border: 1px solid rgba(0,117,255,0.34);
++  background: rgba(0,117,255,0.16);
++  color: #fff;
++  font-size: 0.78rem;
++  font-weight: 800;
++  white-space: nowrap;
++}
++
++.library-toolbar__search-btn:hover {
++  background: rgba(0,117,255,0.24);
++}
++
+ .library-toolbar__search-input::placeholder {
+   color: rgba(255,255,255,0.25);
+ }
+@@ -524,7 +639,15 @@ function goPage(page: number) {
+ }
+ 
+ @media (max-width: 640px) {
+-    .library-toolbar__meta {
++  .library-toolbar__search-wrap {
++    gap: 0.4rem;
++  }
++
++  .library-toolbar__search-btn {
++    padding: 0 0.72rem;
++  }
++
++  .library-toolbar__meta {
+     flex-direction: column;
+     align-items: flex-start;
+     gap: 0.2rem;

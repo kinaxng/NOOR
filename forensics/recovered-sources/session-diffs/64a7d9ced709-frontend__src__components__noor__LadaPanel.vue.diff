@@ -1,0 +1,214 @@
+diff --git a/frontend/src/components/noor/LadaPanel.vue b/frontend/src/components/noor/LadaPanel.vue
+index 46074d0..2afe3c4 100644
+--- a/frontend/src/components/noor/LadaPanel.vue
++++ b/frontend/src/components/noor/LadaPanel.vue
+@@ -33,6 +33,11 @@ const emit = defineEmits<{
+ const submitting = ref(false)
+ const submitStatus = ref<'idle' | 'running' | 'success' | 'error'>('idle')
+ const submitProgress = ref(0)
++const previewLoading = ref(false)
++const previewUrl = ref('')
++const previewError = ref('')
++const previewStale = ref(false)
++const previewFrameNumber = ref(0)
+ 
+ // Hardcoded option lists (mirrors LADA_ENCODING_PRESETS in backend)
+ const detectionModels = computed(() => [
+@@ -129,6 +134,21 @@ watch([() => props.detail, () => props.initialSelectedPath, () => props.initialS
+   selectedSubmitId.value = initialId || detail.id
+ }, { immediate: true })
+ 
++watch(
++  [activeTab, selectedSubmitPath, () => facefusionSettings.value.source_path],
++  () => {
++    if (activeTab.value === 'facefusion' && previewUrl.value) {
++      previewStale.value = true
++    }
++  }
++)
++
++watch(facefusionSettings, () => {
++  if (activeTab.value === 'facefusion' && previewUrl.value) {
++    previewStale.value = true
++  }
++}, { deep: true })
++
+ const displayTitle = computed(() => {
+   if (!props.detail) return ''
+   return props.detail.nfo?.title || props.detail.nfo?.originaltitle || props.detail.name
+@@ -225,6 +245,36 @@ async function handleSubmitFaceFusionJob() {
+     submitting.value = false
+   }
+ }
++
++async function handleGenerateFaceFusionPreview() {
++  if (!selectedSubmitPath.value || !facefusionSettings.value.source_path) {
++    toast.error('请先填写源脸图片')
++    return
++  }
++
++  previewLoading.value = true
++  previewError.value = ''
++  try {
++    const resp = await api.post('/facefusion/preview', {
++      input_path: selectedSubmitPath.value,
++      frame_number: previewFrameNumber.value,
++      preview_mode: 'default',
++      preview_resolution: '768x768',
++      settings: {
++        ...facefusionSettings.value,
++        source_paths: [facefusionSettings.value.source_path],
++      },
++    })
++    previewUrl.value = `${resp.data.preview_url}?t=${Date.now()}`
++    previewStale.value = false
++  } catch (e: any) {
++    console.error(e)
++    previewError.value = e.response?.data?.detail || 'FaceFusion 预览失败'
++    toast.error(previewError.value)
++  } finally {
++    previewLoading.value = false
++  }
++}
+ </script>
+ 
+ <template>
+@@ -262,7 +312,37 @@ async function handleSubmitFaceFusionJob() {
+               </div>
+ 
+               <!-- Shared Header: backdrop + title + tagline + actors -->
+-              <PanelHeader :detail="detail" :show-play="false" />
++              <PanelHeader :detail="detail" :show-play="false">
++                <template v-if="activeTab === 'facefusion'" #media>
++                  <div class="facefusion-preview">
++                    <img
++                      v-if="previewUrl"
++                      :src="previewUrl"
++                      class="facefusion-preview__image"
++                      alt="FaceFusion preview"
++                    />
++                    <div v-else class="facefusion-preview__empty">
++                      <span>FaceFusion Preview</span>
++                    </div>
++                    <div class="facefusion-preview__overlay">
++                      <div>
++                        <span v-if="previewLoading">生成中</span>
++                        <span v-else-if="previewStale">预览已过期</span>
++                        <span v-else-if="previewUrl">当前预览</span>
++                        <span v-else>等待生成</span>
++                      </div>
++                      <button
++                        type="button"
++                        class="facefusion-preview__button"
++                        :disabled="previewLoading || !selectedSubmitPath || !facefusionSettings.source_path"
++                        @click="handleGenerateFaceFusionPreview"
++                      >
++                        {{ previewLoading ? '生成中' : (previewUrl ? '刷新预览' : '生成预览') }}
++                      </button>
++                    </div>
++                  </div>
++                </template>
++              </PanelHeader>
+ 
+               <!-- File Selector -->
+               <FilePathSelector
+@@ -309,6 +389,22 @@ async function handleSubmitFaceFusionJob() {
+                     <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">源脸图片</label>
+                     <input v-model="facefusionSettings.source_path" class="settings-input w-full" type="text" placeholder="/path/to/source-face.jpg" />
+                   </div>
++                  <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
++                    <div>
++                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">预览帧</label>
++                      <input v-model.number="previewFrameNumber" class="settings-input w-full" type="number" min="0" />
++                    </div>
++                    <VuiButton
++                      variant="outlined"
++                      color="secondary"
++                      size="small"
++                      :loading="previewLoading"
++                      :disabled="!selectedSubmitPath || !facefusionSettings.source_path"
++                      @click="handleGenerateFaceFusionPreview"
++                    >
++                      {{ previewUrl ? '刷新预览' : '生成预览' }}
++                    </VuiButton>
++                  </div>
+                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                     <div>
+                       <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">执行后端</label>
+@@ -460,6 +556,76 @@ async function handleSubmitFaceFusionJob() {
+   background: rgba(255, 255, 255, 0.035);
+ }
+ 
++.facefusion-preview {
++  position: relative;
++  min-height: 13rem;
++  aspect-ratio: 16 / 9;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  background:
++    radial-gradient(circle at 20% 20%, rgba(0, 117, 255, 0.16), transparent 32%),
++    linear-gradient(135deg, rgba(10, 18, 28, 0.98), rgba(17, 24, 39, 0.94));
++}
++
++.facefusion-preview__image {
++  width: 100%;
++  height: 100%;
++  object-fit: contain;
++  background: rgba(0, 0, 0, 0.3);
++}
++
++.facefusion-preview__empty {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  width: 100%;
++  height: 100%;
++  color: var(--color-text-muted);
++  font-size: 0.78rem;
++  letter-spacing: 0.08em;
++  text-transform: uppercase;
++}
++
++.facefusion-preview__overlay {
++  position: absolute;
++  left: 0.75rem;
++  right: 0.75rem;
++  bottom: 0.75rem;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 0.75rem;
++  padding: 0.55rem 0.65rem;
++  border-radius: 0.65rem;
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  background: rgba(5, 10, 18, 0.76);
++  color: var(--color-text-secondary);
++  font-size: 0.75rem;
++  backdrop-filter: blur(14px);
++}
++
++.facefusion-preview__button {
++  min-height: 2rem;
++  padding: 0 0.75rem;
++  border-radius: 999px;
++  border: 1px solid rgba(0, 117, 255, 0.42);
++  background: rgba(0, 117, 255, 0.16);
++  color: var(--color-text-primary);
++  font-size: 0.75rem;
++  transition: background 0.16s ease, border-color 0.16s ease;
++}
++
++.facefusion-preview__button:hover:not(:disabled) {
++  background: rgba(0, 117, 255, 0.28);
++  border-color: rgba(0, 117, 255, 0.7);
++}
++
++.facefusion-preview__button:disabled {
++  cursor: not-allowed;
++  opacity: 0.5;
++}
++
+ .crack-tabs button {
+   min-width: 6rem;
+   height: 2rem;

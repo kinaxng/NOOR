@@ -1,0 +1,256 @@
+diff --git a/frontend/src/components/noor/LadaPanel.vue b/frontend/src/components/noor/LadaPanel.vue
+index 0353578..5f2bf3d 100644
+--- a/frontend/src/components/noor/LadaPanel.vue
++++ b/frontend/src/components/noor/LadaPanel.vue
+@@ -41,7 +41,7 @@ const previewFrameNumber = ref(0)
+ const previewFrameTotal = ref(0)
+ const previewMetadataLoading = ref(false)
+ const sourceUploadLoading = ref(false)
+-const uploadedSourceImages = ref<Array<{ name: string; path: string }>>([])
++const uploadedSourceImages = ref<Array<{ id: string; name: string; path: string; preview_url: string }>>([])
+ 
+ // Hardcoded option lists (mirrors LADA_ENCODING_PRESETS in backend)
+ const detectionModels = computed(() => [
+@@ -193,12 +193,8 @@ const previewTimeLabel = computed(() => {
+   return `帧 ${previewFrameNumber.value} / ${previewFrameMax.value}`
+ })
+ const facefusionSourcePaths = computed(() => {
+-  const manualPaths = String(facefusionSettings.value.source_path || '')
+-    .split(/[\n,]+/)
+-    .map(item => item.trim())
+-    .filter(Boolean)
+   const uploadedPaths = uploadedSourceImages.value.map(item => item.path).filter(Boolean)
+-  return Array.from(new Set([...uploadedPaths, ...manualPaths]))
++  return Array.from(new Set(uploadedPaths))
+ })
+ 
+ function handleClose() {
+@@ -344,7 +340,14 @@ async function handleSourceImageUpload(event: Event) {
+     const nextFiles = Array.isArray(resp.data?.files) ? resp.data.files : []
+     uploadedSourceImages.value = [
+       ...uploadedSourceImages.value,
+-      ...nextFiles.map((item: any) => ({ name: item.name || item.path, path: item.path })),
++      ...nextFiles
++        .filter((item: any) => item?.path)
++        .map((item: any) => ({
++          id: item.id || '',
++          name: item.name || '源脸图片',
++          path: item.path,
++          preview_url: item.preview_url || '',
++        })),
+     ]
+     if (previewUrl.value) previewStale.value = true
+   } catch (e: any) {
+@@ -355,9 +358,17 @@ async function handleSourceImageUpload(event: Event) {
+   }
+ }
+ 
+-function removeUploadedSourceImage(path: string) {
+-  uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== path)
++async function removeUploadedSourceImage(source: { id: string; path: string }) {
++  const before = uploadedSourceImages.value
++  uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== source.path)
+   if (previewUrl.value) previewStale.value = true
++  if (!source.id) return
++  try {
++    await api.delete(`/facefusion/source-images/${source.id}`)
++  } catch (e: any) {
++    uploadedSourceImages.value = before
++    toast.error(e.response?.data?.detail || '源脸图片删除失败')
++  }
+ }
+ </script>
+ 
+@@ -471,8 +482,8 @@ function removeUploadedSourceImage(path: string) {
+                 <div class="space-y-3 mt-3">
+                   <div>
+                     <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">源脸图片</label>
+-                    <div class="facefusion-source-uploader">
+-                      <label class="facefusion-source-uploader__button">
++                    <div class="facefusion-source-manager">
++                      <label class="facefusion-source-upload-card">
+                         <input
+                           type="file"
+                           accept="image/*"
+@@ -480,22 +491,24 @@ function removeUploadedSourceImage(path: string) {
+                           :disabled="sourceUploadLoading"
+                           @change="handleSourceImageUpload"
+                         />
+-                        <span>{{ sourceUploadLoading ? '上传中' : '选择图片' }}</span>
++                        <span class="facefusion-source-upload-card__plus">+</span>
++                        <span>{{ sourceUploadLoading ? '上传中' : '上传图片' }}</span>
+                       </label>
+-                      <span class="facefusion-source-uploader__count">{{ facefusionSourcePaths.length }} 张源脸图</span>
+-                    </div>
+-                    <div v-if="uploadedSourceImages.length" class="facefusion-source-list">
+-                      <div v-for="source in uploadedSourceImages" :key="source.path" class="facefusion-source-item">
+-                        <span :title="source.path">{{ source.name }}</span>
+-                        <button type="button" @click="removeUploadedSourceImage(source.path)">移除</button>
++                      <div v-for="source in uploadedSourceImages" :key="source.path" class="facefusion-source-card">
++                        <img
++                          v-if="source.preview_url"
++                          :src="source.preview_url"
++                          :alt="source.name"
++                          loading="lazy"
++                        />
++                        <div v-else class="facefusion-source-card__placeholder">IMG</div>
++                        <div class="facefusion-source-card__meta">
++                          <span>{{ source.name }}</span>
++                          <button type="button" @click="removeUploadedSourceImage(source)">删除</button>
++                        </div>
+                       </div>
+                     </div>
+-                    <textarea
+-                      v-model="facefusionSettings.source_path"
+-                      class="settings-input facefusion-source-textarea w-full"
+-                      rows="3"
+-                      placeholder="可选：手动填写源脸图片路径，每行一个"
+-                    ></textarea>
++                    <div class="facefusion-source-count">{{ facefusionSourcePaths.length }} 张源脸图</div>
+                   </div>
+                   <div>
+                     <div>
+@@ -759,21 +772,22 @@ function removeUploadedSourceImage(path: string) {
+   opacity: 0.45;
+ }
+ 
+-.facefusion-source-uploader {
+-  display: flex;
+-  align-items: center;
+-  flex-wrap: wrap;
+-  gap: 0.75rem;
++.facefusion-source-manager {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
++  gap: 0.65rem;
+ }
+ 
+-.facefusion-source-uploader__button {
++.facefusion-source-upload-card {
+   position: relative;
+-  display: inline-flex;
++  display: flex;
++  min-height: 8.4rem;
++  flex-direction: column;
+   align-items: center;
+   justify-content: center;
+-  min-height: 2.15rem;
+-  padding: 0 0.9rem;
+-  border-radius: 999px;
++  gap: 0.45rem;
++  padding: 0.75rem;
++  border-radius: 0.6rem;
+   border: 1px solid rgba(0, 117, 255, 0.42);
+   background: rgba(0, 117, 255, 0.14);
+   color: var(--color-text-primary);
+@@ -782,43 +796,66 @@ function removeUploadedSourceImage(path: string) {
+   overflow: hidden;
+ }
+ 
+-.facefusion-source-uploader__button input {
++.facefusion-source-upload-card input {
+   position: absolute;
+   inset: 0;
+   opacity: 0;
+   cursor: pointer;
+ }
+ 
+-.facefusion-source-uploader__button:has(input:disabled) {
++.facefusion-source-upload-card:has(input:disabled) {
+   opacity: 0.55;
+   cursor: not-allowed;
+ }
+ 
+-.facefusion-source-uploader__count {
+-  color: var(--color-text-secondary);
+-  font-size: 0.75rem;
++.facefusion-source-upload-card__plus {
++  display: grid;
++  width: 2.2rem;
++  height: 2.2rem;
++  place-items: center;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, 0.08);
++  color: var(--color-text-primary);
++  font-size: 1.35rem;
++  line-height: 1;
+ }
+ 
+-.facefusion-source-list {
++.facefusion-source-card {
++  min-width: 0;
++  display: flex;
++  min-height: 8.4rem;
++  flex-direction: column;
++  overflow: hidden;
++  border-radius: 0.6rem;
++  border: 1px solid var(--color-border-default);
++  background: rgba(255, 255, 255, 0.035);
++}
++
++.facefusion-source-card img,
++.facefusion-source-card__placeholder {
++  width: 100%;
++  aspect-ratio: 1 / 1;
++  object-fit: cover;
++  background: rgba(255, 255, 255, 0.055);
++}
++
++.facefusion-source-card__placeholder {
+   display: grid;
+-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+-  gap: 0.45rem;
+-  margin-top: 0.6rem;
++  place-items: center;
++  color: var(--color-text-muted);
++  font-size: 0.75rem;
+ }
+ 
+-.facefusion-source-item {
+-  min-width: 0;
++.facefusion-source-card__meta {
+   display: flex;
++  min-width: 0;
+   align-items: center;
+   justify-content: space-between;
+-  gap: 0.55rem;
+-  padding: 0.45rem 0.55rem;
+-  border-radius: 0.55rem;
+-  border: 1px solid var(--color-border-default);
+-  background: rgba(255, 255, 255, 0.035);
++  gap: 0.45rem;
++  padding: 0.45rem 0.5rem;
+ }
+ 
+-.facefusion-source-item span {
++.facefusion-source-card__meta span {
+   min-width: 0;
+   overflow: hidden;
+   text-overflow: ellipsis;
+@@ -827,20 +864,20 @@ function removeUploadedSourceImage(path: string) {
+   font-size: 0.75rem;
+ }
+ 
+-.facefusion-source-item button {
++.facefusion-source-card__meta button {
+   flex: none;
+   color: var(--color-text-muted);
+   font-size: 0.72rem;
+ }
+ 
+-.facefusion-source-item button:hover {
++.facefusion-source-card__meta button:hover {
+   color: var(--color-text-primary);
+ }
+ 
+-.facefusion-source-textarea {
+-  min-height: 5.2rem;
+-  margin-top: 0.6rem;
+-  resize: vertical;
++.facefusion-source-count {
++  margin-top: 0.5rem;
++  color: var(--color-text-muted);
++  font-size: 0.72rem;
+ }
+ 
+ .crack-tabs button {

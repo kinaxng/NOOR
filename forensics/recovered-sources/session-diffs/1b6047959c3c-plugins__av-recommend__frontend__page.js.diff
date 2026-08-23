@@ -1,0 +1,42 @@
+diff --git a/plugins/av-recommend/frontend/page.js b/plugins/av-recommend/frontend/page.js
+index 220ca14..f6c6ec5 100644
+--- a/plugins/av-recommend/frontend/page.js
++++ b/plugins/av-recommend/frontend/page.js
+@@ -24,23 +24,22 @@ function imageCandidates(...values) {
+   return out
+ }
+ 
+-async function loadJavdbImageCandidates(sdk, code) {
++async function refreshStoredImageCandidates(sdk, code) {
+   const text = String(code || '').trim()
+   if (!text) return []
+   try {
+     let payload
+     if (sdk.api?.post) {
+-      const resp = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code: text, refresh: true } })
++      const resp = await sdk.api.post('/plugins/av-recommend/actions/refresh_cover', { payload: { code: text } })
+       payload = resp.data
+     } else {
+-      payload = await fetch('/api/plugins/javdb/actions/video', {
++      payload = await fetch('/api/plugins/av-recommend/actions/refresh_cover', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ payload: { code: text, refresh: true } }),
++        body: JSON.stringify({ payload: { code: text } }),
+       }).then(r => r.json())
+     }
+-    const data = payload?.data || payload
+-    return imageCandidates(data?.cover_url, data?.thumb_url, data?.fanart_url, data?.previews, data?.preview_images)
++    return imageCandidates(payload?.image_candidates, payload?.cover_url, payload?.thumb_url, payload?.fanart_url)
+   } catch {
+     return []
+   }
+@@ -715,7 +714,7 @@ export async function mount(root, sdk) {
+         image,
+         imageCandidates(item.image_candidates, item.fanart_url, item.cover_url, item.thumb_url, item.image, item.poster_url, item.jacket_url),
+         item.code || 'NO IMAGE',
+-        () => loadJavdbImageCandidates(sdk, item.code || item.number),
++        () => refreshStoredImageCandidates(sdk, item.code || item.number),
+       )
+       const body = el('section', 'av-rec-body')
+       const head = el('div', 'av-rec-card-head')

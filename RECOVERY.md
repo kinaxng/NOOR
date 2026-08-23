@@ -418,6 +418,31 @@ the recovered bytecode modules remain unchanged.
   `media_library.pyc` (listing, deletion, hardlink, stream, and detail helpers),
   so split-module recovery does not break older plugin imports.
 
+## Session Diff Archive and Whisper Contract Recovery (2026-08-23)
+
+- Added `forensics/extract_session_diffs.py` and archived 477 unique unified-diff
+  sections from the original June/August rollout under
+  `forensics/recovered-sources/session-diffs/` with a SHA256 manifest. The script
+  also runs `git apply --reverse --check`; 63 diffs already apply reversibly to the
+  current tree, 376 require equivalence review, and 38 were truncated by the editor
+  when originally printed and are retained only as evidence.
+- Restored the original Whisper translator line-retry behavior in
+  `backend/app/pipeline/whisper/runtime.py`: batch results are normalized to the
+  batch length, suspected untranslated lines are repaired one by one, and a failed
+  batch is retried per line before falling back to source text.
+- Added `backend/tests/test_whisper_translator.py` covering full
+  `/v1/chat` and `/v1/chat/completions` endpoint preservation, Ollama detection,
+  request shape, and refusal handling. Extended `backend/tests/test_whisper_runtime.py`
+  with untranslated-line detection, failed-batch recovery, and successful-batch
+  repair tests.
+- Restored the original `facefusion_restore` phase defaults/terminal labels and the
+  exported `legacy_hardlink_groups_path_impl()` compatibility helper, with regression
+  coverage in `backend/tests/test_job_phases.py` and
+  `backend/tests/test_media_library_hardlinks.py`.
+- Full verification currently passes: 223 backend tests, frontend production build,
+  and plugin validation.
+
+
 The isolated recovery repository history records each reconstruction step. Generated
 `__pycache__` files are intentionally ignored; the original recovered `.pyc` artifacts
 outside cache directories remain versioned as forensic evidence.

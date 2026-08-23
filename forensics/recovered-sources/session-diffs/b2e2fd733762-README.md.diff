@@ -1,0 +1,41 @@
+diff --git a/README.md b/README.md
+index 7fa3a9f..2314a03 100644
+--- a/README.md
++++ b/README.md
+@@ -121,11 +121,11 @@ npm --prefix frontend run guard:ui
+ Docker 版定位为**部署环境**，不是开发环境。
+ 
+ - 使用**单一 `.env`**：Docker Compose 读取它做端口/挂载插值，后端也直接读取并回写它
++- 容器内 NOOR 自身数据统一落在 `/app/data`，由宿主机 `./data` 持久化
+ - `INSTALL_NEMO=false` 为默认值，避免把实验性的 Reazon / NeMo 运行时打进生产镜像
+-- `MEDIA_ROOT / TMP_DIR / CACHE_DIR` 用来决定媒体总根、临时目录、缓存目录挂载位置
+ - `MODELS_DIR` 与 `MEDIA_ROOT` 都会以**宿主机原绝对路径**挂进容器
+ - `FULL_RUNTIME_IMAGE` 用来指定 full GPU 版的 CUDA/Python 3.12 基底；默认使用官方镜像
+-- 设置页修改的业务配置会直接回写项目根 `.env`
++- 设置页修改的业务配置会直接回写项目根 `.env`；存储页显示的是后端解析后的实际运行路径
+ 
+ ```bash
+ # 1) 准备部署环境变量
+@@ -152,9 +152,10 @@ docker compose exec backend nvidia-smi
+ 
+ 持久化约定：
+ - SQLite 数据库：`./data/noor.db`
++- 插件数据 / 任务日志 / 状态文件：`./data/`
+ - 设置页保存配置：`./.env`
+-- 临时文件：`${TMP_DIR:-./tmp}/`
+-- 缓存目录：`${CACHE_DIR:-./cache}/`
++- 临时文件：`./data/runtime/...`
++- 缓存目录：`./data/runtime/...`
+ - 模型总根：`${MODELS_DIR}` 挂载到容器内同一路径 `${MODELS_DIR}`
+ - 媒体总根：`${MEDIA_ROOT}` 挂载到容器内同一路径 `${MEDIA_ROOT}`
+ 
+@@ -180,7 +181,8 @@ LADA_CLI_PATH=python3 -m lada.cli.main
+ LADA_MODEL_WEIGHTS_DIR=/path/to/lada_model_weights
+ 
+ # Whisper
+-HF_HOME=/root/.cache/huggingface
++WHISPER_MODEL_DIR=/path/to/whisper_models
++WHISPER_CACHE_DIR=/path/to/noor/data/runtime/whisper/cache
+ 
+ # Emby / Jellyfin
+ EMBY_SERVER=http://localhost:8096

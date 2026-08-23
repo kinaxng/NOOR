@@ -1,0 +1,188 @@
+diff --git a/frontend/src/components/noor/LadaPanel.vue b/frontend/src/components/noor/LadaPanel.vue
+index af728af..84ef68f 100644
+--- a/frontend/src/components/noor/LadaPanel.vue
++++ b/frontend/src/components/noor/LadaPanel.vue
+@@ -212,13 +212,6 @@ async function loadFaceFusionPreviewMetadata() {
+   }
+ }
+ 
+-function setPreviewFrameByRatio(ratio: number) {
+-  previewFrameNumber.value = Math.round(previewFrameMax.value * ratio)
+-  if (previewUrl.value) {
+-    previewStale.value = true
+-  }
+-}
+-
+ function markPreviewFrameChanged() {
+   if (previewUrl.value) {
+     previewStale.value = true
+@@ -377,20 +370,34 @@ async function handleGenerateFaceFusionPreview() {
+                       <span>FaceFusion Preview</span>
+                     </div>
+                     <div class="facefusion-preview__overlay">
+-                      <div>
++                      <div class="facefusion-preview__overlay-head">
+                         <span v-if="previewLoading">生成中</span>
+                         <span v-else-if="previewStale">预览已过期</span>
+                         <span v-else-if="previewUrl">当前预览</span>
+                         <span v-else>等待生成</span>
++                        <span class="facefusion-preview__frame">{{ previewMetadataLoading ? '读取中' : previewTimeLabel }}</span>
++                      </div>
++                      <div class="facefusion-preview__controls">
++                        <input
++                          v-model.number="previewFrameNumber"
++                          class="preview-frame-slider"
++                          type="range"
++                          min="0"
++                          :max="previewFrameMax"
++                          step="1"
++                          :disabled="previewMetadataLoading || previewFrameMax <= 0"
++                          @input="markPreviewFrameChanged"
++                          @change="handlePreviewSliderCommit"
++                        />
++                        <button
++                          type="button"
++                          class="facefusion-preview__button"
++                          :disabled="previewLoading || !selectedSubmitPath || !facefusionSettings.source_path"
++                          @click="handleGenerateFaceFusionPreview"
++                        >
++                          {{ previewLoading ? '生成中' : (previewUrl ? '刷新预览' : '生成预览') }}
++                        </button>
+                       </div>
+-                      <button
+-                        type="button"
+-                        class="facefusion-preview__button"
+-                        :disabled="previewLoading || !selectedSubmitPath || !facefusionSettings.source_path"
+-                        @click="handleGenerateFaceFusionPreview"
+-                      >
+-                        {{ previewLoading ? '生成中' : (previewUrl ? '刷新预览' : '生成预览') }}
+-                      </button>
+                     </div>
+                   </div>
+                 </template>
+@@ -442,28 +449,17 @@ async function handleGenerateFaceFusionPreview() {
+                     <input v-model="facefusionSettings.source_path" class="settings-input w-full" type="text" placeholder="/path/to/source-face.jpg" />
+                   </div>
+                   <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+-                    <div class="preview-slider-control">
+-                      <div class="preview-slider-control__head">
+-                        <label class="block text-[10px] text-text-muted uppercase tracking-wider">预览帧</label>
+-                        <span>{{ previewMetadataLoading ? '读取中' : previewTimeLabel }}</span>
+-                      </div>
++                    <div>
++                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">预览帧</label>
+                       <input
+                         v-model.number="previewFrameNumber"
+-                        class="preview-frame-slider"
+-                        type="range"
++                        class="settings-input w-full"
++                        type="number"
+                         min="0"
+                         :max="previewFrameMax"
+                         step="1"
+-                        :disabled="previewMetadataLoading || previewFrameMax <= 0"
+                         @input="markPreviewFrameChanged"
+-                        @change="handlePreviewSliderCommit"
+                       />
+-                      <div class="preview-frame-jumps">
+-                        <button type="button" @click="setPreviewFrameByRatio(0)">开头</button>
+-                        <button type="button" @click="setPreviewFrameByRatio(0.25)">25%</button>
+-                        <button type="button" @click="setPreviewFrameByRatio(0.5)">50%</button>
+-                        <button type="button" @click="setPreviewFrameByRatio(0.75)">75%</button>
+-                      </div>
+                     </div>
+                     <VuiButton
+                       variant="outlined"
+@@ -664,9 +660,9 @@ async function handleGenerateFaceFusionPreview() {
+   right: 0.75rem;
+   bottom: 0.75rem;
+   display: flex;
++  flex-direction: column;
+   align-items: center;
+-  justify-content: space-between;
+-  gap: 0.75rem;
++  gap: 0.55rem;
+   padding: 0.55rem 0.65rem;
+   border-radius: 0.65rem;
+   border: 1px solid rgba(255, 255, 255, 0.12);
+@@ -676,6 +672,21 @@ async function handleGenerateFaceFusionPreview() {
+   backdrop-filter: blur(14px);
+ }
+ 
++.facefusion-preview__overlay-head,
++.facefusion-preview__controls {
++  width: 100%;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 0.75rem;
++}
++
++.facefusion-preview__frame {
++  color: var(--color-text-secondary);
++  font-size: 0.72rem;
++  white-space: nowrap;
++}
++
+ .facefusion-preview__button {
+   min-height: 2rem;
+   padding: 0 0.75rem;
+@@ -697,27 +708,9 @@ async function handleGenerateFaceFusionPreview() {
+   opacity: 0.5;
+ }
+ 
+-.preview-slider-control {
+-  display: flex;
+-  flex-direction: column;
+-  gap: 0.55rem;
+-}
+-
+-.preview-slider-control__head {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 0.75rem;
+-}
+-
+-.preview-slider-control__head span {
+-  color: var(--color-text-secondary);
+-  font-size: 0.72rem;
+-  white-space: nowrap;
+-}
+-
+ .preview-frame-slider {
+   width: 100%;
++  min-width: 0;
+   height: 0.35rem;
+   border-radius: 999px;
+   appearance: none;
+@@ -748,29 +741,6 @@ async function handleGenerateFaceFusionPreview() {
+   opacity: 0.45;
+ }
+ 
+-.preview-frame-jumps {
+-  display: flex;
+-  flex-wrap: wrap;
+-  gap: 0.35rem;
+-}
+-
+-.preview-frame-jumps button {
+-  min-height: 1.65rem;
+-  padding: 0 0.55rem;
+-  border-radius: 999px;
+-  border: 1px solid var(--color-border-default);
+-  background: rgba(255, 255, 255, 0.04);
+-  color: var(--color-text-secondary);
+-  font-size: 0.68rem;
+-  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+-}
+-
+-.preview-frame-jumps button:hover {
+-  color: var(--color-text-primary);
+-  background: rgba(0, 117, 255, 0.14);
+-  border-color: rgba(0, 117, 255, 0.38);
+-}
+-
+ .crack-tabs button {
+   min-width: 6rem;
+   height: 2rem;

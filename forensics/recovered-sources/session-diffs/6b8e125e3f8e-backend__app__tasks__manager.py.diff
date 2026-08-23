@@ -1,0 +1,72 @@
+diff --git a/backend/app/tasks/manager.py b/backend/app/tasks/manager.py
+index 7953d4c..c0f6a01 100644
+--- a/backend/app/tasks/manager.py
++++ b/backend/app/tasks/manager.py
+@@ -13,6 +13,7 @@ import httpx
+ from app.core.database import async_session_maker
+ from app.core.models import Job, JobCreate, JobResponse
+ from app.core.config import get_settings
++from app.core.gpu_guard import ensure_gpu_memory
+ from app.pipeline.facefusion.runner import run_facefusion_restoration
+ from app.pipeline.lada.runner import run_lada_restoration
+ from app.tasks.job_phases import (
+@@ -824,6 +825,35 @@ class JobManager:
+         """设置最大并发任务数"""
+         self._max_concurrent = max(1, max_concurrent)
+ 
++    async def _ensure_gpu_memory_for_job(self, job_id: str, task_key: str, task_name: str) -> None:
++        settings = get_settings()
++        if not settings.gpu_guard_enabled:
++            return
++
++        required_map = {
++            "lada": settings.gpu_guard_lada_required_free_mb,
++            "facefusion": settings.gpu_guard_facefusion_required_free_mb,
++            "whisper": settings.gpu_guard_whisper_required_free_mb,
++        }
++        required_free_mb = int(required_map.get(task_key, 0) or 0)
++        if required_free_mb <= 0:
++            return
++
++        try:
++            logs = ensure_gpu_memory(
++                task_name=task_name,
++                required_free_mb=required_free_mb,
++                device_index=int(settings.gpu_guard_device_index or 0),
++                cleanup_policy=settings.gpu_guard_cleanup_policy,
++                grace_seconds=int(settings.gpu_guard_grace_seconds or 8),
++            )
++        except Exception as exc:
++            await self._append_job_log(job_id, f"GPU Guard: {exc}", emit_event=True)
++            raise
++
++        for line in logs:
++            await self._append_job_log(job_id, line, emit_event=True)
++
+     async def _process_queue(self):
+         while True:
+             job_id = None
+@@ -911,6 +941,7 @@ class JobManager:
+         strategy_name = settings_dict.get("strategy") or settings_dict.get("preset") or "recommended"
+ 
+         await self.add_log(job_id, "开始 Lada 视频修复...")
++        await self._ensure_gpu_memory_for_job(job_id, "lada", "LADA")
+ 
+         cancel_event = self._cancel_event_for(job_id)
+         success = await run_lada_restoration(
+@@ -980,6 +1011,7 @@ class JobManager:
+         settings_dict = job_data.settings.model_dump() if hasattr(job_data, 'settings') else {}
+ 
+         await self.add_log(job_id, "开始 FaceFusion 处理...")
++        await self._ensure_gpu_memory_for_job(job_id, "facefusion", "FaceFusion")
+         cancel_event = self._cancel_event_for(job_id)
+         success = await run_facefusion_restoration(
+             job_id=job_id,
+@@ -1128,6 +1160,7 @@ class JobManager:
+         if config.translate_to:
+             await self.add_log(job_id, f"  翻译: {config.translate_model} → {config.translate_to} | 风格: {config.translate_style}")
+         await self.add_log(job_id, "开始 Whisper 字幕生成...")
++        await self._ensure_gpu_memory_for_job(job_id, "whisper", "Whisper")
+ 
+         # 日志文件
+         log_file = self._log_file_path(job_id)

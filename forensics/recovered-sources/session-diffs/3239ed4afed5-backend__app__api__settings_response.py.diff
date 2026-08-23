@@ -1,0 +1,27 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index 6ae7953..c9c860f 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -79,6 +79,22 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             "max_clip_length": int(env_data.get("LADA_MAX_CLIP_LENGTH", "180")),
+             "detect_face_mosaics": env_data.get("LADA_DETECT_FACE_MOSAICS", "false").lower() == "true",
+         },
++        "facefusion": {
++            "dir": env_data.get("FACEFUSION_DIR", "/volume1/facefusion/facefusion"),
++            "python_path": env_data.get("FACEFUSION_PYTHON_PATH", ""),
++        },
++        "facefusion_defaults": {
++            "execution_provider": env_data.get("FACEFUSION_EXECUTION_PROVIDER", "cuda"),
++            "device_ids": env_data.get("FACEFUSION_DEVICE_IDS", "0"),
++            "processors": env_data.get("FACEFUSION_PROCESSORS", "face_swapper"),
++            "face_selector_mode": env_data.get("FACEFUSION_FACE_SELECTOR_MODE", "reference"),
++            "reference_frame_number": int(env_data.get("FACEFUSION_REFERENCE_FRAME_NUMBER", "0")),
++            "reference_face_position": int(env_data.get("FACEFUSION_REFERENCE_FACE_POSITION", "0")),
++            "reference_face_distance": float(env_data.get("FACEFUSION_REFERENCE_FACE_DISTANCE", "0.3")),
++            "output_video_encoder": env_data.get("FACEFUSION_OUTPUT_VIDEO_ENCODER", "libx264"),
++            "output_video_preset": env_data.get("FACEFUSION_OUTPUT_VIDEO_PRESET", "veryfast"),
++            "output_video_quality": int(env_data.get("FACEFUSION_OUTPUT_VIDEO_QUALITY", "80")),
++        },
+         "whisper": {
+             **whisper_payload,
+             "features": whisper_features,

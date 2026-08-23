@@ -1,0 +1,19 @@
+diff --git a/frontend/src/components/noor/FaceFusionPanel.vue b/frontend/src/components/noor/FaceFusionPanel.vue
+index ef18040..fa4d5cc 100644
+--- a/frontend/src/components/noor/FaceFusionPanel.vue
++++ b/frontend/src/components/noor/FaceFusionPanel.vue
+@@ -1936,6 +1936,14 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   display: grid;
+   min-width: 0;
+   gap: 0.85rem;
++  overflow: hidden;
++}
++
++.facefusion-native-column > * {
++  min-width: 0;
++  width: 100%;
++  max-width: 100%;
++  box-sizing: border-box;
+ }
+ 
+ .facefusion-native-column--source {

@@ -1,0 +1,37 @@
+diff --git a/docs/DEV_DOCKER_ALIGNMENT.md b/docs/DEV_DOCKER_ALIGNMENT.md
+index 40e3b37..b92682f 100644
+--- a/docs/DEV_DOCKER_ALIGNMENT.md
++++ b/docs/DEV_DOCKER_ALIGNMENT.md
+@@ -18,22 +18,23 @@
+ - `docker-compose.yml` 前端映射 `FRONTEND_PORT` 默认 `19898`，符合“开发/生产分离”目标。
+ 
+ ### 2.2 环境变量来源
+-- 当前项目存在三份相关文件：
++- 当前项目存在两类相关文件：
+   - `.env`（实际运行 + compose 插值）
+-  - `.env.docker`（历史/辅助）
+   - `.env.example`（模板）
+ - 当前实际 compose 使用的是 `.env`，而非 `.env.docker`。
++- Docker Compose 会把 `./data` 挂载到容器 `/app/data`，并通过 `environment` 覆盖 NOOR 运行路径。
++- 后端设置接口的存储字段返回 `Settings` 解析后的实际运行值；因此 Docker 中应显示 `/app/data/...`，本地开发中应显示宿主机路径。
+ 
+ ## 3) 风险点（需要长期约束）
+ 
+ 1. `.env` 混合了开发参数与 Docker 参数，容易误改。
+-2. `.env.docker` 与 compose 实际读取路径不一致，可能造成认知偏差。
++2. 容器内设置页保存配置会回写挂载的 `.env`；如果同一份 `.env` 也用于本地开发，需要注意容器路径与宿主机路径差异。
+ 3. 文档若未强调“5173/9898 只用于开发版”，容易误把 19898 当开发入口。
+ 
+ ## 4) 统一建议（不破坏现状）
+ 
+ 1. 继续保留单一 `.env` 作为系统真实配置源（你当前偏好的模式）。
+-2. `.env.docker` 保留仅作参考，文档明确“compose 默认不读取它”。
++2. Docker 内部运行数据统一使用 `/app/data`，宿主机通过 `./data` 持久化。
+ 3. 在 README / DOCKER.md 固化以下说明：
+    - 开发调试入口：`http://127.0.0.1:5173`
+    - Docker 入口：`http://127.0.0.1:19898`
+@@ -51,4 +52,3 @@ curl -I http://127.0.0.1:9898/docs
+ # Docker 前端（如运行）
+ curl -I http://127.0.0.1:19898/
+ ```
+-

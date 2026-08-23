@@ -1,0 +1,103 @@
+diff --git a/frontend/src/components/noor/LadaPanel.vue b/frontend/src/components/noor/LadaPanel.vue
+index cdaca73..56b5f2b 100644
+--- a/frontend/src/components/noor/LadaPanel.vue
++++ b/frontend/src/components/noor/LadaPanel.vue
+@@ -367,7 +367,7 @@ function markPreviewFrameChanged() {
+ 
+ async function handlePreviewSliderCommit() {
+   markPreviewFrameChanged()
+-  if (facefusionSourcePaths.value.length) {
++  if (facefusionSourcePaths.value.length && !previewLoading.value) {
+     await handleGenerateFaceFusionPreview()
+   }
+ }
+@@ -437,6 +437,7 @@ async function handleSubmitFaceFusionJob() {
+ }
+ 
+ async function handleGenerateFaceFusionPreview() {
++  if (previewLoading.value) return
+   if (!selectedSubmitPath.value || !facefusionSourcePaths.value.length) {
+     toast.error('请先填写源脸图片')
+     return
+@@ -450,11 +451,13 @@ async function handleGenerateFaceFusionPreview() {
+       input_path: selectedSubmitPath.value,
+       frame_number: frameNumber,
+       preview_mode: 'default',
+-      preview_resolution: '512x512',
++      preview_resolution: '768x768',
+       settings: {
+         ...facefusionSettings.value,
+         source_paths: facefusionSourcePaths.value,
+       },
++    }, {
++      timeout: 300000,
+     })
+     previewFrameNumber.value = frameNumber
+     previewUrl.value = `${resp.data.preview_url}?t=${Date.now()}`
+@@ -562,13 +565,17 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                           min="0"
+                           :max="previewFrameMax"
+                           step="1"
+-                          :disabled="previewMetadataLoading || previewFrameMax <= 0"
++                          :disabled="previewLoading || previewMetadataLoading || previewFrameMax <= 0"
+                           @input="markPreviewFrameChanged"
+                           @change="handlePreviewSliderCommit"
+                         />
+-                        <span class="facefusion-preview__frame">{{ previewMetadataLoading ? '读取中' : previewTimeLabel }}</span>
++                        <span class="facefusion-preview__frame">{{ previewLoading ? '生成中' : previewMetadataLoading ? '读取中' : previewTimeLabel }}</span>
+                       </div>
+                     </div>
++                    <div v-if="previewLoading" class="facefusion-preview__busy">
++                      <span></span>
++                      <strong>正在生成预览</strong>
++                    </div>
+                   </div>
+                 </template>
+               </PanelHeader>
+@@ -684,6 +691,7 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                         min="0"
+                         :max="previewFrameMax"
+                         step="1"
++                        :disabled="previewLoading"
+                         @input="markPreviewFrameChanged"
+                         @change="handlePreviewSliderCommit"
+                       />
+@@ -977,6 +985,38 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   backdrop-filter: blur(14px);
+ }
+ 
++.facefusion-preview__busy {
++  position: absolute;
++  inset: 0;
++  display: grid;
++  place-items: center;
++  gap: 0.6rem;
++  background: rgba(4, 8, 14, 0.52);
++  color: var(--color-text-primary);
++  pointer-events: none;
++}
++
++.facefusion-preview__busy span {
++  width: 2rem;
++  height: 2rem;
++  border-radius: 999px;
++  border: 2px solid rgba(255, 255, 255, 0.22);
++  border-top-color: var(--color-accent-blue, #0075ff);
++  animation: facefusion-preview-spin 0.8s linear infinite;
++}
++
++.facefusion-preview__busy strong {
++  font-size: 0.78rem;
++  font-weight: 760;
++  letter-spacing: 0.04em;
++}
++
++@keyframes facefusion-preview-spin {
++  to {
++    transform: rotate(360deg);
++  }
++}
++
+ .facefusion-preview__controls {
+   width: 100%;
+   display: flex;

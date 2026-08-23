@@ -1,0 +1,53 @@
+diff --git a/backend/app/pipeline/facefusion/runner.py b/backend/app/pipeline/facefusion/runner.py
+index d488140..271a64e 100644
+--- a/backend/app/pipeline/facefusion/runner.py
++++ b/backend/app/pipeline/facefusion/runner.py
+@@ -68,6 +68,16 @@ def _build_env(*, facefusion_cache_dir: str, facefusion_temp_dir: str) -> dict[s
+ _resolve_model_dir = resolve_facefusion_model_dir
+ 
+ 
++def _execution_providers(job_settings: dict) -> list[str]:
++    settings = get_settings()
++    return _split_words(job_settings.get("execution_provider", settings.facefusion_execution_provider), [])
++
++
++def _system_memory_limit(job_settings: dict) -> int:
++    settings = get_settings()
++    return int(job_settings.get("system_memory_limit", settings.facefusion_system_memory_limit) or 0)
++
++
+ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tuple[list[str], str, dict[str, str], str, str, str, str]:
+     settings = get_settings()
+     configured_dir = job_settings.get("facefusion_dir")
+@@ -119,7 +129,7 @@ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tup
+         cmd += ["--frame-enhancer-model", str(job_settings.get("frame_enhancer_model", settings.facefusion_frame_enhancer_model))]
+         cmd += ["--frame-enhancer-blend", str(job_settings.get("frame_enhancer_blend", settings.facefusion_frame_enhancer_blend))]
+ 
+-    providers = _split_words(job_settings.get("execution_provider", settings.facefusion_execution_provider), [])
++    providers = _execution_providers(job_settings)
+     if providers:
+         cmd += ["--execution-providers", *providers]
+     device_ids = _split_words(job_settings.get("device_ids", settings.facefusion_device_ids), ["0"])
+@@ -127,8 +137,8 @@ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tup
+         cmd += ["--execution-device-ids", *device_ids]
+     cmd += ["--execution-thread-count", str(job_settings.get("thread_count", settings.facefusion_thread_count))]
+     cmd += ["--video-memory-strategy", str(job_settings.get("video_memory_strategy", settings.facefusion_video_memory_strategy))]
+-    system_memory_limit = int(job_settings.get("system_memory_limit", settings.facefusion_system_memory_limit) or 0)
+-    if system_memory_limit > 0:
++    system_memory_limit = _system_memory_limit(job_settings)
++    if system_memory_limit > 0 and "tensorrt" not in {provider.lower() for provider in providers}:
+         cmd += ["--system-memory-limit", str(system_memory_limit)]
+     download_providers = _split_words(job_settings.get("download_providers", settings.facefusion_download_providers), [])
+     if download_providers:
+@@ -237,6 +247,11 @@ async def run_facefusion_restoration(
+     await progress_queue.put({"type": "log", "line": f"FaceFusion model directory: {model_dir} ({model_dir_mode})"})
+     await progress_queue.put({"type": "log", "line": f"FaceFusion working directory: {cwd}"})
+     await progress_queue.put({"type": "log", "line": f"FaceFusion runtime cache directory: {facefusion_cache_dir}"})
++    if _system_memory_limit(job_settings) > 0 and "tensorrt" in {provider.lower() for provider in _execution_providers(job_settings)}:
++        await progress_queue.put({
++            "type": "log",
++            "line": "FaceFusion system memory limit ignored for TensorRT to avoid ONNXRuntime/TensorRT RLIMIT_DATA crashes.",
++        })
+ 
+     result = {"returncode": None, "cancelled": False}
+     proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}

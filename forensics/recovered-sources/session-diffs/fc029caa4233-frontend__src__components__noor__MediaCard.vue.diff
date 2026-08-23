@@ -1,0 +1,100 @@
+diff --git a/frontend/src/components/noor/MediaCard.vue b/frontend/src/components/noor/MediaCard.vue
+index dff4d64..5753ea4 100644
+--- a/frontend/src/components/noor/MediaCard.vue
++++ b/frontend/src/components/noor/MediaCard.vue
+@@ -9,6 +9,7 @@ const props = defineProps<{
+   item: MediaItem
+   selected?: boolean
+   imageMode?: 'cover' | 'backdrop'
++  facefusionBadgeAlwaysVisible?: boolean
+ }>()
+ 
+ const emit = defineEmits<{
+@@ -48,6 +49,23 @@ const releaseTypeLabel = computed(() => {
+   return props.item.tags?.release_type || ''
+ })
+ 
++const isFaceFusionOutput = computed(() => {
++  const values = [
++    props.item.name,
++    props.item.path,
++    props.item.nfo?.title,
++    props.item.nfo?.originaltitle,
++    props.item.nfo?.sorttitle,
++    props.item.nfo?.num,
++  ]
++  return values.some(value => /(^|[^a-z0-9])(facefusion|ff)(?=[^a-z0-9]|$)/i.test(String(value || '')))
++})
++
++const facefusionLabel = computed(() => {
++  void i18nVersion.value
++  return t('mediacard.facefusion')
++})
++
+ const imageUrl = computed(() => {
+   if (props.imageMode === 'backdrop') return props.item.fanart_path || props.item.poster_path
+   return props.item.poster_path || props.item.fanart_path
+@@ -85,7 +103,10 @@ function handleFaceFusionBadgeClick() {
+ <template>
+   <div
+     class="media-card bg-surface overflow-hidden transition-all duration-300"
+-    :class="imageMode === 'backdrop' ? 'media-card--backdrop' : 'media-card--cover'"
++    :class="[
++      imageMode === 'backdrop' ? 'media-card--backdrop' : 'media-card--cover',
++      { 'media-card--pin-facefusion': facefusionBadgeAlwaysVisible },
++    ]"
+   >
+     <!-- Poster -->
+     <div
+@@ -149,10 +170,11 @@ function handleFaceFusionBadgeClick() {
+ 
+         <button
+           v-if="!item.tags?.release_type"
+-          class="text-xs px-1.5 py-0.5 rounded transition-colors cursor-pointer border tag-facefusion"
++          class="media-card__facefusion-tag text-xs px-1.5 py-0.5 rounded transition-colors cursor-pointer border"
++          :class="isFaceFusionOutput ? 'tag-facefusion--active' : 'tag-facefusion--idle'"
+           @click.stop="handleFaceFusionBadgeClick"
+         >
+-          FF
++          {{ facefusionLabel }}
+         </button>
+ 
+         <!-- Release type badge -->
+@@ -206,13 +228,35 @@ function handleFaceFusionBadgeClick() {
+   background: rgba(185, 28, 28, 0.94);
+ }
+ 
+-.tag-facefusion {
++.media-card__facefusion-tag {
++  display: none;
++}
++
++.media-card:hover .media-card__facefusion-tag,
++.media-card--pin-facefusion .media-card__facefusion-tag {
++  display: inline-flex;
++  align-items: center;
++}
++
++.tag-facefusion--idle {
++  border-color: rgba(255, 255, 255, 0.12);
++  background: rgba(255, 255, 255, 0.045);
++  color: rgba(255, 255, 255, 0.58);
++}
++
++.tag-facefusion--idle:hover {
++  border-color: rgba(0, 117, 255, 0.36);
++  background: rgba(0, 117, 255, 0.12);
++  color: #fff;
++}
++
++.tag-facefusion--active {
+   border-color: rgba(0, 117, 255, 0.28);
+   background: rgba(0, 117, 255, 0.1);
+   color: #9cc9ff;
+ }
+ 
+-.tag-facefusion:hover {
++.tag-facefusion--active:hover {
+   border-color: rgba(0, 117, 255, 0.52);
+   background: rgba(0, 117, 255, 0.18);
+   color: #fff;

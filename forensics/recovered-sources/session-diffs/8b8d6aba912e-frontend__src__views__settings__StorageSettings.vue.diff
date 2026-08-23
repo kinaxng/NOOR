@@ -1,0 +1,47 @@
+diff --git a/frontend/src/views/settings/StorageSettings.vue b/frontend/src/views/settings/StorageSettings.vue
+index 286255b..009c272 100644
+--- a/frontend/src/views/settings/StorageSettings.vue
++++ b/frontend/src/views/settings/StorageSettings.vue
+@@ -24,8 +24,6 @@ const whisperModelDir = ref('')
+ const whisperCacheDir = ref('')
+ const whisperTempDir = ref('')
+ const audioSeparatorModelDir = ref('')
+-const reazonModelDir = ref('')
+-const reazonNemoModelPath = ref('')
+ const ladaModelDir = ref('')
+ const ladaCacheDir = ref('')
+ const ladaTempDir = ref('')
+@@ -56,7 +54,6 @@ type DirPickerTarget =
+   | 'whisperCacheDir'
+   | 'whisperTempDir'
+   | 'audioSeparatorModelDir'
+-  | 'reazonModelDir'
+   | 'ladaModelDir'
+   | 'ladaCacheDir'
+   | 'ladaTempDir'
+@@ -106,8 +103,6 @@ async function loadSettings() {
+     whisperCacheDir.value = data.storage?.whisper_cache_dir || ''
+     whisperTempDir.value = data.storage?.whisper_temp_dir || ''
+     audioSeparatorModelDir.value = data.storage?.audio_separator_model_dir || ''
+-    reazonModelDir.value = data.storage?.reazon_model_dir || ''
+-    reazonNemoModelPath.value = data.storage?.reazon_nemo_model_path || ''
+     ladaModelDir.value = data.storage?.lada_model_weights_dir || data.storage?.lada_model_dir || ''
+     ladaCacheDir.value = data.storage?.lada_cache_dir || ''
+     ladaTempDir.value = data.storage?.lada_temp_dir || ''
+@@ -176,7 +171,6 @@ function currentDirPickerPath(target: DirPickerTarget): string {
+     whisperCacheDir: whisperCacheDir.value,
+     whisperTempDir: whisperTempDir.value,
+     audioSeparatorModelDir: audioSeparatorModelDir.value,
+-    reazonModelDir: reazonModelDir.value,
+     ladaModelDir: ladaModelDir.value,
+     ladaCacheDir: ladaCacheDir.value,
+     ladaTempDir: ladaTempDir.value,
+@@ -259,8 +253,6 @@ function confirmDirPicker() {
+     whisperTempDir.value = path
+   } else if (dirPickerTarget.value === 'audioSeparatorModelDir') {
+     audioSeparatorModelDir.value = path
+-  } else if (dirPickerTarget.value === 'reazonModelDir') {
+-    reazonModelDir.value = path
+   } else if (dirPickerTarget.value === 'ladaModelDir') {
+     ladaModelDir.value = path
+   } else if (dirPickerTarget.value === 'ladaCacheDir') {

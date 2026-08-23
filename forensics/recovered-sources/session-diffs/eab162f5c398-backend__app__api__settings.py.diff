@@ -1,0 +1,73 @@
+diff --git a/backend/app/api/settings.py b/backend/app/api/settings.py
+index 7c81202..edd2653 100644
+--- a/backend/app/api/settings.py
++++ b/backend/app/api/settings.py
+@@ -58,6 +58,8 @@ from app.api.settings_response import build_settings_payload
+ from app.api.settings_whisper_models import delete_whisper_model_files, resolve_whisper_model_dir
+ from app.api.settings_updates import (
+     apply_emby_config_updates,
++    apply_facefusion_config_updates,
++    apply_facefusion_defaults_updates,
+     apply_lada_config_updates,
+     apply_network_config_updates,
+     apply_ui_config_updates,
+@@ -112,6 +114,24 @@ class LadaDefaultsConfig(BaseModel):
+     detect_face_mosaics: bool = False
+ 
+ 
++class FaceFusionConfig(BaseModel):
++    dir: str = "/volume1/facefusion/facefusion"
++    python_path: str = ""
++
++
++class FaceFusionDefaultsConfig(BaseModel):
++    execution_provider: str = "cuda"
++    device_ids: str = "0"
++    processors: str = "face_swapper"
++    face_selector_mode: str = "reference"
++    reference_frame_number: int = 0
++    reference_face_position: int = 0
++    reference_face_distance: float = 0.3
++    output_video_encoder: str = "libx264"
++    output_video_preset: str = "veryfast"
++    output_video_quality: int = 80
++
++
+ class CustomPipelineConfig(BaseModel):
+     model: str = "large-v3"  # large-v3 | large-v2 | turbo
+     vad_method: str = "semantic"
+@@ -300,6 +320,34 @@ async def update_lada_config(config: LadaConfig):
+         raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+ 
+ 
++@router.put("/facefusion")
++async def update_facefusion_config(config: FaceFusionConfig):
++    log_mgr = SystemLogManager.get_instance()
++    log_mgr.add_log("info", "[Settings] 正在保存 FaceFusion CLI 配置...")
++    try:
++        apply_facefusion_config_updates(config, update_env_value)
++        clear_settings_cache()
++        log_mgr.add_log("success", "[Settings] FaceFusion CLI 配置已保存")
++        return {"success": True, "message": "FaceFusion settings saved to .env"}
++    except Exception as e:
++        log_mgr.add_log("error", f"[Settings] FaceFusion CLI 配置保存失败 — {str(e)}")
++        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
++
++
++@router.put("/facefusion/defaults")
++async def update_facefusion_defaults(config: FaceFusionDefaultsConfig):
++    log_mgr = SystemLogManager.get_instance()
++    log_mgr.add_log("info", "[Settings] 正在保存 FaceFusion 默认参数...")
++    try:
++        apply_facefusion_defaults_updates(config, update_env_value)
++        clear_settings_cache()
++        log_mgr.add_log("success", "[Settings] FaceFusion 默认参数已保存")
++        return {"success": True, "message": "FaceFusion defaults saved to .env"}
++    except Exception as e:
++        log_mgr.add_log("error", f"[Settings] FaceFusion 默认参数保存失败 — {str(e)}")
++        raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
++
++
+ @router.put("/network")
+ async def update_network_config(config: NetworkConfig):
+     """Update network configuration (acceleration mode, proxy, mirrors)."""

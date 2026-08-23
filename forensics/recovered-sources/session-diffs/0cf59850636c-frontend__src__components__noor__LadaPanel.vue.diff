@@ -1,0 +1,253 @@
+diff --git a/frontend/src/components/noor/LadaPanel.vue b/frontend/src/components/noor/LadaPanel.vue
+index 10e0a99..8a3cff4 100644
+--- a/frontend/src/components/noor/LadaPanel.vue
++++ b/frontend/src/components/noor/LadaPanel.vue
+@@ -40,6 +40,8 @@ const previewStale = ref(false)
+ const previewFrameNumber = ref(0)
+ const previewFrameTotal = ref(0)
+ const previewMetadataLoading = ref(false)
++const sourceUploadLoading = ref(false)
++const uploadedSourceImages = ref<Array<{ name: string; path: string }>>([])
+ 
+ // Hardcoded option lists (mirrors LADA_ENCODING_PRESETS in backend)
+ const detectionModels = computed(() => [
+@@ -142,7 +144,7 @@ watch([selectedSubmitPath, activeTab], async () => {
+ }, { immediate: true })
+ 
+ watch(
+-  [activeTab, selectedSubmitPath, () => facefusionSettings.value.source_path],
++  [activeTab, selectedSubmitPath, () => facefusionSettings.value.source_path, uploadedSourceImages],
+   () => {
+     if (activeTab.value === 'facefusion' && previewUrl.value) {
+       previewStale.value = true
+@@ -190,6 +192,14 @@ const previewTimeLabel = computed(() => {
+   if (!previewFrameTotal.value) return `帧 ${previewFrameNumber.value}`
+   return `帧 ${previewFrameNumber.value} / ${previewFrameMax.value}`
+ })
++const facefusionSourcePaths = computed(() => {
++  const manualPaths = String(facefusionSettings.value.source_path || '')
++    .split(/[\n,]+/)
++    .map(item => item.trim())
++    .filter(Boolean)
++  const uploadedPaths = uploadedSourceImages.value.map(item => item.path).filter(Boolean)
++  return Array.from(new Set([...uploadedPaths, ...manualPaths]))
++})
+ 
+ function handleClose() {
+   emit('close')
+@@ -220,7 +230,7 @@ function markPreviewFrameChanged() {
+ 
+ async function handlePreviewSliderCommit() {
+   markPreviewFrameChanged()
+-  if (facefusionSettings.value.source_path) {
++  if (facefusionSourcePaths.value.length) {
+     await handleGenerateFaceFusionPreview()
+   }
+ }
+@@ -256,7 +266,7 @@ async function handleSubmitJob() {
+ }
+ 
+ async function handleSubmitFaceFusionJob() {
+-  if (!selectedSubmitPath.value || !facefusionSettings.value.source_path) return
++  if (!selectedSubmitPath.value || !facefusionSourcePaths.value.length) return
+ 
+   submitting.value = true
+   submitStatus.value = 'running'
+@@ -269,7 +279,7 @@ async function handleSubmitFaceFusionJob() {
+       input_path: selectedSubmitPath.value,
+       settings: {
+         ...facefusionSettings.value,
+-        source_paths: [facefusionSettings.value.source_path],
++        source_paths: facefusionSourcePaths.value,
+       },
+     })
+     submitProgress.value = 72
+@@ -290,7 +300,7 @@ async function handleSubmitFaceFusionJob() {
+ }
+ 
+ async function handleGenerateFaceFusionPreview() {
+-  if (!selectedSubmitPath.value || !facefusionSettings.value.source_path) {
++  if (!selectedSubmitPath.value || !facefusionSourcePaths.value.length) {
+     toast.error('请先填写源脸图片')
+     return
+   }
+@@ -306,7 +316,7 @@ async function handleGenerateFaceFusionPreview() {
+       preview_resolution: '768x768',
+       settings: {
+         ...facefusionSettings.value,
+-        source_paths: [facefusionSettings.value.source_path],
++        source_paths: facefusionSourcePaths.value,
+       },
+     })
+     previewFrameNumber.value = frameNumber
+@@ -320,6 +330,37 @@ async function handleGenerateFaceFusionPreview() {
+     previewLoading.value = false
+   }
+ }
++
++async function handleSourceImageUpload(event: Event) {
++  const input = event.target as HTMLInputElement
++  const files = Array.from(input.files || [])
++  if (!files.length) return
++
++  sourceUploadLoading.value = true
++  try {
++    const form = new FormData()
++    files.forEach(file => form.append('files', file))
++    const resp = await api.post('/facefusion/source-images', form, {
++      headers: { 'Content-Type': 'multipart/form-data' },
++    })
++    const nextFiles = Array.isArray(resp.data?.files) ? resp.data.files : []
++    uploadedSourceImages.value = [
++      ...uploadedSourceImages.value,
++      ...nextFiles.map((item: any) => ({ name: item.name || item.path, path: item.path })),
++    ]
++    if (previewUrl.value) previewStale.value = true
++  } catch (e: any) {
++    toast.error(e.response?.data?.detail || '源脸图片上传失败')
++  } finally {
++    sourceUploadLoading.value = false
++    input.value = ''
++  }
++}
++
++function removeUploadedSourceImage(path: string) {
++  uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== path)
++  if (previewUrl.value) previewStale.value = true
++}
+ </script>
+ 
+ <template>
+@@ -432,7 +473,31 @@ async function handleGenerateFaceFusionPreview() {
+                 <div class="space-y-3 mt-3">
+                   <div>
+                     <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">源脸图片</label>
+-                    <input v-model="facefusionSettings.source_path" class="settings-input w-full" type="text" placeholder="/path/to/source-face.jpg" />
++                    <div class="facefusion-source-uploader">
++                      <label class="facefusion-source-uploader__button">
++                        <input
++                          type="file"
++                          accept="image/*"
++                          multiple
++                          :disabled="sourceUploadLoading"
++                          @change="handleSourceImageUpload"
++                        />
++                        <span>{{ sourceUploadLoading ? '上传中' : '选择图片' }}</span>
++                      </label>
++                      <span class="facefusion-source-uploader__count">{{ facefusionSourcePaths.length }} 张源脸图</span>
++                    </div>
++                    <div v-if="uploadedSourceImages.length" class="facefusion-source-list">
++                      <div v-for="source in uploadedSourceImages" :key="source.path" class="facefusion-source-item">
++                        <span :title="source.path">{{ source.name }}</span>
++                        <button type="button" @click="removeUploadedSourceImage(source.path)">移除</button>
++                      </div>
++                    </div>
++                    <textarea
++                      v-model="facefusionSettings.source_path"
++                      class="settings-input facefusion-source-textarea w-full"
++                      rows="3"
++                      placeholder="可选：手动填写源脸图片路径，每行一个"
++                    ></textarea>
+                   </div>
+                   <div>
+                     <div>
+@@ -527,7 +592,7 @@ async function handleGenerateFaceFusionPreview() {
+                   size="lg"
+                   :status="submitStatus"
+                   :progress="submitProgress"
+-                  :disabled="!selectedSubmitPath || (activeTab === 'facefusion' && !facefusionSettings.source_path)"
++                  :disabled="!selectedSubmitPath || (activeTab === 'facefusion' && !facefusionSourcePaths.length)"
+                   :idle-label="t('ladaPanel.start')"
+                   :success-label="t('ladaPanel.submitQueued')"
+                   :error-label="t('ladaPanel.submitFailed')"
+@@ -696,6 +761,90 @@ async function handleGenerateFaceFusionPreview() {
+   opacity: 0.45;
+ }
+ 
++.facefusion-source-uploader {
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 0.75rem;
++}
++
++.facefusion-source-uploader__button {
++  position: relative;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  min-height: 2.15rem;
++  padding: 0 0.9rem;
++  border-radius: 999px;
++  border: 1px solid rgba(0, 117, 255, 0.42);
++  background: rgba(0, 117, 255, 0.14);
++  color: var(--color-text-primary);
++  font-size: 0.78rem;
++  cursor: pointer;
++  overflow: hidden;
++}
++
++.facefusion-source-uploader__button input {
++  position: absolute;
++  inset: 0;
++  opacity: 0;
++  cursor: pointer;
++}
++
++.facefusion-source-uploader__button:has(input:disabled) {
++  opacity: 0.55;
++  cursor: not-allowed;
++}
++
++.facefusion-source-uploader__count {
++  color: var(--color-text-secondary);
++  font-size: 0.75rem;
++}
++
++.facefusion-source-list {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
++  gap: 0.45rem;
++  margin-top: 0.6rem;
++}
++
++.facefusion-source-item {
++  min-width: 0;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 0.55rem;
++  padding: 0.45rem 0.55rem;
++  border-radius: 0.55rem;
++  border: 1px solid var(--color-border-default);
++  background: rgba(255, 255, 255, 0.035);
++}
++
++.facefusion-source-item span {
++  min-width: 0;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  color: var(--color-text-secondary);
++  font-size: 0.75rem;
++}
++
++.facefusion-source-item button {
++  flex: none;
++  color: var(--color-text-muted);
++  font-size: 0.72rem;
++}
++
++.facefusion-source-item button:hover {
++  color: var(--color-text-primary);
++}
++
++.facefusion-source-textarea {
++  min-height: 5.2rem;
++  margin-top: 0.6rem;
++  resize: vertical;
++}
++
+ .crack-tabs button {
+   min-width: 6rem;
+   height: 2rem;

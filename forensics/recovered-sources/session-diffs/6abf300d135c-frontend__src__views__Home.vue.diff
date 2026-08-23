@@ -1,0 +1,23 @@
+diff --git a/frontend/src/views/Home.vue b/frontend/src/views/Home.vue
+index 80d7869..644c1cf 100644
+--- a/frontend/src/views/Home.vue
++++ b/frontend/src/views/Home.vue
+@@ -338,6 +338,10 @@ function handleSelectVideo(item: MediaItem) {
+   void loadItemDetail(item)
+ }
+ 
++function handleTagAction(tag: Exclude<LibraryFilter, 'all'>) {
++  activeFilter.value = tag
++}
++
+ function handleQuickAction(item: MediaItem) {
+   resetPanelState({ keepSelectedVideo: true })
+   selectedVideo.value = item
+@@ -510,6 +514,7 @@ function goPage(page: number) {
+         @quick-action="handleQuickAction"
+         @subtitle-action="handleSubtitleAction"
+         @delete-action="handleDeleteAction"
++        @tag-action="handleTagAction"
+       />
+     </div>
+ 

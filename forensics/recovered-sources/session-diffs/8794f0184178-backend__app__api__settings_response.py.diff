@@ -1,0 +1,14 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index 39ddbbe..85a0566 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -61,6 +61,9 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             "whisper_model_dir": env_data.get("WHISPER_MODEL_DIR", settings.whisper_model_dir),
+             "whisper_cache_dir": env_data.get("WHISPER_CACHE_DIR", settings.whisper_cache_dir),
+             "whisper_temp_dir": env_data.get("WHISPER_TEMP_DIR", settings.whisper_temp_dir),
++            "audio_separator_model_dir": env_data.get("AUDIO_SEPARATOR_MODEL_DIR", settings.audio_separator_model_dir),
++            "reazon_model_dir": env_data.get("REAZON_MODEL_DIR", settings.reazon_model_dir),
++            "reazon_nemo_model_path": env_data.get("REAZON_NEMO_MODEL_PATH", settings.reazon_nemo_model_path),
+             "lada_model_dir": lada_model_weights_dir,
+             "lada_model_weights_dir": lada_model_weights_dir,
+             "lada_cache_dir": env_data.get("LADA_CACHE_DIR", settings.lada_cache_dir),

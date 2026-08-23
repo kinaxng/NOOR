@@ -1,0 +1,13 @@
+diff --git a/frontend/src/views/settings/FaceFusionSettings.vue b/frontend/src/views/settings/FaceFusionSettings.vue
+index e1d3f81..599edcc 100644
+--- a/frontend/src/views/settings/FaceFusionSettings.vue
++++ b/frontend/src/views/settings/FaceFusionSettings.vue
+@@ -593,7 +593,7 @@ async function saveDefaults() {
+                 <span>{{ processor.label }}</span>
+                 <small>{{ processor.id }}</small>
+                 <em :class="{ 'is-cuda': processor.acceleration === 'cuda', 'is-muted': processor.acceleration === 'none' }">
+-                  {{ processor.acceleration === 'tensorrt' ? 'TensorRT' : processor.acceleration === 'cuda' ? 'CUDA' : '无推理加速' }}
++                  {{ processor.acceleration === 'tensorrt' ? 'TRT 推荐' : processor.acceleration === 'cuda' ? 'CUDA 推荐' : '无推理加速' }}
+                 </em>
+               </button>
+             </div>

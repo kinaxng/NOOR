@@ -1,0 +1,13 @@
+diff --git a/frontend/src/api/types.ts b/frontend/src/api/types.ts
+index a9a2c24..44001d3 100644
+--- a/frontend/src/api/types.ts
++++ b/frontend/src/api/types.ts
+@@ -30,7 +30,7 @@ export interface MediaLibrary {
+ }
+ 
+ export interface FileTags {
+-  is_uncensored: boolean  // -u 流出
++  is_uncensored: boolean  // 片商/目录等结构性来源判定的无码
+   has_chinese: boolean    // -c 中文
+   has_facefusion?: boolean // FaceFusion / FF 换脸版本
+   is_cracked: boolean     // 破解

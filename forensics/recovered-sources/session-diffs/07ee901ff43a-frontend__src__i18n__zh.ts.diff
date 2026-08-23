@@ -1,0 +1,21 @@
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index 6c63e3c..a3a886b 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -360,6 +360,7 @@ export const zh: Record<string, string> = {
+   'mediacard.chinese': '中字',
+   'mediacard.cracked': '已破',
+   'mediacard.crack': '破解',
++  'mediacard.facefusion': '换脸',
+   'mediacard.noCover': 'NO COVER',
+ 
+   // 详情弹窗
+@@ -584,7 +585,7 @@ export const zh: Record<string, string> = {
+   'settings.tab.system': '系统',
+   'settings.tab.storage': '存储',
+   'settings.tab.lada': 'LADA',
+-  'settings.tab.facefusion': 'FaceFusion',
++  'settings.tab.facefusion': '换脸',
+   'settings.tab.whisper': 'Whisper',
+   'settings.emby.title': '媒体服务器连接',
+   'settings.emby.server': '服务器地址',

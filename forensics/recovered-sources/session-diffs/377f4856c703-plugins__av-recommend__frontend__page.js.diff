@@ -1,0 +1,78 @@
+diff --git a/plugins/av-recommend/frontend/page.js b/plugins/av-recommend/frontend/page.js
+index cead60a..220ca14 100644
+--- a/plugins/av-recommend/frontend/page.js
++++ b/plugins/av-recommend/frontend/page.js
+@@ -46,41 +46,46 @@ async function loadJavdbImageCandidates(sdk, code) {
+   }
+ }
+ 
+-function renderFallbackImage(host, candidates, placeholder, onExhausted) {
++function loadImageUrl(url) {
++  return new Promise(resolve => {
++    const img = new Image()
++    img.decoding = 'async'
++    img.onload = () => resolve(url)
++    img.onerror = () => resolve('')
++    img.src = url
++  })
++}
++
++async function firstLoadableImage(urls) {
++  for (const url of imageCandidates(urls)) {
++    const loaded = await loadImageUrl(url)
++    if (loaded) return loaded
++  }
++  return ''
++}
++
++async function renderFallbackImage(host, candidates, placeholder, onExhausted) {
+   const urls = imageCandidates(candidates)
++  const token = Symbol('image-load')
++  host.__imageLoadToken = token
++  host.innerHTML = ''
++  host.classList.add('is-loading')
++  let loaded = await firstLoadableImage(urls)
++  if (!loaded && typeof onExhausted === 'function') {
++    const fresh = imageCandidates(await onExhausted())
++    loaded = await firstLoadableImage(fresh.filter(url => !urls.includes(url)))
++  }
++  if (host.__imageLoadToken !== token) return
++  host.classList.remove('is-loading')
+   host.innerHTML = ''
+-  if (!urls.length) {
++  if (!loaded) {
+     host.textContent = placeholder || 'NO IMAGE'
+     return
+   }
+   const img = document.createElement('img')
+-  let index = 0
+-  let refreshed = false
+   img.loading = 'lazy'
+   img.alt = ''
+-  img.onerror = async () => {
+-    index += 1
+-    if (index < urls.length) {
+-      img.src = urls[index]
+-      return
+-    }
+-    if (!refreshed && typeof onExhausted === 'function') {
+-      refreshed = true
+-      const fresh = imageCandidates(await onExhausted())
+-      for (const url of fresh) {
+-        if (!urls.includes(url)) urls.push(url)
+-      }
+-      if (index < urls.length) {
+-        img.src = urls[index]
+-        return
+-      }
+-    }
+-    {
+-      host.innerHTML = ''
+-      host.textContent = placeholder || 'NO IMAGE'
+-    }
+-  }
+-  img.src = urls[index]
++  img.src = loaded
+   host.appendChild(img)
+ }
+ 

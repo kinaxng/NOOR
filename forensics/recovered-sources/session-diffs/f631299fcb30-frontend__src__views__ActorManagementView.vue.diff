@@ -1,0 +1,47 @@
+diff --git a/frontend/src/views/ActorManagementView.vue b/frontend/src/views/ActorManagementView.vue
+index d154ef3..e3882a2 100644
+--- a/frontend/src/views/ActorManagementView.vue
++++ b/frontend/src/views/ActorManagementView.vue
+@@ -53,6 +53,16 @@ function actorName(actor: MediaActor) {
+   return actor.display_name || actor.name
+ }
+ 
++function actorRawName(actor: MediaActor) {
++  return actor.name || actor.display_name
++}
++
++function actorDisplayAlias(actor: MediaActor) {
++  const displayName = String(actor.display_name || '').trim()
++  const rawName = String(actor.name || '').trim()
++  return displayName && displayName !== rawName ? displayName : ''
++}
++
+ function mappingGroupName(group: any) {
+   if (!group) return ''
+   const lang = String(currentLang.value || '').toLowerCase()
+@@ -78,7 +88,9 @@ function selectedMergeTargetId(group: any) {
+ function selectedMergeTargetName(group: any) {
+   const selectedId = selectedMergeTargetId(group)
+   const actor = (group?.actors || []).find((item: any) => String(item?.id || '') === selectedId)
+-  return actor ? actorName(actor) : (group?.target_actor_display_name || group?.target_actor_name || '')
++  if (!actor) return group?.target_actor_display_name || group?.target_actor_name || ''
++  const alias = actorDisplayAlias(actor)
++  return alias ? `${actorRawName(actor)} / ${alias}` : actorRawName(actor)
+ }
+ 
+ function selectMergeTarget(group: any, actor: MediaActor) {
+@@ -376,8 +388,12 @@ onMounted(() => {
+                 <span v-else>{{ actorInitial(actor.name) }}</span>
+               </span>
+               <span class="duplicate-member__body">
+-                <span>{{ actorName(actor) }}</span>
+-                <em>{{ actor.name }}<template v-if="actor.tmdb_id"> · TMDB {{ actor.tmdb_id }}</template></em>
++                <span>{{ actorRawName(actor) }}</span>
++                <em>
++                  <template v-if="actorDisplayAlias(actor)">{{ actorDisplayAlias(actor) }}</template>
++                  <template v-else>{{ actor.name }}</template>
++                  <template v-if="actor.tmdb_id"> · TMDB {{ actor.tmdb_id }}</template>
++                </em>
+               </span>
+             </button>
+           </div>

@@ -1,0 +1,212 @@
+diff --git a/frontend/src/components/noor/LadaPanel.vue b/frontend/src/components/noor/LadaPanel.vue
+index 2afe3c4..af728af 100644
+--- a/frontend/src/components/noor/LadaPanel.vue
++++ b/frontend/src/components/noor/LadaPanel.vue
+@@ -38,6 +38,8 @@ const previewUrl = ref('')
+ const previewError = ref('')
+ const previewStale = ref(false)
+ const previewFrameNumber = ref(0)
++const previewFrameTotal = ref(0)
++const previewMetadataLoading = ref(false)
+ 
+ // Hardcoded option lists (mirrors LADA_ENCODING_PRESETS in backend)
+ const detectionModels = computed(() => [
+@@ -134,6 +136,11 @@ watch([() => props.detail, () => props.initialSelectedPath, () => props.initialS
+   selectedSubmitId.value = initialId || detail.id
+ }, { immediate: true })
+ 
++watch([selectedSubmitPath, activeTab], async () => {
++  if (activeTab.value !== 'facefusion' || !selectedSubmitPath.value) return
++  await loadFaceFusionPreviewMetadata()
++}, { immediate: true })
++
+ watch(
+   [activeTab, selectedSubmitPath, () => facefusionSettings.value.source_path],
+   () => {
+@@ -178,10 +185,53 @@ const mergedEncodingPresets = computed(() => {
+   return options
+ })
+ 
++const previewFrameMax = computed(() => Math.max(0, previewFrameTotal.value > 0 ? previewFrameTotal.value - 1 : 0))
++const previewTimeLabel = computed(() => {
++  if (!previewFrameTotal.value) return `帧 ${previewFrameNumber.value}`
++  return `帧 ${previewFrameNumber.value} / ${previewFrameMax.value}`
++})
++
+ function handleClose() {
+   emit('close')
+ }
+ 
++async function loadFaceFusionPreviewMetadata() {
++  previewMetadataLoading.value = true
++  try {
++    const resp = await api.post('/facefusion/preview/metadata', {
++      input_path: selectedSubmitPath.value,
++    })
++    previewFrameTotal.value = Number(resp.data?.frame_total || 0)
++    if (previewFrameTotal.value > 0 && previewFrameNumber.value > previewFrameMax.value) {
++      previewFrameNumber.value = previewFrameMax.value
++    }
++  } catch (e) {
++    previewFrameTotal.value = 0
++  } finally {
++    previewMetadataLoading.value = false
++  }
++}
++
++function setPreviewFrameByRatio(ratio: number) {
++  previewFrameNumber.value = Math.round(previewFrameMax.value * ratio)
++  if (previewUrl.value) {
++    previewStale.value = true
++  }
++}
++
++function markPreviewFrameChanged() {
++  if (previewUrl.value) {
++    previewStale.value = true
++  }
++}
++
++async function handlePreviewSliderCommit() {
++  markPreviewFrameChanged()
++  if (facefusionSettings.value.source_path) {
++    await handleGenerateFaceFusionPreview()
++  }
++}
++
+ async function handleSubmitJob() {
+   if (!selectedSubmitPath.value) return
+ 
+@@ -255,9 +305,10 @@ async function handleGenerateFaceFusionPreview() {
+   previewLoading.value = true
+   previewError.value = ''
+   try {
++    const frameNumber = Math.max(0, Math.min(Number(previewFrameNumber.value || 0), previewFrameMax.value || Number(previewFrameNumber.value || 0)))
+     const resp = await api.post('/facefusion/preview', {
+       input_path: selectedSubmitPath.value,
+-      frame_number: previewFrameNumber.value,
++      frame_number: frameNumber,
+       preview_mode: 'default',
+       preview_resolution: '768x768',
+       settings: {
+@@ -265,6 +316,7 @@ async function handleGenerateFaceFusionPreview() {
+         source_paths: [facefusionSettings.value.source_path],
+       },
+     })
++    previewFrameNumber.value = frameNumber
+     previewUrl.value = `${resp.data.preview_url}?t=${Date.now()}`
+     previewStale.value = false
+   } catch (e: any) {
+@@ -390,9 +442,28 @@ async function handleGenerateFaceFusionPreview() {
+                     <input v-model="facefusionSettings.source_path" class="settings-input w-full" type="text" placeholder="/path/to/source-face.jpg" />
+                   </div>
+                   <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+-                    <div>
+-                      <label class="block text-[10px] text-text-muted uppercase tracking-wider mb-1">预览帧</label>
+-                      <input v-model.number="previewFrameNumber" class="settings-input w-full" type="number" min="0" />
++                    <div class="preview-slider-control">
++                      <div class="preview-slider-control__head">
++                        <label class="block text-[10px] text-text-muted uppercase tracking-wider">预览帧</label>
++                        <span>{{ previewMetadataLoading ? '读取中' : previewTimeLabel }}</span>
++                      </div>
++                      <input
++                        v-model.number="previewFrameNumber"
++                        class="preview-frame-slider"
++                        type="range"
++                        min="0"
++                        :max="previewFrameMax"
++                        step="1"
++                        :disabled="previewMetadataLoading || previewFrameMax <= 0"
++                        @input="markPreviewFrameChanged"
++                        @change="handlePreviewSliderCommit"
++                      />
++                      <div class="preview-frame-jumps">
++                        <button type="button" @click="setPreviewFrameByRatio(0)">开头</button>
++                        <button type="button" @click="setPreviewFrameByRatio(0.25)">25%</button>
++                        <button type="button" @click="setPreviewFrameByRatio(0.5)">50%</button>
++                        <button type="button" @click="setPreviewFrameByRatio(0.75)">75%</button>
++                      </div>
+                     </div>
+                     <VuiButton
+                       variant="outlined"
+@@ -626,6 +697,80 @@ async function handleGenerateFaceFusionPreview() {
+   opacity: 0.5;
+ }
+ 
++.preview-slider-control {
++  display: flex;
++  flex-direction: column;
++  gap: 0.55rem;
++}
++
++.preview-slider-control__head {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 0.75rem;
++}
++
++.preview-slider-control__head span {
++  color: var(--color-text-secondary);
++  font-size: 0.72rem;
++  white-space: nowrap;
++}
++
++.preview-frame-slider {
++  width: 100%;
++  height: 0.35rem;
++  border-radius: 999px;
++  appearance: none;
++  background: linear-gradient(90deg, rgba(0, 117, 255, 0.68), rgba(59, 130, 246, 0.28));
++  outline: none;
++}
++
++.preview-frame-slider::-webkit-slider-thumb {
++  width: 1rem;
++  height: 1rem;
++  border-radius: 999px;
++  appearance: none;
++  border: 2px solid rgba(255, 255, 255, 0.9);
++  background: var(--color-accent-blue, #0075ff);
++  box-shadow: 0 0 0 0.35rem rgba(0, 117, 255, 0.16);
++}
++
++.preview-frame-slider::-moz-range-thumb {
++  width: 1rem;
++  height: 1rem;
++  border-radius: 999px;
++  border: 2px solid rgba(255, 255, 255, 0.9);
++  background: var(--color-accent-blue, #0075ff);
++  box-shadow: 0 0 0 0.35rem rgba(0, 117, 255, 0.16);
++}
++
++.preview-frame-slider:disabled {
++  opacity: 0.45;
++}
++
++.preview-frame-jumps {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 0.35rem;
++}
++
++.preview-frame-jumps button {
++  min-height: 1.65rem;
++  padding: 0 0.55rem;
++  border-radius: 999px;
++  border: 1px solid var(--color-border-default);
++  background: rgba(255, 255, 255, 0.04);
++  color: var(--color-text-secondary);
++  font-size: 0.68rem;
++  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
++}
++
++.preview-frame-jumps button:hover {
++  color: var(--color-text-primary);
++  background: rgba(0, 117, 255, 0.14);
++  border-color: rgba(0, 117, 255, 0.38);
++}
++
+ .crack-tabs button {
+   min-width: 6rem;
+   height: 2rem;

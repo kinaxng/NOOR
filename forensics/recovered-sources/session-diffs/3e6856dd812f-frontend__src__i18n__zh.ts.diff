@@ -1,0 +1,15 @@
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index fa08e3c..82853fa 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -103,6 +103,10 @@ export const zh: Record<string, string> = {
+   'files.actors.nameSyncApplyConfirm': '将把 {count} 位无冲突演员的当前语言名称写入 Emby 名称，跳过 {conflicts} 位冲突演员。',
+   'files.actors.nameSyncApplySuccess': '已同步 {count} 位演员名称',
+   'files.actors.nameSyncApplyFailed': '同步演员名称失败',
++  'files.actors.nameSyncProgressRunning': '正在写入 Emby',
++  'files.actors.nameSyncProgressDone': '本次名称同步完成',
++  'files.actors.nameSyncProgressCounts': '已处理 {processed}/{total} · 写入 {applied} · 跳过 {skipped}',
++  'files.actors.nameSyncProgressCurrent': '当前：{name} -> {target}',
+   'files.actors.nameSyncConflictsTitle': '需要先处理的冲突',
+   'files.actors.nameSyncConflictWith': '冲突：{names}',
+   'files.actors.nameSyncConflict': '冲突',

@@ -1,0 +1,25 @@
+diff --git a/backend/tests/test_media_library_api.py b/backend/tests/test_media_library_api.py
+index 390a918..a297f02 100644
+--- a/backend/tests/test_media_library_api.py
++++ b/backend/tests/test_media_library_api.py
+@@ -130,6 +130,20 @@ def test_actor_group_target_name_follows_noor_language():
+     assert media_library._actor_group_target_name(group, target_name="三原ほのか", lang="zh-CN") == "三原ほのか"
+ 
+ 
++def test_actor_group_selected_target_uses_emby_actor_and_excludes_source():
++    group = {
++        "jp": "吉岡ひより",
++        "zh_cn": "吉冈日和",
++        "actors": [
++            {"id": "a1", "name": "吉岡ひより"},
++            {"id": "a2", "name": "吉冈日和"},
++        ],
++    }
++
++    assert media_library._actor_group_target_name(group, lang="zh-CN", target_actor_id="a1") == "吉岡ひより"
++    assert media_library._actor_group_source_ids(group, target_actor_id="a1") == ["a2"]
++
++
+ @pytest.mark.asyncio
+ async def test_get_items_returns_paginated_cached_library_items(monkeypatch: pytest.MonkeyPatch):
+     media_library._items_cache.clear()

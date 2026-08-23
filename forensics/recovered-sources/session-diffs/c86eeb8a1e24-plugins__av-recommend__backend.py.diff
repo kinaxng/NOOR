@@ -1,0 +1,17 @@
+diff --git a/plugins/av-recommend/backend.py b/plugins/av-recommend/backend.py
+index 215ad89..07f6f4d 100644
+--- a/plugins/av-recommend/backend.py
++++ b/plugins/av-recommend/backend.py
+@@ -361,12 +361,6 @@ async def _javdb_candidates(config: dict[str, Any]) -> tuple[list[dict[str, Any]
+         detail_limit = max(0, min(int(config.get("detail_limit") or 36), 80))
+         requests = [
+             ("latest", {"page": 1, "limit": candidate_limit, "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "update"}),
+-            ("latest", {"page": 1, "limit": max(24, candidate_limit // 2), "type": "all", "filter_by": "magnets", "filters": ["magnets"], "sort_by": "release"}),
+-            # A recommendation engine should not only chase the newest feed.
+-            # Blend in DBOnline's own recommend/ranking lists as candidates, but
+-            # keep them small so they do not slow down the plugin.
+-            ("recommend", {"page": 1, "limit": max(18, candidate_limit // 3)}),
+-            ("rankings", {"page": 1, "limit": max(18, candidate_limit // 3), "period": "weekly", "type": 0}),
+         ]
+         by_code: dict[str, dict[str, Any]] = {}
+         for action, payload in requests:

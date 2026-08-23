@@ -1,0 +1,75 @@
+diff --git a/plugins/subscription-core/frontend/page.js b/plugins/subscription-core/frontend/page.js
+index fbfac3e..9bcf083 100644
+--- a/plugins/subscription-core/frontend/page.js
++++ b/plugins/subscription-core/frontend/page.js
+@@ -33,7 +33,29 @@ function imageCandidates(...values) {
+   values.forEach(push)
+   return out
+ }
+-function renderFallbackImage(host, candidates, placeholder = 'NO IMAGE') {
++async function loadJavdbImageCandidates(sdk, code) {
++  const text = String(code || '').trim()
++  if (!text) return []
++  try {
++    let payload
++    if (sdk.api?.post) {
++      const resp = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code: text, refresh: true } })
++      payload = resp.data
++    } else {
++      payload = await fetch('/api/plugins/javdb/actions/video', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ payload: { code: text, refresh: true } }),
++      }).then(r => r.json())
++    }
++    const data = payload?.data || payload
++    return imageCandidates(data?.cover_url, data?.thumb_url, data?.fanart_url, data?.previews, data?.preview_images)
++  } catch {
++    return []
++  }
++}
++
++function renderFallbackImage(host, candidates, placeholder = 'NO IMAGE', onExhausted) {
+   const urls = imageCandidates(candidates)
+   host.innerHTML = ''
+   if (!urls.length) {
+@@ -43,12 +65,27 @@ function renderFallbackImage(host, candidates, placeholder = 'NO IMAGE') {
+   host.classList.add('has-image')
+   const img = document.createElement('img')
+   let index = 0
++  let refreshed = false
+   img.alt = ''
+   img.loading = 'lazy'
+-  img.onerror = () => {
++  img.onerror = async () => {
+     index += 1
+-    if (index < urls.length) img.src = urls[index]
+-    else {
++    if (index < urls.length) {
++      img.src = urls[index]
++      return
++    }
++    if (!refreshed && typeof onExhausted === 'function') {
++      refreshed = true
++      const fresh = imageCandidates(await onExhausted())
++      for (const url of fresh) {
++        if (!urls.includes(url)) urls.push(url)
++      }
++      if (index < urls.length) {
++        img.src = urls[index]
++        return
++      }
++    }
++    {
+       host.classList.remove('has-image')
+       host.innerHTML = ''
+       host.textContent = placeholder
+@@ -413,6 +450,8 @@ export async function mount(root, sdk = {}) {
+       renderFallbackImage(
+         card.querySelector('.sub-card__cover'),
+         imageCandidates(item.image_candidates, item.fanart_url, item.cover_url, item.thumb_url, item.image, best?.image_candidates, best?.fanart_url, best?.cover_url, best?.thumb_url, best?.image),
++        'NO IMAGE',
++        () => loadJavdbImageCandidates(sdk, item.code || item.number),
+       )
+       const bHost = card.querySelector('.sub-card__badges')
+       itemBadges(item).forEach(x => bHost.appendChild(x))

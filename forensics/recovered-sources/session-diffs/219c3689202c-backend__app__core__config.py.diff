@@ -1,0 +1,48 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index 496cfc6..06aaee4 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -101,6 +101,7 @@ class Settings(BaseSettings):
+     facefusion_system_memory_limit: int = 0
+     facefusion_log_level: str = "info"
+     facefusion_download_providers: str = "github huggingface"
++    facefusion_halt_on_error: bool = False
+     facefusion_processors: str = ""
+     facefusion_face_swapper_model: str = "hyperswap_1a_256"
+     facefusion_face_swapper_pixel_boost: str = "256x256"
+@@ -114,14 +115,21 @@ class Settings(BaseSettings):
+     facefusion_face_detector_size: str = "640x640"
+     facefusion_face_detector_score: float = 0.5
+     facefusion_face_detector_angles: str = "0"
++    facefusion_face_detector_margin: str = "0 0 0 0"
+     facefusion_face_landmarker_model: str = "2dfan4"
+     facefusion_face_landmarker_score: float = 0.5
+     facefusion_face_selector_mode: str = "reference"
+     facefusion_face_selector_order: str = "large-small"
++    facefusion_face_selector_gender: str = ""
++    facefusion_face_selector_age_start: str = ""
++    facefusion_face_selector_age_end: str = ""
++    facefusion_face_selector_race: str = ""
+     facefusion_reference_frame_number: int = 0
+     facefusion_reference_face_position: int = 0
+     facefusion_reference_face_distance: float = 0.3
+     facefusion_face_mask_types: str = "box"
++    facefusion_face_mask_areas: str = ""
++    facefusion_face_mask_regions: str = ""
+     facefusion_face_mask_blur: float = 0.3
+     facefusion_face_mask_padding: str = "0 0 0 0"
+     facefusion_face_occluder_model: str = "xseg_1"
+@@ -129,9 +137,13 @@ class Settings(BaseSettings):
+     facefusion_output_video_encoder: str = "libx264"
+     facefusion_output_video_preset: str = "veryfast"
+     facefusion_output_video_quality: int = 80
++    facefusion_output_video_scale: str = "1.0"
++    facefusion_output_video_fps: str = ""
+     facefusion_output_audio_encoder: str = "aac"
+     facefusion_output_audio_quality: int = 80
+     facefusion_output_audio_volume: int = 100
++    facefusion_output_image_quality: int = 80
++    facefusion_output_image_scale: str = "1.0"
+     facefusion_temp_frame_format: str = "png"
+ 
+     # Server

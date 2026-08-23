@@ -48,6 +48,12 @@ TERMINAL_STATUS_DETAILS = {
         "cancelled": "视频修复已取消",
         "skipped": "视频修复已跳过",
     },
+    "facefusion_restore": {
+        "completed": "FaceFusion 处理完成",
+        "failed": "FaceFusion 处理失败",
+        "cancelled": "FaceFusion 处理已取消",
+        "skipped": "FaceFusion 处理已跳过",
+    },
     "whisper": {
         "completed": "字幕生成完成",
         "failed": "字幕生成失败",
@@ -81,6 +87,7 @@ FOLLOWUP_DETAIL_VALUES = frozenset(FOLLOWUP_STATUS_DETAILS.values())
 JOB_TYPE_PHASE_DEFAULTS = {
     "lada": {"phase_key": "prepare", "phase_label": "准备任务"},
     "lada_restore": {"phase_key": "prepare", "phase_label": "准备任务"},
+    "facefusion_restore": {"phase_key": "prepare", "phase_label": "准备任务"},
     "whisper": {"phase_key": "prepare", "phase_label": "准备任务"},
     "whisper_transcribe": {"phase_key": "prepare", "phase_label": "准备任务"},
     "translate-srt": {"phase_key": "translate", "phase_label": "字幕翻译"},

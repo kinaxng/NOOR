@@ -1,0 +1,82 @@
+diff --git a/backend/app/pipeline/whisper/orchestrator.py b/backend/app/pipeline/whisper/orchestrator.py
+index c9c07b5..9e25964 100644
+--- a/backend/app/pipeline/whisper/orchestrator.py
++++ b/backend/app/pipeline/whisper/orchestrator.py
+@@ -25,7 +25,7 @@ from .engine import (
+ )
+ from .enhancer import AudioEnhancer
+ from .merge import MergeEngine
+-from .japanese_post import JapanesePostProcessor, RecommendedSubtitlePostProcessor
++from .japanese_post import JapanesePostProcessor, RecommendedSubtitlePostProcessor, SubtitleSafetyPostProcessor
+ from .scene_detector import AudioSceneDetector
+ from .runtime import raise_if_cancelled
+ from .preprocess import AudioPreprocessError, preprocess_audio
+@@ -545,9 +545,31 @@ class WhisperPipeline:
+             except Exception as e:
+                 self.log(f"语音增强失败（跳过）: {e}")
+ 
+-        # Phase: 场景检测
++        # Phase: 场景检测 / smart VAD chunk
+         all_segments: list[tuple[str, float, float]] = []  # (audio_path, start, end)
+-        if duration > 60.0:
++        if getattr(self.config, "chunker", "") == "smart_vad_chunk" and duration > max(10.0, self.config.target_chunk_duration_s):
++            self.log("=" * 50)
++            self.log(f"Smart VAD Chunk: {self.config.vad_backend} · target {self.config.target_chunk_duration_s:.0f}s")
++            self.log("=" * 50)
++            try:
++                self._raise_if_cancelled()
++                detector = AudioSceneDetector(
++                    mode="energy",
++                    min_silence_duration=0.1,
++                    min_segment_duration=max(3.0, min(10.0, self.config.target_chunk_duration_s * 0.35)),
++                    energy_threshold=0.01,
++                    max_segment_duration=self.config.max_chunk_duration_s or self.config.target_chunk_duration_s,
++                )
++                scenes = detector.detect(str(audio_path))
++                self.log(f"Smart VAD 生成 {len(scenes)} 个安全连续块")
++                if len(scenes) > 1:
++                    all_segments = [(str(audio_path), s.start, s.end) for s in scenes]
++                else:
++                    all_segments = [(str(audio_path), 0.0, duration)]
++            except Exception as e:
++                self.log(f"Smart VAD chunk 失败（回退整段）: {e}")
++                all_segments = [(str(audio_path), 0.0, duration)]
++        elif duration > 60.0:
+             self.log("=" * 50)
+             self.log("场景检测: semantic MFCC")
+             self.log("=" * 50)
+@@ -661,13 +683,31 @@ class WhisperPipeline:
+                 "recommended_segment_diagnostics": recommended_segment_diagnostics,
+             }
+ 
+-        # Phase: 日语后处理
++        # Phase: 字幕后处理
+         self.log("=" * 50)
+-        self.log("日语后处理: 断句优化 & 格式整理", 92)
++        self.log("字幕后处理: 时轴安全整理 & 格式整理", 92)
+         self.log("=" * 50)
+         try:
+             self._raise_if_cancelled()
+-            if getattr(self.config, "executor_key", "advanced") == "recommended":
++            is_direct_translation = (
++                getattr(self.config, "whisper_task", None) == WhisperTask.TRANSLATE
++                or getattr(self.config, "whisper_task", None) == "translate"
++                or getattr(self.config, "model_backend", "") == WhisperModel.CHICKENRICE_ZH
++                or getattr(self.config, "model_backend", "") == "chickenrice-zh"
++            )
++            if is_direct_translation:
++                post_processor = SubtitleSafetyPostProcessor(
++                    max_segment_duration=max(
++                        1.0,
++                        float(getattr(self.config, "segment_merge_max_duration_ms", 20000) or 20000) / 1000.0,
++                    ),
++                    min_gap_threshold=max(
++                        0.0,
++                        float(getattr(self.config, "segment_merge_max_gap_ms", 2000) or 2000) / 1000.0 / 40.0,
++                    ),
++                )
++                self.log("后处理策略: subtitle-safety")
++            elif getattr(self.config, "executor_key", "advanced") == "recommended":
+                 post_processor = RecommendedSubtitlePostProcessor()
+                 self.log("后处理策略: default-cleanup")
+             else:

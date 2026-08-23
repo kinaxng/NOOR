@@ -1,0 +1,50 @@
+diff --git a/backend/app/pipeline/whisper/strategy.py b/backend/app/pipeline/whisper/strategy.py
+index fe6981b..f4c47bc 100644
+--- a/backend/app/pipeline/whisper/strategy.py
++++ b/backend/app/pipeline/whisper/strategy.py
+@@ -3,11 +3,16 @@ from __future__ import annotations
+ from dataclasses import dataclass
+ from typing import Any
+ 
++from .runtime_tier import apply_whisper_runtime_tier
++
+ 
+ CHICKENRICE_WHISPER_STRATEGY = {
+     "strategy": "chickenrice",
+     "subtitle_profile": "standard",
+     "model_backend": "chickenrice-zh",
++    "runtime_tier": "gpu_standard",
++    "device": "cuda",
++    "compute_type": "float16",
+     "model": "chickenrice-zh",
+     "whisper_task": "translate",
+     "vad_backend": "energy",
+@@ -76,6 +81,7 @@ def apply_whisper_strategy(payload: dict[str, Any], strategy: str | None) -> dic
+             "segment_merge_max_gap_ms",
+             "segment_merge_max_duration_ms",
+             "timing_refiner",
++            "runtime_tier",
+         )
+         if key in merged and merged[key] not in (None, "")
+     }
+@@ -87,10 +93,12 @@ def apply_whisper_strategy(payload: dict[str, Any], strategy: str | None) -> dic
+         if selected_backend:
+             merged["model_backend"] = selected_backend
+         _apply_model_backend(merged)
++        apply_whisper_runtime_tier(merged)
+         return merged
+     merged.update(CHICKENRICE_WHISPER_STRATEGY)
+     merged.update(editable_runtime_fields)
+     _apply_model_backend(merged)
++    apply_whisper_runtime_tier(merged)
+     return merged
+ 
+ 
+@@ -110,6 +118,7 @@ def build_whisper_execution_plan(payload: dict[str, Any], strategy: str | None)
+         detail_lines=(
+             "执行分支: chickenrice",
+             "主链路: Faster-Whisper + ChickenRice 日中直出模型",
++            f"运行档位: {runtime_settings.get('runtime_tier')} ({runtime_settings.get('device')} / {runtime_settings.get('compute_type')})",
+             "固定参数: ja -> zh / faster-whisper backend / smart VAD chunk",
+         ),
+     )

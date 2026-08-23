@@ -1,0 +1,26 @@
+diff --git a/backend/app/tasks/manager.py b/backend/app/tasks/manager.py
+index e6b63c7..7953d4c 100644
+--- a/backend/app/tasks/manager.py
++++ b/backend/app/tasks/manager.py
+@@ -739,6 +739,13 @@ class JobManager:
+             raise ValueError("Blocked jobs must depend on a parent task")
+ 
+         job_id = str(uuid.uuid4())
++        settings = get_settings()
++        output_path = None
++        if job_type in {"lada", "lada_restore"}:
++            output_path = build_lada_output_path(job_data.input_path, settings.source_dir, settings.output_dir)
++        elif job_type == "facefusion_restore":
++            output_path = build_facefusion_output_path(job_data.input_path, settings.source_dir, settings.output_dir)
++
+         async with self._db_lock:
+             async with async_session_maker() as session:
+                 job = Job(
+@@ -747,6 +754,7 @@ class JobManager:
+                     emby_item_id=job_data.emby_item_id,
+                     emby_item_name=job_data.emby_item_name,
+                     input_path=job_data.input_path,
++                    output_path=output_path,
+                     status=status,
+                     chain_id=job_data.chain_id,
+                     depends_on_task_id=job_data.depends_on_task_id,

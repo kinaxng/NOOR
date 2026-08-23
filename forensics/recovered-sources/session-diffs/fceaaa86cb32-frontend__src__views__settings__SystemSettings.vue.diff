@@ -1,0 +1,40 @@
+diff --git a/frontend/src/views/settings/SystemSettings.vue b/frontend/src/views/settings/SystemSettings.vue
+index e87ea9b..bf57261 100644
+--- a/frontend/src/views/settings/SystemSettings.vue
++++ b/frontend/src/views/settings/SystemSettings.vue
+@@ -196,7 +196,22 @@ async function saveEmby() {
+ async function copyWebhookUrl() {
+   if (!embyWebhookUrl.value) return
+   try {
+-    await navigator.clipboard.writeText(embyWebhookUrl.value)
++    if (navigator.clipboard?.writeText && window.isSecureContext) {
++      await navigator.clipboard.writeText(embyWebhookUrl.value)
++    } else {
++      const textarea = document.createElement('textarea')
++      textarea.value = embyWebhookUrl.value
++      textarea.setAttribute('readonly', 'true')
++      textarea.style.position = 'fixed'
++      textarea.style.left = '-9999px'
++      textarea.style.top = '0'
++      document.body.appendChild(textarea)
++      textarea.focus()
++      textarea.select()
++      const copied = document.execCommand('copy')
++      document.body.removeChild(textarea)
++      if (!copied) throw new Error('copy failed')
++    }
+     toast.success('Webhook 地址已复制')
+   } catch {
+     toast.error('复制失败，请手动复制')
+@@ -334,8 +349,9 @@ function toggleLibrary(libId: string) {
+                 <div class="webhook-guide">
+                   <div>1. 在 Emby 安装并打开 Webhooks 插件。</div>
+                   <div>2. 新增 Webhook，URL 填入上面的地址，Method 选择 POST。</div>
+-                  <div>3. 事件选择媒体新增、删除、更新、库扫描完成等媒体库相关事件。</div>
+-                  <div>4. 保存后可在 Emby 里发送测试请求；NOOR 收到后会清空媒体库缓存。</div>
++                  <div>3. 请求内容类型选择 application/json，Body 模板可保持插件默认 JSON。</div>
++                  <div>4. 事件选择媒体新增、删除、更新、库扫描完成等媒体库相关事件。</div>
++                  <div>5. 保存后可在 Emby 里发送测试请求；NOOR 收到后会清空媒体库缓存。</div>
+                 </div>
+               </div>
+             </div>

@@ -1,0 +1,17 @@
+diff --git a/.dockerignore b/.dockerignore
+index 1c9276d..1e7b27e 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -28,6 +28,12 @@ data
+ # Local runtime artifacts
+ tmp
+ /tmp
++cache
++logs
++*.db
++*.db-shm
++*.db-wal
++*.db-journal
+ *.log
+ 
+ # Large local assets (mount via volumes instead of build context)

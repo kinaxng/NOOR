@@ -1,0 +1,47 @@
+diff --git a/backend/app/api/settings.py b/backend/app/api/settings.py
+index eb9e090..8d1334f 100644
+--- a/backend/app/api/settings.py
++++ b/backend/app/api/settings.py
+@@ -53,6 +53,10 @@ from app.api.settings_lada_upgrade import (
+     resolve_git_branch,
+     should_add_break_system_packages,
+ )
++from app.api.settings_facefusion_upgrade import (
++    get_facefusion_installation_info,
++    upgrade_facefusion_source,
++)
+ from app.api.settings_response import build_settings_payload
+ from app.api.settings_whisper_models import delete_whisper_model_files, resolve_whisper_model_dir
+ from app.api.settings_updates import (
+@@ -399,6 +403,31 @@ async def update_facefusion_defaults(config: FaceFusionDefaultsConfig):
+         raise HTTPException(status_code=500, detail=f"Failed to save .env: {str(e)}")
+ 
+ 
++@router.get("/facefusion/info")
++async def get_facefusion_info():
++    """Get embedded FaceFusion source and upgrade info."""
++    return get_facefusion_installation_info(get_settings())
++
++
++@router.post("/facefusion/upgrade")
++async def upgrade_facefusion():
++    """Upgrade embedded FaceFusion source through NOOR's controlled sync flow."""
++    log_mgr = SystemLogManager.get_instance()
++    log_mgr.add_log("info", "[FaceFusion] 正在升级内置 FaceFusion...")
++    try:
++        result = upgrade_facefusion_source(get_settings(), log_mgr)
++        clear_settings_cache()
++        return result
++    except HTTPException:
++        raise
++    except subprocess.TimeoutExpired:
++        log_mgr.add_log("error", "[FaceFusion] 升级超时")
++        raise HTTPException(status_code=500, detail="FaceFusion 升级超时")
++    except Exception as e:
++        log_mgr.add_log("error", f"[FaceFusion] 升级异常 — {str(e)}")
++        raise HTTPException(status_code=500, detail=str(e))
++
++
+ @router.put("/network")
+ async def update_network_config(config: NetworkConfig):
+     """Update network configuration (acceleration mode, proxy, mirrors)."""

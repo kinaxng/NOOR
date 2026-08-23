@@ -1,0 +1,13 @@
+diff --git a/backend/tests/test_whisper_translator.py b/backend/tests/test_whisper_translator.py
+index 99bfd89..d40786d 100644
+--- a/backend/tests/test_whisper_translator.py
++++ b/backend/tests/test_whisper_translator.py
+@@ -2,7 +2,26 @@ from __future__ import annotations
+ 
+ import httpx
+ 
+-from app.pipeline.whisper.translator import OpenAILikeTranslator
++from app.pipeline.whisper.translator import (
++    OpenAILikeTranslator,
++    _is_ollama_native_chat_url,
++    _resolve_chat_completions_url,

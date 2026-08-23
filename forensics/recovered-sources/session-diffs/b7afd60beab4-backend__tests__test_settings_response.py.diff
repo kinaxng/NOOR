@@ -1,0 +1,81 @@
+diff --git a/backend/tests/test_settings_response.py b/backend/tests/test_settings_response.py
+index cc300e8..81d304c 100644
+--- a/backend/tests/test_settings_response.py
++++ b/backend/tests/test_settings_response.py
+@@ -1,5 +1,7 @@
+ from __future__ import annotations
+ 
++from types import SimpleNamespace
++
+ import pytest
+ 
+ from app.api.settings_response import build_settings_payload, split_enabled_library_ids
+@@ -43,7 +45,7 @@ def test_build_settings_payload_maps_env_and_defaults(monkeypatch: pytest.Monkey
+     assert payload['emby']['enabled_library_ids'] == ['1', '2']
+     assert payload['storage']['database_url'] == get_settings().database_url
+     assert payload['storage']['database_path'].endswith('/data/noor.db')
+-    assert payload['storage']['lada_model_dir'] == '/models/lada'
++    assert payload['storage']['lada_model_dir'] == get_settings().lada_model_dir
+     assert payload['facefusion']['native_model_dir'] == '/volume1/facefusion/facefusion/.assets/models'
+     assert payload['facefusion']['model_dir_mode'] == 'native_assets'
+     assert payload['lada']['version'] == '1.2.3'
+@@ -59,6 +61,59 @@ def test_build_settings_payload_maps_env_and_defaults(monkeypatch: pytest.Monkey
+     assert payload['network']['github_token'] == 'github_pat_xxx'
+ 
+ 
++def test_build_settings_payload_uses_resolved_storage_settings(monkeypatch: pytest.MonkeyPatch):
++    monkeypatch.setattr("app.api.settings_response.load_media_library_config", lambda: {})
++    monkeypatch.setattr(
++        "app.api.settings_response.get_settings",
++        lambda: SimpleNamespace(
++            source_dir="/media",
++            output_dir="/output",
++            noor_data_dir="/app/data",
++            database_url="sqlite+aiosqlite:////app/data/noor.db",
++            whisper_model_dir="/models/whisper",
++            whisper_cache_dir="/app/data/runtime/whisper/cache",
++            whisper_temp_dir="/app/data/runtime/whisper/temp",
++            audio_separator_model_dir="/app/data/models/whisper/audio-separator",
++            reazon_model_dir="/app/data/models/whisper/reazon",
++            reazon_nemo_model_path="/app/data/models/whisper/reazon/reazonspeech-nemo-v2.nemo",
++            lada_model_dir="/models/lada",
++            lada_cache_dir="/app/data/runtime/lada/cache",
++            lada_temp_dir="/app/data/runtime/lada/temp",
++            facefusion_model_dir="/app/data/models/facefusion",
++            facefusion_cache_dir="/app/data/runtime/facefusion/cache",
++            facefusion_temp_dir="/app/data/runtime/facefusion/temp",
++        ),
++    )
++
++    payload = build_settings_payload(
++        env_data={
++            "NOOR_DATA_DIR": "/host/noor/data",
++            "DATABASE_URL": "sqlite+aiosqlite:////host/noor/data/noor.db",
++            "WHISPER_CACHE_DIR": "/host/noor/data/runtime/whisper/cache",
++            "LADA_CACHE_DIR": "/host/noor/data/runtime/lada/cache",
++        },
++        version_info={
++            'version': '0.0.0',
++            'is_docker': False,
++            'is_submodule': False,
++            'install_mode': 'editable-repo',
++            'can_self_upgrade': False,
++            'upgrade_strategy': 'manual',
++            'upgrade_hint': '',
++            'repo_path': '',
++        },
++        lada_model_weights_dir="/host/models/lada",
++        whisper_features={},
++        custom_whisper_config={},
++    )
++
++    assert payload["storage"]["noor_data_dir"] == "/app/data"
++    assert payload["storage"]["database_path"] == "/app/data/noor.db"
++    assert payload["storage"]["whisper_cache_dir"] == "/app/data/runtime/whisper/cache"
++    assert payload["storage"]["lada_cache_dir"] == "/app/data/runtime/lada/cache"
++    assert payload["storage"]["lada_model_dir"] == "/models/lada"
++
++
+ def test_build_settings_payload_normalizes_best_strategy_alias(monkeypatch: pytest.MonkeyPatch):
+     monkeypatch.setattr("app.api.settings_response.load_media_library_config", lambda: {})
+     payload = build_settings_payload(

@@ -1,0 +1,28 @@
+diff --git a/backend/tests/test_facefusion_runner.py b/backend/tests/test_facefusion_runner.py
+index 759ee51..59b2117 100644
+--- a/backend/tests/test_facefusion_runner.py
++++ b/backend/tests/test_facefusion_runner.py
+@@ -19,6 +19,7 @@ def test_facefusion_env_splits_runtime_cache_dirs(tmp_path):
+     assert (cache_dir / "xdg").is_dir()
+     assert (cache_dir / "onnxruntime" / "tensorrt").is_dir()
+     assert (cache_dir / "cuda").is_dir()
++    assert (cache_dir / "jobs").is_dir()
+ 
+ 
+ def test_facefusion_command_uses_facefusion_dir_as_cwd(monkeypatch, tmp_path):
+@@ -92,6 +93,7 @@ def test_facefusion_command_uses_facefusion_dir_as_cwd(monkeypatch, tmp_path):
+ 
+     assert cwd == str(facefusion_dir)
+     assert cmd[1] == str(facefusion_dir / "facefusion.py")
++    assert cmd[cmd.index("--jobs-path") + 1] == str(cache_dir / "jobs")
+     assert resolved_model_dir == str(model_dir)
+     assert model_dir_mode == "configured_symlink"
+     assert runtime_cache_dir == str(cache_dir)
+@@ -173,6 +175,7 @@ def test_facefusion_command_uses_embedded_source_by_default(monkeypatch, tmp_pat
+ 
+     assert cwd == str(embedded_dir)
+     assert cmd[1] == str(embedded_dir / "facefusion.py")
++    assert cmd[cmd.index("--jobs-path") + 1] == str(cache_dir / "jobs")
+     assert resolved_model_dir == str(model_dir)
+     assert model_dir_mode == "configured_symlink"
+     assert source_mode == "embedded"

@@ -1,0 +1,69 @@
+diff --git a/backend/app/api/settings_whisper.py b/backend/app/api/settings_whisper.py
+index 2a55aa4..092dc64 100644
+--- a/backend/app/api/settings_whisper.py
++++ b/backend/app/api/settings_whisper.py
+@@ -1,6 +1,5 @@
+ from __future__ import annotations
+ 
+-import json
+ from typing import Any, Callable
+ 
+ from app.pipeline.whisper.strategy import apply_whisper_strategy
+@@ -15,17 +14,6 @@ ONNX_VAD_MODEL_KEYS = {
+ }
+ 
+ 
+-DEFAULT_CUSTOM_PIPELINE_CONFIG = {
+-    "model": "large-v3",
+-    "vad_method": "semantic",
+-    "scene_detector": "semantic",
+-    "enhancers": [],
+-    "segmenter": "silero-v6.2",
+-    "timestamp_mode": "aligner_interpolation",
+-    "aligner_backend": "qwen3",
+-    "framer_backend": "vad-grouped",
+-}
+-
+ DEFAULT_AUDIO_PREPROCESS_MODE = "none"
+ DEFAULT_AUDIO_PREPROCESS_MODEL = "vocal_balanced"
+ 
+@@ -34,22 +22,10 @@ def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
+     payload = config.model_dump() if hasattr(config, "model_dump") else dict(config)
+     payload = apply_whisper_strategy(payload, payload.get("strategy"))
+ 
+-    raw_custom_config = payload.get("custom_config") or {}
+-    if hasattr(raw_custom_config, "model_dump"):
+-        raw_custom_config = raw_custom_config.model_dump()
+-
+-    custom_config = {
+-        **DEFAULT_CUSTOM_PIPELINE_CONFIG,
+-        **raw_custom_config,
+-    }
+-    custom_config["timestamp_mode"] = payload.get("timestamp_mode", custom_config["timestamp_mode"])
+-    custom_config["aligner_backend"] = payload.get("aligner_backend", custom_config["aligner_backend"])
+-    custom_config["framer_backend"] = payload.get("framer_backend", custom_config["framer_backend"])
+-
+-    payload["custom_config"] = custom_config
+-    payload["timestamp_mode"] = custom_config["timestamp_mode"]
+-    payload["aligner_backend"] = custom_config["aligner_backend"]
+-    payload["framer_backend"] = custom_config["framer_backend"]
++    payload["custom_config"] = None
++    payload["timestamp_mode"] = payload.get("timestamp_mode", "vad_only")
++    payload["aligner_backend"] = "none"
++    payload["framer_backend"] = payload.get("framer_backend", "vad-grouped")
+     payload["audio_preprocess_mode"] = payload.get("audio_preprocess_mode", DEFAULT_AUDIO_PREPROCESS_MODE)
+     payload["audio_preprocess_model"] = payload.get("audio_preprocess_model", DEFAULT_AUDIO_PREPROCESS_MODEL)
+     payload["subtitle_profile"] = payload.get("subtitle_profile", "standard")
+@@ -89,9 +65,9 @@ def apply_whisper_config_updates(config: Any, update_env_value_fn: Callable[[str
+     update_env_value_fn("WHISPER_TRANSLATE_STYLE", payload["translate_style"])
+     update_env_value_fn("WHISPER_TRANSLATE_BASE_URL", payload["translate_base_url"])
+     update_env_value_fn("WHISPER_TRANSLATE_API_KEY", payload["translate_api_key"])
+-    update_env_value_fn("WHISPER_PASS1_PIPELINE", payload["pass1_pipeline"])
+-    update_env_value_fn("WHISPER_PASS2_PIPELINE", payload["pass2_pipeline"])
+-    update_env_value_fn("WHISPER_CUSTOM_CONFIG", json.dumps(payload["custom_config"]))
++    update_env_value_fn("WHISPER_PASS1_PIPELINE", payload.get("pass1_pipeline") or "faster")
++    update_env_value_fn("WHISPER_PASS2_PIPELINE", "")
++    update_env_value_fn("WHISPER_CUSTOM_CONFIG", "")
+ 
+ 
+ def sanitize_download_status(download_status: dict[str, Any]) -> dict[str, Any]:

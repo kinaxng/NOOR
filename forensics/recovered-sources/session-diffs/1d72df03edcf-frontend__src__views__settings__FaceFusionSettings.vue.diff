@@ -1,0 +1,158 @@
+diff --git a/frontend/src/views/settings/FaceFusionSettings.vue b/frontend/src/views/settings/FaceFusionSettings.vue
+index 190db7e..d3db09b 100644
+--- a/frontend/src/views/settings/FaceFusionSettings.vue
++++ b/frontend/src/views/settings/FaceFusionSettings.vue
+@@ -11,6 +11,15 @@ const { t } = useI18n()
+ 
+ const loading = ref(false)
+ const saving = ref(false)
++const activeSection = ref<'runtime' | 'execution' | 'detection' | 'masking' | 'output'>('runtime')
++
++const sections = [
++  { key: 'runtime', label: '路径' },
++  { key: 'execution', label: '执行' },
++  { key: 'detection', label: '检测选择' },
++  { key: 'masking', label: '遮罩' },
++  { key: 'output', label: '输出' },
++] as const
+ 
+ const facefusionDir = ref('/volume1/facefusion/facefusion')
+ const facefusionPythonPath = ref('')
+@@ -164,7 +173,32 @@ async function saveDefaults() {
+     </div>
+ 
+     <template v-else>
+-      <div class="settings-card ui-card">
++      <div class="facefusion-tabbar">
++        <div class="facefusion-tabs" role="tablist">
++          <button
++            v-for="section in sections"
++            :key="section.key"
++            type="button"
++            :class="{ 'is-active': activeSection === section.key }"
++            @click="activeSection = section.key"
++          >
++            {{ section.label }}
++          </button>
++        </div>
++        <VuiButton
++          v-if="activeSection !== 'runtime'"
++          variant="gradient"
++          color="info"
++          size="small"
++          customClass="settings-primary-btn"
++          :loading="saving"
++          @click="saveDefaults"
++        >
++          保存默认参数
++        </VuiButton>
++      </div>
++
++      <div v-if="activeSection === 'runtime'" class="settings-card ui-card">
+         <h2 class="settings-card__title">FaceFusion CLI</h2>
+         <p class="settings-card__desc">宿主机保留 FaceFusion 本体，NOOR 只通过 headless-run CLI 调用。</p>
+ 
+@@ -185,7 +219,7 @@ async function saveDefaults() {
+         </div>
+       </div>
+ 
+-      <div class="settings-card ui-card">
++      <div v-if="activeSection === 'execution'" class="settings-card ui-card">
+         <h2 class="settings-card__title">执行与处理器</h2>
+         <p class="settings-card__desc">这些参数将作为媒体库破解面板中 FaceFusion tab 的默认值。</p>
+ 
+@@ -238,7 +272,7 @@ async function saveDefaults() {
+         </div>
+       </div>
+ 
+-      <div class="settings-card ui-card">
++      <div v-if="activeSection === 'detection'" class="settings-card ui-card">
+         <h2 class="settings-card__title">检测与选择</h2>
+ 
+         <div class="settings-form mt-4">
+@@ -313,7 +347,7 @@ async function saveDefaults() {
+         </div>
+       </div>
+ 
+-      <div class="settings-card ui-card">
++      <div v-if="activeSection === 'masking'" class="settings-card ui-card">
+         <h2 class="settings-card__title">遮罩</h2>
+ 
+         <div class="settings-form mt-4">
+@@ -347,7 +381,7 @@ async function saveDefaults() {
+         </div>
+       </div>
+ 
+-      <div class="settings-card ui-card">
++      <div v-if="activeSection === 'output'" class="settings-card ui-card">
+         <h2 class="settings-card__title">输出</h2>
+ 
+         <div class="settings-form mt-4">
+@@ -403,12 +437,6 @@ async function saveDefaults() {
+               <option value="tiff">tiff</option>
+             </select>
+           </FieldRow>
+-
+-          <div class="settings-actions mt-2">
+-            <VuiButton variant="gradient" color="info" size="small" customClass="settings-primary-btn" :loading="saving" @click="saveDefaults">
+-              保存默认参数
+-            </VuiButton>
+-          </div>
+         </div>
+       </div>
+     </template>
+@@ -444,4 +472,54 @@ async function saveDefaults() {
+ .settings-primary-btn {
+   min-width: 5.5rem;
+ }
++
++.facefusion-tabbar {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 0.75rem;
++  flex-wrap: wrap;
++}
++
++.facefusion-tabs {
++  display: inline-flex;
++  align-items: center;
++  gap: 0.25rem;
++  padding: 0.375rem;
++  border-radius: var(--radius-xl);
++  border: 1px solid var(--color-border-default);
++  background: rgba(255, 255, 255, 0.035);
++  max-width: 100%;
++  overflow-x: auto;
++}
++
++.facefusion-tabs button {
++  height: 2rem;
++  min-width: 5rem;
++  padding: 0 0.875rem;
++  border: 0;
++  border-radius: var(--radius-lg);
++  background: transparent;
++  color: var(--color-text-secondary);
++  font-size: 0.8125rem;
++  font-weight: 700;
++  white-space: nowrap;
++  cursor: pointer;
++}
++
++.facefusion-tabs button.is-active {
++  background: var(--color-brand);
++  color: #fff;
++  box-shadow: 0 4px 12px rgba(0, 117, 255, 0.26);
++}
++
++@media (max-width: 768px) {
++  .facefusion-tabbar {
++    align-items: stretch;
++  }
++
++  .facefusion-tabs {
++    width: 100%;
++  }
++}
+ </style>

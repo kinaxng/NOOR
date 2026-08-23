@@ -1,0 +1,48 @@
+diff --git a/backend/app/api/settings.py b/backend/app/api/settings.py
+index bc3cbb2..2a6219b 100644
+--- a/backend/app/api/settings.py
++++ b/backend/app/api/settings.py
+@@ -127,6 +127,7 @@ class FaceFusionDefaultsConfig(BaseModel):
+     system_memory_limit: int = 0
+     log_level: str = "info"
+     download_providers: str = "github huggingface"
++    halt_on_error: bool = False
+     processors: str = ""
+     face_swapper_model: str = "hyperswap_1a_256"
+     face_swapper_pixel_boost: str = "256x256"
+@@ -140,14 +141,21 @@ class FaceFusionDefaultsConfig(BaseModel):
+     face_detector_size: str = "640x640"
+     face_detector_score: float = 0.5
+     face_detector_angles: str = "0"
++    face_detector_margin: str = "0 0 0 0"
+     face_landmarker_model: str = "2dfan4"
+     face_landmarker_score: float = 0.5
+     face_selector_mode: str = "reference"
+     face_selector_order: str = "large-small"
++    face_selector_gender: str = ""
++    face_selector_age_start: str = ""
++    face_selector_age_end: str = ""
++    face_selector_race: str = ""
+     reference_frame_number: int = 0
+     reference_face_position: int = 0
+     reference_face_distance: float = 0.3
+     face_mask_types: str = "box"
++    face_mask_areas: str = ""
++    face_mask_regions: str = ""
+     face_mask_blur: float = 0.3
+     face_mask_padding: str = "0 0 0 0"
+     face_occluder_model: str = "xseg_1"
+@@ -155,9 +163,13 @@ class FaceFusionDefaultsConfig(BaseModel):
+     output_video_encoder: str = "libx264"
+     output_video_preset: str = "veryfast"
+     output_video_quality: int = 80
++    output_video_scale: str = "1.0"
++    output_video_fps: str = ""
+     output_audio_encoder: str = "aac"
+     output_audio_quality: int = 80
+     output_audio_volume: int = 100
++    output_image_quality: int = 80
++    output_image_scale: str = "1.0"
+     temp_frame_format: str = "png"
+ 
+ 

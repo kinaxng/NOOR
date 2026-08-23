@@ -1,0 +1,18 @@
+diff --git a/plugins/gfriends/backend.py b/plugins/gfriends/backend.py
+index 942e344..813fb26 100644
+--- a/plugins/gfriends/backend.py
++++ b/plugins/gfriends/backend.py
+@@ -12,11 +12,11 @@ from urllib.parse import quote, urljoin, urlparse
+ 
+ import httpx
+ 
+-from app.core.config import PROJECT_ROOT
++from app.core.runtime_paths import plugin_cache_path
+ from app.plugins.contracts import PluginTestResult
+ 
+ PLUGIN_ID = "gfriends"
+-CACHE_DIR = PROJECT_ROOT / "data" / "plugin_cache" / PLUGIN_ID
++CACHE_DIR = plugin_cache_path(PLUGIN_ID)
+ INDEX_PATH = CACHE_DIR / "index.json"
+ IMAGE_DIR = CACHE_DIR / "images"
+ DEFAULT_FILETREE_URL = "https://cdn.jsdelivr.net/gh/xinxin8816/gfriends/Filetree.json"

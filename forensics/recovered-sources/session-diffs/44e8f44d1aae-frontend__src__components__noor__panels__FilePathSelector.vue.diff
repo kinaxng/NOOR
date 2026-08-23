@@ -1,0 +1,27 @@
+diff --git a/frontend/src/components/noor/panels/FilePathSelector.vue b/frontend/src/components/noor/panels/FilePathSelector.vue
+index d138045..1c0b39b 100644
+--- a/frontend/src/components/noor/panels/FilePathSelector.vue
++++ b/frontend/src/components/noor/panels/FilePathSelector.vue
+@@ -54,9 +54,21 @@ function onSelect(path: string) {
+           {{ p.path.split('/').pop() }}
+         </option>
+       </select>
+-      <div v-else-if="modelValue" class="text-xs text-text-muted font-mono truncate">
++      <div v-else-if="modelValue" class="file-path-selector__path text-xs text-text-muted font-mono">
+         {{ modelValue }}
+       </div>
+     </div>
+   </div>
+ </template>
++
++<style scoped>
++.file-path-selector__path {
++  display: -webkit-box;
++  max-width: 100%;
++  overflow: hidden;
++  overflow-wrap: anywhere;
++  line-height: 1.45;
++  -webkit-box-orient: vertical;
++  -webkit-line-clamp: 2;
++}
++</style>

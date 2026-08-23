@@ -1,0 +1,70 @@
+diff --git a/backend/app/api/endpoints/media_library.py b/backend/app/api/endpoints/media_library.py
+index a02f224..4c713b5 100644
+--- a/backend/app/api/endpoints/media_library.py
++++ b/backend/app/api/endpoints/media_library.py
+@@ -1844,6 +1844,7 @@ async def _list_actors(
+     sort_by: str = "SortName",
+     sort_order: str = "Ascending",
+     lang: str | None = None,
++    include_ignored: bool = False,
+ ) -> tuple[list[dict], int]:
+     params = {
+         "Limit": max(1, min(limit, 5000)),
+@@ -1869,13 +1870,13 @@ async def _list_actors(
+     actors = [
+         _apply_actor_profile_override(_parse_person(config, item), overrides.get(str(item.get("Id") or "")))
+         for item in data.get("Items", [])
+-        if str(item.get("Id") or "") not in ignored_ghost_ids
++        if include_ignored or str(item.get("Id") or "") not in ignored_ghost_ids
+     ]
+     for actor in actors:
+         actor["emby_url"] = _actor_web_url(config, actor.get("id"), actor.get("server_id"))
+     actors = _enrich_actor_display_names(actors, lang=lang)
+     raw_total = int(data.get("TotalRecordCount") or len(actors))
+-    removed_count = len(data.get("Items", [])) - len(actors)
++    removed_count = 0 if include_ignored else len(data.get("Items", [])) - len(actors)
+     return actors, max(0, raw_total - removed_count)
+ 
+ 
+@@ -1939,6 +1940,7 @@ async def _preview_actor_mapping_matches(
+         sort_by="SortName",
+         sort_order="Ascending",
+         lang=lang,
++        include_ignored=True,
+     )
+     groups_by_mapping: dict[str, dict] = {}
+     unmatched = []
+@@ -1946,6 +1948,7 @@ async def _preview_actor_mapping_matches(
+     actors_by_key = {_normalize_actor_key(str(actor.get("name") or "")): actor for actor in actors if _normalize_actor_key(str(actor.get("name") or ""))}
+     ignored_ghost_ids = _load_actor_merge_ignored_ghosts()
+     for actor in actors:
++        actor_id = str(actor.get("id") or "")
+         actor_name = str(actor.get("name") or "").strip()
+         key = _normalize_actor_key(actor_name)
+         match = name_index.get(key)
+@@ -1958,6 +1961,16 @@ async def _preview_actor_mapping_matches(
+         if not record:
+             unmatched.append(actor)
+             continue
++        if actor_id in ignored_ghost_ids:
++            next_actor = dict(actor)
++            next_actor["matched_name"] = actor_name
++            next_actor["rejected_mapping_id"] = record.get("id")
++            next_actor["rejected_mapping_name"] = _localized_mapping_name(record, actor_name, lang)
++            next_actor["rejected_mapping_tmdb_id"] = record.get("tmdb_id")
++            next_actor["rejected_reason"] = "ignored_person"
++            rejected.append(next_actor)
++            unmatched.append(actor)
++            continue
+         if _should_reject_actor_mapping_match(actor, record, match):
+             next_actor = dict(actor)
+             next_actor["matched_name"] = actor_name
+@@ -2090,7 +2103,7 @@ async def _preview_actor_mapping_matches(
+         "matched_actors": sum(len(group["actors"]) for group in groups_by_mapping.values()),
+         "unmatched_actors": len(unmatched),
+         "rejected_actors": len(rejected),
+-        "rejected_matches": rejected[:100],
++        "rejected_matches": rejected,
+         "emby_total": total,
+         "emby_scanned": len(actors),
+         "mapping_records": len(mapping_records),

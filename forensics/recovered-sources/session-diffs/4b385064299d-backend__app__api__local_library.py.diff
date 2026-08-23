@@ -1,0 +1,34 @@
+diff --git a/backend/app/api/local_library.py b/backend/app/api/local_library.py
+index 70e0ec5..e596147 100644
+--- a/backend/app/api/local_library.py
++++ b/backend/app/api/local_library.py
+@@ -2,11 +2,12 @@
+ Internal helpers for the local subtitle library plugin.
+ 
+ Configuration is env-backed through NOOR_ENV_FILE.
+-Index is stored in data/subtitle_index.db.
++Index is stored in data/runtime/subtitle_library/subtitle_index.db.
+ """
+ import json
+ import os
+ import re
++import shutil
+ import sqlite3
+ import threading
+ import time
+@@ -57,9 +58,12 @@ def _save_config(config: dict) -> None:
+ # ─── Index ────────────────────────────────────────────────────────────────────
+ 
+ def _index_db_path() -> Path:
+-    data_dir = data_path()
+-    data_dir.mkdir(parents=True, exist_ok=True)
+-    return data_dir / "subtitle_index.db"
++    path = data_path("runtime", "subtitle_library", "subtitle_index.db")
++    path.parent.mkdir(parents=True, exist_ok=True)
++    legacy_path = data_path("subtitle_index.db")
++    if not path.exists() and legacy_path.is_file():
++        shutil.copy2(legacy_path, path)
++    return path
+ 
+ 
+ def _get_library_paths(config: dict) -> list[str]:

@@ -1,0 +1,40 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index dddd7fd..4e4622f 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -20,6 +20,7 @@ DEFAULT_LADA_MODEL_WEIGHTS_DIR = "/volume1/models/lada_model_weights"
+ DEFAULT_AUDIO_SEPARATOR_MODEL_DIR = "/volume1/models/audio-separator"
+ DEFAULT_REAZON_MODEL_DIR = "/volume1/models/reazon"
+ DEFAULT_REAZON_NEMO_MODEL_PATH = f"{DEFAULT_REAZON_MODEL_DIR}/reazonspeech-nemo-v2.nemo"
++DEFAULT_FACEFUSION_DIR = "/volume1/facefusion/facefusion"
+ 
+ 
+ def _normalize_github_mirror_instead_of_prefix(mirror: str) -> str:
+@@ -44,6 +45,8 @@ def _normalize_github_mirror_instead_of_prefix(mirror: str) -> str:
+ class Settings(BaseSettings):
+     # Lada CLI
+     lada_cli_path: str = "python3 -m lada.cli.main"
++    facefusion_dir: str = DEFAULT_FACEFUSION_DIR
++    facefusion_python_path: str = ""
+ 
+     # Emby
+     emby_server: str = "http://localhost:8096"
+@@ -90,6 +93,18 @@ class Settings(BaseSettings):
+     lada_max_clip_length: int = 180
+     lada_detect_face_mosaics: bool = False
+ 
++    # FaceFusion defaults
++    facefusion_execution_provider: str = "cuda"
++    facefusion_device_ids: str = "0"
++    facefusion_processors: str = "face_swapper"
++    facefusion_face_selector_mode: str = "reference"
++    facefusion_reference_frame_number: int = 0
++    facefusion_reference_face_position: int = 0
++    facefusion_reference_face_distance: float = 0.3
++    facefusion_output_video_encoder: str = "libx264"
++    facefusion_output_video_preset: str = "veryfast"
++    facefusion_output_video_quality: int = 80
++
+     # Server
+     host: str = "0.0.0.0"
+     port: int = 9898

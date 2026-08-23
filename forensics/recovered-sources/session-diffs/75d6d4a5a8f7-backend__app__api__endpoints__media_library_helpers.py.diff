@@ -1,0 +1,28 @@
+diff --git a/backend/app/api/endpoints/media_library_helpers.py b/backend/app/api/endpoints/media_library_helpers.py
+index 432aa27..8376643 100644
+--- a/backend/app/api/endpoints/media_library_helpers.py
++++ b/backend/app/api/endpoints/media_library_helpers.py
+@@ -59,6 +59,7 @@ ADAPTER_NOT_ACTIVATED = "媒体库适配器未配置，请在设置中配置 Emb
+ MEDIA_LIBRARY_SCAN_GROUPS_ENV = "MEDIA_LIBRARY_SCAN_GROUPS"
+ MEDIA_LIBRARY_PATH_PREFIX_ENV = "MEDIA_LIBRARY_PATH_PREFIX"
+ MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV = "MEDIA_LIBRARY_LOCAL_PATH_PREFIX"
++MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV = "MEDIA_LIBRARY_WEBHOOK_TOKEN"
+ 
+ 
+ def config_path() -> Path:
+@@ -111,6 +112,7 @@ def _env_backed_config(env_data: dict[str, str]) -> dict:
+         "path_prefix": env_data.get(MEDIA_LIBRARY_PATH_PREFIX_ENV, "/data/media"),
+         "local_path_prefix": env_data.get(MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV, env_data.get("SOURCE_DIR", "")),
+         "scan_groups": _parse_scan_groups(env_data.get(MEDIA_LIBRARY_SCAN_GROUPS_ENV, "")),
++        "webhook_token": env_data.get(MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV, ""),
+     }
+ 
+ 
+@@ -123,6 +125,7 @@ def _build_env_updates_from_config(config: dict) -> dict[str, str]:
+         MEDIA_LIBRARY_PATH_PREFIX_ENV: str(config.get("path_prefix", "/data/media") or "/data/media"),
+         MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV: str(config.get("local_path_prefix", "") or ""),
+         MEDIA_LIBRARY_SCAN_GROUPS_ENV: _scan_groups_to_env(config.get("scan_groups", []) or []),
++        MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV: str(config.get("webhook_token", "") or ""),
+     }
+ 
+ 

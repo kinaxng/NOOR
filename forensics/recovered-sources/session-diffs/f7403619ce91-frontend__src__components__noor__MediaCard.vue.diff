@@ -1,0 +1,79 @@
+diff --git a/frontend/src/components/noor/MediaCard.vue b/frontend/src/components/noor/MediaCard.vue
+index 3b1dad0..9297898 100644
+--- a/frontend/src/components/noor/MediaCard.vue
++++ b/frontend/src/components/noor/MediaCard.vue
+@@ -16,6 +16,7 @@ const emit = defineEmits<{
+   quickAction: [item: MediaItem]
+   subtitleAction: [item: MediaItem]
+   deleteAction: [item: MediaItem]
++  tagAction: [tag: 'cracked' | 'chinese' | 'leaked' | 'uncensored']
+ }>()
+ 
+ const showDeleteAction = ref(false)
+@@ -71,6 +72,29 @@ function handleDeleteClick() {
+   emit('deleteAction', props.item)
+ }
+ 
++function handleChineseBadgeClick() {
++  if (hasChinese.value) {
++    emit('tagAction', 'chinese')
++    return
++  }
++  emit('subtitleAction', props.item)
++}
++
++function handleCrackBadgeClick() {
++  if (isCracked.value) {
++    emit('tagAction', 'cracked')
++    return
++  }
++  emit('quickAction', props.item)
++}
++
++function handleReleaseTypeBadgeClick() {
++  const key = props.item.tags?.release_type_key
++  if (key === 'leaked' || key === 'uncensored') {
++    emit('tagAction', key)
++  }
++}
++
+ </script>
+ 
+ <template>
+@@ -123,7 +147,7 @@ function handleDeleteClick() {
+         <button
+           class="text-xs px-1.5 py-0.5 rounded transition-colors cursor-pointer border"
+           :class="hasChinese ? 'tag-subtitle' : 'tag-subtitle--none'"
+-          @click.stop="$emit('subtitleAction', item)"
++          @click.stop="handleChineseBadgeClick"
+         >
+           {{ chineseLabel }}
+         </button>
+@@ -131,21 +155,22 @@ function handleDeleteClick() {
+         <!-- Cracked tag -->
+         <button
+           v-if="!item.tags?.release_type"
+-          class="text-xs px-1.5 py-0.5 rounded transition-colors border"
++          class="text-xs px-1.5 py-0.5 rounded transition-colors cursor-pointer border"
+           :class="isCracked ? 'tag-cracked' : 'tag-cracked--none'"
+-          @click.stop="!isCracked && $emit('quickAction', item)"
++          @click.stop="handleCrackBadgeClick"
+         >
+           {{ crackedLabel }}
+         </button>
+ 
+         <!-- Release type badge -->
+-        <span
++        <button
+           v-if="item.tags?.release_type"
+-          class="text-xs px-1.5 py-0.5 rounded border"
++          class="text-xs px-1.5 py-0.5 rounded transition-colors cursor-pointer border"
+           :class="item.tags.release_type_key === 'leaked' ? 'tag-leaked' : 'tag-uncensored'"
++          @click.stop="handleReleaseTypeBadgeClick"
+         >
+           {{ releaseTypeLabel }}
+-        </span>
++        </button>
+       </div>
+     </div>
+   </div>

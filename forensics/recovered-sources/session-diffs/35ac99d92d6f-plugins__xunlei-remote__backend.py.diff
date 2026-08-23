@@ -1,0 +1,55 @@
+diff --git a/plugins/xunlei-remote/backend.py b/plugins/xunlei-remote/backend.py
+index d8a034c..34c3948 100644
+--- a/plugins/xunlei-remote/backend.py
++++ b/plugins/xunlei-remote/backend.py
+@@ -1324,27 +1324,21 @@ async def _restore_candidates(config: dict[str, Any], client: httpx.AsyncClient,
+     }
+ 
+ 
+-async def _restore_xltd(config: dict[str, Any], client: httpx.AsyncClient, pan_auth: str, device_id: str, payload: dict[str, Any], device_info: dict[str, Any]) -> dict[str, Any]:
+-    daily_limit = _extract_task_daily_limit(device_info)
+-    if _is_task_daily_limit_active(daily_limit):
+-        raise ValueError(f"{_task_daily_limit_message(daily_limit)}；已阻止恢复残留任务，避免迅雷再次移除失败任务")
++async def _delete_restore_file(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+     target_path = str(payload.get("path") or "").strip()
+     if not target_path:
+         raise ValueError("missing xltd path")
+-    candidates = await _restore_candidates(config, client, pan_auth, device_id, limit=int(payload.get("limit") or 200))
+-    item = next((entry for entry in candidates.get("items", []) if entry.get("path") == target_path), None)
+-    if not item:
+-        raise ValueError("未找到这个残留文件")
+-    match = item.get("matched_task") if isinstance(item.get("matched_task"), dict) else None
+-    url = str(payload.get("url") or (match or {}).get("url") or "").strip()
+-    if not url:
+-        raise ValueError("这个残留文件没有匹配到原始 magnet，无法自动恢复")
+-    if int(item.get("size") or 0) <= 0:
+-        raise ValueError("这个残留文件是 0 字节，没有恢复价值")
+-    savepath = str(payload.get("savepath") or item.get("remote_dir") or "").strip()
+-    result = await _submit_single_download(config, {**payload, "url": url, "savepath": savepath, "file_indices": payload.get("file_indices") or "--1"}, url)
+-    result["restore"] = {"path": item.get("path"), "remote_dir": savepath, "matched_task": match}
+-    return result
++    path = Path(target_path).expanduser().resolve()
++    allowed = [root.resolve() for root in _restore_scan_roots(config)]
++    if not any(path == root or root in path.parents for root in allowed):
++        raise ValueError("残留文件不在允许扫描目录内")
++    if path.suffix.lower() not in {".xltd", ".xtld"}:
++        raise ValueError("只允许删除 .xltd / .xtld 残留文件")
++    if not path.exists() or not path.is_file():
++        raise ValueError("残留文件不存在")
++    stat = path.stat()
++    path.unlink()
++    return {"ok": True, "deleted": True, "path": str(path), "size": stat.st_size, "size_formatted": _format_size(stat.st_size)}
+ 
+ async def test(config: dict[str, Any]) -> PluginTestResult:
+     try:
+@@ -1626,8 +1620,8 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str,
+             return await _flow_info(config, client, pan_auth)
+         if action == "restore_candidates":
+             return await _restore_candidates(config, client, pan_auth, device_id, limit=int(payload.get("limit") or 80))
+-        if action == "restore_xltd":
+-            return await _restore_xltd(config, client, pan_auth, device_id, payload, device_info)
++        if action == "delete_restore_file":
++            return await _delete_restore_file(config, payload)
+         if action == "device_info":
+             out = {"ok": True, "device_id": device_id, "info": device_info}
+             daily_limit = _extract_task_daily_limit(device_info)

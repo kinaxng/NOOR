@@ -1,0 +1,47 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index 75a3e2d..83c97e2 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -1,11 +1,11 @@
+ from __future__ import annotations
+ 
+-from pathlib import Path
+ from typing import Any
+ 
+ from app.api.endpoints.media_library_helpers import load_config as load_media_library_config
+ from app.core.config import PROJECT_ROOT, get_settings
+ from app.core.database_paths import sqlite_db_path_from_url
++from app.core.facefusion_paths import inspect_facefusion_model_dir, resolve_facefusion_source
+ from app.pipeline.whisper.strategy import apply_whisper_strategy, normalize_whisper_strategy
+ 
+ 
+@@ -56,8 +56,12 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
+             "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
+         }
+-    facefusion_dir = env_data.get("FACEFUSION_DIR", "/volume1/facefusion/facefusion")
+-    facefusion_native_model_dir = str(Path(facefusion_dir) / ".assets" / "models")
++    configured_facefusion_dir = env_data.get("FACEFUSION_DIR", settings.facefusion_dir)
++    facefusion_source = resolve_facefusion_source(configured_facefusion_dir)
++    facefusion_native_model_dir, facefusion_model_dir_mode = inspect_facefusion_model_dir(
++        facefusion_source.source_dir,
++        settings.facefusion_model_dir,
++    )
+     resolved_lada_model_dir = settings.lada_model_dir or lada_model_weights_dir
+ 
+     return {
+@@ -110,10 +114,12 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             "detect_face_mosaics": env_data.get("LADA_DETECT_FACE_MOSAICS", "false").lower() == "true",
+         },
+         "facefusion": {
+-            "dir": facefusion_dir,
++            "dir": "" if facefusion_source.mode == "embedded" else str(facefusion_source.source_dir),
++            "resolved_dir": str(facefusion_source.source_dir),
++            "source_mode": facefusion_source.mode,
+             "python_path": env_data.get("FACEFUSION_PYTHON_PATH", ""),
+             "native_model_dir": facefusion_native_model_dir,
+-            "model_dir_mode": "native_assets",
++            "model_dir_mode": facefusion_model_dir_mode,
+         },
+         "facefusion_defaults": {
+             "execution_provider": env_data.get("FACEFUSION_EXECUTION_PROVIDER", "cuda"),

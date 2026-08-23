@@ -1,0 +1,13 @@
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index c4bf86d..6b377ea 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -539,7 +539,7 @@ export const en: Record<string, string> = {
+   'settings.storage.databasePath': 'Database File',
+   'settings.storage.databasePathHint': 'Current SQLite database location; defaults under the NOOR data directory and is shown read-only.',
+   'settings.storage.facefusionModelDir': 'FaceFusion Model Directory',
+-  'settings.storage.facefusionModelDirHint': 'Reserved for FaceFusion model migration; the current host FF still prefers its own .assets/models.',
++  'settings.storage.facefusionModelDirHint': 'Model directory for NOOR embedded FaceFusion; runtime maps it to source .assets/models.',
+   'settings.storage.whisperCacheDir': 'Whisper Cache Directory',
+   'settings.storage.whisperTempDir': 'Whisper Temp Directory',
+   'settings.storage.ladaCacheDir': 'LADA Cache Directory',

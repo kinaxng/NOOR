@@ -1,0 +1,57 @@
+diff --git a/frontend/src/components/noor/FaceFusionPanel.vue b/frontend/src/components/noor/FaceFusionPanel.vue
+index 5ceb958..e57f835 100644
+--- a/frontend/src/components/noor/FaceFusionPanel.vue
++++ b/frontend/src/components/noor/FaceFusionPanel.vue
+@@ -709,25 +709,6 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                       </div>
+                     </div>
+ 
+-                    <div class="facefusion-native-group">
+-                      <h3>处理器</h3>
+-                      <div class="facefusion-choice-chips">
+-                        <button
+-                          v-for="processor in facefusionProcessorOptions"
+-                          :key="processor.id"
+-                          type="button"
+-                          class="processor-chip"
+-                          :class="{ 'is-active': hasFacefusionToken('processors', processor.id) }"
+-                          @click="toggleFacefusionToken('processors', processor.id)"
+-                        >
+-                          <span>{{ processor.label }}</span>
+-                          <small>{{ processor.id }}</small>
+-                          <em :class="{ 'is-cuda': processor.acceleration === 'cuda', 'is-muted': processor.acceleration === 'none' }">
+-                            {{ processor.acceleration === 'tensorrt' ? 'TRT 推荐' : processor.acceleration === 'cuda' ? 'CUDA 推荐' : '无推理加速' }}
+-                          </em>
+-                        </button>
+-                      </div>
+-                    </div>
+                   </section>
+ 
+                   <div class="facefusion-native-group facefusion-native-group--preview">
+@@ -766,6 +747,26 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                   </div>
+ 
+                   <section class="facefusion-native-column facefusion-native-column--processors">
++                    <div class="facefusion-native-group facefusion-native-group--left">
++                      <h3>处理器</h3>
++                      <div class="facefusion-choice-chips">
++                        <button
++                          v-for="processor in facefusionProcessorOptions"
++                          :key="processor.id"
++                          type="button"
++                          class="processor-chip"
++                          :class="{ 'is-active': hasFacefusionToken('processors', processor.id) }"
++                          @click="toggleFacefusionToken('processors', processor.id)"
++                        >
++                          <span>{{ processor.label }}</span>
++                          <small>{{ processor.id }}</small>
++                          <em :class="{ 'is-cuda': processor.acceleration === 'cuda', 'is-muted': processor.acceleration === 'none' }">
++                            {{ processor.acceleration === 'tensorrt' ? 'TRT 推荐' : processor.acceleration === 'cuda' ? 'CUDA 推荐' : '无推理加速' }}
++                          </em>
++                        </button>
++                      </div>
++                    </div>
++
+                     <div v-if="selectedFacefusionProcessors.includes('face_swapper')" class="facefusion-native-group facefusion-native-group--left">
+                       <h3>换脸参数</h3>
+                       <div class="facefusion-native-fields">

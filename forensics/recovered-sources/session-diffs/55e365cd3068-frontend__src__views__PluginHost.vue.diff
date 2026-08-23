@@ -1,0 +1,120 @@
+diff --git a/frontend/src/views/PluginHost.vue b/frontend/src/views/PluginHost.vue
+index 17295b6..959d1f3 100644
+--- a/frontend/src/views/PluginHost.vue
++++ b/frontend/src/views/PluginHost.vue
+@@ -4,19 +4,85 @@ import { useRoute, useRouter } from 'vue-router'
+ import api from '../api'
+ import { useToast } from '../composables/useToast'
+ import { useConfirm } from '../composables/useConfirm'
++import { useSystemLog } from '../composables/useSystemLog'
++import { createDownloaderDialogContext as createSharedDownloaderDialogContext } from '../composables/useDownloaderDialog'
++import { openSubscriptionDialog } from '../composables/useSubscriptionDialog'
+ 
+ const route = useRoute()
+ const router = useRouter()
+ const toast = useToast()
+ const confirm = useConfirm()
++const { show: showSystemLog } = useSystemLog()
+ const host = ref<HTMLElement | null>(null)
+ const loading = ref(false)
+ const error = ref('')
+ const pluginId = computed(() => String(route.params.pluginId || ''))
+ let dispose: null | (() => void) = null
+ let styleEl: HTMLLinkElement | null = null
++let mountSeq = 0
++let sdkAbortController: AbortController | null = null
++let sdkCleanupFns: Array<() => void> = []
++
++function pluginDiagnostic(level: 'info' | 'warning' | 'error', message: string, sourceId = pluginId.value) {
++  if (!showSystemLog.value) return
++  void api.post('/system/logs/client', {
++    level,
++    source: `plugin.${sourceId || 'unknown'}.frontend`,
++    message,
++    route: window.location.pathname + window.location.search,
++  }).catch(() => {})
++}
++
++function shouldLogPluginRequest(path: string, level: 'info' | 'warning' | 'error' = 'info') {
++  if (level !== 'info') return true
++  const value = String(path || '').toLowerCase()
++  if (value.includes('/ws/overview') || value.includes('/ws/metrics')) return false
++  if (value.includes('/system/metrics')) return false
++  if (value.includes('/actions/overview') || value.includes('/actions/metrics')) return false
++  if (value.includes('/actions/status') || value.endsWith('/status')) return false
++  if (value.includes('refresh-status') || value.includes('refresh_status')) return false
++  return true
++}
++
++function errorMessage(error: any) {
++  return error?.response?.data?.detail || error?.message || String(error || 'unknown error')
++}
++
++function isAbortLikeError(error: any) {
++  const name = String(error?.name || '')
++  const code = String(error?.code || '')
++  const message = String(error?.response?.data?.detail || error?.message || '')
++  return name === 'AbortError'
++    || name === 'CanceledError'
++    || code === 'ERR_CANCELED'
++    || message.includes('is unmounted')
++    || message.includes('aborted')
++    || message.includes('canceled')
++}
++
++function isLifecycleCancelMessage(message: any) {
++  const value = String(message || '').toLowerCase()
++  return value.includes('aborterror')
++    || value.includes('err_canceled')
++    || value.includes('operation was aborted')
++    || value.includes('request aborted')
++    || value.includes('request canceled')
++    || value.includes('request cancelled')
++    || value.includes('is unmounted')
++    || value.includes('plugin unmounted')
++    || value.includes('canceled')
++    || value.includes('cancelled')
++}
+ 
+ function clearMounted() {
++  mountSeq += 1
++  if (sdkAbortController) {
++    try { sdkAbortController.abort() } catch {}
++    sdkAbortController = null
++  }
++  for (const cleanup of sdkCleanupFns.splice(0)) {
++    try { cleanup() } catch {}
++  }
+   if (dispose) {
+     try { dispose() } catch {}
+     dispose = null
+@@ -50,17 +116,130 @@ function makeInput(options: any = {}) {
+ }
+ 
+ function makeSelect(options: any = {}) {
+-  const select = document.createElement('select')
+-  select.className = ['noor-plugin-input', 'noor-plugin-select', options.className || ''].filter(Boolean).join(' ')
+-  for (const item of options.options || []) {
+-    const opt = document.createElement('option')
+-    opt.value = String(item.value ?? '')
+-    opt.textContent = String(item.label ?? item.value ?? '')
+-    select.appendChild(opt)
++  type SelectItem = { value: string; label: string; disabled: boolean }
++  const items = (Array.isArray(options.options) ? options.options : []).map((item: any) => ({
++    value: String(item?.value ?? ''),
++    label: String(item?.label ?? item?.value ?? ''),
++    disabled: !!item?.disabled,
++  })) as SelectItem[]
++  let current = String(options.value ?? '')
++  let open = false
++  let detachOutside: null | (() => void) = null
++  const wrap = document.createElement('div')
++  wrap.className = ['noor-plugin-select', 'noor-plugin-select--pill', options.className || ''].filter(Boolean).join(' ')
++  if (options.disabled) wrap.classList.add('is-disabled')
++  const trigger = document.createElement('button')
++  trigger.type = 'button'
++  trigger.className = 'noor-plugin-select__trigger'
++  trigger.disabled = !!options.disabled
++  const labelNode = document.createElement('span')
++  labelNode.className = 'noor-plugin-select__label'
++  labelNode.textContent = String(options.label || '')

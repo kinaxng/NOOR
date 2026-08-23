@@ -1,0 +1,56 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index 1eb16ce..e1f5980 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++from pathlib import Path
+ from typing import Any
+ 
+ from app.api.endpoints.media_library_helpers import load_config as load_media_library_config
+@@ -23,6 +24,26 @@ def database_path_for_display(database_url: str) -> str:
+     return str(path)
+ 
+ 
++def infer_model_root_dir(settings: Any, env_data: dict[str, str]) -> str:
++    configured = env_data.get("MODEL_ROOT_DIR", "").strip()
++    if configured:
++        return configured
++    whisper_model = Path(settings.whisper_model_dir)
++    if whisper_model.name == "whisper":
++        return str(whisper_model.parent)
++    return str(Path(settings.noor_data_dir) / "models")
++
++
++def infer_runtime_root_dir(settings: Any, env_data: dict[str, str]) -> str:
++    configured = env_data.get("RUNTIME_ROOT_DIR", "").strip()
++    if configured:
++        return configured
++    whisper_cache = Path(settings.whisper_cache_dir)
++    if whisper_cache.name == "cache" and whisper_cache.parent.name == "whisper":
++        return str(whisper_cache.parent.parent)
++    return str(Path(settings.noor_data_dir) / "runtime")
++
++
+ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str, Any], lada_model_weights_dir: str, whisper_features: dict[str, Any], custom_whisper_config: dict[str, Any]) -> dict[str, Any]:
+     media_library_config = load_media_library_config()
+     settings = get_settings()
+@@ -71,6 +92,8 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+         else "当前使用外部 FaceFusion 目录；NOOR 只支持升级内置 FaceFusion 源码。"
+     )
+     resolved_lada_model_dir = settings.lada_model_dir or lada_model_weights_dir
++    model_root_dir = infer_model_root_dir(settings, env_data)
++    runtime_root_dir = infer_runtime_root_dir(settings, env_data)
+ 
+     return {
+         "emby": {
+@@ -85,6 +108,8 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             "source_dir": settings.source_dir,
+             "output_dir": settings.output_dir,
+             "noor_data_dir": settings.noor_data_dir,
++            "model_root_dir": model_root_dir,
++            "runtime_root_dir": runtime_root_dir,
+             "database_url": settings.database_url,
+             "database_path": database_path_for_display(settings.database_url),
+             "whisper_model_dir": settings.whisper_model_dir,

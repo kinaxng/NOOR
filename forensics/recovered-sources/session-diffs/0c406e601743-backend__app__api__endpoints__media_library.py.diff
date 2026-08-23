@@ -1,0 +1,13 @@
+diff --git a/backend/app/api/endpoints/media_library.py b/backend/app/api/endpoints/media_library.py
+index 953714f..180d31e 100644
+--- a/backend/app/api/endpoints/media_library.py
++++ b/backend/app/api/endpoints/media_library.py
+@@ -1913,6 +1913,8 @@ def _merge_group_metadata(representative: dict, group: list[dict]) -> dict:
+         merged_tags['is_cracked'] = True
+     if any((item.get('tags') or {}).get('has_chinese') for item in group):
+         merged_tags['has_chinese'] = True
++    if any((item.get('tags') or {}).get('has_facefusion') for item in group):
++        merged_tags['has_facefusion'] = True
+     if any((item.get('tags') or {}).get('is_leaked') for item in group):
+         merged_tags['is_leaked'] = True
+ 

@@ -277,6 +277,22 @@
   插件宿主按契约返回 `plugin disabled`；这是当前隔离验证环境的预期行为，
   不是前端或插件源码缺口。
 
+## 会话 diff 证据与 Whisper 补翻恢复（2026-08-23）
+
+- 新增 `forensics/extract_session_diffs.py`，从原始 rollout 提取 520 个 diff 片段，
+  去重后归档 477 个唯一 diff、126 个路径到
+  `forensics/recovered-sources/session-diffs/`，并生成 manifest。
+- 对每个 diff 执行 `git apply --reverse --check`：63 个可直接反向应用到当前树，
+  376 个因当前实现已演进/等价而无法直接反向应用，38 个因会话中滚动输出被截断
+  仅作为证据。反向检查不能证明行为完全一致，仍需行为测试。
+- 已按 2026-06-20 原版补丁恢复 Whisper 翻译逐条补翻逻辑：批次长度补齐、疑似
+  未翻译行逐条重试、批量失败后逐行恢复，而不是直接保留原文。
+- 新增 `test_whisper_translator.py`，并在 `test_whisper_runtime.py` 补三条补翻
+  回归测试；新增 `test_job_phases.py` 锁定 `facefusion_restore` 阶段文案/默认值；
+  硬链接兼容测试补回 `legacy_hardlink_groups_path_impl()` 导出。
+- 本轮后端全量测试为 223 项通过，前端生产构建和插件校验均通过。
+
+
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。

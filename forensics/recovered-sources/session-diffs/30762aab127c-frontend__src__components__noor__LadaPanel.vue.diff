@@ -1,0 +1,290 @@
+diff --git a/frontend/src/components/noor/LadaPanel.vue b/frontend/src/components/noor/LadaPanel.vue
+index 1db445e..cdaca73 100644
+--- a/frontend/src/components/noor/LadaPanel.vue
++++ b/frontend/src/components/noor/LadaPanel.vue
+@@ -42,6 +42,10 @@ const previewFrameTotal = ref(0)
+ const previewMetadataLoading = ref(false)
+ const sourceUploadLoading = ref(false)
+ const uploadedSourceImages = ref<Array<{ id: string; name: string; path: string; preview_url: string }>>([])
++const sourceLibraryOpen = ref(false)
++const sourceLibraryLoading = ref(false)
++const sourceLibraryImages = ref<Array<{ id: string; name: string; path: string; preview_url: string; updated_at?: number }>>([])
++const selectedLibraryImageIds = ref<string[]>([])
+ 
+ // Hardcoded option lists (mirrors LADA_ENCODING_PRESETS in backend)
+ const detectionModels = computed(() => [
+@@ -284,6 +288,60 @@ function handleClose() {
+   emit('close')
+ }
+ 
++async function loadSourceImageLibrary() {
++  sourceLibraryLoading.value = true
++  try {
++    const resp = await api.get('/facefusion/source-images')
++    sourceLibraryImages.value = Array.isArray(resp.data?.files)
++      ? resp.data.files.map((item: any) => ({
++        id: item.id || '',
++        name: item.name || '源脸图片',
++        path: item.path || '',
++        preview_url: item.preview_url || '',
++        updated_at: item.updated_at,
++      })).filter((item: any) => item.id && item.path)
++      : []
++  } catch (e: any) {
++    toast.error(e.response?.data?.detail || '图片库读取失败')
++  } finally {
++    sourceLibraryLoading.value = false
++  }
++}
++
++async function toggleSourceLibrary() {
++  sourceLibraryOpen.value = !sourceLibraryOpen.value
++  if (sourceLibraryOpen.value) {
++    await loadSourceImageLibrary()
++  }
++}
++
++function isSourceSelected(path: string) {
++  return uploadedSourceImages.value.some(item => item.path === path)
++}
++
++function toggleLibraryImage(image: { id: string; path: string }) {
++  if (isSourceSelected(image.path)) return
++  selectedLibraryImageIds.value = selectedLibraryImageIds.value.includes(image.id)
++    ? selectedLibraryImageIds.value.filter(id => id !== image.id)
++    : [...selectedLibraryImageIds.value, image.id]
++}
++
++function addSelectedLibraryImages() {
++  const selected = sourceLibraryImages.value.filter(item => selectedLibraryImageIds.value.includes(item.id) && !isSourceSelected(item.path))
++  if (!selected.length) return
++  uploadedSourceImages.value = [
++    ...uploadedSourceImages.value,
++    ...selected.map(item => ({
++      id: item.id,
++      name: item.name,
++      path: item.path,
++      preview_url: item.preview_url,
++    })),
++  ]
++  selectedLibraryImageIds.value = []
++  if (previewUrl.value) previewStale.value = true
++}
++
+ async function loadFaceFusionPreviewMetadata() {
+   previewMetadataLoading.value = true
+   try {
+@@ -432,6 +490,7 @@ async function handleSourceImageUpload(event: Event) {
+           preview_url: item.preview_url || '',
+         })),
+     ]
++    await loadSourceImageLibrary()
+     if (previewUrl.value) previewStale.value = true
+   } catch (e: any) {
+     toast.error(e.response?.data?.detail || '源脸图片上传失败')
+@@ -442,16 +501,8 @@ async function handleSourceImageUpload(event: Event) {
+ }
+ 
+ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+-  const before = uploadedSourceImages.value
+   uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== source.path)
+   if (previewUrl.value) previewStale.value = true
+-  if (!source.id) return
+-  try {
+-    await api.delete(`/facefusion/source-images/${source.id}`)
+-  } catch (e: any) {
+-    uploadedSourceImages.value = before
+-    toast.error(e.response?.data?.detail || '源脸图片删除失败')
+-  }
+ }
+ </script>
+ 
+@@ -577,6 +628,10 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                         <span class="facefusion-source-upload-card__plus">+</span>
+                         <span>{{ sourceUploadLoading ? '上传中' : '上传图片' }}</span>
+                       </label>
++                      <button type="button" class="facefusion-source-upload-card facefusion-source-library-card" @click="toggleSourceLibrary">
++                        <span class="facefusion-source-upload-card__plus">LIB</span>
++                        <span>{{ sourceLibraryOpen ? '收起图片库' : '图片库' }}</span>
++                      </button>
+                       <div v-for="source in uploadedSourceImages" :key="source.path" class="facefusion-source-card">
+                         <img
+                           v-if="source.preview_url"
+@@ -591,6 +646,32 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                         </div>
+                       </div>
+                     </div>
++                    <div v-if="sourceLibraryOpen" class="facefusion-source-library">
++                      <div class="facefusion-source-library__head">
++                        <span>{{ sourceLibraryLoading ? '读取中' : `图片库 · ${sourceLibraryImages.length}` }}</span>
++                        <div>
++                          <button type="button" @click="loadSourceImageLibrary">刷新</button>
++                          <button type="button" :disabled="!selectedLibraryImageIds.length" @click="addSelectedLibraryImages">
++                            使用选中 {{ selectedLibraryImageIds.length || '' }}
++                          </button>
++                        </div>
++                      </div>
++                      <div v-if="!sourceLibraryLoading && !sourceLibraryImages.length" class="facefusion-source-library__empty">暂无缓存图片</div>
++                      <div v-else class="facefusion-source-library__grid">
++                        <button
++                          v-for="image in sourceLibraryImages"
++                          :key="image.id"
++                          type="button"
++                          class="facefusion-source-library__item"
++                          :class="{ 'is-active': selectedLibraryImageIds.includes(image.id), 'is-used': isSourceSelected(image.path) }"
++                          :disabled="isSourceSelected(image.path)"
++                          @click="toggleLibraryImage(image)"
++                        >
++                          <img v-if="image.preview_url" :src="image.preview_url" :alt="image.name" loading="lazy" />
++                          <span>{{ isSourceSelected(image.path) ? '已使用' : selectedLibraryImageIds.includes(image.id) ? '已选择' : '选择' }}</span>
++                        </button>
++                      </div>
++                    </div>
+                     <div class="facefusion-source-count">{{ facefusionSourcePaths.length }} 张源脸图</div>
+                   </div>
+                   <div>
+@@ -979,6 +1060,16 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   cursor: not-allowed;
+ }
+ 
++.facefusion-source-library-card {
++  border-color: rgba(255, 255, 255, 0.12);
++  background: rgba(255, 255, 255, 0.045);
++}
++
++.facefusion-source-library-card:hover {
++  border-color: rgba(0, 117, 255, 0.45);
++  background: rgba(0, 117, 255, 0.12);
++}
++
+ .facefusion-source-upload-card__plus {
+   display: grid;
+   width: 2.2rem;
+@@ -991,6 +1082,12 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   line-height: 1;
+ }
+ 
++.facefusion-source-library-card .facefusion-source-upload-card__plus {
++  font-size: 0.68rem;
++  font-weight: 800;
++  letter-spacing: 0.04em;
++}
++
+ .facefusion-source-card {
+   min-width: 0;
+   display: flex;
+@@ -1051,6 +1148,114 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   font-size: 0.72rem;
+ }
+ 
++.facefusion-source-library {
++  display: grid;
++  gap: 0.75rem;
++  margin-top: 0.75rem;
++  padding: 0.75rem;
++  border-radius: 0.75rem;
++  border: 1px solid rgba(255, 255, 255, 0.08);
++  background: rgba(255, 255, 255, 0.025);
++}
++
++.facefusion-source-library__head {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 0.75rem;
++  flex-wrap: wrap;
++}
++
++.facefusion-source-library__head > span {
++  color: var(--color-text-secondary);
++  font-size: 0.76rem;
++  font-weight: 750;
++}
++
++.facefusion-source-library__head div {
++  display: flex;
++  gap: 0.45rem;
++  flex-wrap: wrap;
++}
++
++.facefusion-source-library__head button {
++  min-height: 1.8rem;
++  padding: 0 0.65rem;
++  border-radius: 999px;
++  border: 1px solid rgba(255, 255, 255, 0.1);
++  background: rgba(255, 255, 255, 0.04);
++  color: var(--color-text-secondary);
++  font-size: 0.72rem;
++  cursor: pointer;
++}
++
++.facefusion-source-library__head button:hover:not(:disabled) {
++  border-color: rgba(0, 117, 255, 0.4);
++  color: var(--color-text-primary);
++}
++
++.facefusion-source-library__head button:disabled {
++  opacity: 0.45;
++  cursor: not-allowed;
++}
++
++.facefusion-source-library__empty {
++  color: var(--color-text-muted);
++  font-size: 0.75rem;
++}
++
++.facefusion-source-library__grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(5.75rem, 1fr));
++  gap: 0.55rem;
++  max-height: 18rem;
++  overflow: auto;
++  padding-right: 0.15rem;
++}
++
++.facefusion-source-library__item {
++  position: relative;
++  overflow: hidden;
++  aspect-ratio: 1 / 1;
++  border-radius: 0.6rem;
++  border: 1px solid rgba(255, 255, 255, 0.1);
++  background: rgba(255, 255, 255, 0.04);
++  cursor: pointer;
++}
++
++.facefusion-source-library__item img {
++  width: 100%;
++  height: 100%;
++  object-fit: cover;
++}
++
++.facefusion-source-library__item span {
++  position: absolute;
++  left: 0.35rem;
++  right: 0.35rem;
++  bottom: 0.35rem;
++  display: inline-flex;
++  justify-content: center;
++  min-height: 1.35rem;
++  align-items: center;
++  border-radius: 999px;
++  background: rgba(5, 10, 18, 0.74);
++  color: var(--color-text-primary);
++  font-size: 0.68rem;
++  font-weight: 760;
++  backdrop-filter: blur(10px);
++}
++
++.facefusion-source-library__item.is-active {
++  border-color: rgba(0, 117, 255, 0.8);
++  box-shadow: 0 0 0 2px rgba(0, 117, 255, 0.22);
++}
++
++.facefusion-source-library__item.is-used {
++  opacity: 0.52;
++  cursor: default;
++}
++
+ .facefusion-choice-chips {
+   display: flex;
+   flex-wrap: wrap;

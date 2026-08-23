@@ -1,0 +1,13 @@
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index b984ae0..4fa8dd7 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -546,7 +546,7 @@ export const zh: Record<string, string> = {
+   'settings.storage.ladaCacheDir': 'LADA 缓存目录',
+   'settings.storage.ladaTempDir': 'LADA 临时目录',
+   'settings.storage.facefusionCacheDir': 'FaceFusion 缓存目录',
+-  'settings.storage.facefusionCacheDirHint': 'FaceFusion 工作目录；TensorRT/ONNX cache 会落在这里的 .caches 下',
++  'settings.storage.facefusionCacheDirHint': 'FaceFusion 运行缓存根目录；XDG、TensorRT/ONNX、CUDA 缓存会拆到子目录',
+   'settings.storage.facefusionTempDir': 'FaceFusion 临时目录',
+   'settings.storage.cacheDirHint': '运行时缓存目录',
+   'settings.storage.tempDirHint': '处理任务的临时文件目录',

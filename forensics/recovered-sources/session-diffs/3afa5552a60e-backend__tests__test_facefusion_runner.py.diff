@@ -1,0 +1,91 @@
+diff --git a/backend/tests/test_facefusion_runner.py b/backend/tests/test_facefusion_runner.py
+index 11dccff..e42a1d1 100644
+--- a/backend/tests/test_facefusion_runner.py
++++ b/backend/tests/test_facefusion_runner.py
+@@ -1,6 +1,9 @@
+ from __future__ import annotations
+ 
+-from app.pipeline.facefusion.runner import _build_env
++from types import SimpleNamespace
++
++from app.pipeline.facefusion import runner
++from app.pipeline.facefusion.runner import _build_command, _build_env
+ 
+ 
+ def test_facefusion_env_splits_runtime_cache_dirs(tmp_path):
+@@ -16,3 +19,75 @@ def test_facefusion_env_splits_runtime_cache_dirs(tmp_path):
+     assert (cache_dir / "xdg").is_dir()
+     assert (cache_dir / "onnxruntime" / "tensorrt").is_dir()
+     assert (cache_dir / "cuda").is_dir()
++
++
++def test_facefusion_command_uses_facefusion_dir_as_cwd(monkeypatch, tmp_path):
++    facefusion_dir = tmp_path / "facefusion"
++    facefusion_dir.mkdir()
++    (facefusion_dir / "facefusion.py").write_text("print('ok')")
++    cache_dir = tmp_path / "cache"
++    temp_dir = tmp_path / "temp"
++
++    monkeypatch.setattr(
++        runner,
++        "get_settings",
++        lambda: SimpleNamespace(
++            facefusion_dir=str(facefusion_dir),
++            facefusion_python_path="",
++            facefusion_cache_dir=str(cache_dir),
++            facefusion_temp_dir=str(temp_dir),
++            facefusion_processors="",
++            facefusion_execution_provider="cuda",
++            facefusion_device_ids="0",
++            facefusion_thread_count=8,
++            facefusion_video_memory_strategy="strict",
++            facefusion_system_memory_limit=0,
++            facefusion_download_providers="github huggingface",
++            facefusion_face_detector_model="yolo_face",
++            facefusion_face_detector_size="640x640",
++            facefusion_face_detector_score=0.5,
++            facefusion_face_detector_angles="0",
++            facefusion_face_detector_margin="0 0 0 0",
++            facefusion_face_landmarker_model="2dfan4",
++            facefusion_face_landmarker_score=0.5,
++            facefusion_face_selector_mode="reference",
++            facefusion_face_selector_order="large-small",
++            facefusion_face_selector_gender="",
++            facefusion_face_selector_age_start="",
++            facefusion_face_selector_age_end="",
++            facefusion_face_selector_race="",
++            facefusion_reference_frame_number=0,
++            facefusion_reference_face_position=0,
++            facefusion_reference_face_distance=0.3,
++            facefusion_face_mask_types="box",
++            facefusion_face_mask_areas="",
++            facefusion_face_mask_regions="",
++            facefusion_face_mask_blur=0.3,
++            facefusion_face_mask_padding="0 0 0 0",
++            facefusion_face_occluder_model="xseg_1",
++            facefusion_face_parser_model="bisenet_resnet_34",
++            facefusion_output_video_encoder="libx264",
++            facefusion_output_video_preset="veryfast",
++            facefusion_output_video_quality=80,
++            facefusion_output_video_scale="1.0",
++            facefusion_output_video_fps="",
++            facefusion_output_audio_encoder="aac",
++            facefusion_output_audio_quality=80,
++            facefusion_output_audio_volume=100,
++            facefusion_output_image_quality=80,
++            facefusion_output_image_scale="1.0",
++            facefusion_temp_frame_format="png",
++            facefusion_log_level="info",
++        ),
++    )
++
++    _cmd, cwd, env, native_model_dir, runtime_cache_dir = _build_command(
++        "/input.mp4",
++        "/output.mp4",
++        {"source_paths": ["/face.jpg"]},
++    )
++
++    assert cwd == str(facefusion_dir)
++    assert native_model_dir == str(facefusion_dir / ".assets" / "models")
++    assert runtime_cache_dir == str(cache_dir)
++    assert env["XDG_CACHE_HOME"] == str(cache_dir / "xdg")

@@ -1,0 +1,291 @@
+diff --git a/backend/tests/test_whisper_translator.py b/backend/tests/test_whisper_translator.py
+index 99bfd89..f414a86 100644
+--- a/backend/tests/test_whisper_translator.py
++++ b/backend/tests/test_whisper_translator.py
+@@ -2,7 +2,26 @@ from __future__ import annotations
+ 
+ import httpx
+ 
+-from app.pipeline.whisper.translator import OpenAILikeTranslator
++from app.pipeline.whisper.translator import (
++    OpenAILikeTranslator,
++    _is_ollama_native_chat_url,
++    _resolve_chat_completions_url,
++    _resolve_ollama_root_url,
++)
++
++
++def test_resolve_chat_completions_url_preserves_full_user_endpoint():
++    assert _resolve_chat_completions_url("http://ollama:11434/v1/chat") == "http://ollama:11434/v1/chat"
++    assert _resolve_chat_completions_url("http://ollama:11434/v1/chat/completions") == "http://ollama:11434/v1/chat/completions"
++    assert _resolve_chat_completions_url("http://ollama:11434/v1/") == "http://ollama:11434/v1/chat/completions"
++    assert _resolve_chat_completions_url("http://ollama:11434") == "http://ollama:11434/v1/chat/completions"
++
++
++def test_detects_ollama_native_chat_endpoint():
++    assert _is_ollama_native_chat_url("http://ollama:11434/api/chat")
++    assert _is_ollama_native_chat_url("http://ollama:11434/api/chat/")
++    assert not _is_ollama_native_chat_url("http://ollama:11434/v1")
++    assert _resolve_ollama_root_url("http://ollama:11434/api/chat") == "http://ollama:11434"
+ 
+ 
+ def test_translate_batch_accepts_valid_short_translations(monkeypatch):
+@@ -45,3 +64,258 @@ def test_translate_batch_accepts_valid_short_translations(monkeypatch):
+     result = translator.translate_batch(["ん", "あ", "待って"], "zh")
+ 
+     assert result == ["嗯", "啊", "等等"]
++
++
++def test_translate_batch_supports_ollama_native_chat(monkeypatch):
++    captured = {}
++
++    class FakeResponse:
++        def raise_for_status(self):
++            return None
++
++        def json(self):
++            return {
++                "model": "qwen3.5:9b",
++                "message": {
++                    "role": "assistant",
++                    "content": "[1] 你好\n[2] 今天天气很好",
++                },
++                "done": True,
++            }
++
++    class FakeClient:
++        def __init__(self, *args, **kwargs):
++            pass
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def post(self, url, *args, **kwargs):
++            captured["url"] = url
++            captured["json"] = kwargs["json"]
++            return FakeResponse()
++
++    monkeypatch.setattr(httpx, "Client", FakeClient)
++
++    translator = OpenAILikeTranslator(
++        model="qwen3.5:9b",
++        base_url="http://127.0.0.1:11434/api/chat",
++        translate_style="standard",
++    )
++
++    result = translator.translate_batch(["こんにちは", "今日はいい天気ですね"], "zh")
++
++    assert captured["url"] == "http://127.0.0.1:11434/api/chat"
++    assert captured["json"]["stream"] is False
++    assert captured["json"]["think"] is False
++    assert captured["json"]["format"]["required"] == ["translations"]
++    assert captured["json"]["options"]["num_predict"] == 16384
++    assert result == ["你好", "今天天气很好"]
++
++
++def test_translate_batch_uses_structured_ollama_output(monkeypatch):
++    captured = {}
++
++    class FakeResponse:
++        def raise_for_status(self):
++            return None
++
++        def json(self):
++            return {
++                "message": {
++                    "content": '{"translations":[{"index":1,"text":"你好"},{"index":2,"text":"今天天气很好"}]}'
++                }
++            }
++
++    class FakeClient:
++        def __init__(self, *args, **kwargs):
++            pass
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def post(self, url, *args, **kwargs):
++            captured["url"] = url
++            captured["json"] = kwargs["json"]
++            return FakeResponse()
++
++    monkeypatch.setattr(httpx, "Client", FakeClient)
++
++    translator = OpenAILikeTranslator(
++        model="qwen3.5:9b",
++        base_url="http://127.0.0.1:11434",
++        translate_style="standard",
++    )
++
++    result = translator.translate_batch(["こんにちは", "今日はいい天気ですね"], "zh")
++
++    assert captured["url"] == "http://127.0.0.1:11434/api/chat"
++    assert captured["json"]["format"]["properties"]["translations"]["type"] == "array"
++    assert result == ["你好", "今天天气很好"]
++
++
++def test_translate_batch_skips_non_dialogue_lines_before_model(monkeypatch):
++    captured = {}
++
++    class FakeResponse:
++        def raise_for_status(self):
++            return None
++
++        def json(self):
++            return {
++                "message": {
++                    "content": '{"translations":[{"index":1,"text":"等一下"}]}'
++                }
++            }
++
++    class FakeClient:
++        def __init__(self, *args, **kwargs):
++            pass
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def post(self, url, *args, **kwargs):
++            captured["content"] = kwargs["json"]["messages"][1]["content"]
++            return FakeResponse()
++
++    monkeypatch.setattr(httpx, "Client", FakeClient)
++
++    translator = OpenAILikeTranslator(
++        model="qwen3.5:9b",
++        base_url="http://127.0.0.1:11434",
++        translate_style="standard",
++    )
++
++    result = translator.translate_batch(["…", "待って", "じゅ" + ("る" * 80)], "zh")
++
++    assert result == ["...", "等一下", "啾噜、啾噜..."]
++    assert "待って" in captured["content"]
++    assert "じゅ" not in captured["content"]
++
++
++def test_translate_batch_accepts_single_unnumbered_translation(monkeypatch):
++    class FakeResponse:
++        def raise_for_status(self):
++            return None
++
++        def json(self):
++            return {
++                "choices": [
++                    {
++                        "message": {
++                            "content": "你好，今天天气很好。"
++                        }
++                    }
++                ]
++            }
++
++    class FakeClient:
++        def __init__(self, *args, **kwargs):
++            pass
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def post(self, *args, **kwargs):
++            return FakeResponse()
++
++    monkeypatch.setattr(httpx, "Client", FakeClient)
++
++    translator = OpenAILikeTranslator(
++        model="test-model",
++        base_url="https://api.example.com/v1",
++        translate_style="standard",
++    )
++
++    result = translator.translate_batch(["こんにちは、今日はいい天気ですね。"], "zh")
++
++    assert result == ["你好，今天天气很好。"]
++
++
++def test_translate_batch_collapses_runaway_repetitive_translation(monkeypatch):
++    repeated = "啊嗯、" * 3000
++
++    class FakeResponse:
++        def raise_for_status(self):
++            return None
++
++        def json(self):
++            return {
++                "choices": [
++                    {
++                        "message": {
++                            "content": f"[1] {repeated}"
++                        }
++                    }
++                ]
++            }
++
++    class FakeClient:
++        def __init__(self, *args, **kwargs):
++            pass
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def post(self, *args, **kwargs):
++            return FakeResponse()
++
++    monkeypatch.setattr(httpx, "Client", FakeClient)
++
++    translator = OpenAILikeTranslator(
++        model="test-model",
++        base_url="https://api.example.com/v1",
++        translate_style="standard",
++    )
++
++    result = translator.translate_batch(["んん、んぐ、んぐ、んぐぐぐぐぐぐぐぐ"], "zh")
++
++    assert result == ["嗯、嗯..."]
++
++
++def test_sanitize_translation_keeps_non_repetitive_long_text():
++    source = "これは長い説明文です。" * 10
++    translated = "这是一段正常的长说明文本，用来确认清洗逻辑不会误伤非重复内容。" * 8
++
++    assert OpenAILikeTranslator._sanitize_translation(source, translated) == translated
++
++
++def test_sanitize_translation_collapses_nonverbal_prompt_meta_output():
++    translated = "请提供需要汉化的日语字幕文本内容，我将根据上述规则进行翻译。"
++
++    assert OpenAILikeTranslator._sanitize_translation("…", translated) == "..."
++
++
++def test_sanitize_translation_collapses_long_repetitive_source_from_source_sound():
++    source = "じゅ" + ("る" * 180)
++    translated = "滴答" * 80
++
++    assert OpenAILikeTranslator._sanitize_translation(source, translated) == "啾噜、啾噜..."
++
++
++def test_sanitize_translation_collapses_prompt_meta_for_repetitive_kana():
++    source = "る" * 180
++    translated = "这段日语文本似乎是由一系列重复的るる组成，由于没有具体上下文。"
++
++    assert OpenAILikeTranslator._sanitize_translation(source, translated) == "噜、噜..."
++
++
++def test_sanitize_translation_collapses_churu_and_gu_noise():
++    assert OpenAILikeTranslator._sanitize_translation("ちゅ" + ("る" * 40), "抽吸声" * 20) == "啾噜、啾噜..."
++    assert OpenAILikeTranslator._sanitize_translation("ぐ" * 40, "吸吮" * 20) == "咕、咕..."

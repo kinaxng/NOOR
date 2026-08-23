@@ -1,0 +1,67 @@
+diff --git a/backend/app/pipeline/whisper/types.py b/backend/app/pipeline/whisper/types.py
+index 560de88..fdf92d2 100644
+--- a/backend/app/pipeline/whisper/types.py
++++ b/backend/app/pipeline/whisper/types.py
+@@ -16,31 +16,13 @@ class WhisperModel(str, Enum):
+     # Anime-optimized
+     ANIME = "anime-whisper"
+ 
+-    # Kotoba Whisper v2.0 — ctranslate2 optimized, Japanese-specific
+-    KOTOBA_V2 = "kotoba-whisper-v2.0-faster"
+-    REAZON_NEMO_V2 = "reazonspeech-nemo-v2"
+-
+-    # Faster-Whisper models
+-    TINY = "tiny"
+-    BASE = "base"
+-    SMALL = "small"
+-    MEDIUM = "medium"
+     LARGE_V3 = "large-v3"
+-    LARGE_V3_TURBO = "large-v3-turbo"
+ 
+ 
+ class PipelineMode(str, Enum):
+     """处理管线模式"""
+-    SINGLE = "single"           # 单遍处理
+-    ENSEMBLE = "ensemble"       # 两遍处理 + 合并
+-    FASTER = "faster"          # Faster-Whisper turbo, 清洁音频
+-    BALANCED = "balanced"       # Faster-Whisper + Silero VAD, 嘈杂对话
+-    ANIME = "anime"            # anime-whisper + TEN VAD, JAV优化
+-    TRANSFORMERS = "transformers"  # HuggingFace Kotoba, 日语专用
+-    QWEN = "qwen"              # faster-whisper large-v3 baseline（历史兼容键，不是真 Qwen3-ASR）
+-    CUSTOM = "custom"           # 完全自定义配置
+-    COLI = "coli"              # coli ASR (sensevoice), 本地离线
+-    REAZON = "reazon"          # Reazon / NeMo Japanese ASR
++    FASTER = "faster"          # ChickenRice / faster-whisper 后端
++    ANIME = "anime"            # anime-whisper 后端
+ 
+ 
+ class VADMethod(str, Enum):
+@@ -107,7 +89,7 @@ class WhisperConfig:
+ 
+     # Pass 模式
+     # 管线设置
+-    pipeline_mode: PipelineMode = PipelineMode.ENSEMBLE
++    pipeline_mode: PipelineMode = PipelineMode.FASTER
+     merge_strategy: MergeStrategy = MergeStrategy.SMART
+ 
+     # VAD 设置
+@@ -123,19 +105,6 @@ class WhisperConfig:
+     audio_preprocess_mode: str = "none"  # none / vocal_isolation
+     audio_preprocess_model: str = "vocal_balanced"  # vocal_balanced / vocal_clean
+ 
+-    # Decoupled 管线设置（custom 模式）
+-    timestamp_mode: str = "aligner_interpolation"  # aligner_interpolation / vad_only / aligner_only
+-    aligner_backend: str = "qwen3"  # qwen3 / none
+-    framer_backend: str = "vad-grouped"  # vad-grouped / full-scene
+-
+-    # Pass1 设置 (anime-whisper)
+-    pass1_model: WhisperModel = WhisperModel.ANIME
+-    pass1_pipeline: Optional[PipelineMode] = None  # Pass1 自定义模式
+-
+-    # Pass2 设置 (faster-whisper)
+-    pass2_model: WhisperModel = WhisperModel.LARGE_V3
+-    pass2_pipeline: Optional[PipelineMode] = None  # Pass2 自定义模式
+-
+     # 语言设置
+     language: str = "ja"  # ja/en/zh/auto
+ 

@@ -1,0 +1,33 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index 83c97e2..6dd36a9 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ from typing import Any
+ 
+ from app.api.endpoints.media_library_helpers import load_config as load_media_library_config
++from app.api.settings_facefusion_upgrade import get_facefusion_installation_info
+ from app.core.config import PROJECT_ROOT, get_settings
+ from app.core.database_paths import sqlite_db_path_from_url
+ from app.core.facefusion_paths import inspect_facefusion_model_dir, resolve_facefusion_source
+@@ -62,6 +63,7 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+         facefusion_source.source_dir,
+         settings.facefusion_model_dir,
+     )
++    facefusion_info = get_facefusion_installation_info(settings)
+     resolved_lada_model_dir = settings.lada_model_dir or lada_model_weights_dir
+ 
+     return {
+@@ -117,6 +119,12 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             "dir": "" if facefusion_source.mode == "embedded" else str(facefusion_source.source_dir),
+             "resolved_dir": str(facefusion_source.source_dir),
+             "source_mode": facefusion_source.mode,
++            "version": facefusion_info["version"],
++            "is_docker": facefusion_info["is_docker"],
++            "can_self_upgrade": facefusion_info["can_self_upgrade"],
++            "upgrade_strategy": facefusion_info["upgrade_strategy"],
++            "upgrade_hint": facefusion_info["upgrade_hint"],
++            "upstream_repo": facefusion_info["upstream_repo"],
+             "python_path": env_data.get("FACEFUSION_PYTHON_PATH", ""),
+             "native_model_dir": facefusion_native_model_dir,
+             "model_dir_mode": facefusion_model_dir_mode,

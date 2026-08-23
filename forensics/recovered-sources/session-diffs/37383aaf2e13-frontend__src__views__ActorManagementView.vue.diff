@@ -1,0 +1,171 @@
+diff --git a/frontend/src/views/ActorManagementView.vue b/frontend/src/views/ActorManagementView.vue
+index d11c765..1316280 100644
+--- a/frontend/src/views/ActorManagementView.vue
++++ b/frontend/src/views/ActorManagementView.vue
+@@ -18,6 +18,9 @@ const actors = ref<MediaActor[]>([])
+ const duplicateGroups = ref<MediaActorDuplicateGroup[]>([])
+ const loading = ref(false)
+ const duplicateLoading = ref(false)
++const mappingUploading = ref(false)
++const mappingFile = ref<any | null>(null)
++const fileInput = ref<HTMLInputElement | null>(null)
+ const query = ref('')
+ const page = ref(1)
+ const pageSize = 60
+@@ -75,6 +78,40 @@ async function loadDuplicates() {
+   }
+ }
+ 
++async function loadLatestMappingUpload() {
++  try {
++    const resp = await api.get('/media-library/actors/mapping/latest-upload')
++    mappingFile.value = resp.data.uploaded ? resp.data.file : null
++  } catch {
++    mappingFile.value = null
++  }
++}
++
++function openMappingPicker() {
++  fileInput.value?.click()
++}
++
++async function uploadMappingFile(event: Event) {
++  const input = event.target as HTMLInputElement
++  const file = input.files?.[0]
++  input.value = ''
++  if (!file) return
++  const form = new FormData()
++  form.append('file', file)
++  mappingUploading.value = true
++  try {
++    const resp = await api.post('/media-library/actors/mapping/upload', form, {
++      headers: { 'Content-Type': 'multipart/form-data' },
++    })
++    mappingFile.value = resp.data.file || null
++    toast.success(t('files.actors.mappingUploadSuccess'))
++  } catch (error: any) {
++    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingUploadFailed'))
++  } finally {
++    mappingUploading.value = false
++  }
++}
++
+ function setSort(key: SortKey, order: SortOrder) {
+   sortBy.value = key
+   sortOrder.value = order
+@@ -101,6 +138,7 @@ watch(page, () => {
+ 
+ onMounted(() => {
+   loadActors()
++  loadLatestMappingUpload()
+ })
+ </script>
+ 
+@@ -124,9 +162,41 @@ onMounted(() => {
+           <BaseIcon name="user" class="w-4 h-4" />
+           {{ t('files.actors.detectDuplicates') }}
+         </VuiButton>
++        <VuiButton variant="outlined" color="secondary" size="small" :disabled="mappingUploading" @click="openMappingPicker">
++          <BaseIcon name="upload" class="w-4 h-4" />
++          {{ t('files.actors.importMapping') }}
++        </VuiButton>
++        <input ref="fileInput" type="file" accept=".xml,text/xml,application/xml" class="actor-file-input" @change="uploadMappingFile" />
+       </div>
+     </div>
+ 
++    <section v-if="mappingFile" class="mapping-panel ui-card">
++      <div class="mapping-panel__head">
++        <div>
++          <h2>{{ t('files.actors.mappingTitle') }}</h2>
++          <span>{{ mappingFile.filename }} · {{ mappingFile.format }} · {{ mappingFile.size }} bytes</span>
++        </div>
++      </div>
++      <div class="mapping-grid">
++        <div class="mapping-kv">
++          <span>{{ t('files.actors.mappingFilename') }}</span>
++          <strong>{{ mappingFile.filename || '-' }}</strong>
++        </div>
++        <div class="mapping-kv">
++          <span>{{ t('files.actors.mappingSize') }}</span>
++          <strong>{{ mappingFile.size || 0 }} bytes</strong>
++        </div>
++        <div class="mapping-kv mapping-kv--wide">
++          <span>{{ t('files.actors.mappingUploadedAt') }}</span>
++          <strong>{{ mappingFile.uploaded_at || '-' }}</strong>
++        </div>
++      </div>
++      <div class="mapping-block">
++        <span class="mapping-block__label">{{ t('files.actors.mappingSavedPath') }}</span>
++        <pre>{{ mappingFile.saved_path }}</pre>
++      </div>
++    </section>
++
+     <section class="noor-control-panel actor-filter-panel">
+       <div class="noor-control-panel__row noor-control-panel__row--primary">
+         <div class="noor-control-panel__group">
+@@ -227,6 +297,10 @@ onMounted(() => {
+   flex-wrap: wrap;
+ }
+ 
++.actor-file-input {
++  display: none;
++}
++
+ .actor-search {
+   position: relative;
+   min-width: min(22rem, 100%);
+@@ -259,6 +333,106 @@ onMounted(() => {
+   box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.16);
+ }
+ 
++.mapping-panel {
++  padding: 1rem;
++}
++
++.mapping-panel__head {
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: 1rem;
++  margin-bottom: 0.8rem;
++}
++
++.mapping-panel__head h2 {
++  margin: 0;
++  color: var(--color-text-primary);
++  font-size: 1rem;
++  font-weight: 800;
++}
++
++.mapping-panel__head span {
++  display: block;
++  margin-top: 0.2rem;
++  color: var(--color-text-muted);
++  font-size: 0.76rem;
++}
++
++.mapping-grid {
++  display: grid;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++  gap: 0.6rem;
++}
++
++.mapping-kv {
++  padding: 0.7rem;
++  border-radius: var(--radius-md);
++  background: rgba(255, 255, 255, 0.04);
++  border: 1px solid var(--color-border-subtle);
++  min-width: 0;
++}
++
++.mapping-kv span,
++.mapping-block__label {
++  display: block;
++  color: var(--color-text-muted);
++  font-size: 0.72rem;
++  font-weight: 800;
++}
++
++.mapping-kv strong {
++  display: block;
++  margin-top: 0.25rem;

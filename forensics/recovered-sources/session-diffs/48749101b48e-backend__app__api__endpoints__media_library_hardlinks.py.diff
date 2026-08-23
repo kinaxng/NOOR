@@ -1,0 +1,51 @@
+diff --git a/backend/app/api/endpoints/media_library_hardlinks.py b/backend/app/api/endpoints/media_library_hardlinks.py
+index b99af74..ee95729 100644
+--- a/backend/app/api/endpoints/media_library_hardlinks.py
++++ b/backend/app/api/endpoints/media_library_hardlinks.py
+@@ -9,9 +9,23 @@ VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.w
+ 
+ 
+ def hardlink_groups_path_impl(config_path_fn: Callable[[], Path]) -> Path:
++    return config_path_fn().parent / 'runtime' / 'media_library' / 'hardlink_groups.txt'
++
++
++def legacy_hardlink_groups_path_impl(config_path_fn: Callable[[], Path]) -> Path:
+     return config_path_fn().parent / 'hardlink_groups.txt'
+ 
+ 
++def _legacy_path_for(primary_path: Path) -> Path | None:
++    if (
++        primary_path.name == 'hardlink_groups.txt'
++        and primary_path.parent.name == 'media_library'
++        and primary_path.parent.parent.name == 'runtime'
++    ):
++        return primary_path.parent.parent.parent / 'hardlink_groups.txt'
++    return None
++
++
+ def scan_inodes_impl(dir_path: str) -> dict[tuple[int, int], str]:
+     result: dict[tuple[int, int], str] = {}
+     if not os.path.isdir(dir_path):
+@@ -160,7 +174,9 @@ def save_hardlink_groups_impl(groups: list[dict], *, hardlink_groups_path_fn: Ca
+             source = entry.get('source_path') or ''
+             hlinks = entry.get('hardlink_paths', [])
+             lines.append(f"{code}|{source}|{'|'.join(hlinks)}")
+-    hardlink_groups_path_fn().write_text('\n'.join(lines) + '\n', encoding='utf-8')
++    path = hardlink_groups_path_fn()
++    path.parent.mkdir(parents=True, exist_ok=True)
++    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+ 
+ 
+ def source_file_size_impl(source_path: str | None) -> int | None:
+@@ -175,7 +191,10 @@ def source_file_size_impl(source_path: str | None) -> int | None:
+ def load_hardlink_groups_impl(*, hardlink_groups_path_fn: Callable[[], Path]) -> list[dict]:
+     path = hardlink_groups_path_fn()
+     if not path.is_file():
+-        return []
++        legacy_path = _legacy_path_for(path)
++        if legacy_path is None or not legacy_path.is_file():
++            return []
++        path = legacy_path
+ 
+     code_map: dict[str, list] = {}
+     for line in path.read_text(encoding='utf-8').splitlines():

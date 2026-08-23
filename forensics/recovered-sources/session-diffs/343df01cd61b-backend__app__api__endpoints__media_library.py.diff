@@ -1,0 +1,189 @@
+diff --git a/backend/app/api/endpoints/media_library.py b/backend/app/api/endpoints/media_library.py
+index b954867..66783f8 100644
+--- a/backend/app/api/endpoints/media_library.py
++++ b/backend/app/api/endpoints/media_library.py
+@@ -6,6 +6,9 @@ import re
+ import secrets
+ import shutil
+ import time
++import csv
++import io
++import json
+ import mimetypes
+ import xml.etree.ElementTree as ET
+ from datetime import datetime, timezone
+@@ -14,10 +17,11 @@ from typing import Optional
+ from urllib.parse import quote
+ 
+ import httpx
+-from fastapi import APIRouter, HTTPException, Query, Request
++from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+ from fastapi.responses import StreamingResponse
+ from pydantic import BaseModel
+ from app.api.system import SystemLogManager
++from app.core.runtime_paths import data_path
+ 
+ from app.api.endpoints.media_library_helpers import (
+     ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED,
+@@ -92,6 +96,91 @@ class MediaItemDeleteRequest(BaseModel):
+     dry_run: bool = False
+ 
+ 
++def _actor_mapping_upload_dir() -> Path:
++    path = data_path() / "media_actor_mapping_uploads"
++    path.mkdir(parents=True, exist_ok=True)
++    return path
++
++
++def _safe_upload_filename(filename: str | None) -> str:
++    raw = Path(filename or "actor_mapping").name.strip() or "actor_mapping"
++    return re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fffぁ-んァ-ン一-龯]", "_", raw)[:120]
++
++
++def _decode_mapping_text(content: bytes) -> str:
++    for encoding in ("utf-8-sig", "utf-8", "gb18030", "big5"):
++        try:
++            return content.decode(encoding)
++        except UnicodeDecodeError:
++            continue
++    return content.decode("utf-8", errors="replace")
++
++
++def _analyze_actor_mapping_upload(filename: str, content: bytes) -> dict:
++    suffix = Path(filename).suffix.lower()
++    result = {
++        "filename": filename,
++        "size": len(content),
++        "format": suffix.lstrip(".") or "unknown",
++        "columns": [],
++        "sample_rows": [],
++        "record_count": 0,
++        "note": "",
++    }
++
++    if suffix == ".json":
++        text = _decode_mapping_text(content)
++        payload = json.loads(text)
++        records = payload.get("records") if isinstance(payload, dict) else payload
++        if isinstance(records, list):
++            rows = [item for item in records if isinstance(item, dict)]
++            columns = sorted({key for row in rows[:50] for key in row.keys()})
++            result.update({
++                "format": "json",
++                "columns": columns,
++                "sample_rows": rows[:5],
++                "record_count": len(rows),
++            })
++        elif isinstance(payload, dict):
++            result.update({
++                "format": "json",
++                "columns": list(payload.keys()),
++                "sample_rows": [payload],
++                "record_count": 1,
++            })
++        return result
++
++    if suffix in {".csv", ".tsv"}:
++        text = _decode_mapping_text(content)
++        delimiter = "\t" if suffix == ".tsv" else ","
++        reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
++        rows = []
++        for index, row in enumerate(reader):
++            if index < 5:
++                rows.append(dict(row))
++        result.update({
++            "format": suffix.lstrip("."),
++            "columns": list(reader.fieldnames or []),
++            "sample_rows": rows,
++            "record_count": sum(1 for _ in csv.DictReader(io.StringIO(text), delimiter=delimiter)),
++        })
++        return result
++
++    if suffix in {".xlsx", ".xls"}:
++        result["note"] = "已保存 Excel 文件；下一步将根据实际文件结构补充解析。"
++        return result
++
++    text = _decode_mapping_text(content)
++    lines = [line for line in text.splitlines() if line.strip()]
++    result.update({
++        "format": "text",
++        "sample_rows": [{"line": line} for line in lines[:5]],
++        "record_count": len(lines),
++        "note": "未知表格格式，已按文本保存。",
++    })
++    return result
++
++
+ def _normalize_actor_key(value: str | None) -> str:
+     if not value:
+         return ""
+@@ -1193,6 +1282,69 @@ async def get_duplicate_actors(limit: int = 2000):
+     return {"groups": groups, "total": len(groups)}
+ 
+ 
++@router.post("/actors/mapping/upload")
++async def upload_actor_mapping(file: UploadFile = File(...)):
++    filename = _safe_upload_filename(file.filename)
++    content = await file.read()
++    if not content:
++        raise HTTPException(status_code=400, detail="上传文件为空")
++    if len(content) > 30 * 1024 * 1024:
++        raise HTTPException(status_code=400, detail="上传文件超过 30MB")
++
++    upload_dir = _actor_mapping_upload_dir()
++    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
++    target = upload_dir / f"{timestamp}_{filename}"
++    target.write_bytes(content)
++    latest = upload_dir / "latest"
++    latest.write_text(str(target), encoding="utf-8")
++
++    try:
++        analysis = _analyze_actor_mapping_upload(filename, content)
++    except Exception as exc:
++        analysis = {
++            "filename": filename,
++            "size": len(content),
++            "format": Path(filename).suffix.lower().lstrip(".") or "unknown",
++            "columns": [],
++            "sample_rows": [],
++            "record_count": 0,
++            "note": f"文件已保存，但结构探测失败: {exc}",
++        }
++
++    analysis["saved_path"] = str(target)
++    SystemLogManager.get_instance().add_log(
++        "info",
++        f"[MediaLibrary] 已上传演员映射表: {filename} · {len(content)} bytes",
++        source="media_library.actors",
++    )
++    return {"ok": True, "analysis": analysis}
++
++
++@router.get("/actors/mapping/latest-upload")
++async def get_latest_actor_mapping_upload():
++    latest = _actor_mapping_upload_dir() / "latest"
++    if not latest.is_file():
++        return {"ok": True, "uploaded": False}
++    path = Path(latest.read_text(encoding="utf-8").strip())
++    if not path.is_file():
++        return {"ok": True, "uploaded": False}
++    content = path.read_bytes()
++    try:
++        analysis = _analyze_actor_mapping_upload(path.name, content)
++    except Exception as exc:
++        analysis = {
++            "filename": path.name,
++            "size": len(content),
++            "format": path.suffix.lower().lstrip(".") or "unknown",
++            "columns": [],
++            "sample_rows": [],
++            "record_count": 0,
++            "note": f"结构探测失败: {exc}",
++        }
++    analysis["saved_path"] = str(path)
++    return {"ok": True, "uploaded": True, "analysis": analysis}
++
++
+ @router.get("/item/{item_id}")
+ async def get_item(item_id: str):
+     """Get item details."""

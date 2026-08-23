@@ -1,0 +1,31 @@
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index dd4d125..8df321a 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -2,6 +2,7 @@ export const zh: Record<string, string> = {
+   // 通用
+   'common.save': '保存',
+   'common.cancel': '取消',
++  'common.back': '返回',
+   'common.delete': '删除',
+   'common.close': '关闭',
+   'common.loading': '加载中...',
+@@ -91,6 +92,18 @@ export const zh: Record<string, string> = {
+   'files.actors.duplicatesCount': '发现 {count} 个重名组',
+   'files.actors.noDuplicates': '未发现重名演员',
+   'files.actors.movieCount': '{count} 部',
++  'files.actors.detailTitle': '演员资料',
++  'files.actors.detailLoadFailed': '加载演员资料失败',
++  'files.actors.moviesLoadFailed': '加载演员作品失败',
++  'files.actors.detailSaveFailed': '保存演员资料失败',
++  'files.actors.detailSaveSuccess': '演员资料已保存并同步到 Emby',
++  'files.actors.detailSaveLocalOnly': '演员资料已保存，Emby 同步失败，已保留 NOOR 覆盖资料',
++  'files.actors.detailName': '名称',
++  'files.actors.detailSortName': '排序名',
++  'files.actors.detailOverview': '简介',
++  'files.actors.detailMovies': '关联作品',
++  'files.actors.detailMovieCount': '{count} 部作品',
++  'files.actors.detailNoMovies': '暂无关联作品',
+ 
+   // Toolbar
+   'toolbar.blurOn': '开启封面模糊 (H)',

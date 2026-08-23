@@ -1,0 +1,13 @@
+diff --git a/DOCKER.md b/DOCKER.md
+index 3b77746..7c6ab54 100644
+--- a/DOCKER.md
++++ b/DOCKER.md
+@@ -142,7 +142,7 @@ NOOR_DATA_DIR=./data
+ - NOOR 自身数据库、插件数据、任务日志、状态文件、运行缓存和临时文件统一放在 `./data`，容器内路径为 `/app/data`
+ - `MODELS_DIR` / `MEDIA_ROOT` 会按**原绝对路径**挂进容器，不再改写成 `/app/...` 或 `/Videos`
+ - 业务配置也可以直接预填在同一个 `.env`，例如 Emby/Jellyfin、Whisper、LADA、媒体库路径映射
+-- LADA 权重默认仍从 `MODELS_DIR/lada_model_weights` 读取；Whisper 模型可指向 `MODELS_DIR`
++- LADA 权重默认仍从 `MODELS_DIR/lada_model_weights` 读取；Whisper / HuggingFace 模型默认指向 `MODELS_DIR/huggingface`
+ - Whisper / LADA / FaceFusion 的运行缓存和临时目录默认落在 `/app/data/runtime/...`
+ - Reazon / NeMo 与 audio-separator 的模型目录默认落在 `/app/data/models/whisper/...`
+ 

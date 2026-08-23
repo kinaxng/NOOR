@@ -1,0 +1,48 @@
+diff --git a/backend/tests/test_media_library_hardlinks.py b/backend/tests/test_media_library_hardlinks.py
+index 63f288b..3d916a2 100644
+--- a/backend/tests/test_media_library_hardlinks.py
++++ b/backend/tests/test_media_library_hardlinks.py
+@@ -7,7 +7,10 @@ import pytest
+ from app.api.endpoints.media_library_hardlinks import (
+     build_hardlink_groups_impl,
+     enrich_hardlink_groups_impl,
++    hardlink_groups_path_impl,
+     scan_single_group_impl,
++    save_hardlink_groups_impl,
++    load_hardlink_groups_impl,
+ )
+ 
+ 
+@@ -71,6 +74,32 @@ def test_enrich_hardlink_groups_includes_source_size():
+     assert payload['groups'][0]['entries'][0]['source_size'] == 123456
+ 
+ 
++def test_hardlink_groups_path_uses_runtime_media_library_dir(tmp_path: Path):
++    config_path = tmp_path / 'media_library_config.json'
++
++    assert hardlink_groups_path_impl(lambda: config_path) == tmp_path / 'runtime' / 'media_library' / 'hardlink_groups.txt'
++
++
++def test_save_hardlink_groups_creates_runtime_dir(tmp_path: Path):
++    path = tmp_path / 'runtime' / 'media_library' / 'hardlink_groups.txt'
++
++    save_hardlink_groups_impl([
++        {'code': 'ABC-123', 'entries': [{'source_path': '/source/abc.mp4', 'hardlink_paths': ['/hard/abc.mp4']}]}
++    ], hardlink_groups_path_fn=lambda: path)
++
++    assert path.read_text(encoding='utf-8') == 'ABC-123|/source/abc.mp4|/hard/abc.mp4\n'
++
++
++def test_load_hardlink_groups_falls_back_to_legacy_root_file(tmp_path: Path):
++    legacy_path = tmp_path / 'hardlink_groups.txt'
++    new_path = tmp_path / 'runtime' / 'media_library' / 'hardlink_groups.txt'
++    legacy_path.write_text('ABC-123|/source/abc.mp4|/hard/abc.mp4\n', encoding='utf-8')
++
++    assert load_hardlink_groups_impl(hardlink_groups_path_fn=lambda: new_path) == [
++        {'code': 'ABC-123', 'entries': [{'source_path': '/source/abc.mp4', 'hardlink_paths': ['/hard/abc.mp4']}]}
++    ]
++
++
+ def test_scan_single_group_includes_source_only_entries(tmp_path: Path):
+     source_root = tmp_path / 'source'
+     hardlink_root = tmp_path / 'hardlinks'

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import multiprocessing
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -250,6 +251,62 @@ def _build_translation_batches(
 
 
 from app.tasks.job_phases import get_phase_label, normalize_phase_key
+_KANA_RE = re.compile(r"[\u3040-\u30ff]")
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+_PUNCT_SPACE_RE = re.compile(r"[\s。、，,.!?！？…~～ー\-・「」『』（）()\[\]【】\"\'“”‘’]+")
+
+
+def _normalize_translation_probe(text: str) -> str:
+    return _PUNCT_SPACE_RE.sub("", text or "")
+
+
+def _translation_needs_line_retry(source: str, translated: str, target_lang: str) -> bool:
+    cleaned = (translated or "").strip()
+    if not cleaned:
+        return True
+
+    source_norm = _normalize_translation_probe(source)
+    translated_norm = _normalize_translation_probe(cleaned)
+    if source_norm and source_norm == translated_norm:
+        return True
+
+    # For Chinese output, a line that is still kana-heavy is almost always an
+    # untranslated fallback. Do not reject mixed CJK text solely because it
+    # contains kanji, since Japanese source and Chinese target share Han chars.
+    if target_lang.lower().startswith("zh"):
+        kana_count = len(_KANA_RE.findall(cleaned))
+        cjk_count = len(_CJK_RE.findall(cleaned))
+        if kana_count >= 4 and kana_count >= max(4, cjk_count):
+            return True
+
+    return False
+
+
+def _retry_single_translation_line(
+    translator,
+    source: str,
+    target_lang: str,
+    styles: list[str],
+    *,
+    emit_log,
+    line_label: str,
+) -> str | None:
+    seen_styles: set[str] = set()
+    for style in styles:
+        if style in seen_styles:
+            continue
+        seen_styles.add(style)
+        try:
+            result = translator.translate_batch([source], target_lang, translate_style=style)
+            translated = result[0] if result else ""
+            if not _translation_needs_line_retry(source, translated, target_lang):
+                return translated
+            emit_log(f"{line_label} 逐条补翻仍像原文（{style}），继续尝试...")
+        except Exception as exc:
+            emit_log(f"{line_label} 逐条补翻失败（{style}）: {str(exc)[:80]}")
+    return None
+
+
 
 
 def _translation_process_entry(
@@ -368,6 +425,30 @@ def _translation_process_entry(
                         target_lang,
                         translate_style=active_style,
                     )
+                    if len(results) < len(batch_texts):
+                        results = list(results) + [""] * (len(batch_texts) - len(results))
+                    else:
+                        results = list(results[:len(batch_texts)])
+                    retry_styles = [active_style]
+                    if active_style != "standard":
+                        retry_styles.append("standard")
+                    bad_indices = [
+                        j for j, text in enumerate(results)
+                        if _translation_needs_line_retry(batch_texts[j], text, target_lang)
+                    ]
+                    if bad_indices:
+                        emit_log(f"批次 {batch_index + 1} 有 {len(bad_indices)} 条疑似未翻译，逐条补翻...")
+                    for j in bad_indices:
+                        repaired = _retry_single_translation_line(
+                            translator,
+                            batch_texts[j],
+                            target_lang,
+                            retry_styles,
+                            emit_log=emit_log,
+                            line_label=f"批次 {batch_index + 1} 第 {j + 1} 条",
+                        )
+                        if repaired is not None:
+                            results[j] = repaired
                     for index, text in enumerate(results):
                         translated_texts[start + index] = text
                     retry_message = f"（重试 {retry} 次）" if retry > 0 else ""
@@ -395,10 +476,28 @@ def _translation_process_entry(
                     else:
                         emit_log(
                             f"批次 {batch_index + 1} 最终失败: "
-                            f"{error[:80]}，保留原文"
+                            f"{error[:80]}，尝试逐条补翻..."
                         )
+                        recovered = 0
                         for index in range(len(batch_texts)):
-                            translated_texts[start + index] = batch_texts[index]
+                            repaired = _retry_single_translation_line(
+                                translator,
+                                batch_texts[index],
+                                target_lang,
+                                ["standard"],
+                                emit_log=emit_log,
+                                line_label=f"批次 {batch_index + 1} 第 {index + 1} 条",
+                            )
+                            if repaired is not None:
+                                translated_texts[start + index] = repaired
+                                recovered += 1
+                            else:
+                                translated_texts[start + index] = batch_texts[index]
+                        if recovered < len(batch_texts):
+                            emit_log(
+                                f"批次 {batch_index + 1} 逐条补翻完成，"
+                                f"{len(batch_texts) - recovered} 条仍保留原文"
+                            )
                         break
 
             translate_phase_progress = int(end / total * 100)

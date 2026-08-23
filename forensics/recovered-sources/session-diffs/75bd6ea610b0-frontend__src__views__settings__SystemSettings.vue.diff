@@ -1,0 +1,142 @@
+diff --git a/frontend/src/views/settings/SystemSettings.vue b/frontend/src/views/settings/SystemSettings.vue
+index 9c1aa3d..e87ea9b 100644
+--- a/frontend/src/views/settings/SystemSettings.vue
++++ b/frontend/src/views/settings/SystemSettings.vue
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { ref, onMounted } from 'vue'
++import { ref, computed, onMounted } from 'vue'
+ import api from '../../api'
+ import { useToast } from '../../composables/useToast'
+ import { useBlurCover } from '../../composables/useBlurCover'
+@@ -25,6 +25,7 @@ const connectionStatus = ref<{ ok: boolean; message: string } | null>(null)
+ const serverUrl = ref('')
+ const apiKey = ref('')
+ const userId = ref('')
++const webhookToken = ref('')
+ const enabledLibraryIds = ref<string[]>([])
+ const availableLibraries = ref<{ id: string; name: string }[]>([])
+ const librariesLoaded = ref(false)
+@@ -37,6 +38,11 @@ const hfMirror = ref('https://hf-mirror.com')
+ const pipMirror = ref('https://pypi.tuna.tsinghua.edu.cn/simple')
+ const hfToken = ref('')
+ 
++const embyWebhookUrl = computed(() => {
++  if (!webhookToken.value) return ''
++  return `${window.location.origin}/api/media-library/webhook/emby?token=${encodeURIComponent(webhookToken.value)}`
++})
++
+ onMounted(async () => {
+   await loadSettings()
+ })
+@@ -53,6 +59,7 @@ async function loadSettings() {
+         serverUrl.value = cfg.server_url || ''
+         apiKey.value = cfg.api_key || ''
+         userId.value = cfg.user_id || ''
++        webhookToken.value = cfg.webhook_token || ''
+         const ids = cfg.enabled_library_ids || ''
+         enabledLibraryIds.value = ids ? ids.split(',').map((s: string) => s.trim()).filter(Boolean) : []
+ 
+@@ -186,6 +193,16 @@ async function saveEmby() {
+   }
+ }
+ 
++async function copyWebhookUrl() {
++  if (!embyWebhookUrl.value) return
++  try {
++    await navigator.clipboard.writeText(embyWebhookUrl.value)
++    toast.success('Webhook 地址已复制')
++  } catch {
++    toast.error('复制失败，请手动复制')
++  }
++}
++
+ async function saveNetwork() {
+   networkSaving.value = true
+   try {
+@@ -293,6 +310,37 @@ function toggleLibrary(libId: string) {
+             </div>
+           </div>
+ 
++          <div class="field-row-full">
++            <div class="field-row__label-col">
++              <span class="field-row__label-text">Emby Webhook</span>
++              <span class="field-row__label-desc">Emby 媒体库变化后通知 NOOR 清空缓存</span>
++            </div>
++            <div class="field-row__input-col">
++              <div class="webhook-box">
++                <div class="webhook-url-row">
++                  <code class="webhook-url">{{ embyWebhookUrl || '保存或重新加载设置后生成 Webhook 地址' }}</code>
++                  <VuiButton
++                    variant="contained"
++                    color="secondary"
++                    size="small"
++                    customClass="settings-inline-action"
++                    :disabled="!embyWebhookUrl"
++                    @click="copyWebhookUrl"
++                  >
++                    <BaseIcon name="copy" class="w-3.5 h-3.5" />
++                    复制
++                  </VuiButton>
++                </div>
++                <div class="webhook-guide">
++                  <div>1. 在 Emby 安装并打开 Webhooks 插件。</div>
++                  <div>2. 新增 Webhook，URL 填入上面的地址，Method 选择 POST。</div>
++                  <div>3. 事件选择媒体新增、删除、更新、库扫描完成等媒体库相关事件。</div>
++                  <div>4. 保存后可在 Emby 里发送测试请求；NOOR 收到后会清空媒体库缓存。</div>
++                </div>
++              </div>
++            </div>
++          </div>
++
+           <!-- Blur Toggle -->
+           <FieldRow :label="t('settings.ui.blur')" :description="t('settings.ui.blurDesc')">
+             <div class="flex items-center gap-3">
+@@ -405,6 +453,47 @@ function toggleLibrary(libId: string) {
+   box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.1);
+ }
+ 
++.webhook-box {
++  display: flex;
++  flex-direction: column;
++  gap: 0.65rem;
++  width: 100%;
++}
++
++.webhook-url-row {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) auto;
++  gap: 0.55rem;
++  align-items: center;
++}
++
++.webhook-url {
++  min-height: 36px;
++  display: flex;
++  align-items: center;
++  padding: 0.55rem 0.7rem;
++  border-radius: var(--radius-md);
++  border: 1px solid rgba(255, 255, 255, 0.08);
++  background: rgba(255, 255, 255, 0.035);
++  color: rgba(255, 255, 255, 0.82);
++  font-family: var(--font-mono);
++  font-size: 0.72rem;
++  line-height: 1.35;
++  word-break: break-all;
++}
++
++.webhook-guide {
++  display: grid;
++  gap: 0.35rem;
++  padding: 0.7rem 0.8rem;
++  border-radius: var(--radius-md);
++  border: 1px solid rgba(0, 117, 255, 0.16);
++  background: rgba(0, 117, 255, 0.07);
++  color: rgba(255, 255, 255, 0.62);
++  font-size: 0.74rem;
++  line-height: 1.45;
++}
++
+ .settings-textarea {
+   padding: 0.625rem 0.875rem;
+   background: rgba(255, 255, 255, 0.04);

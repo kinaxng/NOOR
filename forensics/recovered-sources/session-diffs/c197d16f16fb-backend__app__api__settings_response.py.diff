@@ -1,0 +1,44 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index 2b2b0a9..e5d6755 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -49,10 +49,14 @@ def infer_runtime_root_dir(settings: Any, env_data: dict[str, str]) -> str:
+ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str, Any], lada_model_weights_dir: str, whisper_features: dict[str, Any], custom_whisper_config: dict[str, Any]) -> dict[str, Any]:
+     media_library_config = load_media_library_config()
+     settings = get_settings()
+-    whisper_strategy = normalize_whisper_strategy(env_data.get("WHISPER_STRATEGY", "chickenrice"))
++    raw_whisper_strategy = env_data.get("WHISPER_STRATEGY", "chickenrice")
++    whisper_strategy = normalize_whisper_strategy(raw_whisper_strategy)
+     env_model_backend = env_data.get("WHISPER_MODEL_BACKEND", "").strip()
+-    default_model_backend = env_model_backend or ("chickenrice-zh" if whisper_strategy == "chickenrice" else env_data.get("WHISPER_MODEL", "anime-whisper"))
+-    default_model = default_model_backend if whisper_strategy == "chickenrice" else env_data.get("WHISPER_MODEL", default_model_backend)
++    env_model = env_data.get("WHISPER_MODEL", "").strip()
++    raw_strategy_lower = raw_whisper_strategy.strip().lower()
++    legacy_strategy_model = "large-v3" if raw_strategy_lower in {"baseline", "compat", "compatibility", "fast", "faster", "qwen"} else "chickenrice-zh"
++    default_model_backend = env_model_backend or env_model or legacy_strategy_model
++    default_model = default_model_backend
+     whisper_payload = {
+         "strategy": whisper_strategy,
+         "subtitle_profile": env_data.get("WHISPER_SUBTITLE_PROFILE", "standard"),
+@@ -84,14 +88,13 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+         "framer_backend": custom_whisper_config.get("framer_backend", "vad-grouped"),
+         "custom_config": custom_whisper_config,
+     }
+-    if whisper_strategy in {"chickenrice", "recommended", "baseline", "reazon_nemo"}:
+-        whisper_payload = apply_whisper_strategy(whisper_payload, whisper_strategy)
+-        whisper_payload["custom_config"] = {
+-            **custom_whisper_config,
+-            "timestamp_mode": whisper_payload.get("timestamp_mode", "aligner_interpolation"),
+-            "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
+-            "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
+-        }
++    whisper_payload = apply_whisper_strategy(whisper_payload, raw_whisper_strategy)
++    whisper_payload["custom_config"] = {
++        **custom_whisper_config,
++        "timestamp_mode": whisper_payload.get("timestamp_mode", "aligner_interpolation"),
++        "aligner_backend": whisper_payload.get("aligner_backend", "qwen3"),
++        "framer_backend": whisper_payload.get("framer_backend", "vad-grouped"),
++    }
+     configured_facefusion_dir = env_data.get("FACEFUSION_DIR", settings.facefusion_dir)
+     facefusion_source = resolve_facefusion_source(configured_facefusion_dir)
+     facefusion_native_model_dir, facefusion_model_dir_mode = inspect_facefusion_model_dir(

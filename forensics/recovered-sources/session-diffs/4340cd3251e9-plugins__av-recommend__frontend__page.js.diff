@@ -1,0 +1,13 @@
+diff --git a/plugins/av-recommend/frontend/page.js b/plugins/av-recommend/frontend/page.js
+index 57e1138..4bbba89 100644
+--- a/plugins/av-recommend/frontend/page.js
++++ b/plugins/av-recommend/frontend/page.js
+@@ -319,6 +319,8 @@ export async function mount(root, sdk) {
+       else if (item.match_level === 'weak') people.appendChild(badge('弱匹配', 'soft'))
+       for (const source of (resourceSummary.providers || []).slice(0, 3)) people.appendChild(badge(`${source.name}×${source.count}`, 'info'))
+       for (const name of (item.actors || []).slice(0, 4)) people.appendChild(badge(name, 'soft'))
++      if (item.series) people.appendChild(badge(`系列 ${item.series}`, 'soft'))
++      if (item.director) people.appendChild(badge(`导演 ${item.director}`, 'muted'))
+       for (const name of (item.categories || []).slice(0, 5)) people.appendChild(badge(name, 'muted'))
+       const breakdown = item.score_breakdown || {}
+       const scoreParts = el('div', 'av-rec-score-parts')

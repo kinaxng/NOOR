@@ -1,0 +1,12 @@
+diff --git a/backend/app/core/models.py b/backend/app/core/models.py
+index d739e95..a6dcb06 100644
+--- a/backend/app/core/models.py
++++ b/backend/app/core/models.py
+@@ -85,6 +85,7 @@ class JobCreate(BaseModel):
+     emby_item_name: str
+     input_path: str
+     settings: JobSettings = Field(default_factory=JobSettings)
++    job_type: Optional[str] = None
+     chain_id: Optional[str] = None
+     depends_on_task_id: Optional[str] = None
+     parent_task_id: Optional[str] = None

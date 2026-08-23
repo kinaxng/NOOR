@@ -1,0 +1,25 @@
+diff --git a/backend/app/api/settings_helpers.py b/backend/app/api/settings_helpers.py
+index ad03a4e..d8c4caf 100644
+--- a/backend/app/api/settings_helpers.py
++++ b/backend/app/api/settings_helpers.py
+@@ -12,7 +12,7 @@ import time
+ from pathlib import Path
+ from typing import Optional
+ 
+-from app.core.config import DEFAULT_LADA_MODEL_WEIGHTS_DIR, PROJECT_ROOT, get_settings
++from app.core.config import DEFAULT_NOOR_DATA_DIR, PROJECT_ROOT, get_settings
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -116,7 +116,10 @@ def update_env_value(key: str, value: str) -> None:
+ 
+ 
+ def get_lada_model_weights_dir_from_env(env_data: dict[str, str]) -> str:
+-    return env_data.get(LADA_MODEL_WEIGHTS_ENV) or DEFAULT_LADA_MODEL_WEIGHTS_DIR
++    if env_data.get(LADA_MODEL_WEIGHTS_ENV):
++        return env_data[LADA_MODEL_WEIGHTS_ENV]
++    data_dir = Path(env_data.get("NOOR_DATA_DIR") or DEFAULT_NOOR_DATA_DIR)
++    return str(data_dir / "models" / "lada")
+ 
+ 
+ def python_executable() -> str:

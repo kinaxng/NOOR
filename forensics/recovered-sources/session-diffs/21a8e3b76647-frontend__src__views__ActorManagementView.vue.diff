@@ -1,0 +1,110 @@
+diff --git a/frontend/src/views/ActorManagementView.vue b/frontend/src/views/ActorManagementView.vue
+index 82d806e..6d5fd9e 100644
+--- a/frontend/src/views/ActorManagementView.vue
++++ b/frontend/src/views/ActorManagementView.vue
+@@ -6,22 +6,20 @@ import VuiButton from '../components/ui/Button/VuiButton.vue'
+ import NoorPagination from '../components/ui/Pagination.vue'
+ import { useI18n } from '../composables/useI18n'
+ import { useToast } from '../composables/useToast'
+-import type { MediaActor, MediaActorDuplicateGroup } from '../api/types'
++import type { MediaActor } from '../api/types'
+ 
+ type SortKey = 'SortName' | 'DateCreated'
+ type SortOrder = 'Ascending' | 'Descending'
+ 
+-const { t, i18nVersion } = useI18n()
++const { t, i18nVersion, currentLang } = useI18n()
+ const toast = useToast()
+ 
+ const actors = ref<MediaActor[]>([])
+-const duplicateGroups = ref<MediaActorDuplicateGroup[]>([])
+ const loading = ref(false)
+ const duplicateLoading = ref(false)
+ const mappingUploading = ref(false)
+ const mappingImporting = ref(false)
+ const mappingMatching = ref(false)
+-const mappingFile = ref<any | null>(null)
+ const mappingStatus = ref<any | null>(null)
+ const mappingMatches = ref<any | null>(null)
+ const showMappingMatches = ref(false)
+@@ -32,7 +30,6 @@ const pageSize = 60
+ const total = ref(0)
+ const sortBy = ref<SortKey>('SortName')
+ const sortOrder = ref<SortOrder>('Ascending')
+-const showDuplicates = ref(false)
+ 
+ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+ const resultLabel = computed(() => {
+@@ -56,6 +53,7 @@ async function loadActors() {
+         q: query.value.trim() || undefined,
+         sort_by: sortBy.value,
+         sort_order: sortOrder.value,
++        lang: currentLang.value,
+       },
+     })
+     actors.value = resp.data.actors || []
+@@ -71,25 +69,8 @@ async function loadActors() {
+ 
+ async function loadDuplicates() {
+   duplicateLoading.value = true
+-  try {
+-    const resp = await api.get('/media-library/actors/duplicates')
+-    duplicateGroups.value = resp.data.groups || []
+-    showDuplicates.value = true
+-  } catch (error: any) {
+-    duplicateGroups.value = []
+-    toast.error(error?.response?.data?.detail || error?.message || t('files.actors.duplicatesFailed'))
+-  } finally {
+-    duplicateLoading.value = false
+-  }
+-}
+-
+-async function loadLatestMappingUpload() {
+-  try {
+-    const resp = await api.get('/media-library/actors/mapping/latest-upload')
+-    mappingFile.value = resp.data.uploaded ? resp.data.file : null
+-  } catch {
+-    mappingFile.value = null
+-  }
++  await previewMappingMatches()
++  duplicateLoading.value = false
+ }
+ 
+ async function loadMappingStatus() {
+@@ -117,9 +98,11 @@ async function uploadMappingFile(event: Event) {
+     const resp = await api.post('/media-library/actors/mapping/upload', form, {
+       headers: { 'Content-Type': 'multipart/form-data' },
+     })
+-    mappingFile.value = resp.data.file || null
+-    await loadMappingStatus()
+-    toast.success(t('files.actors.mappingUploadSuccess'))
++    if (!resp.data.ok) throw new Error(t('files.actors.mappingUploadFailed'))
++    const imported = await api.post('/media-library/actors/mapping/import-latest')
++    mappingStatus.value = { imported: true, ...(imported.data.mapping || {}) }
++    toast.success(t('files.actors.mappingImportSuccess'))
++    loadActors()
+   } catch (error: any) {
+     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingUploadFailed'))
+   } finally {
+@@ -133,6 +116,7 @@ async function importLatestMapping() {
+     const resp = await api.post('/media-library/actors/mapping/import-latest')
+     mappingStatus.value = { imported: true, ...(resp.data.mapping || {}) }
+     toast.success(t('files.actors.mappingImportSuccess'))
++    loadActors()
+   } catch (error: any) {
+     toast.error(error?.response?.data?.detail || error?.message || t('files.actors.mappingImportFailed'))
+   } finally {
+@@ -179,9 +163,12 @@ watch(page, () => {
+   loadActors()
+ })
+ 
++watch(currentLang, () => {
++  loadActors()
++})
++
+ onMounted(() => {
+   loadActors()
+-  loadLatestMappingUpload()
+   loadMappingStatus()
+ })
+ </script>

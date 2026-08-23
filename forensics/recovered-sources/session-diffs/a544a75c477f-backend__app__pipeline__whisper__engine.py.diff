@@ -1,0 +1,32 @@
+diff --git a/backend/app/pipeline/whisper/engine.py b/backend/app/pipeline/whisper/engine.py
+index 7be4dad..4f6398c 100644
+--- a/backend/app/pipeline/whisper/engine.py
++++ b/backend/app/pipeline/whisper/engine.py
+@@ -17,6 +17,12 @@ from .types import (
+ from .runtime import raise_if_cancelled, run_cancellable_subprocess
+ 
+ 
++def _model_cache_candidates(base_dir: str, model_id: str) -> list[Path]:
++    from app.api.settings_whisper_models import resolve_model_cache_candidates
++
++    return resolve_model_cache_candidates(base_dir, model_id)
++
++
+ def _resolve_whisper_storage() -> tuple[str, str, str]:
+     from app.core.config import get_settings
+     from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+@@ -31,13 +37,7 @@ def _resolve_whisper_storage() -> tuple[str, str, str]:
+ 
+ 
+ def _iter_hf_repo_paths(base_dir: str, model_id: str) -> list[Path]:
+-    base = Path(base_dir)
+-    repo_dir = f"models--{model_id.replace('/', '--')}"
+-    return [
+-        base / repo_dir,
+-        base / "hub" / repo_dir,
+-        base / "huggingface" / "hub" / repo_dir,
+-    ]
++    return _model_cache_candidates(base_dir, model_id)
+ 
+ 
+ def _hf_model_cached(base_dir: str, model_id: str) -> bool:

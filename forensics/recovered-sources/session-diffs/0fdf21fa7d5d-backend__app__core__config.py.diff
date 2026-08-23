@@ -1,0 +1,12 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index f0cb5a1..c96e37c 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -113,6 +113,7 @@ class Settings(BaseSettings):
+     facefusion_log_level: str = "info"
+     facefusion_download_providers: str = "github huggingface"
+     facefusion_halt_on_error: bool = False
++    facefusion_badge_always_visible: bool = False
+     facefusion_preview_mode: str = "default"
+     facefusion_preview_resolution: str = "768x768"
+     facefusion_processors: str = ""

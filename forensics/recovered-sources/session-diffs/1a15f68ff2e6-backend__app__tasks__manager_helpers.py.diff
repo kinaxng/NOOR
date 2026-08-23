@@ -1,0 +1,39 @@
+diff --git a/backend/app/tasks/manager_helpers.py b/backend/app/tasks/manager_helpers.py
+index e79452c..3eab7f1 100644
+--- a/backend/app/tasks/manager_helpers.py
++++ b/backend/app/tasks/manager_helpers.py
+@@ -2,17 +2,23 @@ from __future__ import annotations
+ 
+ import os
+ from datetime import datetime, timezone
++from pathlib import Path
+ 
+-LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cache', 'logs')
+-os.makedirs(LOGS_DIR, exist_ok=True)
++from app.core.runtime_paths import data_path
+ 
+ 
+ def utcnow_naive() -> datetime:
+     return datetime.now(timezone.utc).replace(tzinfo=None)
+ 
+ 
++def logs_dir() -> Path:
++    path = data_path("runtime", "jobs", "logs")
++    path.mkdir(parents=True, exist_ok=True)
++    return path
++
++
+ def log_file_path(job_id: str) -> str:
+-    return os.path.join(LOGS_DIR, f'{job_id}.log')
++    return str(logs_dir() / f'{job_id}.log')
+ 
+ 
+ def read_log_lines(job_id: str) -> list[str]:
+@@ -28,6 +34,7 @@ def read_log_lines(job_id: str) -> list[str]:
+ 
+ def append_log_line(job_id: str, log: str) -> None:
+     log_file = log_file_path(job_id)
++    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+     with open(log_file, 'a', encoding='utf-8') as f:
+         f.write(log + '\n')
+ 

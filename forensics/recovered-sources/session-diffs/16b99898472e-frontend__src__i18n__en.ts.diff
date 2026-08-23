@@ -1,0 +1,21 @@
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index d409436..67c6119 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -360,6 +360,7 @@ export const en: Record<string, string> = {
+   'mediacard.chinese': 'Chinese',
+   'mediacard.cracked': 'Cracked',
+   'mediacard.crack': 'Crack',
++  'mediacard.facefusion': 'Face Swap',
+   'mediacard.noCover': 'NO COVER',
+ 
+   // Detail Modal
+@@ -582,7 +583,7 @@ export const en: Record<string, string> = {
+   'settings.tab.system': 'System',
+   'settings.tab.storage': 'Storage',
+   'settings.tab.lada': 'LADA',
+-  'settings.tab.facefusion': 'FaceFusion',
++  'settings.tab.facefusion': 'Face Swap',
+   'settings.tab.whisper': 'Whisper',
+   'settings.tab.local-library': 'Subtitle Library',
+   'settings.emby.title': 'Media Server Connection',

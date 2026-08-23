@@ -1,0 +1,33 @@
+diff --git a/backend/tests/test_whisper_strategy.py b/backend/tests/test_whisper_strategy.py
+index c89240d..b80df08 100644
+--- a/backend/tests/test_whisper_strategy.py
++++ b/backend/tests/test_whisper_strategy.py
+@@ -47,6 +47,28 @@ def test_apply_whisper_strategy_preserves_large_v3_backend_option():
+     assert payload["pipeline_mode"] == "faster"
+ 
+ 
++def test_apply_whisper_strategy_preserves_editable_vad_settings():
++    payload = apply_whisper_strategy(
++        {
++            "model_backend": "chickenrice-zh",
++            "vad_backend": "whisper_vad_onnx",
++            "chunker": "smart_vad_chunk",
++            "target_chunk_duration_s": 24,
++            "max_chunk_duration_s": 36,
++            "segment_merge_max_gap_ms": 1200,
++            "segment_merge_max_duration_ms": 18000,
++        },
++        "chickenrice",
++    )
++
++    assert payload["vad_backend"] == "whisper_vad_onnx"
++    assert payload["chunker"] == "smart_vad_chunk"
++    assert payload["target_chunk_duration_s"] == 24
++    assert payload["max_chunk_duration_s"] == 36
++    assert payload["segment_merge_max_gap_ms"] == 1200
++    assert payload["segment_merge_max_duration_ms"] == 18000
++
++
+ def test_recommended_strategy_matches_current_single_chain():
+     assert is_recommended_whisper_strategy("advanced") is True
+     assert is_recommended_whisper_strategy("best") is True

@@ -1,0 +1,60 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index 61c3777..83e74e4 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -53,6 +53,8 @@ class Settings(BaseSettings):
+ 
+     # Storage
+     noor_data_dir: str = DEFAULT_NOOR_DATA_DIR
++    model_root_dir: str = ""
++    runtime_root_dir: str = ""
+     source_dir: str = ""  # Emby media source directory (for hardlinks)
+     output_dir: str = ""  # Lada output directory
+     whisper_model_dir: str = ""  # Whisper model storage directory
+@@ -169,23 +171,27 @@ class Settings(BaseSettings):
+     @model_validator(mode="after")
+     def apply_storage_defaults(self):
+         data_dir = Path(self.noor_data_dir or DEFAULT_NOOR_DATA_DIR)
++        model_root = Path(self.model_root_dir or data_dir / "models")
++        runtime_root = Path(self.runtime_root_dir or data_dir / "runtime")
+ 
+         def fill(attr: str, path: Path) -> None:
+             if not (getattr(self, attr, "") or "").strip():
+                 setattr(self, attr, str(path))
+ 
+-        fill("whisper_model_dir", data_dir / "models" / "whisper")
+-        fill("whisper_cache_dir", data_dir / "runtime" / "whisper" / "cache")
+-        fill("whisper_temp_dir", data_dir / "runtime" / "whisper" / "temp")
+-        fill("audio_separator_model_dir", data_dir / "models" / "whisper" / "audio-separator")
+-        fill("reazon_model_dir", data_dir / "models" / "whisper" / "reazon")
++        fill("model_root_dir", model_root)
++        fill("runtime_root_dir", runtime_root)
++        fill("whisper_model_dir", model_root / "whisper")
++        fill("whisper_cache_dir", runtime_root / "whisper" / "cache")
++        fill("whisper_temp_dir", runtime_root / "whisper" / "temp")
++        fill("audio_separator_model_dir", model_root / "whisper" / "audio-separator")
++        fill("reazon_model_dir", model_root / "whisper" / "reazon")
+         fill("reazon_nemo_model_path", Path(self.reazon_model_dir) / "reazonspeech-nemo-v2.nemo")
+-        fill("lada_model_dir", data_dir / "models" / "lada")
+-        fill("lada_cache_dir", data_dir / "runtime" / "lada" / "cache")
+-        fill("lada_temp_dir", data_dir / "runtime" / "lada" / "temp")
+-        fill("facefusion_model_dir", data_dir / "models" / "facefusion")
+-        fill("facefusion_cache_dir", data_dir / "runtime" / "facefusion" / "cache")
+-        fill("facefusion_temp_dir", data_dir / "runtime" / "facefusion" / "temp")
++        fill("lada_model_dir", model_root / "lada")
++        fill("lada_cache_dir", runtime_root / "lada" / "cache")
++        fill("lada_temp_dir", runtime_root / "lada" / "temp")
++        fill("facefusion_model_dir", model_root / "facefusion")
++        fill("facefusion_cache_dir", runtime_root / "facefusion" / "cache")
++        fill("facefusion_temp_dir", runtime_root / "facefusion" / "temp")
+         fill("database_url", data_dir / "noor.db")
+         if self.database_url and "://" not in self.database_url:
+             self.database_url = f"sqlite+aiosqlite:///{self.database_url}"
+@@ -249,6 +255,7 @@ class Settings(BaseSettings):
+         env_file=str(ENV_FILE_PATH),
+         env_file_encoding="utf-8",
+         extra="ignore",
++        protected_namespaces=("settings_",),
+     )
+ 
+ 

@@ -1,0 +1,15 @@
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index 141fb5c..ef2e690 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -103,6 +103,10 @@ export const en: Record<string, string> = {
+   'files.actors.nameSyncApplyConfirm': 'Write current-language names to Emby for {count} non-conflicting actors and skip {conflicts} conflicting actors.',
+   'files.actors.nameSyncApplySuccess': 'Synced names for {count} actors',
+   'files.actors.nameSyncApplyFailed': 'Failed to sync actor names',
++  'files.actors.nameSyncProgressRunning': 'Writing to Emby',
++  'files.actors.nameSyncProgressDone': 'Name sync completed',
++  'files.actors.nameSyncProgressCounts': 'Processed {processed}/{total} · Applied {applied} · Skipped {skipped}',
++  'files.actors.nameSyncProgressCurrent': 'Current: {name} -> {target}',
+   'files.actors.nameSyncConflictsTitle': 'Conflicts to Review First',
+   'files.actors.nameSyncConflictWith': 'Conflict: {names}',
+   'files.actors.nameSyncConflict': 'Conflict',

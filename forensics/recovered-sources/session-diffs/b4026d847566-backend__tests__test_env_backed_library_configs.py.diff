@@ -1,0 +1,40 @@
+diff --git a/backend/tests/test_env_backed_library_configs.py b/backend/tests/test_env_backed_library_configs.py
+index f0dd6ee..019a7d1 100644
+--- a/backend/tests/test_env_backed_library_configs.py
++++ b/backend/tests/test_env_backed_library_configs.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ import json
++import sqlite3
+ 
+ import pytest
+ 
+@@ -96,5 +97,26 @@ def test_legacy_library_files_use_noor_data_dir(monkeypatch: pytest.MonkeyPatch,
+     monkeypatch.setattr(local_library, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+ 
+     assert media_library_helpers.config_path() == tmp_path / "media_library_config.json"
+-    assert local_library._index_db_path() == tmp_path / "subtitle_index.db"
++    assert local_library._index_db_path() == tmp_path / "runtime" / "subtitle_library" / "subtitle_index.db"
+     assert tmp_path.exists()
++
++
++def test_local_subtitle_index_migrates_legacy_root_db(monkeypatch: pytest.MonkeyPatch, tmp_path):
++    legacy_path = tmp_path / "subtitle_index.db"
++    conn = sqlite3.connect(legacy_path)
++    conn.execute("CREATE TABLE subtitle_index (base_name TEXT)")
++    conn.execute("INSERT INTO subtitle_index (base_name) VALUES ('ABC-123')")
++    conn.commit()
++    conn.close()
++    monkeypatch.setattr(local_library, "data_path", lambda *parts: tmp_path.joinpath(*parts))
++
++    new_path = local_library._index_db_path()
++
++    assert new_path == tmp_path / "runtime" / "subtitle_library" / "subtitle_index.db"
++    assert new_path.is_file()
++    conn = sqlite3.connect(new_path)
++    try:
++        row = conn.execute("SELECT base_name FROM subtitle_index").fetchone()
++    finally:
++        conn.close()
++    assert row == ("ABC-123",)

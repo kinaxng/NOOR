@@ -1,0 +1,32 @@
+diff --git a/backend/app/pipeline/whisper/orchestrator.py b/backend/app/pipeline/whisper/orchestrator.py
+index 27c89b6..9e2932b 100644
+--- a/backend/app/pipeline/whisper/orchestrator.py
++++ b/backend/app/pipeline/whisper/orchestrator.py
+@@ -21,6 +21,7 @@ from .engine import (
+ from .japanese_post import JapanesePostProcessor, SubtitleSafetyPostProcessor
+ from .scene_detector import AudioSceneDetector, WhisperVadOnnxSceneDetector
+ from .runtime import raise_if_cancelled
++from .timing_refiner import SubtimerVadTimingRefiner
+ from app.api.settings_whisper_models import resolve_model_cache_candidates
+ from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+ 
+@@ -310,6 +311,19 @@ class WhisperPipeline:
+         except Exception as e:
+             self.log(f"后处理失败（跳过）: {e}")
+ 
++        timing_refiner = str(getattr(self.config, "timing_refiner", "none") or "none").strip().lower()
++        if timing_refiner == "subtimer_vad":
++            try:
++                self._raise_if_cancelled()
++                scene_bounds = [(start, end) for _, start, end in all_segments]
++                refiner = SubtimerVadTimingRefiner()
++                result, changed = refiner.refine(result, scene_bounds)
++                self.log(f"实验时间轴微调: subtimer-vad 调整 {changed}/{len(result.segments)} 段", 96)
++            except Exception as e:
++                self.log(f"实验时间轴微调失败（跳过）: {e}")
++        elif timing_refiner not in {"", "none"}:
++            self.log(f"未知时间轴微调模式，已跳过: {timing_refiner}")
++
+         # Phase: 生成 SRT
+         self.log("=" * 50)
+         self.log("生成 SRT 文件", 97)

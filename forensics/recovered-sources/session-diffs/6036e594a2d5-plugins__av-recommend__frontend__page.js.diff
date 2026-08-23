@@ -1,0 +1,80 @@
+diff --git a/plugins/av-recommend/frontend/page.js b/plugins/av-recommend/frontend/page.js
+index 8a8f86e..cead60a 100644
+--- a/plugins/av-recommend/frontend/page.js
++++ b/plugins/av-recommend/frontend/page.js
+@@ -24,7 +24,29 @@ function imageCandidates(...values) {
+   return out
+ }
+ 
+-function renderFallbackImage(host, candidates, placeholder) {
++async function loadJavdbImageCandidates(sdk, code) {
++  const text = String(code || '').trim()
++  if (!text) return []
++  try {
++    let payload
++    if (sdk.api?.post) {
++      const resp = await sdk.api.post('/plugins/javdb/actions/video', { payload: { code: text, refresh: true } })
++      payload = resp.data
++    } else {
++      payload = await fetch('/api/plugins/javdb/actions/video', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ payload: { code: text, refresh: true } }),
++      }).then(r => r.json())
++    }
++    const data = payload?.data || payload
++    return imageCandidates(data?.cover_url, data?.thumb_url, data?.fanart_url, data?.previews, data?.preview_images)
++  } catch {
++    return []
++  }
++}
++
++function renderFallbackImage(host, candidates, placeholder, onExhausted) {
+   const urls = imageCandidates(candidates)
+   host.innerHTML = ''
+   if (!urls.length) {
+@@ -33,12 +55,27 @@ function renderFallbackImage(host, candidates, placeholder) {
+   }
+   const img = document.createElement('img')
+   let index = 0
++  let refreshed = false
+   img.loading = 'lazy'
+   img.alt = ''
+-  img.onerror = () => {
++  img.onerror = async () => {
+     index += 1
+-    if (index < urls.length) img.src = urls[index]
+-    else {
++    if (index < urls.length) {
++      img.src = urls[index]
++      return
++    }
++    if (!refreshed && typeof onExhausted === 'function') {
++      refreshed = true
++      const fresh = imageCandidates(await onExhausted())
++      for (const url of fresh) {
++        if (!urls.includes(url)) urls.push(url)
++      }
++      if (index < urls.length) {
++        img.src = urls[index]
++        return
++      }
++    }
++    {
+       host.innerHTML = ''
+       host.textContent = placeholder || 'NO IMAGE'
+     }
+@@ -669,7 +706,12 @@ export async function mount(root, sdk) {
+       const image = el('button', 'av-rec-cover')
+       image.type = 'button'
+       image.onclick = () => openDetail(item)
+-      renderFallbackImage(image, imageCandidates(item.image_candidates, item.fanart_url, item.cover_url, item.thumb_url, item.image, item.poster_url, item.jacket_url), item.code || 'NO IMAGE')
++      renderFallbackImage(
++        image,
++        imageCandidates(item.image_candidates, item.fanart_url, item.cover_url, item.thumb_url, item.image, item.poster_url, item.jacket_url),
++        item.code || 'NO IMAGE',
++        () => loadJavdbImageCandidates(sdk, item.code || item.number),
++      )
+       const body = el('section', 'av-rec-body')
+       const head = el('div', 'av-rec-card-head')
+       const title = el('button', 'av-rec-card-title')

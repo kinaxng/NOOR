@@ -1,0 +1,13 @@
+diff --git a/plugins/javdb/frontend/page.js b/plugins/javdb/frontend/page.js
+index a205efb..36c83d9 100644
+--- a/plugins/javdb/frontend/page.js
++++ b/plugins/javdb/frontend/page.js
+@@ -909,7 +909,7 @@ export async function mount(root, sdk) {
+         el('strong', 'javdb-actor-select-badge__value', selected?.label || options?.[0]?.label || ''),
+         el('span', 'javdb-actor-select-badge__caret'),
+       )
+-      const native = el('select', 'javdb-actor-select-badge__native')
++      const native = el('select', 'javdb-actor-select-badge__native noor-plugin-select')
+       ;(Array.isArray(options) ? options : []).forEach(option => {
+         const item = el('option')
+         item.value = option.value

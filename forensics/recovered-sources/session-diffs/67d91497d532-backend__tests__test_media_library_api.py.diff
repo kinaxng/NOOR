@@ -1,0 +1,107 @@
+diff --git a/backend/tests/test_media_library_api.py b/backend/tests/test_media_library_api.py
+index c0493f2..0e162a5 100644
+--- a/backend/tests/test_media_library_api.py
++++ b/backend/tests/test_media_library_api.py
+@@ -124,9 +124,20 @@ def test_parse_person_reads_provider_ids_case_insensitively():
+     person = {
+         "Id": "actor-1",
+         "Name": "柏木小夏",
+-        "ProviderIds": {"tmdb": "3413916", "imdb": "nm-example", "Twitter": "actor_x", "Instagram": "actor_ins"},
++        "ProviderIds": {
++            "tmdb": "3413916",
++            "imdb": "nm-example",
++            "Twitter": "actor_x",
++            "Instagram": "actor_ins",
++            "TikTok": "actor_tok",
++            "YouTube": "channel-1",
++            "Wikidata": "Q1",
++        },
+         "PremiereDate": "1998-01-02T00:00:00.0000000Z",
+         "ProductionLocations": ["Tokyo, Japan"],
++        "Gender": "female",
++        "KnownForDepartment": "Acting",
++        "Popularity": 12.5,
+     }
+ 
+     parsed = media_library._parse_person({"server_url": "http://server"}, person)
+@@ -135,8 +146,14 @@ def test_parse_person_reads_provider_ids_case_insensitively():
+     assert parsed["imdb_id"] == "nm-example"
+     assert parsed["birthday"] == "1998-01-02T00:00:00.0000000Z"
+     assert parsed["place_of_birth"] == "Tokyo, Japan"
++    assert parsed["gender"] == "female"
++    assert parsed["known_for_department"] == "Acting"
++    assert parsed["popularity"] == 12.5
+     assert parsed["external_urls"]["x"] == "https://x.com/actor_x"
+     assert parsed["external_urls"]["instagram"] == "https://www.instagram.com/actor_ins/"
++    assert parsed["external_urls"]["tiktok"] == "https://www.tiktok.com/@actor_tok"
++    assert parsed["external_urls"]["youtube"] == "https://www.youtube.com/channel-1"
++    assert parsed["external_urls"]["wikidata"] == "https://www.wikidata.org/wiki/Q1"
+ 
+ 
+ def test_apply_actor_profile_override_updates_fields_and_clears_provider_id():
+@@ -157,7 +174,11 @@ def test_apply_actor_profile_override_updates_fields_and_clears_provider_id():
+             "overview": "简介",
+             "birthday": "1997-02-16",
+             "place_of_birth": "Fukuoka, Japan",
+-            "external_urls": {"x": "https://x.com/miu"},
++            "gender": "female",
++            "known_for_department": "Acting",
++            "popularity": 10.5,
++            "homepage": "https://example.com",
++            "external_urls": {"x": "https://x.com/miu", "homepage": "https://example.com"},
+             "provider_ids": {"Tmdb": "", "Imdb": "nm-new"},
+         },
+     )
+@@ -167,6 +188,10 @@ def test_apply_actor_profile_override_updates_fields_and_clears_provider_id():
+     assert result["overview"] == "简介"
+     assert result["birthday"] == "1997-02-16"
+     assert result["place_of_birth"] == "Fukuoka, Japan"
++    assert result["gender"] == "female"
++    assert result["known_for_department"] == "Acting"
++    assert result["popularity"] == 10.5
++    assert result["homepage"] == "https://example.com"
+     assert result["external_urls"]["x"] == "https://x.com/miu"
+     assert result["provider_ids"] == {"Imdb": "nm-new", "MetaTube": "Gfriends:old"}
+     assert result["tmdb_id"] is None
+@@ -319,7 +344,19 @@ async def test_preview_actor_tmdb_metadata_returns_diffs(monkeypatch: pytest.Mon
+                     'profile_path': '/profile.jpg',
+                     'birthday': '1997-02-16',
+                     'place_of_birth': 'Fukuoka, Japan',
+-                    'external_ids': {'imdb_id': 'nm123', 'twitter_id': 'shiromine_miu', 'instagram_id': 'miu_shiromine'},
++                    'gender': 1,
++                    'known_for_department': 'Acting',
++                    'popularity': 22.7,
++                    'homepage': 'https://example.com/miu',
++                    'external_ids': {
++                        'imdb_id': 'nm123',
++                        'twitter_id': 'shiromine_miu',
++                        'instagram_id': 'miu_shiromine',
++                        'tiktok_id': 'miu_tok',
++                        'youtube_id': 'channel-1',
++                        'wikidata_id': 'Q123',
++                        'facebook_id': 'miu.fb',
++                    },
+                 },
+             )
+         raise AssertionError(f'unexpected request: {method} {url} {params}')
+@@ -339,9 +376,19 @@ async def test_preview_actor_tmdb_metadata_returns_diffs(monkeypatch: pytest.Mon
+     assert result['proposal']['provider_ids']['Imdb'] == 'nm123'
+     assert result['proposal']['provider_ids']['Twitter'] == 'shiromine_miu'
+     assert result['proposal']['provider_ids']['Instagram'] == 'miu_shiromine'
++    assert result['proposal']['provider_ids']['TikTok'] == 'miu_tok'
++    assert result['proposal']['provider_ids']['YouTube'] == 'channel-1'
++    assert result['proposal']['provider_ids']['Wikidata'] == 'Q123'
++    assert result['proposal']['gender'] == 'female'
++    assert result['proposal']['known_for_department'] == 'Acting'
++    assert result['proposal']['popularity'] == 22.7
++    assert result['proposal']['homepage'] == 'https://example.com/miu'
+     assert result['proposal']['external_urls']['x'] == 'https://x.com/shiromine_miu'
+     assert result['proposal']['external_urls']['instagram'] == 'https://www.instagram.com/miu_shiromine/'
+-    assert {item['field'] for item in result['diffs']} >= {'name', 'overview', 'birthday', 'place_of_birth', 'imdb_id', 'image_url'}
++    assert result['proposal']['external_urls']['tiktok'] == 'https://www.tiktok.com/@miu_tok'
++    assert result['proposal']['external_urls']['youtube'] == 'https://www.youtube.com/channel-1'
++    assert result['proposal']['external_urls']['wikidata'] == 'https://www.wikidata.org/wiki/Q123'
++    assert {item['field'] for item in result['diffs']} >= {'name', 'overview', 'birthday', 'place_of_birth', 'gender', 'known_for_department', 'homepage', 'imdb_id', 'image_url'}
+ 
+ 
+ @pytest.mark.asyncio

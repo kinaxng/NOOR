@@ -1,0 +1,35 @@
+diff --git a/backend/app/tasks/manager.py b/backend/app/tasks/manager.py
+index c9efbdf..e6b63c7 100644
+--- a/backend/app/tasks/manager.py
++++ b/backend/app/tasks/manager.py
+@@ -13,6 +13,7 @@ import httpx
+ from app.core.database import async_session_maker
+ from app.core.models import Job, JobCreate, JobResponse
+ from app.core.config import get_settings
++from app.pipeline.facefusion.runner import run_facefusion_restoration
+ from app.pipeline.lada.runner import run_lada_restoration
+ from app.tasks.job_phases import (
+     get_phase_display_state,
+@@ -24,6 +25,7 @@ from app.tasks.job_phases import (
+ )
+ from app.tasks.manager_helpers import (
+     append_log_line,
++    build_facefusion_output_path,
+     build_lada_output_path,
+     log_file_path,
+     read_log_lines,
+@@ -608,6 +610,7 @@ class JobManager:
+             emby_item_id=job.emby_item_id,
+             emby_item_name=job.emby_item_name,
+             input_path=job.input_path,
++            job_type=job.job_type,
+             settings=job.settings or {},
+             chain_id=job.chain_id,
+             depends_on_task_id=job.depends_on_task_id,
+@@ -788,7 +791,7 @@ class JobManager:
+         return response
+ 
+     async def enqueue(self, job_data: JobCreate, job_type: str = "lada") -> JobResponse:
+-        """入队 Lada 或 Whisper 任务"""
++        """入队 Lada / FaceFusion / Whisper 任务"""
+         return await self.create_job(job_data, job_type=job_type, status="queued", enqueue_now=True)

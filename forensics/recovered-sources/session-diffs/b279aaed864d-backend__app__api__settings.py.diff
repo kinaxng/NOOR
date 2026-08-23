@@ -1,0 +1,13 @@
+diff --git a/backend/app/api/settings.py b/backend/app/api/settings.py
+index fd277f4..78b41b3 100644
+--- a/backend/app/api/settings.py
++++ b/backend/app/api/settings.py
+@@ -158,6 +158,8 @@ class FaceFusionDefaultsConfig(BaseModel):
+     log_level: str = "info"
+     download_providers: str = "github huggingface"
+     halt_on_error: bool = False
++    preview_mode: str = "default"
++    preview_resolution: str = "768x768"
+     processors: str = ""
+     face_swapper_model: str = "hyperswap_1a_256"
+     face_swapper_pixel_boost: str = "256x256"

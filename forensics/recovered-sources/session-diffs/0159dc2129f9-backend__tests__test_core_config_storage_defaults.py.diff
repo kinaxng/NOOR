@@ -1,0 +1,25 @@
+diff --git a/backend/tests/test_core_config_storage_defaults.py b/backend/tests/test_core_config_storage_defaults.py
+index cf40c2f..ca3d9f0 100644
+--- a/backend/tests/test_core_config_storage_defaults.py
++++ b/backend/tests/test_core_config_storage_defaults.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ from pathlib import Path
+ 
+-from app.core.config import Settings
++from app.core.config import DEFAULT_NOOR_DATA_DIR, DEFAULT_REAZON_MODEL_DIR, DEFAULT_REAZON_NEMO_MODEL_PATH, Settings
+ from app.core.runtime_paths import apply_whisper_cache_env, build_whisper_cache_env, data_path, plugin_cache_path, plugin_data_path
+ 
+ 
+@@ -24,6 +24,11 @@ def test_storage_defaults_derive_from_noor_data_dir():
+     assert settings.database_url == "sqlite+aiosqlite:////noor-data/noor.db"
+ 
+ 
++def test_reazon_constants_derive_from_default_noor_data_dir():
++    assert DEFAULT_REAZON_MODEL_DIR == str(Path(DEFAULT_NOOR_DATA_DIR) / "models" / "whisper" / "reazon")
++    assert DEFAULT_REAZON_NEMO_MODEL_PATH == str(Path(DEFAULT_REAZON_MODEL_DIR) / "reazonspeech-nemo-v2.nemo")
++
++
+ def test_storage_defaults_keep_explicit_overrides():
+     settings = Settings(
+         _env_file=None,

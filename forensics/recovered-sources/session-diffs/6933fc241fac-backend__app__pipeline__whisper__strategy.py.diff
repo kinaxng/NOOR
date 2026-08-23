@@ -1,0 +1,34 @@
+diff --git a/backend/app/pipeline/whisper/strategy.py b/backend/app/pipeline/whisper/strategy.py
+index c35ccfe..25ecba2 100644
+--- a/backend/app/pipeline/whisper/strategy.py
++++ b/backend/app/pipeline/whisper/strategy.py
+@@ -65,15 +65,29 @@ class WhisperExecutionPlan:
+ def apply_whisper_strategy(payload: dict[str, Any], strategy: str | None) -> dict[str, Any]:
+     normalized = normalize_whisper_strategy(strategy)
+     merged = dict(payload)
++    editable_runtime_fields = {
++        key: merged[key]
++        for key in (
++            "vad_backend",
++            "chunker",
++            "target_chunk_duration_s",
++            "max_chunk_duration_s",
++            "segment_merge_max_gap_ms",
++            "segment_merge_max_duration_ms",
++        )
++        if key in merged and merged[key] not in (None, "")
++    }
+ 
+     if normalized == "chickenrice":
+         selected_backend = merged.get("model_backend") or merged.get("model")
+         merged.update(CHICKENRICE_WHISPER_STRATEGY)
++        merged.update(editable_runtime_fields)
+         if selected_backend:
+             merged["model_backend"] = selected_backend
+         _apply_model_backend(merged)
+         return merged
+     merged.update(CHICKENRICE_WHISPER_STRATEGY)
++    merged.update(editable_runtime_fields)
+     _apply_model_backend(merged)
+     return merged
+ 

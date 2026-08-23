@@ -1,0 +1,13 @@
+diff --git a/frontend/src/views/PluginHost.vue b/frontend/src/views/PluginHost.vue
+index 12106f2..17295b6 100644
+--- a/frontend/src/views/PluginHost.vue
++++ b/frontend/src/views/PluginHost.vue
+@@ -1211,7 +1211,7 @@ onBeforeUnmount(clearMounted)
+ .noor-plugin-btn--danger { background: rgba(227,26,26,.18); color: #ff8a80; border-color: rgba(227,26,26,.28); }
+ .noor-plugin-input { width: 100%; min-height: 36px; padding: .5rem .75rem; border-radius: var(--radius-md); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: white; outline: none; }
+ .noor-plugin-input:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgba(0,117,255,.12); }
+-.noor-plugin-select option { background: #111936; color: white; }
++.noor-plugin-input option, .noor-plugin-select option { background: #111936; color: white; }
+ .noor-plugin-field { display: flex; flex-direction: column; gap: .35rem; }
+ .noor-plugin-field__label { font-size: .75rem; color: rgba(255,255,255,.52); font-weight: 600; }
+ .noor-plugin-field__hint { color: rgba(255,255,255,.35); }

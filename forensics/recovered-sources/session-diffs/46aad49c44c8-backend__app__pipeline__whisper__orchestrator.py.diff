@@ -1,0 +1,15 @@
+diff --git a/backend/app/pipeline/whisper/orchestrator.py b/backend/app/pipeline/whisper/orchestrator.py
+index 16a532f..1b7ae91 100644
+--- a/backend/app/pipeline/whisper/orchestrator.py
++++ b/backend/app/pipeline/whisper/orchestrator.py
+@@ -41,8 +41,8 @@ def _get_whisper_runtime_paths() -> tuple[str, str, str]:
+ 
+     settings = get_settings()
+     model_dir = ensure_directory(settings.whisper_model_dir)
+-    cache_dir = ensure_directory(settings.whisper_cache_dir)
+-    temp_dir = ensure_directory(settings.whisper_temp_dir)
++    cache_dir = ensure_directory(getattr(settings, "whisper_cache_dir", str(Path(model_dir) / ".cache")))
++    temp_dir = ensure_directory(getattr(settings, "whisper_temp_dir", str(Path(model_dir) / ".temp")))
+     apply_whisper_cache_env(model_dir, cache_dir)
+     return model_dir, cache_dir, temp_dir
+ 

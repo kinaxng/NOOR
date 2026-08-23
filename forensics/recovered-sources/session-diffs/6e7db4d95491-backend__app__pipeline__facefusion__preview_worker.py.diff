@@ -1,0 +1,25 @@
+diff --git a/backend/app/pipeline/facefusion/preview_worker.py b/backend/app/pipeline/facefusion/preview_worker.py
+index 995c10b..0b07edb 100644
+--- a/backend/app/pipeline/facefusion/preview_worker.py
++++ b/backend/app/pipeline/facefusion/preview_worker.py
+@@ -28,7 +28,7 @@ def main() -> int:
+     from facefusion.core import common_pre_check, processors_pre_check
+     from facefusion.filesystem import is_image, is_video
+     from facefusion.program import create_program
+-    from facefusion.uis.components.preview import process_preview_frame
++    from facefusion.uis.components import preview as preview_component
+     from facefusion.vision import extract_vision_mask, merge_vision_mask, read_static_image, read_static_images, read_video_frame
+     from facefusion.audio import create_empty_audio_frame
+ 
+@@ -62,7 +62,10 @@ def main() -> int:
+     else:
+         raise RuntimeError("Target path is not an image or video")
+ 
+-    preview_frame = process_preview_frame(
++    if payload.get("skip_content_analysis", True):
++        preview_component.analyse_frame = lambda _vision_frame: False
++
++    preview_frame = preview_component.process_preview_frame(
+         reference_vision_frame,
+         source_vision_frames,
+         source_audio_frame,

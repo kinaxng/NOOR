@@ -1,0 +1,13 @@
+diff --git a/frontend/src/views/settings/StorageSettings.vue b/frontend/src/views/settings/StorageSettings.vue
+index e255549..4ab58a1 100644
+--- a/frontend/src/views/settings/StorageSettings.vue
++++ b/frontend/src/views/settings/StorageSettings.vue
+@@ -435,7 +435,7 @@ function closeDirPicker() {
+           </FieldRow>
+           <FieldRow :label="t('settings.storage.mediaRoot')" :description="t('settings.storage.mediaRootHint')">
+             <div class="dir-input-row">
+-              <input v-model="sourceDir" type="text" placeholder="/home/kinax/Videos/media" class="settings-input" @input="onSourceDirInput" />
++              <input v-model="sourceDir" type="text" :placeholder="t('settings.storage.mediaRootPlaceholder')" class="settings-input" @input="onSourceDirInput" />
+               <button @click="openDirPicker('sourceDir')" class="dir-browse-btn" :title="t('settings.storage.browse')">
+                 <BaseIcon name="folderOpen" class="w-4 h-4" />
+               </button>

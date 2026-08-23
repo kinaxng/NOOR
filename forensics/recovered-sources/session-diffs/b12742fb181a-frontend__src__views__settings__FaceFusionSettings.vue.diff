@@ -1,0 +1,57 @@
+diff --git a/frontend/src/views/settings/FaceFusionSettings.vue b/frontend/src/views/settings/FaceFusionSettings.vue
+index 8f553df..e1d3f81 100644
+--- a/frontend/src/views/settings/FaceFusionSettings.vue
++++ b/frontend/src/views/settings/FaceFusionSettings.vue
+@@ -27,17 +27,17 @@ const sections = [
+ const executionProviderOptions = ['cpu', 'cuda', 'tensorrt', 'openvino', 'directml', 'rocm', 'coreml']
+ const downloadProviderOptions = ['github', 'huggingface']
+ const processorOptions = [
+-  { id: 'face_swapper', label: '人脸替换', tensorrt: true },
+-  { id: 'face_enhancer', label: '人脸增强', tensorrt: true },
+-  { id: 'frame_enhancer', label: '画面增强', tensorrt: true },
+-  { id: 'face_editor', label: '人脸编辑', tensorrt: true },
+-  { id: 'age_modifier', label: '年龄调整', tensorrt: true },
+-  { id: 'expression_restorer', label: '表情修复', tensorrt: true },
+-  { id: 'lip_syncer', label: '唇形同步', tensorrt: true },
+-  { id: 'frame_colorizer', label: '画面上色', tensorrt: true },
+-  { id: 'background_remover', label: '背景移除', tensorrt: true },
+-  { id: 'deep_swapper', label: 'Deep 换脸', tensorrt: true },
+-  { id: 'face_debugger', label: '人脸调试', tensorrt: false },
++  { id: 'face_swapper', label: '人脸替换', acceleration: 'tensorrt' },
++  { id: 'face_enhancer', label: '人脸增强', acceleration: 'tensorrt' },
++  { id: 'frame_enhancer', label: '画面增强', acceleration: 'tensorrt' },
++  { id: 'face_editor', label: '人脸编辑', acceleration: 'cuda' },
++  { id: 'age_modifier', label: '年龄调整', acceleration: 'cuda' },
++  { id: 'expression_restorer', label: '表情修复', acceleration: 'cuda' },
++  { id: 'lip_syncer', label: '唇形同步', acceleration: 'cuda' },
++  { id: 'frame_colorizer', label: '画面上色', acceleration: 'cuda' },
++  { id: 'background_remover', label: '背景移除', acceleration: 'cuda' },
++  { id: 'deep_swapper', label: 'Deep 换脸', acceleration: 'cuda' },
++  { id: 'face_debugger', label: '人脸调试', acceleration: 'none' },
+ ]
+ const faceSwapperModelOptions = ['blendswap_256', 'ghost_1_256', 'ghost_2_256', 'ghost_3_256', 'hififace_unofficial_256', 'hyperswap_1a_256', 'hyperswap_1b_256', 'hyperswap_1c_256', 'inswapper_128', 'inswapper_128_fp16', 'simswap_256', 'simswap_unofficial_512', 'uniface_256']
+ const faceSwapperPixelBoostOptionsByModel: Record<string, string[]> = {
+@@ -592,7 +592,9 @@ async function saveDefaults() {
+               >
+                 <span>{{ processor.label }}</span>
+                 <small>{{ processor.id }}</small>
+-                <em :class="{ 'is-muted': !processor.tensorrt }">{{ processor.tensorrt ? 'TensorRT' : '无 TensorRT' }}</em>
++                <em :class="{ 'is-cuda': processor.acceleration === 'cuda', 'is-muted': processor.acceleration === 'none' }">
++                  {{ processor.acceleration === 'tensorrt' ? 'TensorRT' : processor.acceleration === 'cuda' ? 'CUDA' : '无推理加速' }}
++                </em>
+               </button>
+             </div>
+           </FieldRow>
+@@ -1249,6 +1251,12 @@ async function saveDefaults() {
+   color: var(--color-text-tertiary);
+ }
+ 
++.choice-chips .processor-chip em.is-cuda {
++  border-color: rgba(80, 220, 140, 0.28);
++  background: rgba(80, 220, 140, 0.1);
++  color: #8be0a9;
++}
++
+ .processor-options {
+   display: grid;
+   gap: 0.75rem;

@@ -1,0 +1,13 @@
+diff --git a/backend/app/api/settings_response.py b/backend/app/api/settings_response.py
+index 982c8a4..b4dd280 100644
+--- a/backend/app/api/settings_response.py
++++ b/backend/app/api/settings_response.py
+@@ -177,6 +177,8 @@ def build_settings_payload(*, env_data: dict[str, str], version_info: dict[str,
+             "log_level": env_data.get("FACEFUSION_LOG_LEVEL", "info"),
+             "download_providers": env_data.get("FACEFUSION_DOWNLOAD_PROVIDERS", "github huggingface"),
+             "halt_on_error": env_data.get("FACEFUSION_HALT_ON_ERROR", "false").lower() == "true",
++            "preview_mode": env_data.get("FACEFUSION_PREVIEW_MODE", "default"),
++            "preview_resolution": env_data.get("FACEFUSION_PREVIEW_RESOLUTION", "768x768"),
+             "processors": env_data.get("FACEFUSION_PROCESSORS", ""),
+             "face_swapper_model": env_data.get("FACEFUSION_FACE_SWAPPER_MODEL", "hyperswap_1a_256"),
+             "face_swapper_pixel_boost": env_data.get("FACEFUSION_FACE_SWAPPER_PIXEL_BOOST", "256x256"),

@@ -1,0 +1,50 @@
+diff --git a/backend/app/pipeline/facefusion/runner.py b/backend/app/pipeline/facefusion/runner.py
+index bf373de..886619e 100644
+--- a/backend/app/pipeline/facefusion/runner.py
++++ b/backend/app/pipeline/facefusion/runner.py
+@@ -67,6 +67,15 @@ def _build_env(*, facefusion_cache_dir: str, facefusion_temp_dir: str) -> dict[s
+ 
+ _resolve_model_dir = resolve_facefusion_model_dir
+ 
++FACEFUSION_ALLOWED_PROCESSORS = {
++    "face_swapper",
++    "face_enhancer",
++    "frame_enhancer",
++    "expression_restorer",
++    "deep_swapper",
++    "face_debugger",
++}
++
+ 
+ FACEFUSION_PHASE_MAP = {
+     "download": ("prepare", 1, 4),
+@@ -152,6 +161,9 @@ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tup
+         job_settings.get("processors"),
+         _split_words(settings.facefusion_processors, []),
+     )
++    processors = [processor for processor in processors if processor in FACEFUSION_ALLOWED_PROCESSORS]
++    if not processors:
++        processors = ["face_swapper"]
+     if processors:
+         cmd += ["--processors", *processors]
+     if "face_swapper" in processors:
+@@ -165,6 +177,19 @@ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tup
+     if "frame_enhancer" in processors:
+         cmd += ["--frame-enhancer-model", str(job_settings.get("frame_enhancer_model", settings.facefusion_frame_enhancer_model))]
+         cmd += ["--frame-enhancer-blend", str(job_settings.get("frame_enhancer_blend", settings.facefusion_frame_enhancer_blend))]
++    if "expression_restorer" in processors:
++        cmd += ["--expression-restorer-model", str(job_settings.get("expression_restorer_model", "live_portrait"))]
++        cmd += ["--expression-restorer-factor", str(job_settings.get("expression_restorer_factor", 80))]
++        expression_areas = _split_words(job_settings.get("expression_restorer_areas", "upper-face lower-face"), ["upper-face", "lower-face"])
++        if expression_areas:
++            cmd += ["--expression-restorer-areas", *expression_areas]
++    if "deep_swapper" in processors:
++        cmd += ["--deep-swapper-model", str(job_settings.get("deep_swapper_model", "iperov/elon_musk_224"))]
++        cmd += ["--deep-swapper-morph", str(job_settings.get("deep_swapper_morph", 100))]
++    if "face_debugger" in processors:
++        debugger_items = _split_words(job_settings.get("face_debugger_items", "face-landmark-5/68 face-mask"), ["face-landmark-5/68", "face-mask"])
++        if debugger_items:
++            cmd += ["--face-debugger-items", *debugger_items]
+ 
+     providers = _execution_providers(job_settings)
+     if providers:

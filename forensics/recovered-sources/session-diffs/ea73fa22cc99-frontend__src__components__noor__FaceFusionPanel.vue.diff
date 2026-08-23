@@ -1,0 +1,209 @@
+diff --git a/frontend/src/components/noor/FaceFusionPanel.vue b/frontend/src/components/noor/FaceFusionPanel.vue
+index bd72d88..f9a553c 100644
+--- a/frontend/src/components/noor/FaceFusionPanel.vue
++++ b/frontend/src/components/noor/FaceFusionPanel.vue
+@@ -1551,26 +1551,20 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+         <div class="facefusion-model-dialog__backdrop" @click="deepModelDialogOpen = false"></div>
+         <div class="facefusion-model-dialog__panel">
+           <div class="facefusion-model-dialog__head">
+-            <div>
+-              <span>Deep 换脸模型</span>
+-              <strong>{{ facefusionSettings.deep_swapper_model || '未选择' }}</strong>
+-            </div>
++            <strong>选择 Deep 模型</strong>
+             <button type="button" @click="deepModelDialogOpen = false">关闭</button>
+           </div>
+ 
+-          <label class="facefusion-model-upload">
+-            <input
+-              type="file"
+-              accept=".dfm,.onnx,.pth,.pt"
+-              :disabled="deepModelUploading"
+-              @change="handleDeepModelUpload"
+-            />
+-            <span>{{ deepModelUploading ? '上传中' : '上传自定义模型' }}</span>
+-            <small>.dfm / .onnx / .pth / .pt</small>
+-          </label>
+-
+-          <div class="facefusion-model-dialog__toolbar">
+-            <span>{{ deepModelLoading ? '读取中' : `模型 · ${deepSwapperModels.length}` }}</span>
++          <div class="facefusion-model-toolbar">
++            <label class="facefusion-model-upload">
++              <input
++                type="file"
++                accept=".dfm,.onnx,.pth,.pt"
++                :disabled="deepModelUploading"
++                @change="handleDeepModelUpload"
++              />
++              <span>{{ deepModelUploading ? '上传中' : '上传' }}</span>
++            </label>
+             <button type="button" @click="loadDeepSwapperModels">刷新</button>
+           </div>
+ 
+@@ -1588,25 +1582,18 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+               }"
+               @click="selectDeepSwapperModel(model.id)"
+             >
+-              <div class="facefusion-model-item__main">
+-                <strong>{{ model.name }}</strong>
+-                <b>
+-                  {{
+-                    facefusionSettings.deep_swapper_model === model.id
+-                      ? '已选'
+-                      : model.source === 'custom'
+-                      ? '自定义'
+-                      : model.downloading
+-                        ? `下载中 ${Math.max(0, Math.min(100, Number(model.progress || 0)))}%`
+-                        : model.downloaded
+-                          ? '已下载'
+-                          : '下载'
+-                  }}
+-                </b>
+-              </div>
+-              <div v-if="model.downloading" class="facefusion-model-progress">
+-                <i :style="{ width: `${Math.max(2, Math.min(100, Number(model.progress || 0)))}%` }"></i>
+-              </div>
++              <strong>{{ model.name }}</strong>
++              <b>
++                {{
++                  facefusionSettings.deep_swapper_model === model.id
++                    ? '已选'
++                    : model.downloading
++                      ? `下载中 ${Math.max(0, Math.min(100, Number(model.progress || 0)))}%`
++                      : model.downloaded || model.source === 'custom'
++                        ? '已下载'
++                        : '下载'
++                }}
++              </b>
+             </button>
+           </div>
+         </div>
+@@ -2401,28 +2388,13 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ }
+ 
+ .facefusion-model-dialog__head,
+-.facefusion-model-dialog__toolbar {
++.facefusion-model-toolbar {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 0.75rem;
+ }
+ 
+-.facefusion-model-dialog__head div {
+-  display: grid;
+-  min-width: 0;
+-  gap: 0.2rem;
+-}
+-
+-.facefusion-model-dialog__head span,
+-.facefusion-model-dialog__toolbar span {
+-  color: var(--color-text-muted);
+-  font-size: 0.68rem;
+-  font-weight: 850;
+-  letter-spacing: 0.08em;
+-  text-transform: uppercase;
+-}
+-
+ .facefusion-model-dialog__head strong {
+   overflow: hidden;
+   color: var(--color-text-primary);
+@@ -2433,7 +2405,8 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ }
+ 
+ .facefusion-model-dialog__head button,
+-.facefusion-model-dialog__toolbar button {
++.facefusion-model-toolbar button,
++.facefusion-model-upload {
+   min-height: 2rem;
+   padding: 0 0.75rem;
+   border-radius: 999px;
+@@ -2444,13 +2417,9 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ }
+ 
+ .facefusion-model-upload {
+-  display: grid;
+-  gap: 0.25rem;
+-  padding: 0.85rem;
+-  border-radius: 0.75rem;
+-  border: 1px dashed rgba(0, 117, 255, 0.42);
+-  background: rgba(0, 117, 255, 0.075);
+-  color: var(--color-text-primary);
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
+   cursor: pointer;
+ }
+ 
+@@ -2459,13 +2428,7 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ }
+ 
+ .facefusion-model-upload span {
+-  font-size: 0.8rem;
+-  font-weight: 850;
+-}
+-
+-.facefusion-model-upload small {
+-  color: var(--color-text-muted);
+-  font-size: 0.7rem;
++  font-weight: 780;
+ }
+ 
+ .facefusion-model-dialog__empty {
+@@ -2475,15 +2438,17 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+ 
+ .facefusion-model-list {
+   display: grid;
+-  gap: 0.38rem;
++  gap: 0.32rem;
+   overflow: auto;
+   padding-right: 0.2rem;
+ }
+ 
+ .facefusion-model-item {
+   display: grid;
+-  gap: 0.42rem;
+-  min-height: 2.55rem;
++  grid-template-columns: minmax(0, 1fr) auto;
++  align-items: center;
++  gap: 0.75rem;
++  min-height: 2.35rem;
+   padding: 0.58rem 0.75rem;
+   border-radius: 0.7rem;
+   border: 1px solid rgba(255, 255, 255, 0.09);
+@@ -2492,14 +2457,6 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   text-align: left;
+ }
+ 
+-.facefusion-model-item__main {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 0.65rem;
+-  min-width: 0;
+-}
+-
+ .facefusion-model-item strong {
+   min-width: 0;
+   overflow: hidden;
+@@ -2517,20 +2474,6 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   font-weight: 850;
+ }
+ 
+-.facefusion-model-progress {
+-  height: 0.28rem;
+-  overflow: hidden;
+-  border-radius: 999px;
+-  background: rgba(255, 255, 255, 0.08);
+-}
+-
+-.facefusion-model-progress i {
+-  display: block;
+-  height: 100%;
+-  border-radius: inherit;
+-  background: linear-gradient(90deg, rgba(0, 117, 255, 0.86), rgba(66, 211, 146, 0.88));
+-}
+-
+ .facefusion-model-item.is-active {
+   border-color: rgba(0, 117, 255, 0.72);
+   background: rgba(0, 117, 255, 0.14);

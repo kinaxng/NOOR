@@ -1,0 +1,13 @@
+diff --git a/backend/app/pipeline/facefusion/source/facefusion/execution.py b/backend/app/pipeline/facefusion/source/facefusion/execution.py
+index 6a1d228..9c825fb 100644
+--- a/backend/app/pipeline/facefusion/source/facefusion/execution.py
++++ b/backend/app/pipeline/facefusion/source/facefusion/execution.py
+@@ -109,7 +109,7 @@ def create_inference_providers(execution_device_id : int, execution_providers :
+ 
+ 
+ def resolve_cache_path() -> str:
+-	return os.path.join('.caches', onnxruntime.get_version_string())
++	return os.getenv('ORT_TENSORRT_CACHE_PATH') or os.path.join('.caches', onnxruntime.get_version_string())
+ 
+ 
+ def resolve_cudnn_conv_algo_search() -> str:

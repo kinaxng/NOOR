@@ -1,0 +1,48 @@
+diff --git a/backend/app/pipeline/whisper/japanese_post.py b/backend/app/pipeline/whisper/japanese_post.py
+index 499856d..b933c99 100644
+--- a/backend/app/pipeline/whisper/japanese_post.py
++++ b/backend/app/pipeline/whisper/japanese_post.py
+@@ -104,6 +104,43 @@ class JapanesePostProcessor:
+             metadata={**result.metadata, "post_processed": True}
+         )
+ 
++
++class SubtitleSafetyPostProcessor:
++    """Language-neutral subtitle cleanup for direct translated subtitles."""
++
++    def __init__(self, max_segment_duration: float = 20.0, min_gap_threshold: float = 0.05):
++        self.max_segment_duration = max_segment_duration
++        self.min_gap_threshold = min_gap_threshold
++
++    def process(self, result: TranscriptionResult) -> TranscriptionResult:
++        segments = [s for s in result.segments if (s.text or "").strip() and s.end_time > s.start_time]
++        if not segments:
++            return result
++
++        normalized: list[SubtitleSegment] = []
++        previous_end = 0.0
++        for seg in sorted(segments, key=lambda item: (item.start_time, item.end_time)):
++            start = max(seg.start_time, previous_end + self.min_gap_threshold if normalized else seg.start_time)
++            end = max(start + 0.1, seg.end_time)
++            if self.max_segment_duration > 0 and end - start > self.max_segment_duration:
++                end = start + self.max_segment_duration
++            normalized.append(SubtitleSegment(
++                index=len(normalized) + 1,
++                start_time=start,
++                end_time=end,
++                text=re.sub(r"\s+", " ", seg.text).strip(),
++                words=list(seg.words or []),
++            ))
++            previous_end = end
++
++        return TranscriptionResult(
++            segments=normalized,
++            language=result.language,
++            duration=result.duration,
++            source=result.source,
++            metadata={**result.metadata, "safety_post_processed": True},
++        )
++
+     def _pass1_sanitize(self, segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
+         """移除填充词和噪音"""
+         for seg in segments:

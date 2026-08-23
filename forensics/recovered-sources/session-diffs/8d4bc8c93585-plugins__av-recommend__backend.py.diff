@@ -1,0 +1,59 @@
+diff --git a/plugins/av-recommend/backend.py b/plugins/av-recommend/backend.py
+index 8672d98..68588d1 100644
+--- a/plugins/av-recommend/backend.py
++++ b/plugins/av-recommend/backend.py
+@@ -1196,6 +1196,45 @@ async def _scan_full_candidate_pool(config: dict[str, Any], *, force: bool = Fal
+         raise
+ 
+ 
++async def _refresh_candidate_cover(code_value: Any) -> dict[str, Any]:
++    from app.plugins.runtime import runtime
++
++    code = _norm_code(code_value)
++    if not code:
++        raise ValueError("缺少番号")
++    if not runtime.is_enabled("javdb"):
++        raise ValueError("JavDB 插件未启用")
++    detail = await runtime.handle_action("javdb", "video", {"code": code, "refresh": True})
++    data = detail.get("data") if isinstance(detail, dict) else {}
++    if not isinstance(data, dict):
++        data = {}
++    cover_url = str(data.get("cover_url") or "")
++    thumb_url = str(data.get("thumb_url") or "")
++    fanart_url = cover_url or thumb_url
++    candidates = _image_candidates(data, data.get("previews"), data.get("preview_images"))
++    async with _pool_lock:
++        pool = _ensure_candidate_pool()
++        pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
++        item = pool_items.get(code)
++        if not isinstance(item, dict):
++            item = {"code": code, "number": code}
++        if cover_url:
++            item["cover_url"] = cover_url
++        if thumb_url:
++            item["thumb_url"] = thumb_url
++        if fanart_url:
++            item["fanart_url"] = fanart_url
++        if candidates:
++            item["image_candidates"] = candidates
++        item["detail"] = data or item.get("detail") or {}
++        item["cover_refreshed_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
++        pool_items[code] = item
++        pool["items"] = pool_items
++        _save_candidate_pool(pool)
++    _CACHE["value"] = None
++    return {"ok": True, "code": code, "cover_url": cover_url, "thumb_url": thumb_url, "fanart_url": fanart_url, "image_candidates": candidates}
++
++
+ def _candidate_score(
+     item: dict[str, Any],
+     profile: dict[str, Any],
+@@ -1928,6 +1967,8 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str,
+             return {"ok": True, "pool": _candidate_pool_stats(pool)}
+     if action == "scan_candidate_pool":
+         return await _scan_full_candidate_pool(config, force=bool((payload or {}).get("force")))
++    if action == "refresh_cover":
++        return await _refresh_candidate_cover((payload or {}).get("code") or (payload or {}).get("number"))
+     if action == "profile":
+         profile = await _library_profile()
+         return {

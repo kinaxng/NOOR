@@ -1,0 +1,132 @@
+diff --git a/frontend/src/views/settings/FaceFusionSettings.vue b/frontend/src/views/settings/FaceFusionSettings.vue
+index 4ab38ec..8dd9c73 100644
+--- a/frontend/src/views/settings/FaceFusionSettings.vue
++++ b/frontend/src/views/settings/FaceFusionSettings.vue
+@@ -56,6 +56,9 @@ const nativeModelDir = ref('')
+ const resolvedFacefusionDir = ref('')
+ const facefusionSourceMode = ref('')
+ const facefusionVersion = ref('')
++const facefusionRuntimeVersions = ref<Record<string, string | null>>({})
++const facefusionExecutionProviders = ref<string[]>([])
++const facefusionPythonExecutable = ref('')
+ const facefusionCanSelfUpgrade = ref(false)
+ const facefusionUpgradeHint = ref('')
+ const facefusionUpstreamRepo = ref('')
+@@ -134,6 +137,21 @@ function inputValue(event: Event) {
+   return (event.target as HTMLInputElement).value
+ }
+ 
++function runtimeVersionRows() {
++  const versions = facefusionRuntimeVersions.value || {}
++  return [
++    { key: 'facefusion', label: 'FaceFusion', value: facefusionVersion.value || '未知' },
++    { key: 'python', label: 'Python', value: versions.python || '未知' },
++    { key: 'onnxruntime', label: 'ONNX Runtime', value: versions.onnxruntime || '未检测到' },
++    { key: 'onnx', label: 'ONNX', value: versions.onnx || '未检测到' },
++    { key: 'numpy', label: 'NumPy', value: versions.numpy || '未检测到' },
++    { key: 'opencv', label: 'OpenCV', value: versions.opencv || '未检测到' },
++    { key: 'scipy', label: 'SciPy', value: versions.scipy || '未检测到' },
++    { key: 'tqdm', label: 'tqdm', value: versions.tqdm || '未检测到' },
++    { key: 'gradio', label: 'Gradio', value: versions.gradio || '未检测到' },
++  ]
++}
++
+ onMounted(async () => {
+   await loadSettings()
+ })
+@@ -149,6 +167,9 @@ async function loadSettings() {
+     resolvedFacefusionDir.value = data.facefusion?.resolved_dir || ''
+     facefusionSourceMode.value = data.facefusion?.source_mode || ''
+     facefusionVersion.value = data.facefusion?.version || ''
++    facefusionRuntimeVersions.value = data.facefusion?.runtime_versions || {}
++    facefusionExecutionProviders.value = data.facefusion?.execution_providers || []
++    facefusionPythonExecutable.value = data.facefusion?.python_executable || ''
+     facefusionCanSelfUpgrade.value = data.facefusion?.can_self_upgrade || false
+     facefusionUpgradeHint.value = data.facefusion?.upgrade_hint || ''
+     facefusionUpstreamRepo.value = data.facefusion?.upstream_repo || ''
+@@ -354,8 +375,32 @@ async function saveDefaults() {
+         <p class="settings-card__desc">默认使用 NOOR 内置 FaceFusion 源码；仅在需要临时覆盖时填写外部目录。</p>
+ 
+         <div class="settings-form mt-4">
+-          <FieldRow label="当前版本" description="NOOR 内置 FaceFusion 源码版本">
+-            <input :value="facefusionVersion || '未知'" type="text" class="settings-input" readonly />
++          <FieldRow label="当前版本" description="NOOR 内置 FaceFusion 与运行时依赖版本">
++            <div class="facefusion-version-grid">
++              <div v-for="item in runtimeVersionRows()" :key="item.key" class="facefusion-version-item">
++                <span>{{ item.label }}</span>
++                <strong>{{ item.value }}</strong>
++              </div>
++            </div>
++          </FieldRow>
++
++          <FieldRow label="Python 解释器" description="实际运行 FaceFusion CLI 的 Python">
++            <input :value="facefusionPythonExecutable" type="text" class="settings-input" readonly />
++          </FieldRow>
++
++          <FieldRow label="可用执行后端" description="ONNX Runtime 当前检测到的 providers">
++            <div class="choice-chips choice-chips--readonly">
++              <button
++                v-for="provider in facefusionExecutionProviders"
++                :key="provider"
++                type="button"
++                class="is-active"
++                disabled
++              >
++                {{ provider }}
++              </button>
++              <span v-if="!facefusionExecutionProviders.length" class="facefusion-empty-state">未检测到</span>
++            </div>
+           </FieldRow>
+ 
+           <FieldRow label="上游仓库" description="升级时从该仓库拉取源码并套用 NOOR 适配">
+@@ -868,6 +913,50 @@ async function saveDefaults() {
+   line-height: 1.5;
+ }
+ 
++.facefusion-version-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
++  gap: 0.5rem;
++  width: 100%;
++}
++
++.facefusion-version-item {
++  min-width: 0;
++  padding: 0.625rem 0.75rem;
++  border: 1px solid rgba(255, 255, 255, 0.08);
++  border-radius: var(--radius-md);
++  background: rgba(255, 255, 255, 0.035);
++}
++
++.facefusion-version-item span {
++  display: block;
++  margin-bottom: 0.25rem;
++  color: var(--color-text-tertiary);
++  font-size: 0.6875rem;
++  font-weight: 700;
++}
++
++.facefusion-version-item strong {
++  display: block;
++  overflow: hidden;
++  color: var(--color-text-primary);
++  font-family: var(--font-mono);
++  font-size: 0.8125rem;
++  font-weight: 700;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.choice-chips--readonly button {
++  cursor: default;
++  opacity: 1;
++}
++
++.facefusion-empty-state {
++  color: var(--color-text-tertiary);
++  font-size: 0.8125rem;
++}
++
+ .facefusion-tabbar {
+   display: flex;
+   align-items: center;

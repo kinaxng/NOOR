@@ -1,0 +1,157 @@
+diff --git a/plugins/av-recommend/backend.py b/plugins/av-recommend/backend.py
+index 6e1748c..5dff0ac 100644
+--- a/plugins/av-recommend/backend.py
++++ b/plugins/av-recommend/backend.py
+@@ -15,15 +15,26 @@ from typing import Any
+ from sqlalchemy import select
+ from sqlalchemy.exc import SQLAlchemyError
+ 
+-from app.core.config import PROJECT_ROOT
+ from app.core.database import async_session_maker
++from app.core.runtime_paths import plugin_data_path
+ from app.knowledge.models import KnowledgeActionState, KnowledgeEdge, KnowledgeEntity
+ from app.plugins.contracts import PluginManifest, PluginTestResult
+ 
+ PLUGIN_ID = "av-recommend"
+-DATA_FILE = PROJECT_ROOT / "data" / "av_recommend" / "feedback.json"
+-CANDIDATE_POOL_FILE = PROJECT_ROOT / "data" / "av_recommend" / "candidate_pool.json"
+-TITLE_PROFILE_FILE = PROJECT_ROOT / "data" / "av_recommend" / "title_profile.json"
++
++
++def _data_file() -> Path:
++    return plugin_data_path("av_recommend", "feedback.json")
++
++
++def _candidate_pool_file() -> Path:
++    return plugin_data_path("av_recommend", "candidate_pool.json")
++
++
++def _title_profile_file() -> Path:
++    return plugin_data_path("av_recommend", "title_profile.json")
++
++
+ CACHE_TTL = 300
+ _CACHE: dict[str, Any] = {"ts": 0, "key": "", "value": None}
+ _pool_lock = asyncio.Lock()
+@@ -154,13 +165,14 @@ def _feedback_counter(entries: Any, key: str) -> Counter:
+ 
+ 
+ def _ensure_store() -> dict[str, Any]:
+-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+-    if not DATA_FILE.exists():
++    data_file = _data_file()
++    data_file.parent.mkdir(parents=True, exist_ok=True)
++    if not data_file.exists():
+         data = {"version": 1, "ignored": [], "liked": [], "disliked": []}
+-        DATA_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
++        data_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+         return data
+     try:
+-        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
++        data = json.loads(data_file.read_text(encoding="utf-8"))
+         if not isinstance(data, dict):
+             raise ValueError("invalid feedback store")
+         data.setdefault("ignored", [])
+@@ -168,19 +180,20 @@ def _ensure_store() -> dict[str, Any]:
+         data.setdefault("disliked", [])
+         return data
+     except Exception:
+-        backup = DATA_FILE.with_suffix(f".{int(time.time())}.bak")
++        backup = data_file.with_suffix(f".{int(time.time())}.bak")
+         try:
+-            DATA_FILE.replace(backup)
++            data_file.replace(backup)
+         except Exception:
+             pass
+         return _ensure_store()
+ 
+ 
+ def _save_store(data: dict[str, Any]) -> None:
+-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+-    tmp = DATA_FILE.with_suffix(".tmp")
++    data_file = _data_file()
++    data_file.parent.mkdir(parents=True, exist_ok=True)
++    tmp = data_file.with_suffix(".tmp")
+     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+-    tmp.replace(DATA_FILE)
++    tmp.replace(data_file)
+ 
+ 
+ def _today_key() -> str:
+@@ -188,13 +201,14 @@ def _today_key() -> str:
+ 
+ 
+ def _ensure_candidate_pool() -> dict[str, Any]:
+-    CANDIDATE_POOL_FILE.parent.mkdir(parents=True, exist_ok=True)
+-    if not CANDIDATE_POOL_FILE.exists():
++    candidate_pool_file = _candidate_pool_file()
++    candidate_pool_file.parent.mkdir(parents=True, exist_ok=True)
++    if not candidate_pool_file.exists():
+         data = {"version": 1, "items": {}, "updated_at": "", "last_full_scan": {}}
+-        CANDIDATE_POOL_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
++        candidate_pool_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+         return data
+     try:
+-        data = json.loads(CANDIDATE_POOL_FILE.read_text(encoding="utf-8"))
++        data = json.loads(candidate_pool_file.read_text(encoding="utf-8"))
+         if not isinstance(data, dict):
+             raise ValueError("invalid candidate pool")
+         data.setdefault("version", 1)
+@@ -203,20 +217,21 @@ def _ensure_candidate_pool() -> dict[str, Any]:
+         data.setdefault("last_full_scan", {})
+         return data
+     except Exception:
+-        backup = CANDIDATE_POOL_FILE.with_suffix(f".{int(time.time())}.bak")
++        backup = candidate_pool_file.with_suffix(f".{int(time.time())}.bak")
+         try:
+-            CANDIDATE_POOL_FILE.replace(backup)
++            candidate_pool_file.replace(backup)
+         except Exception:
+             pass
+         return _ensure_candidate_pool()
+ 
+ 
+ def _save_candidate_pool(data: dict[str, Any]) -> None:
+-    CANDIDATE_POOL_FILE.parent.mkdir(parents=True, exist_ok=True)
++    candidate_pool_file = _candidate_pool_file()
++    candidate_pool_file.parent.mkdir(parents=True, exist_ok=True)
+     data["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+-    tmp = CANDIDATE_POOL_FILE.with_suffix(".tmp")
++    tmp = candidate_pool_file.with_suffix(".tmp")
+     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+-    tmp.replace(CANDIDATE_POOL_FILE)
++    tmp.replace(candidate_pool_file)
+ 
+ 
+ def _backfill_candidate_pool_title_profiles(pool: dict[str, Any]) -> int:
+@@ -523,7 +538,7 @@ def _title_profile_signature(media: list[KnowledgeEntity], media_weights: dict[s
+ 
+ def _load_title_profile_cache(signature: str) -> dict[str, Counter] | None:
+     try:
+-        data = json.loads(TITLE_PROFILE_FILE.read_text(encoding="utf-8"))
++        data = json.loads(_title_profile_file().read_text(encoding="utf-8"))
+     except Exception:
+         return None
+     if not isinstance(data, dict) or data.get("signature") != signature:
+@@ -535,7 +550,8 @@ def _load_title_profile_cache(signature: str) -> dict[str, Counter] | None:
+ 
+ 
+ def _save_title_profile_cache(signature: str, title_traits: Counter, title_terms: Counter, media_count: int) -> None:
+-    TITLE_PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
++    title_profile_file = _title_profile_file()
++    title_profile_file.parent.mkdir(parents=True, exist_ok=True)
+     payload = {
+         "version": TITLE_PROFILE_VERSION,
+         "signature": signature,
+@@ -544,9 +560,9 @@ def _save_title_profile_cache(signature: str, title_traits: Counter, title_terms
+         "title_traits": {str(k): round(float(v), 4) for k, v in title_traits.items()},
+         "title_terms": {str(k): round(float(v), 4) for k, v in title_terms.items()},
+     }
+-    tmp = TITLE_PROFILE_FILE.with_suffix(".tmp")
++    tmp = title_profile_file.with_suffix(".tmp")
+     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+-    tmp.replace(TITLE_PROFILE_FILE)
++    tmp.replace(title_profile_file)
+ 
+ 
+ def _build_title_profile(media: list[KnowledgeEntity], media_weights: dict[str, float], actor_names: set[str]) -> dict[str, Counter]:

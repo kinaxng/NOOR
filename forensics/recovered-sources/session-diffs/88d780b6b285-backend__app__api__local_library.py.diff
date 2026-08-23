@@ -1,0 +1,24 @@
+diff --git a/backend/app/api/local_library.py b/backend/app/api/local_library.py
+index d7a45df..70e0ec5 100644
+--- a/backend/app/api/local_library.py
++++ b/backend/app/api/local_library.py
+@@ -13,6 +13,7 @@ import time
+ from pathlib import Path
+ 
+ from app.api.settings_helpers import read_env_file, set_env_values
++from app.core.runtime_paths import data_path
+ 
+ SUBTITLE_EXTS = {'.srt', '.ass', '.ssa', '.sub', '.sbv', '.vtt', '.sup'}
+ _index_lock = threading.Lock()
+@@ -56,9 +57,8 @@ def _save_config(config: dict) -> None:
+ # ─── Index ────────────────────────────────────────────────────────────────────
+ 
+ def _index_db_path() -> Path:
+-    project_root = Path(__file__).parent.parent.parent
+-    data_dir = project_root / "data"
+-    data_dir.mkdir(exist_ok=True)
++    data_dir = data_path()
++    data_dir.mkdir(parents=True, exist_ok=True)
+     return data_dir / "subtitle_index.db"
+ 
+ 

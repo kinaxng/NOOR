@@ -1,0 +1,31 @@
+diff --git a/backend/app/api/settings_status_helpers.py b/backend/app/api/settings_status_helpers.py
+index 13fc8a2..cb044ef 100644
+--- a/backend/app/api/settings_status_helpers.py
++++ b/backend/app/api/settings_status_helpers.py
+@@ -4,7 +4,7 @@ import json
+ from datetime import datetime, timezone
+ from pathlib import Path
+ 
+-from app.core.config import PROJECT_ROOT
++from app.core.runtime_paths import data_path
+ 
+ 
+ def status_timestamp() -> str:
+@@ -12,14 +12,15 @@ def status_timestamp() -> str:
+ 
+ 
+ def model_download_status_path() -> Path:
+-    return PROJECT_ROOT / 'model_download_status.json'
++    return data_path("runtime", "status", "model_download_status.json")
+ 
+ 
+ def install_status_path() -> Path:
+-    return PROJECT_ROOT / 'install_status.json'
++    return data_path("runtime", "status", "install_status.json")
+ 
+ 
+ def write_status_file(path: Path, payload: dict) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
+     path.write_text(json.dumps(payload))
+ 
+ 

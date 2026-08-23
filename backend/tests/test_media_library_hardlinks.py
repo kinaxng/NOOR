@@ -8,6 +8,7 @@ from app.api.endpoints.media_library_hardlinks import (
     build_hardlink_groups_impl,
     enrich_hardlink_groups_impl,
     hardlink_groups_path_impl,
+    legacy_hardlink_groups_path_impl,
     load_hardlink_groups_impl,
     save_hardlink_groups_impl,
     scan_single_group_impl,
@@ -83,6 +84,12 @@ def test_hardlink_groups_path_uses_runtime_media_library_dir(tmp_path: Path):
     config_path = tmp_path / 'media_library_config.json'
 
     assert hardlink_groups_path_impl(lambda: config_path) == tmp_path / 'runtime' / 'media_library' / 'hardlink_groups.txt'
+
+
+def test_legacy_hardlink_groups_path_uses_config_root(tmp_path: Path):
+    config_path = tmp_path / 'media_library_config.json'
+
+    assert legacy_hardlink_groups_path_impl(lambda: config_path) == tmp_path / 'hardlink_groups.txt'
 
 
 def test_save_hardlink_groups_creates_runtime_dir(tmp_path: Path):

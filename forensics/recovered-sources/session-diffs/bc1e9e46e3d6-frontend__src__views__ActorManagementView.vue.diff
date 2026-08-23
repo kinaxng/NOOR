@@ -1,0 +1,167 @@
+diff --git a/frontend/src/views/ActorManagementView.vue b/frontend/src/views/ActorManagementView.vue
+index e3882a2..94983b9 100644
+--- a/frontend/src/views/ActorManagementView.vue
++++ b/frontend/src/views/ActorManagementView.vue
+@@ -27,6 +27,7 @@ const showMappingMatches = ref(false)
+ const mergePlans = ref<Record<string, any>>({})
+ const mergePlanLoading = ref<Record<string, boolean>>({})
+ const mergeExecuting = ref<Record<string, boolean>>({})
++const batchMerging = ref(false)
+ const selectedMergeTargets = ref<Record<string, string>>({})
+ const fileInput = ref<HTMLInputElement | null>(null)
+ const query = ref('')
+@@ -107,6 +108,14 @@ function changedPeopleLabel(movie: any) {
+   return (movie?.changed_people || []).map((person: any) => person.name).filter(Boolean).join(' / ')
+ }
+ 
++function batchMergeableGroups() {
++  return (mappingMatches.value?.groups || []).filter((group: any) => !group?.has_tmdb_conflict && selectedMergeTargetId(group))
++}
++
++function batchConflictCount() {
++  return (mappingMatches.value?.groups || []).filter((group: any) => group?.has_tmdb_conflict).length
++}
++
+ async function loadActors() {
+   loading.value = true
+   try {
+@@ -238,6 +247,77 @@ async function executeMergePlan(group: any) {
+   }
+ }
+ 
++async function executeBatchMerge() {
++  const groups = batchMergeableGroups()
++  if (!groups.length || batchMerging.value) return
++  const conflictCount = batchConflictCount()
++  const ok = await confirm({
++    title: t('files.actors.batchMergeConfirmTitle'),
++    message: t('files.actors.batchMergeConfirm', { count: groups.length, skipped: conflictCount }),
++    confirmText: t('files.actors.batchMerge'),
++    note: t('files.actors.batchMergeNote'),
++    size: 'md',
++    details: [{
++      label: t('files.actors.batchMergeTargets'),
++      items: groups.slice(0, 20).map((group: any) => `${mappingGroupName(group)} -> ${selectedMergeTargetName(group) || group.target_actor_name || ''}`),
++    }],
++  })
++  if (!ok) return
++
++  batchMerging.value = true
++  let updatedCount = 0
++  let mergedCount = 0
++  let emptyCount = 0
++  let deletedActorCount = 0
++  const failures: string[] = []
++  try {
++    for (const group of groups) {
++      const mappingId = String(group?.mapping_id || '')
++      if (!mappingId) continue
++      mergeExecuting.value = { ...mergeExecuting.value, [mappingId]: true }
++      try {
++        const planResp = await api.get('/media-library/actors/mapping/merge-plan', {
++          params: { mapping_id: mappingId, target_actor_id: selectedMergeTargetId(group) || undefined, lang: currentLang.value },
++        })
++        const plan = planResp.data
++        mergePlans.value = { ...mergePlans.value, [mappingId]: plan }
++        if (!plan?.movie_count) {
++          emptyCount += 1
++          continue
++        }
++        const resp = await api.post('/media-library/actors/mapping/merge-execute', {
++          mapping_id: mappingId,
++          target_name: plan.target_name,
++          target_actor_id: plan.target_actor_id || selectedMergeTargetId(group) || undefined,
++          dry_run: false,
++        }, {
++          params: { lang: currentLang.value },
++        })
++        mergedCount += 1
++        updatedCount += resp.data.updated_count || 0
++        deletedActorCount += (resp.data.deleted_actor_ids || []).length
++      } catch (error: any) {
++        failures.push(`${mappingGroupName(group)}: ${error?.response?.data?.detail || error?.message || t('files.actors.mergeFailed')}`)
++      } finally {
++        mergeExecuting.value = { ...mergeExecuting.value, [mappingId]: false }
++      }
++    }
++    toast.success(t('files.actors.batchMergeSuccess', {
++      groups: mergedCount,
++      count: updatedCount,
++      deleted: deletedActorCount,
++      empty: emptyCount,
++    }))
++    if (failures.length) {
++      toast.error(t('files.actors.batchMergeFailed', { count: failures.length }) + `: ${failures.slice(0, 3).join(' / ')}`)
++    }
++    await previewMappingMatches()
++    loadActors()
++  } finally {
++    batchMerging.value = false
++  }
++}
++
+ function setSort(key: SortKey, order: SortOrder) {
+   sortBy.value = key
+   sortOrder.value = order
+@@ -319,9 +399,22 @@ onMounted(() => {
+             }) }}
+           </span>
+         </div>
+-        <button type="button" class="duplicate-panel__close" @click="showMappingMatches = false">
+-          <BaseIcon name="close" />
+-        </button>
++        <div class="duplicate-panel__tools">
++          <VuiButton
++            v-if="mappingMatches.groups?.length"
++            variant="gradient"
++            color="primary"
++            size="small"
++            :disabled="batchMerging || !batchMergeableGroups().length"
++            @click="executeBatchMerge"
++          >
++            <BaseIcon name="check" class="w-4 h-4" />
++            {{ t('files.actors.batchMerge') }}
++          </VuiButton>
++          <button type="button" class="duplicate-panel__close" @click="showMappingMatches = false">
++            <BaseIcon name="close" />
++          </button>
++        </div>
+       </div>
+ 
+       <div v-if="mappingMatches.groups?.length" class="duplicate-groups">
+@@ -565,6 +658,13 @@ onMounted(() => {
+   color: var(--color-text-muted);
+ }
+ 
++.duplicate-panel__tools {
++  display: inline-flex;
++  align-items: center;
++  gap: 0.5rem;
++  flex: 0 0 auto;
++}
++
+ .duplicate-panel__close {
+   width: 2rem;
+   height: 2rem;
+@@ -897,7 +997,8 @@ onMounted(() => {
+ 
+ @media (max-width: 720px) {
+   .page-header,
+-  .actor-actions {
++  .actor-actions,
++  .duplicate-panel__head {
+     align-items: stretch;
+     flex-direction: column;
+   }
+@@ -906,6 +1007,11 @@ onMounted(() => {
+     width: 100%;
+   }
+ 
++  .duplicate-panel__tools {
++    justify-content: space-between;
++    width: 100%;
++  }
++
+   .actor-grid {
+     grid-template-columns: 1fr;
+   }

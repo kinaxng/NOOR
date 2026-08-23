@@ -1,0 +1,36 @@
+diff --git a/backend/tests/test_settings_updates.py b/backend/tests/test_settings_updates.py
+index 02604e7..424dc8e 100644
+--- a/backend/tests/test_settings_updates.py
++++ b/backend/tests/test_settings_updates.py
+@@ -27,15 +27,31 @@ def test_build_storage_env_updates_uses_lada_weights_env_alias():
+     config = StorageConfig(
+         source_dir='/media/in',
+         output_dir='/media/out',
++        noor_data_dir='/data',
+         whisper_model_dir='/models/whisper',
++        whisper_cache_dir='/runtime/whisper/cache',
++        whisper_temp_dir='/runtime/whisper/temp',
+         lada_model_weights_dir='/models/lada',
++        lada_cache_dir='/runtime/lada/cache',
++        lada_temp_dir='/runtime/lada/temp',
++        facefusion_model_dir='/models/facefusion',
++        facefusion_cache_dir='/runtime/facefusion/cache',
++        facefusion_temp_dir='/runtime/facefusion/temp',
+     )
+ 
+     assert build_storage_env_updates(config, 'LADA_MODEL_WEIGHTS_DIR') == {
+         'SOURCE_DIR': '/media/in',
+         'OUTPUT_DIR': '/media/out',
++        'NOOR_DATA_DIR': '/data',
+         'WHISPER_MODEL_DIR': '/models/whisper',
++        'WHISPER_CACHE_DIR': '/runtime/whisper/cache',
++        'WHISPER_TEMP_DIR': '/runtime/whisper/temp',
+         'LADA_MODEL_WEIGHTS_DIR': '/models/lada',
++        'LADA_CACHE_DIR': '/runtime/lada/cache',
++        'LADA_TEMP_DIR': '/runtime/lada/temp',
++        'FACEFUSION_MODEL_DIR': '/models/facefusion',
++        'FACEFUSION_CACHE_DIR': '/runtime/facefusion/cache',
++        'FACEFUSION_TEMP_DIR': '/runtime/facefusion/temp',
+     }
+ 
+ 

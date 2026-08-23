@@ -1,0 +1,154 @@
+diff --git a/backend/app/api/endpoints/media_library.py b/backend/app/api/endpoints/media_library.py
+index 5a66b79..847ba94 100644
+--- a/backend/app/api/endpoints/media_library.py
++++ b/backend/app/api/endpoints/media_library.py
+@@ -3,6 +3,7 @@ Media Library API — direct Emby/Jellyfin adapter.
+ """
+ import os
+ import re
++import secrets
+ import shutil
+ import time
+ import mimetypes
+@@ -15,6 +16,7 @@ import httpx
+ from fastapi import APIRouter, HTTPException, Query, Request
+ from fastapi.responses import StreamingResponse
+ from pydantic import BaseModel
++from app.api.system import SystemLogManager
+ 
+ from app.api.endpoints.media_library_helpers import (
+     ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED,
+@@ -55,6 +57,9 @@ router = APIRouter(prefix="/api/media-library", tags=["media-library"])
+ 
+ _items_cache: dict[str, tuple[list[dict], float]] = {}
+ _CACHE_TTL = 86400  # 24h
++_sync_version = 0
++_last_invalidated_at: float | None = None
++_last_webhook_at: float | None = None
+ 
+ 
+ class HardlinkDeleteRequest(BaseModel):
+@@ -86,6 +91,42 @@ class MediaItemDeleteRequest(BaseModel):
+     dry_run: bool = False
+ 
+ 
++def _bump_sync_state(*, webhook: bool = False) -> dict:
++    global _sync_version, _last_invalidated_at, _last_webhook_at
++    _items_cache.clear()
++    now = time.time()
++    _sync_version += 1
++    _last_invalidated_at = now
++    if webhook:
++        _last_webhook_at = now
++    return _sync_state_payload()
++
++
++def _iso_from_ts(value: float | None) -> str | None:
++    if value is None:
++        return None
++    return datetime.fromtimestamp(value, timezone.utc).isoformat()
++
++
++def _sync_state_payload() -> dict:
++    return {
++        "version": _sync_version,
++        "last_invalidated_at": _iso_from_ts(_last_invalidated_at),
++        "last_webhook_at": _iso_from_ts(_last_webhook_at),
++        "cache_keys": sorted(_items_cache.keys()),
++    }
++
++
++def _ensure_webhook_token(config: dict) -> dict:
++    token = str(config.get("webhook_token") or "").strip()
++    if token:
++        return config
++    next_config = dict(config)
++    next_config["webhook_token"] = secrets.token_urlsafe(24)
++    _save_config(next_config)
++    return _load_config()
++
++
+ def _allowed_scan_roots(config: dict) -> tuple[list[Path], list[Path]]:
+     source_roots: list[Path] = []
+     hardlink_roots: list[Path] = []
+@@ -777,7 +818,7 @@ async def get_status():
+ @router.get("/config")
+ async def get_config():
+     """Get saved media library configuration."""
+-    return {"config": _load_config()}
++    return {"config": _ensure_webhook_token(_load_config())}
+ 
+ 
+ @router.post("/config")
+@@ -788,8 +829,56 @@ async def save_config(config: dict):
+     existing = _load_config()
+     existing.update(config)
+     _save_config(existing)
+-    _items_cache.clear()
+-    return {"ok": True}
++    state = _bump_sync_state()
++    return {"ok": True, "sync_state": state}
++
++
++@router.get("/sync-state")
++async def get_sync_state():
++    """Return the media library cache sync state for lightweight polling."""
++    return _sync_state_payload()
++
++
++@router.post("/cache/invalidate")
++async def invalidate_cache():
++    """Clear NOOR's media library cache without touching Emby."""
++    state = _bump_sync_state()
++    SystemLogManager.get_instance().add_log(
++        "info",
++        "[MediaLibrary] 媒体库缓存已手动刷新",
++        source="media_library",
++    )
++    return {"ok": True, "sync_state": state}
++
++
++@router.post("/webhook/emby")
++async def emby_webhook(request: Request, token: str | None = None):
++    """Receive Emby webhook notifications and invalidate NOOR media cache."""
++    config = _ensure_webhook_token(_load_config())
++    expected = str(config.get("webhook_token") or "").strip()
++    provided = (token or request.headers.get("X-NOOR-Webhook-Token") or "").strip()
++    if not expected or not secrets.compare_digest(provided, expected):
++        raise HTTPException(status_code=403, detail="Invalid webhook token")
++
++    event_name = ""
++    item_name = ""
++    try:
++        payload = await request.json()
++        if isinstance(payload, dict):
++            event_name = str(payload.get("Event") or payload.get("event") or payload.get("NotificationType") or "")
++            item = payload.get("Item") if isinstance(payload.get("Item"), dict) else {}
++            item_name = str(item.get("Name") or payload.get("Name") or "")
++    except Exception:
++        payload = None
++
++    state = _bump_sync_state(webhook=True)
++    hint = " ".join(part for part in [event_name, item_name] if part).strip()
++    SystemLogManager.get_instance().add_log(
++        "info",
++        f"[MediaLibrary] 收到 Emby Webhook，已刷新媒体库缓存{f' · {hint}' if hint else ''}",
++        source="media_library.webhook",
++    )
++    return {"ok": True, "sync_state": state}
+ 
+ 
+ @router.post("/test")
+@@ -960,10 +1049,11 @@ async def delete_media_item_chain(req: MediaItemDeleteRequest):
+         }
+ 
+     result = _execute_delete_targets(delete_dirs, delete_files)
+-    _items_cache.clear()
++    state = _bump_sync_state()
+     return {
+         "ok": True,
+         "code": code,
++        "sync_state": state,
+         **result,
+     }
+ 

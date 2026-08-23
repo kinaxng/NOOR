@@ -1,0 +1,23 @@
+diff --git a/plugins/qbittorrent/backend.py b/plugins/qbittorrent/backend.py
+index bfdac1d..cc982f2 100644
+--- a/plugins/qbittorrent/backend.py
++++ b/plugins/qbittorrent/backend.py
+@@ -76,12 +76,13 @@ def _api_key(config: dict[str, Any]) -> str:
+ 
+ async def _client(config: dict[str, Any], timeout: float = 15.0) -> httpx.AsyncClient:
+     api_key = _api_key(config)
+-    headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+-    client = httpx.AsyncClient(timeout=timeout, follow_redirects=True, trust_env=False, headers=headers)
+     if api_key:
++        client = httpx.AsyncClient(timeout=timeout, follow_redirects=True, trust_env=False, headers={"Authorization": f"Bearer {api_key}"})
+         return client
++    client = httpx.AsyncClient(timeout=timeout, follow_redirects=True, trust_env=False)
+     login = await client.post(f"{_base(config)}/api/v2/auth/login", data=_auth(config))
+-    login_ok = (login.status_code == 200 and "Ok." in login.text) or (login.status_code == 204 and bool(client.cookies))
++    login_text = (login.text or "").strip()
++    login_ok = login.status_code < 400 and (login_text.lower() == "ok." or login_text.lower() == "ok" or bool(client.cookies))
+     if not login_ok:
+         detail = login.text.strip() or login.reason_phrase or str(login.status_code)
+         await client.aclose()
+ M data/plugins_config.json
+ M plugins/qbittorrent/backend.py

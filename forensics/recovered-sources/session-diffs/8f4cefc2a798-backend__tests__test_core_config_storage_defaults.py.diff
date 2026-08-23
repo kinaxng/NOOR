@@ -1,0 +1,38 @@
+diff --git a/backend/tests/test_core_config_storage_defaults.py b/backend/tests/test_core_config_storage_defaults.py
+index 4b5e2a8..cf40c2f 100644
+--- a/backend/tests/test_core_config_storage_defaults.py
++++ b/backend/tests/test_core_config_storage_defaults.py
+@@ -3,7 +3,7 @@ from __future__ import annotations
+ from pathlib import Path
+ 
+ from app.core.config import Settings
+-from app.core.runtime_paths import data_path, plugin_cache_path, plugin_data_path
++from app.core.runtime_paths import apply_whisper_cache_env, build_whisper_cache_env, data_path, plugin_cache_path, plugin_data_path
+ 
+ 
+ def test_storage_defaults_derive_from_noor_data_dir():
+@@ -45,3 +45,24 @@ def test_runtime_data_helpers_derive_from_noor_data_dir():
+     assert data_path("plugins_config.json", settings=settings) == Path("/noor-data/plugins_config.json")
+     assert plugin_cache_path("gfriends", "images", settings=settings) == Path("/noor-data/plugin_cache/gfriends/images")
+     assert plugin_data_path("av_recommend", "feedback.json", settings=settings) == Path("/noor-data/av_recommend/feedback.json")
++
++
++def test_whisper_cache_env_uses_current_huggingface_keys():
++    env = build_whisper_cache_env("/models/whisper", "/runtime/whisper/cache")
++
++    assert env["HF_HOME"] == "/models/whisper"
++    assert env["HF_HUB_CACHE"] == "/models/whisper/hub"
++    assert env["TORCH_HOME"] == "/runtime/whisper/cache/torch"
++    assert env["XDG_CACHE_HOME"] == "/runtime/whisper/cache"
++    assert "TRANSFORMERS_CACHE" not in env
++
++
++def test_apply_whisper_cache_env_removes_deprecated_transformers_cache(monkeypatch):
++    monkeypatch.setenv("TRANSFORMERS_CACHE", "/legacy/cache")
++
++    apply_whisper_cache_env("/models/whisper", "/runtime/whisper/cache")
++
++    import os
++
++    assert os.environ["HF_HOME"] == "/models/whisper"
++    assert "TRANSFORMERS_CACHE" not in os.environ

@@ -1,0 +1,18 @@
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index a666abf..46629e8 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -67,6 +67,13 @@ export const zh: Record<string, string> = {
+   'files.actors.mergeConfirmTitle': '确认合并演员',
+   'files.actors.mergeConfirm': '确认将 {count} 部作品里的演员统一为“{target}”？执行前会保存备份。',
+   'files.actors.mergeBackupNote': '备份只保存 Emby 条目的原始演员列表，用于误合并后的关系恢复，不会复制视频、封面或 NFO 文件。',
++  'files.actors.batchMerge': '一键合并',
++  'files.actors.batchMergeConfirmTitle': '确认一键合并',
++  'files.actors.batchMergeConfirm': '将合并 {count} 组无冲突候选，跳过 {skipped} 组 TMDB 冲突候选。',
++  'files.actors.batchMergeNote': '每组都会先生成最新合并计划再执行，并按当前选中的目标演员合并；执行前会分别保存备份。',
++  'files.actors.batchMergeTargets': '本次目标',
++  'files.actors.batchMergeSuccess': '已合并 {groups} 组，更新 {count} 部作品，删除空演员 {deleted} 个，跳过无修改 {empty} 组',
++  'files.actors.batchMergeFailed': '{count} 组合并失败',
+   'files.actors.mergePlanTarget': '目标',
+   'files.actors.mergePlanMovies': '{count} 部作品将被修改',
+   'files.actors.mergePlanMore': '还有 {count} 部作品',

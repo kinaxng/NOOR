@@ -1,0 +1,157 @@
+diff --git a/frontend/src/components/noor/FaceFusionPanel.vue b/frontend/src/components/noor/FaceFusionPanel.vue
+index 2348532..6e456f9 100644
+--- a/frontend/src/components/noor/FaceFusionPanel.vue
++++ b/frontend/src/components/noor/FaceFusionPanel.vue
+@@ -138,8 +138,16 @@ const facefusionProcessorOptions = [
+ ]
+ const facefusionAllowedProcessorIds = new Set(facefusionProcessorOptions.map(item => item.id))
+ const facefusionDetectorModelOptions = ['many', 'retinaface', 'scrfd', 'yolo_face', 'yunet']
++const facefusionDetectorSizeOptionsByModel: Record<string, string[]> = {
++  many: ['640x640'],
++  retinaface: ['160x160', '320x320', '480x480', '512x512', '640x640'],
++  scrfd: ['160x160', '320x320', '480x480', '512x512', '640x640'],
++  yolo_face: ['640x640'],
++  yunet: ['640x640'],
++}
+ const facefusionDetectorAngleOptions = ['0', '90', '180', '270']
+ const facefusionMaskTypeOptions = ['box', 'occlusion', 'area', 'region']
++const facefusionMaskAreaOptions = ['upper-face', 'lower-face', 'mouth']
+ const facefusionMaskRegionOptions = ['skin', 'left-eyebrow', 'right-eyebrow', 'left-eye', 'right-eye', 'glasses', 'nose', 'mouth', 'upper-lip', 'lower-lip']
+ const facefusionOccluderModelOptions = ['many', 'xseg_1', 'xseg_2', 'xseg_3']
+ const facefusionParserModelOptions = ['bisenet_resnet_18', 'bisenet_resnet_34']
+@@ -172,6 +180,7 @@ const facefusionOptionLabels: Record<string, Record<string, string>> = {
+   gender: { '': '不限', female: '女性', male: '男性' },
+   race: { '': '不限', white: '白人', black: '黑人', latino: '拉丁裔', asian: '亚洲人', indian: '印度人', arabic: '阿拉伯人' },
+   maskType: { box: '方框', occlusion: '遮挡', area: '区域', region: '部位' },
++  maskArea: { 'upper-face': '上半脸', 'lower-face': '下半脸', mouth: '嘴巴' },
+   maskRegion: {
+     skin: '皮肤',
+     'left-eyebrow': '左眉',
+@@ -365,6 +374,10 @@ const facefusionPixelBoostOptions = computed(() => {
+   const model = String(facefusionSettings.value.face_swapper_model || 'hyperswap_1a_256')
+   return facefusionPixelBoostOptionsByModel[model] || ['256x256']
+ })
++const facefusionDetectorSizeOptions = computed(() => {
++  const model = String(facefusionSettings.value.face_detector_model || 'yolo_face')
++  return facefusionDetectorSizeOptionsByModel[model] || ['640x640']
++})
+ 
+ watch(() => facefusionSettings.value.face_swapper_model, () => {
+   const options = facefusionPixelBoostOptions.value
+@@ -373,6 +386,13 @@ watch(() => facefusionSettings.value.face_swapper_model, () => {
+   }
+ })
+ 
++watch(() => facefusionSettings.value.face_detector_model, () => {
++  const options = facefusionDetectorSizeOptions.value
++  if (!options.includes(String(facefusionSettings.value.face_detector_size || ''))) {
++    facefusionSettings.value.face_detector_size = options[options.length - 1] || '640x640'
++  }
++})
++
+ function splitTokens(value: string) {
+   return String(value || '').split(/[\s,]+/).map(item => item.trim()).filter(Boolean)
+ }
+@@ -396,6 +416,20 @@ function toggleFacefusionToken(key: string, token: string) {
+   settingsValue[key] = next.join(' ')
+ }
+ 
++function getFacefusionQuadValue(key: string, index: number) {
++  const settingsValue = facefusionSettings.value as Record<string, unknown>
++  const values = splitTokens(String(settingsValue[key] || '0 0 0 0')).map(item => Number(item))
++  return Number.isFinite(values[index]) ? values[index] : 0
++}
++
++function updateFacefusionQuadValue(key: string, index: number, value: unknown) {
++  const settingsValue = facefusionSettings.value as Record<string, unknown>
++  const values = [0, 0, 0, 0].map((fallback, itemIndex) => getFacefusionQuadValue(key, itemIndex) || fallback)
++  const next = Math.max(0, Math.min(100, Number(value) || 0))
++  values[index] = next
++  settingsValue[key] = values.map(item => String(Math.round(item))).join(' ')
++}
++
+ async function loadDeepSwapperModels() {
+   deepModelLoading.value = true
+   try {
+@@ -1086,6 +1120,32 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                             </button>
+                           </div>
+                         </label>
++                        <label v-if="selectedFacefusionMaskTypes.includes('area')">
++                          <span>遮罩区域</span>
++                          <div class="facefusion-choice-chips">
++                            <button v-for="area in facefusionMaskAreaOptions" :key="area" type="button" :class="{ 'is-active': hasFacefusionToken('face_mask_areas', area) }" @click="toggleFacefusionToken('face_mask_areas', area)">
++                              {{ facefusionOptionLabel('maskArea', area) }}
++                            </button>
++                          </div>
++                        </label>
++                        <div v-if="selectedFacefusionMaskTypes.includes('box')" class="facefusion-native-subgrid">
++                          <label>
++                            <span>上边距 {{ getFacefusionQuadValue('face_mask_padding', 0) }}</span>
++                            <input :value="getFacefusionQuadValue('face_mask_padding', 0)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_mask_padding', 0, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                          <label>
++                            <span>右边距 {{ getFacefusionQuadValue('face_mask_padding', 1) }}</span>
++                            <input :value="getFacefusionQuadValue('face_mask_padding', 1)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_mask_padding', 1, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                          <label>
++                            <span>下边距 {{ getFacefusionQuadValue('face_mask_padding', 2) }}</span>
++                            <input :value="getFacefusionQuadValue('face_mask_padding', 2)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_mask_padding', 2, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                          <label>
++                            <span>左边距 {{ getFacefusionQuadValue('face_mask_padding', 3) }}</span>
++                            <input :value="getFacefusionQuadValue('face_mask_padding', 3)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_mask_padding', 3, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                        </div>
+                         <label>
+                           <span>遮挡模型</span>
+                           <select v-model="facefusionSettings.face_occluder_model" class="settings-input w-full">
+@@ -1104,10 +1164,34 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+                             <option v-for="model in facefusionDetectorModelOptions" :key="model" :value="model">{{ model }}</option>
+                           </select>
+                         </label>
++                        <label>
++                          <span>检测尺寸</span>
++                          <select v-model="facefusionSettings.face_detector_size" class="settings-input w-full">
++                            <option v-for="size in facefusionDetectorSizeOptions" :key="size" :value="size">{{ size }}</option>
++                          </select>
++                        </label>
+                         <label>
+                           <span>检测分数 {{ Number(facefusionSettings.face_detector_score || 0).toFixed(2) }}</span>
+                           <input v-model.number="facefusionSettings.face_detector_score" type="range" min="0" max="1" step="0.05" class="facefusion-range" />
+                         </label>
++                        <div class="facefusion-native-subgrid">
++                          <label>
++                            <span>检测上边距 {{ getFacefusionQuadValue('face_detector_margin', 0) }}</span>
++                            <input :value="getFacefusionQuadValue('face_detector_margin', 0)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_detector_margin', 0, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                          <label>
++                            <span>检测右边距 {{ getFacefusionQuadValue('face_detector_margin', 1) }}</span>
++                            <input :value="getFacefusionQuadValue('face_detector_margin', 1)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_detector_margin', 1, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                          <label>
++                            <span>检测下边距 {{ getFacefusionQuadValue('face_detector_margin', 2) }}</span>
++                            <input :value="getFacefusionQuadValue('face_detector_margin', 2)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_detector_margin', 2, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                          <label>
++                            <span>检测左边距 {{ getFacefusionQuadValue('face_detector_margin', 3) }}</span>
++                            <input :value="getFacefusionQuadValue('face_detector_margin', 3)" type="range" min="0" max="100" step="1" class="facefusion-range" @input="updateFacefusionQuadValue('face_detector_margin', 3, ($event.target as HTMLInputElement).value)" />
++                          </label>
++                        </div>
+                         <label>
+                           <span>检测角度</span>
+                           <div class="facefusion-choice-chips">
+@@ -1763,6 +1847,13 @@ async function removeUploadedSourceImage(source: { id: string; path: string }) {
+   grid-column: 1 / -1;
+ }
+ 
++.facefusion-native-subgrid {
++  display: grid;
++  grid-column: 1 / -1;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++  gap: 0.7rem;
++}
++
+ .facefusion-reference-box--native {
+   grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1fr);
+ }

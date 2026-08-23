@@ -1,0 +1,17 @@
+diff --git a/backend/app/core/runtime_paths.py b/backend/app/core/runtime_paths.py
+index 069bd2f..dd9ac75 100644
+--- a/backend/app/core/runtime_paths.py
++++ b/backend/app/core/runtime_paths.py
+@@ -4,10 +4,10 @@ import os
+ from pathlib import Path
+ from typing import Any
+ 
+-from app.core.config import PROJECT_ROOT
++from app.core.config import DEFAULT_NOOR_DATA_DIR as CONFIG_DEFAULT_NOOR_DATA_DIR
+ 
+ 
+-DEFAULT_NOOR_DATA_DIR = PROJECT_ROOT / "data"
++DEFAULT_NOOR_DATA_DIR = Path(CONFIG_DEFAULT_NOOR_DATA_DIR)
+ 
+ 
+ def configured_or_default(value: str | None, default_path: str | Path) -> str:

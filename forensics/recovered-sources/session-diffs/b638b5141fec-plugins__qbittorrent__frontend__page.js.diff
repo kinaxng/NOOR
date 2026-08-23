@@ -1,0 +1,29 @@
+diff --git a/plugins/qbittorrent/frontend/page.js b/plugins/qbittorrent/frontend/page.js
+index afc82b4..1b65e22 100644
+--- a/plugins/qbittorrent/frontend/page.js
++++ b/plugins/qbittorrent/frontend/page.js
+@@ -7,6 +7,7 @@ export async function mount(el, sdk = {}) {
+     error: '',
+     version: '',
+     apiMode: '',
++    authMode: '',
+     transfer: {},
+     showNoorOnly: false,
+     noorTag: 'noor',
+@@ -237,7 +238,7 @@ export async function mount(el, sdk = {}) {
+     renderFilterTabs()
+     if (state.version) {
+       version.style.display='inline-flex'
+-      version.textContent = state.apiMode ? `${state.version} · ${state.apiMode}` : state.version
++      version.textContent = [state.version, state.apiMode, state.authMode].filter(Boolean).join(' · ')
+     } else version.style.display='none'
+     scope.textContent = state.showNoorOnly ? `范围：${state.noorTag}` : '范围：全部'
+     if (Number(state.minFileSizeMb || 0) > 0) {
+@@ -675,6 +676,7 @@ export async function mount(el, sdk = {}) {
+     const oldPages = totalPages(oldItems.length)
+     state.version = data.version ? `qB ${data.version}` : ''
+     state.apiMode = data.api_mode === 'start_stop' ? 'start/stop' : data.api_mode === 'pause_resume' ? 'pause/resume' : ''
++    state.authMode = data.auth_mode === 'api_key' ? 'API Key' : data.auth_mode === 'cookie' ? 'Cookie' : ''
+     state.transfer = data.transfer || {}
+     state.showNoorOnly = !!data.show_noor_only
+     state.noorTag = data.noor_tag || 'noor'

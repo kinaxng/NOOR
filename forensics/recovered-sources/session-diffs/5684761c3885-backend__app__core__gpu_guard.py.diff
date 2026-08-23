@@ -1,0 +1,55 @@
+diff --git a/backend/app/core/gpu_guard.py b/backend/app/core/gpu_guard.py
+index 29eb8a7..d426db1 100644
+--- a/backend/app/core/gpu_guard.py
++++ b/backend/app/core/gpu_guard.py
+@@ -109,6 +109,24 @@ def _is_noor_process(process: GpuProcess) -> bool:
+     return any(marker in command for marker in markers)
+ 
+ 
++def _is_gpu_service_process(process: GpuProcess) -> bool:
++    current_pid = os.getpid()
++    if process.pid in {current_pid, os.getppid()}:
++        return False
++    command = f"{process.name} {process.command}".lower()
++    markers = (
++        "llama-server",
++        "ollama runner",
++        "/ollama",
++        "text-generation-launcher",
++        "text-generation-server",
++        "vllm",
++        "lmdeploy",
++        "sglang",
++    )
++    return any(marker in command for marker in markers)
++
++
+ def _format_processes(processes: list[GpuProcess]) -> str:
+     if not processes:
+         return "无 GPU 计算进程"
+@@ -155,7 +173,7 @@ def ensure_gpu_memory(
+     task_name: str,
+     required_free_mb: int,
+     device_index: int = 0,
+-    cleanup_policy: str = "noor",
++    cleanup_policy: str = "services",
+     grace_seconds: int = 8,
+ ) -> list[str]:
+     if required_free_mb <= 0:
+@@ -170,10 +188,15 @@ def ensure_gpu_memory(
+     if snapshot.free_mb >= required_free_mb:
+         return logs
+ 
+-    policy = (cleanup_policy or "noor").strip().lower()
++    policy = (cleanup_policy or "services").strip().lower()
+     candidates: list[GpuProcess] = []
+     if policy == "noor":
+         candidates = [proc for proc in snapshot.processes if _is_noor_process(proc)]
++    elif policy in {"services", "managed", "managed-services"}:
++        candidates = [
++            proc for proc in snapshot.processes
++            if _is_noor_process(proc) or _is_gpu_service_process(proc)
++        ]
+     elif policy == "aggressive":
+         current_pid = os.getpid()
+         candidates = [proc for proc in snapshot.processes if proc.pid not in {current_pid, os.getppid()}]

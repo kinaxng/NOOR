@@ -1,0 +1,70 @@
+diff --git a/backend/app/api/facefusion.py b/backend/app/api/facefusion.py
+index f883daf..32408ea 100644
+--- a/backend/app/api/facefusion.py
++++ b/backend/app/api/facefusion.py
+@@ -1,10 +1,11 @@
+ from __future__ import annotations
+ 
+ from pathlib import Path
++from uuid import uuid4
+ from typing import Any
+ 
+ import cv2
+-from fastapi import APIRouter, HTTPException
++from fastapi import APIRouter, File, HTTPException, UploadFile
+ from fastapi.responses import FileResponse
+ from pydantic import BaseModel, ConfigDict, Field
+ 
+@@ -14,6 +15,8 @@ from app.pipeline.facefusion.preview import generate_facefusion_preview
+ 
+ router = APIRouter(prefix="/api/facefusion", tags=["facefusion"])
+ 
++FACEFUSION_SOURCE_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
++
+ 
+ class FaceFusionPreviewRequest(BaseModel):
+     model_config = ConfigDict(extra="allow")
+@@ -36,6 +39,43 @@ def _preview_root() -> Path:
+     return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "previews"
+ 
+ 
++def _upload_root() -> Path:
++    cache_dir = get_settings().facefusion_cache_dir
++    if cache_dir:
++        return Path(cache_dir) / "uploads"
++    return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "uploads"
++
++
++@router.post("/source-images")
++async def upload_facefusion_source_images(files: list[UploadFile] = File(...)):
++    if not files:
++        raise HTTPException(status_code=400, detail="请选择源脸图片")
++
++    upload_root = _upload_root()
++    upload_root.mkdir(parents=True, exist_ok=True)
++    saved_files: list[dict[str, str]] = []
++    for upload in files:
++        original_name = Path(upload.filename or "source").name
++        suffix = Path(original_name).suffix.lower()
++        if suffix not in FACEFUSION_SOURCE_IMAGE_EXTENSIONS:
++            raise HTTPException(status_code=400, detail=f"不支持的源脸图片格式: {original_name}")
++        target_path = upload_root / f"{uuid4().hex}{suffix}"
++        try:
++            with target_path.open("wb") as handle:
++                while chunk := await upload.read(1024 * 1024):
++                    handle.write(chunk)
++        finally:
++            await upload.close()
++        saved_files.append({
++            "name": original_name,
++            "path": str(target_path),
++        })
++    return {
++        "success": True,
++        "files": saved_files,
++    }
++
++
+ @router.post("/preview/metadata")
+ async def get_facefusion_preview_metadata(payload: FaceFusionPreviewMetadataRequest):
+     input_path = Path(payload.input_path)

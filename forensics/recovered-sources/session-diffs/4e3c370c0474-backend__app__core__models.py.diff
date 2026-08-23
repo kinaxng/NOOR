@@ -1,0 +1,16 @@
+diff --git a/backend/app/core/models.py b/backend/app/core/models.py
+index a6dcb06..e558e09 100644
+--- a/backend/app/core/models.py
++++ b/backend/app/core/models.py
+@@ -160,9 +160,9 @@ class EmbyNFO(BaseModel):
+ 
+ class FileTags(BaseModel):
+     """File tag information parsed from filename."""
+-    is_uncensored: bool = False  # -u 流出
++    is_uncensored: bool = False  # 片商/目录等结构性来源判定的无码
+     has_chinese: bool = False    # -c 中文
+-    is_cracked: bool = False     # 破解 (same as uncensored)
++    is_cracked: bool = False     # 破解/去码版本
+     is_leaked: bool = False      # 流出
+     release_type: Optional[str] = None  # 流出 / 无码
+     release_type_key: Optional[str] = None  # leaked / uncensored

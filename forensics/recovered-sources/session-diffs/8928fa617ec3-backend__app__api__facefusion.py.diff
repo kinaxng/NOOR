@@ -1,0 +1,66 @@
+diff --git a/backend/app/api/facefusion.py b/backend/app/api/facefusion.py
+index 3befb6e..45d06c5 100644
+--- a/backend/app/api/facefusion.py
++++ b/backend/app/api/facefusion.py
+@@ -46,6 +46,18 @@ def _upload_root() -> Path:
+     return PROJECT_ROOT / "data" / "runtime" / "facefusion" / "cache" / "uploads"
+ 
+ 
++def _source_image_path(image_id: str) -> Path:
++    if not image_id or len(image_id) > 64 or not all(ch in "0123456789abcdef" for ch in image_id):
++        raise HTTPException(status_code=400, detail="非法源脸图片 ID")
++
++    upload_root = _upload_root()
++    for suffix in FACEFUSION_SOURCE_IMAGE_EXTENSIONS:
++        path = upload_root / f"{image_id}{suffix}"
++        if path.exists():
++            return path
++    raise HTTPException(status_code=404, detail="源脸图片不存在")
++
++
+ @router.post("/source-images")
+ async def upload_facefusion_source_images(files: list[UploadFile] = File(...)):
+     if not files:
+@@ -66,9 +78,12 @@ async def upload_facefusion_source_images(files: list[UploadFile] = File(...)):
+                     handle.write(chunk)
+         finally:
+             await upload.close()
++        image_id = target_path.stem
+         saved_files.append({
++            "id": image_id,
+             "name": original_name,
+             "path": str(target_path),
++            "preview_url": f"/api/facefusion/source-images/{image_id}",
+         })
+     return {
+         "success": True,
+@@ -76,6 +91,29 @@ async def upload_facefusion_source_images(files: list[UploadFile] = File(...)):
+     }
+ 
+ 
++@router.get("/source-images/{image_id}")
++async def get_facefusion_source_image(image_id: str):
++    path = _source_image_path(image_id)
++    media_types = {
++        ".jpg": "image/jpeg",
++        ".jpeg": "image/jpeg",
++        ".png": "image/png",
++        ".webp": "image/webp",
++        ".bmp": "image/bmp",
++    }
++    return FileResponse(path, media_type=media_types.get(path.suffix.lower(), "application/octet-stream"))
++
++
++@router.delete("/source-images/{image_id}")
++async def delete_facefusion_source_image(image_id: str):
++    path = _source_image_path(image_id)
++    try:
++        path.unlink()
++    except FileNotFoundError:
++        pass
++    return {"success": True}
++
++
+ @router.post("/preview/metadata")
+ async def get_facefusion_preview_metadata(payload: FaceFusionPreviewMetadataRequest):
+     input_path = Path(payload.input_path)

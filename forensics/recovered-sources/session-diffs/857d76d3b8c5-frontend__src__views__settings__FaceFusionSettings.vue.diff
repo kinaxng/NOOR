@@ -1,0 +1,63 @@
+diff --git a/frontend/src/views/settings/FaceFusionSettings.vue b/frontend/src/views/settings/FaceFusionSettings.vue
+index 4244155..84c9fd5 100644
+--- a/frontend/src/views/settings/FaceFusionSettings.vue
++++ b/frontend/src/views/settings/FaceFusionSettings.vue
+@@ -65,6 +65,12 @@ const maskAreaOptions = ['upper-face', 'lower-face', 'mouth']
+ const maskRegionOptions = ['skin', 'left-eyebrow', 'right-eyebrow', 'left-eye', 'right-eye', 'glasses', 'nose', 'mouth', 'upper-lip', 'lower-lip']
+ const genderOptions = ['', 'female', 'male']
+ const raceOptions = ['', 'white', 'black', 'latino', 'asian', 'indian', 'arabic']
++const previewModeOptions = [
++  { id: 'default', label: '默认' },
++  { id: 'frame-by-frame', label: '原图对比' },
++  { id: 'face-by-face', label: '人脸对比' },
++]
++const previewResolutionOptions = ['512x512', '768x768', '1024x1024']
+ const scaleOptions = Array.from({ length: 32 }, (_, index) => {
+   const value = (index + 1) * 0.25
+   return Number.isInteger(value) ? value.toFixed(1) : String(value)
+@@ -95,6 +101,8 @@ const systemMemoryLimit = ref(0)
+ const logLevel = ref('info')
+ const downloadProviders = ref('github huggingface')
+ const haltOnError = ref(false)
++const previewMode = ref('default')
++const previewResolution = ref('768x768')
+ const processors = ref('')
+ const faceSwapperModel = ref('hyperswap_1a_256')
+ const faceSwapperPixelBoost = ref('256x256')
+@@ -240,6 +248,8 @@ async function loadSettings() {
+       logLevel.value = data.facefusion_defaults.log_level || 'info'
+       downloadProviders.value = data.facefusion_defaults.download_providers || 'github huggingface'
+       haltOnError.value = data.facefusion_defaults.halt_on_error ?? false
++      previewMode.value = data.facefusion_defaults.preview_mode || 'default'
++      previewResolution.value = data.facefusion_defaults.preview_resolution || '768x768'
+       processors.value = data.facefusion_defaults.processors || ''
+       faceSwapperModel.value = data.facefusion_defaults.face_swapper_model || 'hyperswap_1a_256'
+       faceSwapperPixelBoost.value = data.facefusion_defaults.face_swapper_pixel_boost || '256x256'
+@@ -397,6 +407,8 @@ async function saveDefaults() {
+       log_level: logLevel.value,
+       download_providers: downloadProviders.value,
+       halt_on_error: haltOnError.value,
++      preview_mode: previewMode.value,
++      preview_resolution: previewResolution.value,
+       processors: processors.value,
+       face_swapper_model: faceSwapperModel.value,
+       face_swapper_pixel_boost: faceSwapperPixelBoost.value,
+@@ -727,6 +739,18 @@ async function saveDefaults() {
+             </div>
+           </FieldRow>
+ 
++          <FieldRow label="预览模式" description="媒体库 FaceFusion 面板的默认预览展示方式">
++            <select v-model="previewMode" class="settings-input">
++              <option v-for="mode in previewModeOptions" :key="mode.id" :value="mode.id">{{ mode.label }} ({{ mode.id }})</option>
++            </select>
++          </FieldRow>
++
++          <FieldRow label="预览分辨率" description="分辨率越高越清晰，但生成更慢、显存占用更高">
++            <select v-model="previewResolution" class="settings-input">
++              <option v-for="resolution in previewResolutionOptions" :key="resolution" :value="resolution">{{ resolution }}</option>
++            </select>
++          </FieldRow>
++
+           <FieldRow label="处理器" description="留空则不传 --processors，使用 FaceFusion 自身配置；多个处理器可用空格或逗号分隔">
+             <div class="choice-chips">
+               <button

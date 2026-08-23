@@ -1,0 +1,260 @@
+diff --git a/backend/app/pipeline/facefusion/runner.py b/backend/app/pipeline/facefusion/runner.py
+index 886619e..65c2665 100644
+--- a/backend/app/pipeline/facefusion/runner.py
++++ b/backend/app/pipeline/facefusion/runner.py
+@@ -2,11 +2,15 @@ from __future__ import annotations
+ 
+ import asyncio
+ import concurrent.futures
++import gc
+ import os
+ import re
+ import signal
++import shutil
+ import subprocess
++import sys
+ import threading
++from contextlib import suppress
+ from pathlib import Path
+ 
+ from app.core.facefusion_paths import (
+@@ -67,6 +71,8 @@ def _build_env(*, facefusion_cache_dir: str, facefusion_temp_dir: str) -> dict[s
+ 
+ _resolve_model_dir = resolve_facefusion_model_dir
+ 
++FACEFUSION_TASK_TEMP_PARENT = "tasks"
++
+ FACEFUSION_ALLOWED_PROCESSORS = {
+     "face_swapper",
+     "face_enhancer",
+@@ -124,6 +130,53 @@ def _system_memory_limit(job_settings: dict) -> int:
+     return int(job_settings.get("system_memory_limit", settings.facefusion_system_memory_limit) or 0)
+ 
+ 
++def _safe_job_id(job_id: str) -> str:
++    safe = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(job_id or ""))
++    return safe.strip("_")[:96] or "facefusion"
++
++
++def _task_temp_dir(base_temp_dir: str, job_id: str) -> Path:
++    return Path(base_temp_dir) / FACEFUSION_TASK_TEMP_PARENT / _safe_job_id(job_id)
++
++
++def _prepare_task_runtime_settings(job_id: str, job_settings: dict) -> tuple[dict, Path]:
++    settings = get_settings()
++    runtime_settings = dict(job_settings or {})
++    base_temp_dir = ensure_directory(runtime_settings.get("facefusion_temp_dir", settings.facefusion_temp_dir) or "")
++    task_temp_dir = _task_temp_dir(base_temp_dir, job_id)
++    task_temp_dir.mkdir(parents=True, exist_ok=True)
++    runtime_settings["facefusion_temp_dir"] = str(task_temp_dir)
++    return runtime_settings, task_temp_dir
++
++
++def _release_process_memory() -> None:
++    gc.collect()
++    torch_module = sys.modules.get("torch")
++    if torch_module is None:
++        return
++    cuda = getattr(torch_module, "cuda", None)
++    if cuda is None:
++        return
++    with suppress(Exception):
++        if cuda.is_available():
++            cuda.empty_cache()
++    with suppress(Exception):
++        if cuda.is_available() and hasattr(cuda, "ipc_collect"):
++            cuda.ipc_collect()
++
++
++def _cleanup_task_runtime(task_temp_dir: Path | None) -> None:
++    if task_temp_dir is None:
++        return
++    with suppress(Exception):
++        if task_temp_dir.exists():
++            shutil.rmtree(task_temp_dir)
++    with suppress(Exception):
++        parent = task_temp_dir.parent
++        if parent.name == FACEFUSION_TASK_TEMP_PARENT and parent.exists() and not any(parent.iterdir()):
++            parent.rmdir()
++
++
+ def _build_command(input_path: str, output_path: str, job_settings: dict) -> tuple[list[str], str, dict[str, str], str, str, str, str]:
+     settings = get_settings()
+     configured_dir = job_settings.get("facefusion_dir")
+@@ -295,32 +348,10 @@ async def run_facefusion_restoration(
+     progress_queue: asyncio.Queue,
+     cancel_event: asyncio.Event | None = None,
+ ) -> bool:
+-    cmd, cwd, env, model_dir, model_dir_mode, facefusion_cache_dir, source_mode = _build_command(input_path, output_path, job_settings)
+-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+-
+-    await progress_queue.put(_progress_event(
+-        progress=1,
+-        phase_key="prepare",
+-        phase_progress=10,
+-        detail="初始化 FaceFusion CLI",
+-    ))
+-    await progress_queue.put({"type": "log", "line": f"Starting command: {' '.join(cmd)}"})
+-    await progress_queue.put({"type": "log", "line": f"FaceFusion source mode: {source_mode}"})
+-    await progress_queue.put({"type": "log", "line": f"FaceFusion model directory: {model_dir} ({model_dir_mode})"})
+-    await progress_queue.put({"type": "log", "line": f"FaceFusion working directory: {cwd}"})
+-    await progress_queue.put({"type": "log", "line": f"FaceFusion runtime cache directory: {facefusion_cache_dir}"})
+-    if _system_memory_limit(job_settings) > 0 and "tensorrt" in {provider.lower() for provider in _execution_providers(job_settings)}:
+-        await progress_queue.put({
+-            "type": "log",
+-            "line": "FaceFusion system memory limit ignored for TensorRT to avoid ONNXRuntime/TensorRT RLIMIT_DATA crashes.",
+-        })
+-
+-    result = {"returncode": None, "cancelled": False}
++    runtime_settings, task_temp_dir = _prepare_task_runtime_settings(job_id, job_settings)
+     proc_holder: dict[str, subprocess.Popen | None] = {"proc": None}
+     proc_lock = threading.Lock()
+     terminate_requested = threading.Event()
+-    progress_state = {"overall": 1, "stage": ""}
+-    state_lock = threading.Lock()
+ 
+     def push(item: dict) -> None:
+         try:
+@@ -328,26 +359,9 @@ async def run_facefusion_restoration(
+         except Exception:
+             pass
+ 
+-    def publish(progress: int, phase_key: str, phase_progress: int, detail: str | None = None, stage: str | None = None) -> None:
+-        progress = max(0, min(100, int(progress)))
+-        with state_lock:
+-            current_stage = str(progress_state.get("stage") or "")
+-            if stage and current_stage != stage:
+-                progress_state["stage"] = stage
+-            elif progress < int(progress_state["overall"]):
+-                return
+-            progress_state["overall"] = progress
+-        push(_progress_event(
+-            progress=progress,
+-            phase_key=phase_key,
+-            phase_progress=phase_progress,
+-            detail=detail,
+-        ))
+-
+     def terminate_process_tree(proc: subprocess.Popen | None) -> None:
+         if proc is None or proc.poll() is not None:
+             return
+-        result["cancelled"] = True
+         terminate_requested.set()
+         try:
+             if os.name == "posix":
+@@ -357,10 +371,8 @@ async def run_facefusion_restoration(
+         except ProcessLookupError:
+             return
+         except Exception:
+-            try:
++            with suppress(Exception):
+                 proc.terminate()
+-            except Exception:
+-                pass
+ 
+     def kill_process_tree(proc: subprocess.Popen | None) -> None:
+         if proc is None or proc.poll() is not None:
+@@ -373,115 +385,165 @@ async def run_facefusion_restoration(
+         except ProcessLookupError:
+             return
+         except Exception:
+-            try:
++            with suppress(Exception):
+                 proc.kill()
+-            except Exception:
+-                pass
+-
+-    def run_in_thread() -> None:
+-        creation_kwargs = {"start_new_session": True} if os.name == "posix" else {}
+-        proc = subprocess.Popen(
+-            cmd,
+-            cwd=cwd,
+-            stdout=subprocess.PIPE,
+-            stderr=subprocess.STDOUT,
+-            text=True,
+-            bufsize=1,
+-            env=env,
+-            **creation_kwargs,
+-        )
+-        with proc_lock:
+-            proc_holder["proc"] = proc
+-        if terminate_requested.is_set():
+-            terminate_process_tree(proc)
+-        if proc.stdout:
+-            for raw_line in proc.stdout:
+-                if terminate_requested.is_set():
+-                    terminate_process_tree(proc)
+-                    break
+-                line = raw_line.rstrip()
+-                if not line:
+-                    continue
+-                push({"type": "log", "line": line})
+-                stage = _classify_output_line(line)
+-                match = re.search(r"(\d{1,3})%", line)
+-                if stage and match:
+-                    pct = max(0, min(100, int(match.group(1))))
+-                    overall, phase_key, phase_progress = _overall_for_phase(stage, pct)
+-                    publish(overall, phase_key, phase_progress, line, stage=stage)
+-                elif stage:
+-                    overall, phase_key, phase_progress = _overall_for_phase(stage, 0)
+-                    publish(overall, phase_key, phase_progress, line, stage=stage)
+-        if proc.stdout:
+-            proc.stdout.close()
+-        try:
+-            proc.wait(timeout=10 if terminate_requested.is_set() else None)
+-        except subprocess.TimeoutExpired:
+-            kill_process_tree(proc)
+-            proc.wait()
+-        result["returncode"] = proc.returncode
+-
+-    loop = asyncio.get_running_loop()
+-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="facefusion-")
+-    future = loop.run_in_executor(executor, run_in_thread)
+-    cancel_wait_task = None
+ 
+     try:
+-        if cancel_event is None:
+-            await future
+-        else:
+-            cancel_wait_task = asyncio.create_task(cancel_event.wait())
+-            done, _ = await asyncio.wait({future, cancel_wait_task}, return_when=asyncio.FIRST_COMPLETED)
+-            if cancel_wait_task in done and cancel_event.is_set() and not future.done():
+-                await progress_queue.put({"type": "log", "line": "Cancellation requested; terminating FaceFusion..."})
+-                terminate_requested.set()
+-                with proc_lock:
+-                    proc = proc_holder.get("proc")
++        cmd, cwd, env, model_dir, model_dir_mode, facefusion_cache_dir, source_mode = _build_command(input_path, output_path, runtime_settings)
++        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
++
++        await progress_queue.put(_progress_event(
++            progress=1,
++            phase_key="prepare",
++            phase_progress=10,
++            detail="初始化 FaceFusion CLI",
++        ))
++        await progress_queue.put({"type": "log", "line": f"Starting command: {' '.join(cmd)}"})
++        await progress_queue.put({"type": "log", "line": f"FaceFusion source mode: {source_mode}"})
++        await progress_queue.put({"type": "log", "line": f"FaceFusion model directory: {model_dir} ({model_dir_mode})"})
++        await progress_queue.put({"type": "log", "line": f"FaceFusion working directory: {cwd}"})
++        await progress_queue.put({"type": "log", "line": f"FaceFusion runtime cache directory: {facefusion_cache_dir}"})
++        await progress_queue.put({"type": "log", "line": f"FaceFusion task temp directory: {task_temp_dir}"})
++        if _system_memory_limit(runtime_settings) > 0 and "tensorrt" in {provider.lower() for provider in _execution_providers(runtime_settings)}:
++            await progress_queue.put({
++                "type": "log",
++                "line": "FaceFusion system memory limit ignored for TensorRT to avoid ONNXRuntime/TensorRT RLIMIT_DATA crashes.",
++            })
++
++        result = {"returncode": None, "cancelled": False}
++        progress_state = {"overall": 1, "stage": ""}
++        state_lock = threading.Lock()
++
++        def publish(progress: int, phase_key: str, phase_progress: int, detail: str | None = None, stage: str | None = None) -> None:
++            progress = max(0, min(100, int(progress)))
++            with state_lock:
++                current_stage = str(progress_state.get("stage") or "")
++                if stage and current_stage != stage:
++                    progress_state["stage"] = stage
++                elif progress < int(progress_state["overall"]):
++                    return
++                progress_state["overall"] = progress
++            push(_progress_event(

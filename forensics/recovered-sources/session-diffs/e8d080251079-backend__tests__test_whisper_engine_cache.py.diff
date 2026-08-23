@@ -1,0 +1,26 @@
+diff --git a/backend/tests/test_whisper_engine_cache.py b/backend/tests/test_whisper_engine_cache.py
+index a62c0c1..67f5f05 100644
+--- a/backend/tests/test_whisper_engine_cache.py
++++ b/backend/tests/test_whisper_engine_cache.py
+@@ -26,6 +26,21 @@ def test_resolve_hf_model_source_prefers_snapshot_when_cached(tmp_path: Path):
+     assert kwargs["local_files_only"] is True
+ 
+ 
++def test_resolve_hf_model_source_supports_huggingface_root_layout(tmp_path: Path):
++    hf_root = tmp_path / "models" / "huggingface"
++    repo_dir = hf_root / "hub" / "models--litagin--anime-whisper"
++    snapshot_dir = repo_dir / "snapshots" / "abc123"
++    snapshot_dir.mkdir(parents=True)
++    (snapshot_dir / "model.safetensors").write_text("ok")
++    (repo_dir / "refs").mkdir(parents=True)
++    (repo_dir / "refs" / "main").write_text("abc123")
++
++    source, kwargs = _resolve_hf_model_source(str(hf_root), "litagin/anime-whisper")
++
++    assert source == str(snapshot_dir)
++    assert kwargs["local_files_only"] is True
++
++
+ def test_resolve_hf_model_source_skips_incomplete_repo_and_uses_valid_hub_snapshot(tmp_path: Path):
+     direct_repo = tmp_path / "models--litagin--anime-whisper"
+     direct_snapshot = direct_repo / "snapshots" / "bad123"

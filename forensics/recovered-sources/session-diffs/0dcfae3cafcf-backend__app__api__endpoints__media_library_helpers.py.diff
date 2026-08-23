@@ -1,0 +1,45 @@
+diff --git a/backend/app/api/endpoints/media_library_helpers.py b/backend/app/api/endpoints/media_library_helpers.py
+index fccb0c7..b063ffb 100644
+--- a/backend/app/api/endpoints/media_library_helpers.py
++++ b/backend/app/api/endpoints/media_library_helpers.py
+@@ -200,11 +200,13 @@ def parse_tags(name: str, studios: list, file_path: str | None) -> dict:
+     base = name.rsplit('.', 1)[0] if '.' in name else name
+     lower = base.lower()
+     fp_lower = (file_path or '').lower()
++    fp_dir_lower = ''
+     fp_base = ''
+     fp_name = ''
+     if file_path:
+         fp_name = os.path.splitext(os.path.basename(file_path))[0].lower()
+         fp_dir = os.path.basename(os.path.dirname(file_path)).lower()
++        fp_dir_lower = os.path.dirname(file_path).lower()
+         fp_base = fp_name + ' ' + fp_dir
+     has_chinese = bool(
+         re.search(r'[-_]c(\d*)[-_\.]', lower) or '中文字幕' in base or 'chinese' in lower
+@@ -222,21 +224,21 @@ def parse_tags(name: str, studios: list, file_path: str | None) -> dict:
+         or re.search(r'(^|[^a-z0-9])(facefusion|ff)(?=[^a-z0-9]|$)', fp_lower)
+     )
+     has_uncensored_studio = any(s.lower() in UNCENSORED_STUDIOS or any(k in s.lower() for k in UNCENSORED_STUDIOS) for s in studios)
+-    has_uncensored_path = any(k in (file_path or '').lower() for k in UNCENSORED_PATH_KEYWORDS)
++    # Do not infer real uncensored works from the Emby title or filename. Phrases
++    # like "無碼破解" are common marketing/variant labels for cracked mosaics.
++    has_uncensored_path = any(k in fp_dir_lower for k in UNCENSORED_PATH_KEYWORDS)
++    is_uncensored = bool(has_uncensored_studio or has_uncensored_path)
+     if (has_uncensored_studio or has_uncensored_path) and not is_leaked and not is_cracked:
+         release_type = '无码'
+         release_type_key = 'uncensored'
+     elif is_leaked:
+         release_type = '流出'
+         release_type_key = 'leaked'
+-    elif '無碼' in base or '无码' in base:
+-        release_type = '无码'
+-        release_type_key = 'uncensored'
+     else:
+         release_type = None
+         release_type_key = None
+     return {
+-        'is_uncensored': is_cracked,
++        'is_uncensored': is_uncensored,
+         'is_cracked': is_cracked,
+         'has_chinese': has_chinese,
+         'has_facefusion': has_facefusion,

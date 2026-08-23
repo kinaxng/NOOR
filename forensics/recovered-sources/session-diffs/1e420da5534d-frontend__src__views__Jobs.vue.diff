@@ -1,0 +1,491 @@
+diff --git a/frontend/src/views/Jobs.vue b/frontend/src/views/Jobs.vue
+index 938629f..e6b6ac6 100644
+--- a/frontend/src/views/Jobs.vue
++++ b/frontend/src/views/Jobs.vue
+@@ -2,7 +2,7 @@
+ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+ import { useJobsStore } from '../stores/jobs'
+ import { useRoute, useRouter } from 'vue-router'
+-import type { Job, SSEEvent } from '../api/types'
++import type { BackgroundTask, Job, SSEEvent } from '../api/types'
+ import api from '../api'
+ import LogViewer from '../components/noor/LogViewer.vue'
+ import BaseIcon from '../components/noor/BaseIcon.vue'
+@@ -47,8 +47,12 @@ const {
+   jobsStore,
+ })
+ 
++function isExternalTask(job: Job) {
++  return job.job_type === 'external_task' || !!job.result_metadata?.external_task
++}
++
+ function shouldWatchJob(job: { status: string }) {
+-  return job.status === 'running' || job.status === 'queued' || job.status === 'blocked' || job.status === 'pending'
++  return !isExternalTask(job as Job) && (job.status === 'running' || job.status === 'queued' || job.status === 'blocked' || job.status === 'pending')
+ }
+ 
+ function getErrorDetail(error: unknown) {
+@@ -214,13 +218,22 @@ const activeTab = useRouteTabs<JobTabKey>({
+   router,
+   basePath: '/jobs',
+   paramName: 'jobTab',
+-  tabs: ['running', 'completed', 'failed'],
++  tabs: ['running', 'completed', 'failed', 'background'],
+   defaultTab: 'running',
+ })
+ const jobPage = ref(1)
+ const JOB_PAGE_SIZE = 10
+ const { connectingLabel, queuedLabel: queuedStatusLabel, blockedLabel: blockedStatusLabel, completedLabel: completedStatusLabel, failedLabel: failedStatusLabel, cancelledLabel: cancelledStatusLabel, fallbackStatusLabel, getRunningBadgeLabel, getJobHeaderMetaTokens, getWhisperStrategyHint, getJobDisplayName } = useJobPresentation(allJobs)
+ const { sortChainJobs, filterTabs, currentTabJobs, currentTabTitle, currentEmptyLabel } = useJobsTabs(allJobs, activeTab)
++const backgroundTasks = ref<BackgroundTask[]>([])
++const backgroundLoading = ref(false)
++const backgroundError = ref('')
++const backgroundRunLoading = ref<Record<string, boolean>>({})
++let backgroundRefreshTimer: number | null = null
++const allFilterTabs = computed(() => [
++  ...filterTabs.value,
++  { key: 'background', label: `${t('jobs.background')} ${backgroundTasks.value.length}` },
++])
+ const currentTabTotalPages = computed(() => Math.max(1, Math.ceil(currentTabJobs.value.length / JOB_PAGE_SIZE)))
+ const paginatedCurrentTabJobs = computed(() => {
+   const start = (jobPage.value - 1) * JOB_PAGE_SIZE
+@@ -234,6 +247,91 @@ function goJobPage(page: number) {
+   jobPage.value = page
+ }
+ 
++function formatTaskDate(value?: string) {
++  if (!value) return '无'
++  const date = new Date(value)
++  if (Number.isNaN(date.getTime())) return value
++  return date.toLocaleString()
++}
++
++function formatInterval(minutes?: number) {
++  const value = Number(minutes || 0)
++  if (!value) return ''
++  if (value < 60) return `${value} 分钟`
++  if (value % 1440 === 0) return `${value / 1440} 天`
++  if (value % 60 === 0) return `${value / 60} 小时`
++  return `${Math.floor(value / 60)} 小时 ${value % 60} 分钟`
++}
++
++function getBackgroundStatusLabel(task: BackgroundTask) {
++  if (!task.enabled || task.status === 'disabled') return '已…6429 tokens truncated…)
++        if not chunk:
++            continue
++        candidates: list[str] = [chunk]
++        if len(chunk) > 4:
++            for size in (2, 3, 4):
++                for idx in range(0, len(chunk) - size + 1):
++                    candidates.append(chunk[idx:idx + size])
++        for term in candidates:
++            if len(term) < 2 or len(term) > 4:
++                continue
++            if term in TITLE_TERM_STOPWORDS or any(stop in term for stop in TITLE_TERM_STOPWORDS if len(stop) >= 3):
++                continue
++            if re.fullmatch(r"[\u3040-\u309f]+", term):
++                continue
++            if re.search(r"^[ぁ-ん]+|[ぁ-ん]+$", term):
++                continue
++            if re.fullmatch(r"[A-Za-z]+", term) and len(term) < 3:
++                continue
++            if re.search(r"(?:カップ|タイトル|サンプル|プレビュー)$", term):
++                continue
++            key = _norm_key(term)
++            if key in seen:
++                continue
++            seen.add(key)
++            terms.append(term)
++            if len(terms) >= limit:
++                return terms
++    return terms
++
++
++def _profile_title_term_matches(item: Any, profile_terms: Counter, limit: int = 8) -> list[dict[str, Any]]:
++    if not profile_terms:
++        return []
++    item_terms = _title_mined_terms(item, 80)
++    matches: list[dict[str, Any]] = []
++    seen: set[str] = set()
++    for term in item_terms:
++        count = float(profile_terms.get(term, 0) or 0)
++        if count <= 0:
++            continue
++        key = _norm_key(term)
++        if key in seen:
++            continue
++        seen.add(key)
++        matches.append({"name": term, "count": count})
++    matches.sort(key=lambda x: (float(x.get("count") or 0), len(str(x.get("name") or ""))), reverse=True)
++    return matches[:limit]
++
++
++def _is_actor_name_term(term: str, actor_names: set[str]) -> bool:
++    normalized = _norm_key(term)
++    if not normalized:
++        return False
++    for actor in actor_names:
++        actor_key = _norm_key(actor)
++        if not actor_key:
++            continue
++        if normalized == actor_key or normalized in actor_key or actor_key in normalized:
++            return True
++    return False
++
++
++def _prune_title_term_counter(counter: Counter) -> Counter:
++    trait_labels = {str(trait.get("name") or "") for trait in TITLE_TRAIT_PATTERNS}
++    items = [(str(term), float(count)) for term, count in counter.items() if str(term).strip() and float(count or 0) > 0]
++    kept: Counter = Counter()
++    for term, count in sorted(items, key=lambda x: (len(x[0]), -x[1])):
++        if term in trait_labels:
++            continue
++        if len(term) <= 2:
++            container = next((longer for longer, longer_count in items if term != longer and term in longer and len(longer) > len(term) and longer_count >= count * 0.5), None)
++            if container:
++                continue
++        kept[term] = count
++    return kept
++
++
++def _title_profile_media_payload(item: KnowledgeEntity) -> dict[str, Any]:
++    data = item.data or {}
++    return {
++        "label": item.label,
++        "summary": item.summary,
++        "data": data,
++        "nfo": data.get("nfo") if isinstance(data, dict) else {},
++        "title": data.get("title") if isinstance(data, dict) else "",
++        "originaltitle": data.get("originaltitle") if isinstance(data, dict) else "",
++        "name": data.get("name") if isinstance(data, dict) else "",
++    }
++
++
++def _title_profile_signature(media: list[KnowledgeEntity], media_weights: dict[str, float]) -> str:
++    rows: list[dict[str, Any]] = []
++    for item in media:
++        payload = _title_profile_media_payload(item)
++        observed = item.updated_at or item.created_at
++        rows.append({
++            "id": item.id,
++            "updated_at": observed.isoformat() if observed else "",
++            "weight": round(float(media_weights.get(item.id, 1.0)), 4),
++            "title": _clean_title_text(payload),
++        })
++    raw = json.dumps({"version": TITLE_PROFILE_VERSION, "rows": rows}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
++    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
++
++
++def _load_title_profile_cache(signature: str) -> dict[str, Counter] | None:
++    try:
++        data = json.loads(TITLE_PROFILE_FILE.read_text(encoding="utf-8"))
++    except Exception:
++        return None
++    if not isinstance(data, dict) or data.get("signature") != signature:
++        return None
++    return {
++        "title_traits": Counter({str(k): float(v) for k, v in (data.get("title_traits") or {}).items()}),
++        "title_terms": Counter({str(k): float(v) for k, v in (data.get("title_terms") or {}).items()}),
++    }
++
++
++def _save_title_profile_cache(signature: str, title_traits: Counter, title_terms: Counter, media_count: int) -> None:
++    TITLE_PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
++    payload = {
++        "version": TITLE_PROFILE_VERSION,
++        "signature": signature,
++        "media_count": media_count,
++        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
++        "title_traits": {str(k): round(float(v), 4) for k, v in title_traits.items()},
++        "title_terms": {str(k): round(float(v), 4) for k, v in title_terms.items()},
++    }
++    tmp = TITLE_PROFILE_FILE.with_suffix(".tmp")
++    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
++    tmp.replace(TITLE_PROFILE_FILE)
++
++
++def _build_title_profile(media: list[KnowledgeEntity], media_weights: dict[str, float], actor_names: set[str]) -> dict[str, Counter]:
++    title_traits: Counter = Counter()
++    title_terms: Counter = Counter()
++    for item in media:
++        payload = _title_profile_media_payload(item)
++        weight = media_weights.get(item.id, 1.0)
++        title_analysis = _analyze_title(payload)
++        for tag in title_analysis.get("tags") or []:
++            name = str(tag.get("name") or "").strip()
++            if name:
++                title_traits[name] += weight * float(tag.get("weight") or 1.0)
++        for term in _title_mined_terms(payload, 80):
++            if _is_actor_name_term(term, actor_names):
++                continue
++            title_terms[term] += weight
++    return {
++        "title_traits": title_traits,
++        "title_terms": _prune_title_term_counter(title_terms),
++    }
++
++
++def _ensure_title_profile(item: dict[str, Any]) -> dict[str, Any]:
++    profile = item.get("title_profile")
++    if isinstance(profile, dict) and int(profile.get("version") or 0) == TITLE_PROFILE_VERSION:
++        return profile
++    profile = _analyze_title(item)
++    item["title_profile"] = profile
++    item["title_traits"] = _title_trait_labels(profile)
++    return profile
++
++
++def _merge_title_traits(categories: list[str], title_traits: list[str], limit: int = 16) -> list[str]:
++    out: list[str] = []
++    seen: set[str] = set()
++    for name in [*(categories or []), *(title_traits or [])]:
++        value = str(name or "").strip()
++        key = _norm_key(value)
++        if not value or key in seen:
++            continue
++        seen.add(key)
++        out.append(value)
++        if len(out) >= limit:
++            break
++    return out
++
++
+ def _entity_payload(entity: KnowledgeEntity) -> dict[str, Any]:
+     return {
+         "id": entity.id,
+@@ -241,6 +636,8 @@ async def _library_profile() -> dict[str, Any]:
+         "studios": Counter(),
+         "series": Counter(),
+         "directors": Counter(),
++        "title_traits": Counter(),
++        "title_terms": Counter(),
+         "actor_category": Counter(),
+         "local_features": {},
+         "top_media": [],
+@@ -263,6 +660,8 @@ async def _library_profile() -> dict[str, Any]:
+             "studios": Counter(),
+             "series": Counter(),
+             "directors": Counter(),
++            "title_traits": Counter(),
++            "title_terms": Counter(),
+             "actor_category": Counter(),
+             "local_features": {},
+             "top_media": [_entity_payload(item) for item in media[:8]],
+@@ -311,6 +710,15 @@ async def _library_profile() -> dict[str, Any]:
+             for actor in rels["actors"]:
+                 for category in rels["categories"]:
+                     profile["actor_category"][(actor, category)] += weight
++        actor_name_terms = {str(name) for name in profile["actors"].keys() if str(name or "").strip()}
++        title_signature = _title_profile_signature(media, media_weights)
++        title_profile = _load_title_profile_cache(title_signature)
++        if title_profile is None:
++            title_profile = _build_title_profile(media, media_weights, actor_name_terms)
++            with contextlib.suppress(Exception):
++                _save_title_profile_cache(title_signature, title_profile["title_traits"], title_profile["title_terms"], len(media))
++        profile["title_traits"] = title_profile["title_traits"]
++        profile["title_terms"] = title_profile["title_terms"]
+         for item in media:
+             data = item.data or {}
+             code = _norm_code(json.dumps(data, ensure_ascii=False) + " " + item.label)
+@@ -419,6 +827,7 @@ def _merge_candidate(existing: dict[str, Any] | None, item: dict[str, Any], sour
+     current["recommendation_source"] = source
+     current["recommendation_source_label"] = source_label
+     current["is_today_increment"] = str(current.get("first_seen_date") or "") == today
++    _ensure_title_profile(current)
+     return current
+ 
+ 
+@@ -514,6 +923,9 @@ async def _javdb_candidates(config: dict[str, Any], source_mode: str = "latest",
+         if source_mode == "full":
+             async with _pool_lock:
+                 pool = _ensure_candidate_pool()
++                title_backfilled = _backfill_candidate_pool_title_profiles(pool)
++                if title_backfilled:
++                    _save_candidate_pool(pool)
+                 pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+                 pool_stats = _candidate_pool_stats(pool)
+             for code, item in pool_items.items():
+@@ -551,6 +963,7 @@ async def _javdb_candidates(config: dict[str, Any], source_mode: str = "latest",
+                         if magnets:
+                             item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
+                             item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
++                        _ensure_title_profile(item)
+                 except Exception:
+                     pass
+             return item
+@@ -654,6 +1067,7 @@ async def _scan_full_candidate_pool(config: dict[str, Any], *, force: bool = Fal
+                 if magnets:
+                     item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
+                     item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
++                _ensure_title_profile(item)
+                 pool_items[code] = item
+                 pool["items"] = pool_items
+                 _save_candidate_pool(pool)
+@@ -720,7 +1134,10 @@ def _candidate_score(
+         return None
+     in_library = code in profile.get("codes", set()) or bool((item.get("library") or {}).get("in_library") if isinstance(item.get("library"), dict) else False)
+     actors = _unique_names(item.get("actors") or [], 12)
+-    categories = _unique_names(item.get("categories") or [], 16)
++    base_categories = _unique_names(item.get("categories") or [], 16)
++    title_profile = _ensure_title_profile(item)
++    title_traits = _title_trait_labels(title_profile, limit=10, min_weight=0.55)
++    categories = _merge_title_traits(base_categories, title_traits, 18)
+     maker = str(item.get("maker") or "").strip()
+     series = _name_one(item.get("series"))
+     director = _name_one(item.get("director"))
+@@ -741,6 +1158,8 @@ def _candidate_score(
+     studio_counter: Counter = profile.get("studios") or Counter()
+     series_counter: Counter = profile.get("series") or Counter()
+     director_counter: Counter = profile.get("directors") or Counter()
++    title_trait_counter: Counter = profile.get("title_traits") or Counter()
++    title_term_counter: Counter = profile.get("title_terms") or Counter()
+     actor_category_counter: Counter = profile.get("actor_category") or Counter()
+     media_count = max(int(profile.get("media_count") or 0), 1)
+ 
+@@ -796,6 +1215,32 @@ def _candidate_score(
+         if names:
+             reasons.append(f"类型匹配：{names}")
+ 
++    title_trait_hits = []
++    for name in title_traits:
++        count = float(title_trait_counter.get(name, 0) or 0)
++        if count > 0:
++            title_trait_hits.append((name, count))
++    if title_trait_hits:
++        sorted_traits = sorted(title_trait_hits, key=lambda x: x[1], reverse=True)
++        boost = min(16, sum(min(4.8, math.sqrt(count) * 2.1 + _preference_confidence(int(round(count)), media_count) * 1.6) for _, count in sorted_traits[:5]))
++        score += boost
++        personalized_score += boost
++        category_preference_score += boost
++        names = "/".join(name for name, _ in sorted_traits[:3])
++        if names:
++            reasons.append(f"标题题材：{names}")
++
++    mined_term_hits = _profile_title_term_matches(item, title_term_counter, 8)
++    if mined_term_hits:
++        boost = min(14, sum(min(4.0, math.log2(float(hit.get("count") or 0) + 1) * 0.95) for hit in mined_term_hits[:5]))
++        if boost > 0:
++            score += boost
++            personalized_score += boost
++            category_preference_score += boost
++            names = "/".join(str(hit.get("name") or "") for hit in mined_term_hits[:3] if hit.get("name"))
++            if names:
++                reasons.append(f"媒体库标题词：{names}")
++
+     feedback_category_boost = 0.0
+     feedback_category_penalty = 0.0
+     for category in categories:
+@@ -940,6 +1385,12 @@ def _candidate_score(
+         "release_date": release,
+         "actors": actors[:6],
+         "categories": categories[:8],
++        "title_traits": title_traits[:8],
++        "title_profile": {
++            "labels": title_traits[:8],
++            "confidence": title_profile.get("confidence") or 0,
++            "tags": (title_profile.get("tags") or [])[:8],
++        },
+         "maker": maker,
+         "series": series,
+         "director": director,
+@@ -987,7 +1438,7 @@ def _resource_features(resource: dict[str, Any]) -> dict[str, bool]:
+         str(resource.get("subtitle") or ""),
+         str(resource.get("provider_label") or ""),
+         tags,
+-        json.dumps(features, ensure_ascii=False),
++        _feature_value_text({key: value for key, value in features.items() if value}),
+     ])
+     return {
+         "has_subtitle": bool(features.get("has_subtitle") or re.search(r"中字|中文字幕|中文|字幕|sub", text, re.I)),
+@@ -1156,6 +1607,73 @@ def _pool_scan_due(pool: dict[str, Any], interval_minutes: int) -> bool:
+     return age >= max(10, interval_minutes) * 60
+ 
+ 
++def _iso_plus_minutes(value: Any, minutes: int) -> str:
++    text = str(value or "").strip()
++    if not text:
++        return ""
++    try:
++        parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
++        if parsed.tzinfo is None:
++            parsed = parsed.replace(tzinfo=dt.timezone.utc)
++        return (parsed.astimezone(dt.timezone.utc) + dt.timedelta(minutes=max(1, minutes))).isoformat()
++    except Exception:
++        return ""
++
++
++def _scan_summary(scanned: Any, added: Any, updated: Any, detail_updated: Any) -> str:
++    return f"扫描 {int(scanned or 0)}，新增 {int(added or 0)}，更新 {int(updated or 0)}，详情 {int(detail_updated or 0)}"
++
++
++async def background_tasks(config: dict[str, Any]) -> list[dict[str, Any]]:
++    async with _pool_lock:
++        pool = _ensure_candidate_pool()
++        stats = _candidate_pool_stats(pool)
++        last = pool.get("last_full_scan") if isinstance(pool.get("last_full_scan"), dict) else {}
++        background = pool.get("background") if isinstance(pool.get("background"), dict) else {}
++
++    enabled = bool(config.get("full_scan_background_enabled", True))
++    interval = max(30, min(int(config.get("full_scan_interval_minutes") or 360), 10080))
++    running = bool(background.get("running"))
++    last_error = str(background.get("last_error") or "")
++    last_run_at = str(last.get("at") or background.get("started_at") or "")
++    next_run_at = _iso_plus_minutes(last.get("at"), interval) if enabled and last.get("at") else ""
++    scanned = last.get("scanned", background.get("last_scanned", 0))
++    added = last.get("added", background.get("last_added", 0))
++    updated = last.get("updated", 0)
++    detail_updated = last.get("detail_updated", background.get("last_detail_updated", 0))
++    warnings = last.get("warnings") if isinstance(last.get("warnings"), list) else []
++    task_status = "running" if running else ("failed" if last_error else ("idle" if enabled else "disabled"))
++    summary = _scan_summary(scanned, added, updated, detail_updated)
++    if not last_run_at and not running:
++        summary = "尚未执行完整候选池扫描"
++
++    return [{
++        "id": "av-recommend.full-candidate-pool",
++        "plugin_id": PLUGIN_ID,
++        "plugin_name": "AV 推荐中心",
++        "title": "完整候选池扫描",
++        "status": task_status,
++        "enabled": enabled,
++        "interval_minutes": interval,
++        "last_run_at": last_run_at,
++        "last_started_at": str(background.get("started_at") or ""),
++        "last_finished_at": str(background.get("finished_at") or ""),
++        "next_run_at": next_run_at,
++        "progress": None if running else (100 if last_run_at else 0),
++        "summary": summary,
++        "detail": last_error or ("；".join(str(item) for item in warnings[:3]) if warnings else ""),
++        "metrics": {
++            "候选池": int(stats.get("total") or 0),
++            "今日增量": int(stats.get("today_increment") or 0),
++            "本次扫描": int(scanned or 0),
++            "本次新增": int(added or 0),
++            "详情更新": int(detail_updated or 0),
++        },
++        "can_run": True,
++        "run_action": {"plugin_id": PLUGIN_ID, "action": "scan_candidate_pool", "payload": {"force": True}},
++    }]
++
++
+ async def _scheduler_loop() -> None:
+     global _scheduler_stop
+     from app.plugins.runtime import runtime
+@@ -1266,6 +1784,8 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
+             "top_actors": _top(profile.get("actors") or Counter(), 10),
+             "top_genres": _top(profile.get("genres") or Counter(), 10),
+             "top_tags": _top(profile.get("tags") or Counter(), 10),
++            "top_title_traits": _top(profile.get("title_traits") or Counter(), 10),
++            "top_title_terms": _top(profile.get("title_terms") or Counter(), 12),
+             "top_studios": _top(profile.get("studios") or Counter(), 8),
+             "top_series": _top(profile.get("series") or Counter(), 8),
+             "top_directors": _top(profile.get("directors") or Counter(), 8),
+@@ -1317,6 +1837,8 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str,
+                 "top_actors": _top(profile.get("actors") or Counter(), 20),
+                 "top_genres": _top(profile.get("genres") or Counter(), 20),
+                 "top_tags": _top(profile.get("tags") or Counter(), 20),
++                "top_title_traits": _top(profile.get("title_traits") or Counter(), 20),
++                "top_title_terms": _top(profile.get("title_terms") or Counter(), 30),
+                 "top_studios": _top(profile.get("studios") or Counter(), 12),
+                 "top_series": _top(profile.get("series") or Counter(), 12),
+                 "top_directors": _top(profile.get("directors") or Counter(), 12),

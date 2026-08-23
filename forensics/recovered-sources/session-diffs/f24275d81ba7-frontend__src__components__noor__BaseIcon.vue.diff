@@ -1,0 +1,20 @@
+diff --git a/frontend/src/components/noor/BaseIcon.vue b/frontend/src/components/noor/BaseIcon.vue
+index 3f1c466..8f9fb72 100644
+--- a/frontend/src/components/noor/BaseIcon.vue
++++ b/frontend/src/components/noor/BaseIcon.vue
+@@ -52,6 +52,15 @@ const icons: Record<string, string> = {
+   menu: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="18" x2="20" y2="18"/></svg>`,
+   moreVertical: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>`,
+   hardlink: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
++  externalLink: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
++  brandTmdb: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M7 9h10v2H7zm0 4h7v2H7z" fill="rgba(255,255,255,.92)"/></svg>`,
++  brandImdb: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 9h2v6H6zm3 0h2l1 2 1-2h2v6h-1.7v-3.3l-.8 1.6h-1L10.7 12v3H9zm7 0h2.4c1.2 0 2 .8 2 2v2c0 1.2-.8 2-2 2H16zm1.7 1.5v3h.5c.3 0 .5-.2.5-.5v-2c0-.3-.2-.5-.5-.5z" fill="rgba(255,255,255,.92)"/></svg>`,
++  brandX: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14.1 10.6 21.2 2h-2.1l-6 7.3L8.3 2H2.5l7.4 10.8L2.5 22h2.1l6.3-7.6 5.1 7.6h5.8zm-2.2 2.6-.7-1L5.2 3.6h2.1l4.7 6.7.7 1 6.3 9.1h-2.1z"/></svg>`,
++  brandInstagram: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.2"/><circle cx="16.8" cy="7.2" r="1"/></svg>`,
++  brandTiktok: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14 3h2.2c.3 2.2 1.6 3.8 3.8 4.2v2.3c-1.5-.1-2.8-.6-4-1.5v6.5c0 3.4-2.2 5.5-5.2 5.5-2.8 0-4.8-1.8-4.8-4.4 0-2.8 2.2-4.6 5.2-4.6.3 0 .6 0 .8.1v2.4a3 3 0 0 0-.9-.1c-1.6 0-2.6.8-2.6 2.1 0 1.2.9 2.1 2.2 2.1 1.5 0 2.4-.9 2.4-2.8z"/></svg>`,
++  brandYoutube: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M21.4 7.2a3 3 0 0 0-2.1-2.1C17.4 4.6 12 4.6 12 4.6s-5.4 0-7.3.5a3 3 0 0 0-2.1 2.1C2.1 9.1 2.1 12 2.1 12s0 2.9.5 4.8a3 3 0 0 0 2.1 2.1c1.9.5 7.3.5 7.3.5s5.4 0 7.3-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-4.8.5-4.8s0-2.9-.5-4.8ZM10 15.4V8.6l5.8 3.4z"/></svg>`,
++  brandFacebook: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14 8h2V5h-2.4C10.8 5 9 6.7 9 9.5V12H7v3h2v6h3.3v-6h2.5l.5-3h-3V9.8c0-1.1.4-1.8 1.7-1.8Z"/></svg>`,
++  brandWikidata: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5h2v14H3zm4 0h1v14H7zm3 0h3v14h-3zm5 0h1v14h-1zm3 0h3v14h-3z"/></svg>`,
+ }
+ </script>
+ 

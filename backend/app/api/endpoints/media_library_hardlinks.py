@@ -12,6 +12,10 @@ def hardlink_groups_path_impl(config_path_fn: Callable[[], Path]) -> Path:
     return config_path_fn().parent / 'runtime' / 'media_library' / 'hardlink_groups.txt'
 
 
+def legacy_hardlink_groups_path_impl(config_path_fn: Callable[[], Path]) -> Path:
+    return config_path_fn().parent / 'hardlink_groups.txt'
+
+
 def _legacy_path_for(primary_path: Path) -> Path | None:
     if primary_path.name == 'hardlink_groups.txt' and primary_path.parent.name == 'media_library' and primary_path.parent.parent.name == 'runtime':
         return primary_path.parent.parent.parent / 'hardlink_groups.txt'

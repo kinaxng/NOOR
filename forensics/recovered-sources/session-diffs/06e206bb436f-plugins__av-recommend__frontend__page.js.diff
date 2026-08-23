@@ -1,0 +1,180 @@
+diff --git a/plugins/av-recommend/frontend/page.js b/plugins/av-recommend/frontend/page.js
+index 8523629..3331311 100644
+--- a/plugins/av-recommend/frontend/page.js
++++ b/plugins/av-recommend/frontend/page.js
+@@ -33,29 +33,9 @@ function scoreTone(score) {
+   return 'neutral'
+ }
+ 
+-function subscriptionActionModel(item) {
+-  const state = item?.subscription_state || null
+-  if (!state) {
+-    return {
+-      label: item?.type === 'upgrade' ? '洗版' : '订阅',
+-      disabled: false,
+-      badge: '',
+-      badgeTone: item?.type === 'upgrade' ? 'warn' : 'info',
+-    }
+-  }
+-  const isUpgrade = state.type === 'upgrade'
+-  const label = isUpgrade ? '洗版中' : '已订阅'
+-  return {
+-    label,
+-    disabled: true,
+-    badge: label,
+-    badgeTone: isUpgrade ? 'warn' : 'good',
+-    title: state.last_submit_error || (state.status === 'waiting_quota' ? '等待下载器额度恢复' : '已存在订阅中心任务'),
+-  }
+-}
+-
+ export async function mount(root, sdk) {
+   const state = {
++    sourceMode: 'latest',
+     loading: false,
+     error: '',
+     data: null,
+@@ -65,11 +45,12 @@ export async function mount(root, sdk) {
+   const page = el('div', 'av-rec-page')
+   const topbar = el('div', 'av-rec-topbar')
+   const title = el('div', 'av-rec-title')
+-  title.innerHTML = '<strong>AV 推荐中心</strong><span>根据 JavDB 最近更新、媒体库偏好和资源可用性生成推荐</span>'
++  title.innerHTML = '<strong>AV 推荐中心</strong><span>根据 JavDB 最新动态、完整候选池、媒体库偏好和资源可用性生成推荐</span>'
+   const actions = el('div', 'av-rec-actions')
++  const modeWrap = el('div', 'av-rec-modes')
+   const refreshBtn = sdk.ui?.button ? sdk.ui.button({ label: '刷新推荐', tone: 'primary', onClick: () => load(true) }) : el('button', 'av-rec-btn', '刷新推荐')
+   if (!sdk.ui?.button) refreshBtn.onclick = () => load(true)
+-  actions.append(refreshBtn)
++  actions.append(modeWrap, refreshBtn)
+   topbar.append(title, actions)
+   const profile = el('div', 'av-rec-profile')
+   const notice = el('div', 'av-rec-notice')
+@@ -77,6 +58,23 @@ export async function mount(root, sdk) {
+   page.append(topbar, profile, notice, grid)
+   root.appendChild(page)
+ 
++  function renderModes() {
++    modeWrap.innerHTML = ''
++    const modes = [
++      ['latest', '最新推荐'],
++      ['full', '完整推荐'],
++    ]
++    for (const [value, label] of modes) {
++      const btn = el('button', 'av-rec-mode' + (state.sourceMode === value ? ' is-active' : ''), label)
++      btn.onclick = () => {
++        if (state.sourceMode === value) return
++        state.sourceMode = value
++        load(false)
++      }
++      modeWrap.appendChild(btn)
++    }
++  }
++
+   function renderProfile() {
+     const data = state.data || {}
+     const p = data.profile || {}
+@@ -87,7 +85,8 @@ export async function mount(root, sdk) {
+       ['番号', p.code_count || 0, '可识别番号'],
+       ['候选', stats.candidates || 0, '本轮扫描'],
+       ['推荐', data.total || 0, '综合排序'],
+-      ['过滤', data.filtered?.total || 0, '未展示候选'],
++      ['今日', stats.today_increment || 0, '新增候选'],
++      ['候选池', stats.candidate_pool_total || 0, state.sourceMode === 'full' ? '完整累计' : '历史累计'],
+     ]
+     for (const [name, value, desc] of cards) {
+       const card = el('div', 'av-rec-stat')
+@@ -224,34 +223,6 @@ export async function mount(root, sdk) {
+     if (code) window.location.href = `/plugins/javdb?code=${code}`
+   }
+ 
+-  async function openSubscription(item) {
+-    const action = subscriptionActionModel(item)
+-    if (action.disabled) {
+-      sdk.toast?.info?.(action.title || action.label)
+-      return
+-    }
+-    try {
+-      await sdk.subscription?.open({
+-        code: item.code,
+-        title: item.title || item.display_title || item.code,
+-        cover_url: item.cover_url || item.fanart_url || '',
+-        fanart_url: item.fanart_url || item.cover_url || '',
+-        sourcePlugin: 'av-recommend',
+-        sourceLabel: '推荐中心',
+-        sourceContext: item.type === 'upgrade' ? 'recommend-upgrade' : 'recommend-subscribe',
+-        defaultMode: 'loose',
+-        requireCracked: !!item.is_cracked,
+-        requireSubtitle: !!item.has_cnsub,
+-        onSuccess: async () => {
+-          sdk.toast?.success(item.type === 'upgrade' ? '已加入洗版' : '已加入订阅')
+-          await load(true)
+-        },
+-      })
+-    } catch (e) {
+-      sdk.toast?.error(e?.message || '订阅失败')
+-    }
+-  }
+-
+   function renderItems() {
+     if (state.loading && !state.data) return skeleton()
+     grid.innerHTML = ''
+@@ -263,7 +234,6 @@ export async function mount(root, sdk) {
+       return
+     }
+     for (const item of items) {
+-      const actionModel = subscriptionActionModel(item)
+       const card = el('article', 'av-rec-card')
+       const image = el('button', 'av-rec-cover')
+       image.type = 'button'
+@@ -281,10 +251,10 @@ export async function mount(root, sdk) {
+       head.append(title, score)
+       const meta = el('div', 'av-rec-meta')
+       if (item.release_date) meta.appendChild(badge(item.release_date, 'muted'))
+-      meta.appendChild(badge(item.type === 'upgrade' ? '洗版' : '订阅', item.type === 'upgrade' ? 'warn' : 'info'))
+-      if (actionModel.badge) meta.appendChild(badge(actionModel.badge, actionModel.badgeTone))
+       if (item.in_library) meta.appendChild(badge('已入库', 'good'))
++      if (item.is_today_increment) meta.appendChild(badge('今日新增', 'hot'))
+       if (item.magnets_count) meta.appendChild(badge(`${item.magnets_count} 磁链`, 'good'))
++      for (const source of (item.source_tags || []).slice(0, 3)) meta.appendChild(badge(source.label || source.id, 'info'))
+       const resourceSummary = item.resource_summary || {}
+       if (resourceSummary.total) meta.appendChild(badge(`${resourceSummary.total} 资源`, 'info'))
+       if (item.has_cnsub) meta.appendChild(badge('中字', 'good'))
+@@ -324,13 +294,6 @@ export async function mount(root, sdk) {
+         reasons.appendChild(li)
+       }
+       const buttons = el('div', 'av-rec-card-actions')
+-      const subBtn = el('button', 'av-rec-primary', actionModel.label)
+-      subBtn.disabled = !!actionModel.disabled
+-      if (actionModel.disabled) {
+-        subBtn.classList.add('is-disabled')
+-        subBtn.title = actionModel.title || actionModel.label
+-      }
+-      subBtn.onclick = () => openSubscription(item)
+       const viewBtn = el('button', '', 'JavDB')
+       viewBtn.onclick = () => openJavDB(item)
+       const likeBtn = el('button', '', '喜欢')
+@@ -339,7 +302,7 @@ export async function mount(root, sdk) {
+       dislikeBtn.onclick = () => openDislikePicker(item)
+       const ignoreBtn = el('button', '', '忽略')
+       ignoreBtn.onclick = () => feedback(item, 'ignore')
+-      buttons.append(subBtn, viewBtn, likeBtn, dislikeBtn, ignoreBtn)
++      buttons.append(viewBtn, likeBtn, dislikeBtn, ignoreBtn)
+       body.append(head, meta, people, scoreParts, reasons, buttons)
+       card.append(image, body)
+       grid.appendChild(card)
+@@ -347,6 +310,7 @@ export async function mount(root, sdk) {
+   }
+ 
+   function render() {
++    renderModes()
+     renderProfile()
+     renderNotice()
+     renderItems()
+@@ -358,7 +322,7 @@ export async function mount(root, sdk) {
+     render()
+     try {
+       const resp = await sdk.api.post('/plugins/av-recommend/actions/recommendations', {
+-        payload: { limit: 60, refresh },
++        payload: { source_mode: state.sourceMode, limit: 60, refresh },
+       })
+       state.data = resp.data
+     } catch (e) {
