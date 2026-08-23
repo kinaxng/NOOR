@@ -134,6 +134,7 @@ class Settings(BaseSettings):
     facefusion_reference_frame_number: int = 0
     facefusion_reference_face_position: int = 0
     facefusion_reference_face_distance: float = 0.3
+    facefusion_face_tracker_score: float = 0.0
     facefusion_face_mask_types: str = "box"
     facefusion_face_mask_areas: str = ""
     facefusion_face_mask_regions: str = ""

@@ -36,6 +36,11 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Verification: frontend production build passes; backend full pytest passes with `266 passed, 6 skipped`; restored-page smoke covers `/files` plus all main/plugin routes and reports no HTTP errors and no console errors.
 - Added a reproducible read-snapshot audit (`noor-restored/forensics/audit_read_snapshots.py`): the final 2026-08-23 window has 79/79 snapshots matching exactly within drift, and every actor/actor-management snapshot also matches. The remaining full-history drift/missing rows are classified as old revisions, final module splits, or retired Whisper multi-chain files in `forensics/read-snapshot-audit-classification.md`.
 - Locked the final Whisper runtime contract with `backend/tests/test_subtitle_panel_runtime_contract.py`: `SubtitlePanel.vue` starts Whisper with `runtime_tier`, `vad_backend`, and `timing_refiner`, and the settings/profile files keep the runtime-tier UI and payload. Verification is now `269 passed, 6 skipped` plus a clean frontend production build.
+- Added reproducible session-diff and final-commit audits under `noor-restored/forensics/audit_session_diffs.py` and `noor-restored/forensics/audit_final_commit_paths.py`. The session-diff manifest covers 520 sections / 477 unique diffs / 126 paths; final commits after 2026-07-14 are all present, and the embedded FaceFusion runtime reports 3.8.0.
+- Restored the final FaceFusion `facefusion_face_tracker_score` core setting and added `backend/tests/test_facefusion_final_contract.py` to lock the tracker score, source-image library multi-select, add-selected behavior, and deletion cleanup.
+- Added `backend/tests/test_javdb_series_directory_contract.py` for the recent series directory: series normalization, bounded directory aggregation, series tab/routing, and series cards.
+- Verification now passes with `277 passed, 6 skipped`, a clean frontend production
+  build, plugin validation, and no restored-page HTTP/console errors.
 
 - File-level recovery inventory is complete: `131 verified / 0 pending / 0 missing / 6 intentional`.
 - Restored repo-level `AGENTS.md` with the NOOR recovery search boundaries and runtime commands.
