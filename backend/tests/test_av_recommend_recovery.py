@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import asyncio
+import json
 from pathlib import Path
 
 
@@ -14,8 +15,8 @@ def _load_backend():
     return module
 
 
-def test_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
-    asyncio.run(_run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path))
+def test_recommendations_exclude_library_and_subscription_codes(monkeypatch, tmp_path):
+    asyncio.run(_run_recommendations_exclude_library_and_subscription_codes(monkeypatch, tmp_path))
 
 
 def test_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
@@ -160,12 +161,19 @@ def test_resource_features_separate_uncensored_from_cracked():
     assert leaked["is_cracked"] is True
 
 
-async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
+async def _run_recommendations_exclude_library_and_subscription_codes(monkeypatch, tmp_path):
     backend = _load_backend()
 
     monkeypatch.setattr(backend, "_data_file", lambda: tmp_path / "feedback.json")
     monkeypatch.setattr(backend, "_title_profile_file", lambda: tmp_path / "title_profile.json")
     monkeypatch.setattr(backend, "_pool_path", lambda: tmp_path / "candidate_pool.json")
+    subscription_file = tmp_path / "subscriptions.json"
+    subscription_file.write_text(json.dumps({
+        "subscriptions": [
+            {"code": "EFGH-456"},
+        ],
+    }), encoding="utf-8")
+    monkeypatch.setattr(backend, "_subscription_path", lambda: subscription_file)
     backend._CACHE.update({"ts": 0, "key": "", "value": None})
     backend._LIVE_LIBRARY_CODES_CACHE.update({"ts": 0, "key": "", "codes": set(), "warning": ""})
 
@@ -195,6 +203,7 @@ async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
         return [
             {"code": "MIDA-669", "title": "MIDA-669 邻居", "actors": ["测试演员"], "categories": ["邻居"], "magnets_count": 3},
             {"code": "ABCD-123", "title": "ABCD-123 邻居", "actors": ["测试演员"], "categories": ["邻居"], "magnets_count": 3},
+            {"code": "EFGH-456", "title": "EFGH-456 邻居", "actors": ["测试演员"], "categories": ["邻居"], "magnets_count": 3},
         ], []
 
     async def fake_enrich_resources(config, items):
