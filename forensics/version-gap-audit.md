@@ -17,7 +17,6 @@
 | 路径 | 原版提交数 | 状态 | 原版最后提交 | 当前最后提交 |
 | --- | ---: | --- | --- | --- |
 | `backend/tests/test_media_library_api.py` | 31 | pending | 7c44237 Import TMDB actor aliases and clean overview links | b29c8d6 Restore media library legacy helper compatibility |
-| `frontend/src/api/types.ts` | 13 | pending | 301d3d8 feat(facefusion): expose face tracker score | 86c250d Restore FaceFusion tracker score |
 | `backend/app/tasks/manager.py` | 7 | pending | 0184022 Add Whisper runtime tier selection | dd3422d Restore GPU guard and FaceFusion reference worker |
 | `backend/app/core/runtime_paths.py` | 4 | pending | 72d45aa Share default data dir constant | 616866a Preserve recovered NOOR backend artifacts |
 | `backend/app/api/local_library.py` | 3 | pending | 2ecda9d Migrate legacy subtitle indexes | 558869c Restore settings contract and media library API tests |
@@ -54,12 +53,6 @@
 | `backend/tests/test_whisper_strategy.py` | 2 | pending | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_whisper_timing_refiner.py` | 2 | pending | 442c3af Avoid duration-only subtitle splits | 52ccdef Restore Whisper long subtitle timing refinement |
 | `frontend/src` | 2 | pending | 14a3cc3 Add experimental Whisper timing refiner | d8f7414 Restore final AI storage settings and verify settings panels |
-| `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | pending | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
-| `frontend/src/composables/useWhisper.ts` | 2 | pending | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
-| `frontend/src/composables/useWhisperProfiles.ts` | 2 | pending | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
-| `frontend/src/views/FilesView.vue` | 2 | pending | 527f96d Add media actor management tab | 2a7fe62 Restore exact historical actor workspace sources |
-| `frontend/src/views/settings/LadaSettings.vue` | 2 | pending | 7219ca2 Split FaceFusion settings into dedicated tab | 6ff12d0 Recover original routed application shell |
-| `frontend/src/views/settings/WhisperSettings.vue` | 2 | pending | 0184022 Add Whisper runtime tier selection | 6ff12d0 Recover original routed application shell |
 | `plugins/av-recommend/backend.py` | 2 | pending | 8ecd4a3 Add fallback image loading for recommendation cards | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/av-recommend/frontend/style.css` | 2 | pending | 6ab498a Refine recommendation detail panel layout | 2129a70 Restore recommendation cover fallback chain |
 | `plugins/gfriends/backend.py` | 2 | pending | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
@@ -92,15 +85,6 @@
 | `backend/tests/test_settings_whisper_models.py` | 1 | pending | 7f76e42 Restrict Whisper model deletion to configured storage | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_task_runtime_paths.py` | 1 | pending | 9716085 Store task runtime files under data dir | 9f74125 Recover core runtime and embedded FaceFusion |
 | `backend/tests/test_whisper_engine_cache.py` | 1 | pending | f176af3 Cover Whisper HuggingFace root layout | 9f68a60 Recover final Whisper single-chain architecture |
-| `frontend/src/App.vue` | 1 | pending | 4f1b075 Move hardlinks under files section | e297426 Restore actor detail navigation identity |
-| `frontend/src/components/noor/AppSidebar.vue` | 1 | pending | 4f1b075 Move hardlinks under files section | d8b8188 Recover frontend application shell components |
-| `frontend/src/components/noor/BaseIcon.vue` | 1 | pending | 9f62658 Refine actor detail navigation and actions | 82d5e7a Recover frontend modal and button primitives |
-| `frontend/src/components/noor/panels/FilePathSelector.vue` | 1 | pending | a7d7d19 Allow file path selector to wrap long paths | 0165575 Recover original FaceFusion panel |
-| `frontend/src/components/ui/Tabs.vue` | 1 | pending | 1220755 Keep active tabs visible on mobile | 84bb8a7 Recover original media card and tabs |
-| `frontend/src/composables/useJobPresentation.ts` | 1 | pending | 806de25 Add FaceFusion crack processing integration | ee05cd1 Recover original frontend dashboard |
-| `frontend/src/router/index.ts` | 1 | pending | 4f1b075 Move hardlinks under files section | 2c31f4a Restore JavDB sidebar workspace |
-| `frontend/src/style.css` | 1 | pending | c2b5111 Show database path in storage settings | 6ff12d0 Recover original routed application shell |
-| `frontend/src/views/settings/SettingsIndex.vue` | 1 | pending | 7219ca2 Split FaceFusion settings into dedicated tab | 8296a65 Restore local subtitle library settings |
 | `plugins/avdb/backend.py` | 1 | pending | d5826f0 Route plugin data through runtime storage | 219325a Restore configurable AVDB provider |
 | `plugins/javdb/backend.py` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
 | `plugins/javdb/frontend/page.js` | 1 | pending | 2225f1e feat(javdb): add recent series directory | 7c1e884 Restore JavDB recent series directory |
@@ -122,6 +106,7 @@
 | `backend/app/core/config.py` | 17 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
 | `frontend/src/components/noor/LadaPanel.vue` | 17 | verified | 77c8bb2 Split FaceFusion into dedicated panel | 0ab46ad Recover original LADA panel |
 | `backend/app/pipeline/facefusion/runner.py` | 16 | verified | 301d3d8 feat(facefusion): expose face tracker score | 24f438b Restore configured FaceFusion model routing |
+| `frontend/src/api/types.ts` | 13 | verified | 301d3d8 feat(facefusion): expose face tracker score | 86c250d Restore FaceFusion tracker score |
 | `backend/app/api/settings_updates.py` | 11 | verified | 301d3d8 feat(facefusion): expose face tracker score | 558869c Restore settings contract and media library API tests |
 | `backend/app/api/facefusion.py` | 9 | verified | 301d3d8 feat(facefusion): expose face tracker score | 24f438b Restore configured FaceFusion model routing |
 | `frontend/src/views/ActorDetailView.vue` | 8 | verified | 3bf46cc Allow removing actor provider IDs | 2a7fe62 Restore exact historical actor workspace sources |
@@ -142,9 +127,24 @@
 | `backend/tests/test_env_backed_library_configs.py` | 3 | verified | 2ecda9d Migrate legacy subtitle indexes | 558869c Restore settings contract and media library API tests |
 | `backend/tests/test_facefusion_upgrade.py` | 3 | verified | 0f6ed10 Track FaceFusion upstream revision | 0ab32de Verify FaceFusion upgrade content patch |
 | `frontend/src/components/noor/SubtitlePanel.vue` | 3 | verified | 0184022 Add Whisper runtime tier selection | ad7302e Recover plugin-based subtitle providers |
+| `frontend/src/components/noor/panels/PanelHeader.vue` | 2 | verified | 9f62658 Refine actor detail navigation and actions | 0165575 Recover original FaceFusion panel |
+| `frontend/src/composables/useWhisper.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | 9f68a60 Recover final Whisper single-chain architecture |
+| `frontend/src/composables/useWhisperProfiles.ts` | 2 | verified | 0184022 Add Whisper runtime tier selection | b0a6622 Recover subtitle workflow dependencies |
+| `frontend/src/views/FilesView.vue` | 2 | verified | 527f96d Add media actor management tab | 2a7fe62 Restore exact historical actor workspace sources |
+| `frontend/src/views/settings/LadaSettings.vue` | 2 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | 6ff12d0 Recover original routed application shell |
+| `frontend/src/views/settings/WhisperSettings.vue` | 2 | verified | 0184022 Add Whisper runtime tier selection | 6ff12d0 Recover original routed application shell |
 | `backend/app/pipeline/whisper/runtime_tier.py` | 1 | verified | 0184022 Add Whisper runtime tier selection | 25718e0 Recover ChickenRice Whisper primary chain |
 | `backend/tests/test_gfriends_plugin.py` | 1 | verified | e1697fa Prefer Japanese actor names for Gfriends lookup | 9f74125 Recover core runtime and embedded FaceFusion |
+| `frontend/src/App.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | e297426 Restore actor detail navigation identity |
+| `frontend/src/components/noor/AppSidebar.vue` | 1 | verified | 4f1b075 Move hardlinks under files section | d8b8188 Recover frontend application shell components |
+| `frontend/src/components/noor/BaseIcon.vue` | 1 | verified | 9f62658 Refine actor detail navigation and actions | 82d5e7a Recover frontend modal and button primitives |
+| `frontend/src/components/noor/panels/FilePathSelector.vue` | 1 | verified | a7d7d19 Allow file path selector to wrap long paths | 0165575 Recover original FaceFusion panel |
+| `frontend/src/components/ui/Tabs.vue` | 1 | verified | 1220755 Keep active tabs visible on mobile | 84bb8a7 Recover original media card and tabs |
+| `frontend/src/composables/useJobPresentation.ts` | 1 | verified | 806de25 Add FaceFusion crack processing integration | ee05cd1 Recover original frontend dashboard |
+| `frontend/src/router/index.ts` | 1 | verified | 4f1b075 Move hardlinks under files section | 2c31f4a Restore JavDB sidebar workspace |
+| `frontend/src/style.css` | 1 | verified | c2b5111 Show database path in storage settings | 6ff12d0 Recover original routed application shell |
 | `frontend/src/views/PluginHost.vue` | 1 | verified | 194662f Make Gfriends an avatar library helper | 8e11c67 Restore plugin pill select controls |
+| `frontend/src/views/settings/SettingsIndex.vue` | 1 | verified | 7219ca2 Split FaceFusion settings into dedicated tab | 8296a65 Restore local subtitle library settings |
 | `plugins/av-recommend` | 1 | verified | 6a80f72 Fix recommendation plugin icon assets | c734bb5 Restore recommendation center icons |
 | `plugins/gfriends/frontend/page.js` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |
 | `plugins/gfriends/frontend/style.css` | 1 | verified | 194662f Make Gfriends an avatar library helper | 364fb38 Restore complete Gfriends plugin assets |

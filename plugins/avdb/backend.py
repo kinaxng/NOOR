@@ -5,10 +5,12 @@ from typing import Any
 
 import httpx
 
+from app.core.runtime_paths import plugin_cache_path
 from app.plugins.contracts import PluginTestResult
 
 
 PLUGIN_ID = "avdb"
+PLUGIN_CACHE_DIR = plugin_cache_path()
 
 
 def _base(config: dict[str, Any]) -> str:

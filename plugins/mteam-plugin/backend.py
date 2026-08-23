@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import hashlib
 import html
 import json
@@ -15,14 +16,17 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-from app.core.config import PROJECT_ROOT
+from app.core.runtime_paths import plugin_cache_path
 from app.plugins.contracts import PluginManifest, PluginTestResult
 
 PLUGIN_ID = "mteam-plugin"
-PLUGIN_CACHE_DIR = PROJECT_ROOT / "data" / "plugin_cache"
+PLUGIN_CACHE_DIR = plugin_cache_path()
 _IMG_RE = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+_BACKGROUND_LAST_STARTED_AT = ""
+_BACKGROUND_LAST_FINISHED_AT = ""
+_BACKGROUND_LAST_ERROR = ""
 
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 _BRACKET_RE = re.compile(r"\[([^\[\]]+)\]")
@@ -153,40 +157,78 @@ def _attach_local_cached_images(plugin_id: str, items: list[dict[str, Any]], ttl
 
 
 async def _background_cover_refresh(items: list[dict[str, Any]], config: dict[str, Any], ttl_days: int, timeout: float) -> None:
-    max_resolve = max(0, min(int(config.get("max_api_cover_resolve") or 2), 20))
-    max_images = max(0, min(int(config.get("max_image_cache_per_fetch") or 2), 20))
+    global _BACKGROUND_LAST_ERROR, _BACKGROUND_LAST_FINISHED_AT
+    max_resolve = max(0, min(int(config.get("max_api_cover_resolve") or 40), 80))
+    max_images = max(0, min(int(config.get("max_image_cache_per_fetch") or 40), 80))
     referer = str(config.get("detail_origin") or config.get("base_url") or "")
     resolved = 0
     cached_images = 0
-    for item in items:
-        copy = dict(item)
-        tid = _extract_torrent_id(copy)
-        if tid and not _read_cover_cache(tid, ttl_days) and resolved < max_resolve:
-            resolved += 1
-            api_url, is_dmm = await _resolve_cover_via_mteam_api(copy, config, min(timeout, 3.0))
-            if api_url:
-                _write_cover_cache(tid, api_url, is_dmm)
-                copy["image_url"] = api_url
-                copy["image_source"] = "dmm" if is_dmm else (urlparse(api_url).hostname or "")
-                if is_dmm:
-                    copy["is_av"] = True
-        original = str(copy.get("original_image_url") or copy.get("image_url") or "")
-        if original and cached_images < max_images and not _local_cached_image_url(PLUGIN_ID, original, ttl_days):
-            cached = await _ensure_cached_image(PLUGIN_ID, original, ttl_days, min(timeout, 3.0), referer=referer)
-            if cached:
-                cached_images += 1
-        if resolved >= max_resolve and cached_images >= max_images:
-            break
+    try:
+        for item in items:
+            copy = dict(item)
+            tid = _extract_torrent_id(copy)
+            if tid and not _read_cover_cache(tid, ttl_days) and resolved < max_resolve:
+                resolved += 1
+                api_url, is_dmm = await _resolve_cover_via_mteam_api(copy, config, min(timeout, 3.0))
+                if api_url:
+                    _write_cover_cache(tid, api_url, is_dmm)
+                    copy["image_url"] = api_url
+                    copy["image_source"] = "dmm" if is_dmm else (urlparse(api_url).hostname or "")
+                    if is_dmm:
+                        copy["is_av"] = True
+            original = str(copy.get("original_image_url") or copy.get("image_url") or "")
+            if original and cached_images < max_images and not _local_cached_image_url(PLUGIN_ID, original, ttl_days):
+                cached = await _ensure_cached_image(PLUGIN_ID, original, ttl_days, min(timeout, 3.0), referer=referer)
+                if cached:
+                    cached_images += 1
+            if resolved >= max_resolve and cached_images >= max_images:
+                break
+        _BACKGROUND_LAST_ERROR = ""
+    except Exception as exc:
+        _BACKGROUND_LAST_ERROR = str(exc)
+        raise
+    finally:
+        _BACKGROUND_LAST_FINISHED_AT = dt.datetime.now(dt.timezone.utc).isoformat()
 
 
 def _schedule_background_refresh(items: list[dict[str, Any]], config: dict[str, Any], ttl_days: int, timeout: float) -> None:
+    global _BACKGROUND_LAST_STARTED_AT
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
+    _BACKGROUND_LAST_STARTED_AT = dt.datetime.now(dt.timezone.utc).isoformat()
     task = loop.create_task(_background_cover_refresh(items[:50], dict(config), ttl_days, timeout))
     _BACKGROUND_TASKS.add(task)
     task.add_done_callback(lambda t: _BACKGROUND_TASKS.discard(t))
+
+
+async def background_tasks(config: dict[str, Any]) -> list[dict[str, Any]]:
+    running = len([task for task in _BACKGROUND_TASKS if not task.done()])
+    status = "running" if running else ("failed" if _BACKGROUND_LAST_ERROR else "idle")
+    max_resolve = max(0, min(int(config.get("max_api_cover_resolve") or 40), 80))
+    max_images = max(0, min(int(config.get("max_image_cache_per_fetch") or 40), 80))
+    return [{
+        "id": "mteam-plugin.cover-refresh",
+        "plugin_id": PLUGIN_ID,
+        "plugin_name": "M-Team",
+        "title": "封面后台补缓存",
+        "status": status,
+        "enabled": True,
+        "last_run_at": _BACKGROUND_LAST_STARTED_AT,
+        "last_started_at": _BACKGROUND_LAST_STARTED_AT,
+        "last_finished_at": _BACKGROUND_LAST_FINISHED_AT,
+        "progress": None if running else (100 if _BACKGROUND_LAST_STARTED_AT else 0),
+        "summary": f"活动任务 {running}，每次最多解析 {max_resolve} 个封面，缓存 {max_images} 张图片",
+        "detail": _BACKGROUND_LAST_ERROR,
+        "metrics": {
+            "活动任务": running,
+            "解析上限": max_resolve,
+            "缓存上限": max_images,
+            "缓存天数": int(config.get("cache_days") or 7),
+        },
+        "can_run": False,
+    }]
 
 
 def _image_cache_id(url: str) -> str:

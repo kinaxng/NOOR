@@ -6,6 +6,8 @@ export async function mount(el, sdk = {}) {
     loading: false,
     error: '',
     version: '',
+    apiMode: '',
+    authMode: '',
     transfer: {},
     showNoorOnly: false,
     noorTag: 'noor',
@@ -162,7 +164,10 @@ export async function mount(el, sdk = {}) {
       btn.classList.toggle('is-active', active)
       btn.querySelector('span').textContent = active ? (state.sortDir === 'asc' ? '↑' : '↓') : '↕'
     }
-    if (state.version) { version.style.display='inline-flex'; version.textContent = state.version } else version.style.display='none'
+    if (state.version) {
+      version.style.display='inline-flex'
+      version.textContent = [state.version, state.apiMode, state.authMode].filter(Boolean).join(' · ')
+    } else version.style.display='none'
     scope.textContent = state.showNoorOnly ? `范围：${state.noorTag}` : '范围：全部'
     if (Number(state.minFileSizeMb || 0) > 0) {
       smallFilter.style.display = 'inline-flex'
@@ -331,6 +336,8 @@ export async function mount(el, sdk = {}) {
     try {
       const data = await call('overview')
       state.version = data.version ? `qB ${data.version}` : ''
+      state.apiMode = data.api_mode === 'start_stop' ? 'start/stop' : data.api_mode === 'pause_resume' ? 'pause/resume' : ''
+      state.authMode = data.auth_mode === 'api_key' ? 'API Key' : data.auth_mode === 'cookie' ? 'Cookie' : ''
       state.transfer = data.transfer || {}
       state.showNoorOnly = !!data.show_noor_only
       state.noorTag = data.noor_tag || 'noor'

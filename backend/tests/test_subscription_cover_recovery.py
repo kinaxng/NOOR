@@ -34,7 +34,7 @@ async def _run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_p
         "subscriptions": [{"id": "sub-1", "code": "MIDA-669", "status": "active", "title": "测试"}],
         "events": [],
     }), encoding="utf-8")
-    monkeypatch.setattr(backend, "DATA_FILE", data_file)
+    monkeypatch.setattr(backend, "_data_file", lambda: data_file)
 
     class FakeRuntime:
         def is_enabled(self, plugin_id):

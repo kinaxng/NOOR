@@ -794,7 +794,11 @@ async def _video(config: dict[str, Any], code: str, *, refresh: bool = False) ->
     if not refresh:
         cached = _cache_get(VIDEO_DETAIL_CACHE, cache_key, VIDEO_DETAIL_CACHE_TTL)
         if cached is not None:
-            return dict(cached)
+            cached_detail = dict(cached)
+            cached_magnets = cached_detail.get("magnets")
+            if isinstance(cached_magnets, list) or cached_detail.get("_magnets_refresh_checked"):
+                return cached_detail
+            refresh = True
     path = f"/video/{code}"
     params = {"refresh": "true"} if refresh else None
     data = _data(await _request(config, "GET", path, params=params))
@@ -804,6 +808,8 @@ async def _video(config: dict[str, Any], code: str, *, refresh: bool = False) ->
     out["cover_url"] = _abs(config, out.get("cover_url"))
     out["thumb_url"] = _abs(config, out.get("thumb_url"))
     out["previews"] = [_abs(config, x) for x in (out.get("previews") or [])]
+    if refresh and not isinstance(out.get("magnets"), list):
+        out["_magnets_refresh_checked"] = True
     _cache_set(VIDEO_DETAIL_CACHE, cache_key, out)
     return dict(out)
 
@@ -812,7 +818,7 @@ async def _related_movies(config: dict[str, Any], payload: dict[str, Any]) -> di
     rel_type = str(payload.get("rel_type") or "").strip()
     rel_id = str(payload.get("rel_id") or payload.get("id") or "").strip()
     page = max(1, int(payload.get("page") or 1))
-    limit = max(1, min(int(payload.get("limit") or 24), 80))
+    limit = max(1, min(int(payload.get("limit") or 24), 48))
     sort_by = payload.get("sort_by") or "release"
     order_by = payload.get("order_by") or "desc"
     path_map = {
@@ -830,7 +836,15 @@ async def _related_movies(config: dict[str, Any], payload: dict[str, Any]) -> di
     else:
         raise ValueError(f"unsupported relation type: {rel_type}")
     items = [_normalize_movie(config, x) for x in _movie_list(data) if isinstance(x, dict)]
-    total = int(data.get("total") or data.get("total_count") or len(items)) if isinstance(data, dict) else len(items)
+    total = int(data.get("total") or data.get("total_count") or 0) if isinstance(data, dict) else 0
+    if not total:
+        # DBOnline's relation endpoint returns current_page/movies but no
+        # total/has_more. Keep pagination alive while a full page is returned.
+        upstream_page_size = len(items)
+        if upstream_page_size >= limit:
+            total = page * limit + 1
+        else:
+            total = (page - 1) * limit + upstream_page_size
     return {"ok": True, "items": items, "total": total, "raw": data}
 
 
@@ -1216,13 +1230,14 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
             try:
                 ranked_data = _data(await _request(config, "GET", "/actors", params={"type": actor_type}))
                 ranked_items = ranked_data.get("actors") if isinstance(ranked_data, dict) else ranked_data
-                for actor in ranked_items or []:
+                for rank_index, actor in enumerate(ranked_items or []):
                     if not isinstance(actor, dict):
                         continue
                     normalized = _normalize_actor(config, actor)
                     actor_id = str(normalized.get("id") or "").strip()
                     if actor_id and actor_id not in ranked_by_id:
                         normalized["ranking_type"] = actor_type
+                        normalized["ranking_order"] = rank_index
                         ranked_by_id[actor_id] = normalized
             except Exception:
                 continue
@@ -1244,12 +1259,14 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
                 "avatar_url": ranked.get("avatar_url") or "",
                 "uncensored": bool(ranked.get("uncensored")),
                 "ranking_type": ranked.get("ranking_type"),
+                "ranking_order": ranked.get("ranking_order"),
                 "raw": actor,
             })
         items.sort(key=lambda item: (
-            item.get("ranking_type") is None,
-            int(item.get("ranking_type") or 0),
-            str(item.get("name_zht") or item.get("name") or "").casefold(),
+            0 if item.get("ranking_type") is not None else 1,
+            int(item.get("ranking_type") if item.get("ranking_type") is not None else 999),
+            int(item.get("ranking_order") if item.get("ranking_order") is not None else 999999),
+            str(item.get("name") or "").lower(),
         ))
         return _cache_set(ACTOR_OPTIONS_CACHE, cache_key, {"ok": True, "items": items, "total": len(items)})
     if action == "series_options":

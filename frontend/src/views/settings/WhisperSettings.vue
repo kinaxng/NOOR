@@ -10,7 +10,7 @@ import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
 import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
 import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
 import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
-import { WHISPER_MODEL_BACKENDS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend } from '../../composables/useWhisperProfiles'
+import { WHISPER_MODEL_BACKENDS, WHISPER_RUNTIME_TIERS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperRuntimeTierMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend, type WhisperRuntimeTier } from '../../composables/useWhisperProfiles'
 
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -23,6 +23,7 @@ const checkingModels = ref(false)
 const downloadingModel = ref<string | null>(null)
 const installingDeps = computed(() => installStatus.value.status === 'running')
 const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
+const activeRuntimeTier = ref<WhisperRuntimeTier>('gpu_standard')
 const activeModelBackend = ref<WhisperModelBackend>('chickenrice-zh')
 const vadBackend = ref('energy')
 const timingRefiner = ref('none')
@@ -125,6 +126,7 @@ async function loadSettings() {
       const w = resp.data.whisper
       const defaults = resolveWhisperEditableDefaults(w)
       whisperFeatures.value = w.features || {}
+      activeRuntimeTier.value = defaults.runtime_tier
       activeModelBackend.value = defaults.model_backend
       vadBackend.value = defaults.vad_backend
       timingRefiner.value = defaults.timing_refiner
@@ -184,6 +186,7 @@ async function loadWhisperModels() {
 
 function buildWhisperSettingsPayload() {
   return buildWhisperProfileWithTranslation(activeModelBackend.value, {
+    runtime_tier: activeRuntimeTier.value,
     vad_backend: vadBackend.value,
     timing_refiner: timingRefiner.value,
     translate_enabled: translateEnabled.value,
@@ -354,6 +357,10 @@ const modelBackendOptions = computed(() => WHISPER_MODEL_BACKENDS.map((backend) 
   meta: getWhisperModelBackendMeta(backend),
   presentation: getWhisperSelectableStrategyPresentation(t, backend),
 })))
+const runtimeTierOptions = computed(() => WHISPER_RUNTIME_TIERS.map((tier) => ({
+  tier,
+  meta: getWhisperRuntimeTierMeta(tier),
+})))
 const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBackend(activeModelBackend.value))
 </script>
 <template>
@@ -368,6 +375,25 @@ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBack
         <h2 class="settings-card__title">{{ t('settings.whisper.currentProfileTitle') }}</h2>
         <p class="settings-card__desc settings-card__desc--compact">{{ t('settings.whisper.currentProfileDesc') }}</p>
 
+        <div class="whisper-section-label">{{ t('settings.whisper.runtimeTierTitle') }}</div>
+        <div class="settings-form mt-2.5 space-y-1.5">
+          <button
+            v-for="option in runtimeTierOptions"
+            :key="option.tier"
+            type="button"
+            class="whisper-strategy-card whisper-strategy-card--summary"
+            :class="{ 'whisper-strategy-card--active': activeRuntimeTier === option.tier }"
+            @click="activeRuntimeTier = option.tier"
+          >
+            <div class="whisper-strategy-card__head">
+              <div class="whisper-strategy-card__title">{{ t(option.meta.titleKey) }}</div>
+              <VuiBadge color="info" variant="gradient" size="sm">{{ t(option.meta.badgeKey) }}</VuiBadge>
+            </div>
+            <p class="whisper-strategy-card__summary">{{ t(option.meta.descKey) }}</p>
+          </button>
+        </div>
+
+        <div class="whisper-section-label whisper-section-label--spaced">{{ t('settings.whisper.modelBackendTitle') }}</div>
         <div class="settings-form mt-2.5 space-y-1.5">
           <button
             v-for="option in modelBackendOptions"
@@ -707,8 +733,19 @@ select.settings-input {
 }
 
 select.settings-input option {
-  background: #0f123b;
-  color: #FFFFFF;
+  background: #0a0e23;
+  color: #fff;
+}
+
+.whisper-section-label {
+  margin-top: 0.7rem;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.whisper-section-label--spaced {
+  margin-top: 1rem;
 }
 
 .dep-row {

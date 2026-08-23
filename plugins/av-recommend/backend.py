@@ -16,14 +16,26 @@ from urllib.parse import parse_qs, unquote, urlparse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import PROJECT_ROOT
 from app.core.database import async_session_maker
+from app.core.runtime_paths import plugin_data_path
 from app.knowledge.models import KnowledgeActionState, KnowledgeEdge, KnowledgeEntity
 from app.plugins.contracts import PluginManifest, PluginTestResult
 
 PLUGIN_ID = "av-recommend"
-DATA_FILE = PROJECT_ROOT / "data" / "av_recommend" / "feedback.json"
-TITLE_PROFILE_FILE = PROJECT_ROOT / "data" / "av_recommend" / "title_profile.json"
+
+
+def _data_file() -> Path:
+    return plugin_data_path("av_recommend", "feedback.json")
+
+
+def _candidate_pool_file() -> Path:
+    return plugin_data_path("av_recommend", "candidate_pool.json")
+
+
+def _title_profile_file() -> Path:
+    return plugin_data_path("av_recommend", "title_profile.json")
+
+
 TITLE_PROFILE_VERSION = 2
 CACHE_TTL = 300
 _CACHE: dict[str, Any] = {"ts": 0, "key": "", "value": None}
@@ -153,11 +165,11 @@ def _image_candidates(*items: Any) -> list[str]:
 
 
 def _pool_path() -> Path:
-    return PROJECT_ROOT / "data" / "av_recommend" / "candidate_pool.json"
+    return _candidate_pool_file()
 
 
 def _subscription_path() -> Path:
-    return PROJECT_ROOT / "data" / "subscription_core" / "subscriptions.json"
+    return plugin_data_path("subscription_core", "subscriptions.json")
 
 
 def _pool() -> dict[str, Any]:
@@ -409,13 +421,14 @@ async def _live_library_codes(config: dict[str, Any], *, force: bool = False) ->
 
 
 def _ensure_store() -> dict[str, Any]:
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not DATA_FILE.exists():
+    data_file = _data_file()
+    data_file.parent.mkdir(parents=True, exist_ok=True)
+    if not data_file.exists():
         data = {"version": 1, "ignored": [], "liked": [], "disliked": []}
-        DATA_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        data_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return data
     try:
-        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        data = json.loads(data_file.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("invalid feedback store")
         data.setdefault("ignored", [])
@@ -423,19 +436,20 @@ def _ensure_store() -> dict[str, Any]:
         data.setdefault("disliked", [])
         return data
     except Exception:
-        backup = DATA_FILE.with_suffix(f".{int(time.time())}.bak")
+        backup = data_file.with_suffix(f".{int(time.time())}.bak")
         try:
-            DATA_FILE.replace(backup)
+            data_file.replace(backup)
         except Exception:
             pass
         return _ensure_store()
 
 
 def _save_store(data: dict[str, Any]) -> None:
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = DATA_FILE.with_suffix(".tmp")
+    data_file = _data_file()
+    data_file.parent.mkdir(parents=True, exist_ok=True)
+    tmp = data_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(DATA_FILE)
+    tmp.replace(data_file)
 
 
 def _text_has_subtitle(value: Any) -> bool:
@@ -717,8 +731,9 @@ def _title_profile_signature(media: list[KnowledgeEntity], media_weights: dict[s
 
 
 def _load_title_profile_cache(signature: str) -> dict[str, Counter] | None:
+    title_profile_file = _title_profile_file()
     try:
-        data = json.loads(TITLE_PROFILE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(title_profile_file.read_text(encoding="utf-8"))
     except Exception:
         return None
     if not isinstance(data, dict) or data.get("signature") != signature or int(data.get("version") or 0) != TITLE_PROFILE_VERSION:
@@ -730,7 +745,8 @@ def _load_title_profile_cache(signature: str) -> dict[str, Counter] | None:
 
 
 def _save_title_profile_cache(signature: str, title_traits: Counter, title_terms: Counter, media_count: int) -> None:
-    TITLE_PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    title_profile_file = _title_profile_file()
+    title_profile_file.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "version": TITLE_PROFILE_VERSION,
         "signature": signature,
@@ -739,9 +755,9 @@ def _save_title_profile_cache(signature: str, title_traits: Counter, title_terms
         "title_traits": {str(key): round(float(value), 4) for key, value in title_traits.items()},
         "title_terms": {str(key): round(float(value), 4) for key, value in title_terms.items()},
     }
-    temporary = TITLE_PROFILE_FILE.with_suffix(".tmp")
+    temporary = title_profile_file.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(TITLE_PROFILE_FILE)
+    temporary.replace(title_profile_file)
 
 
 def _build_title_profile(media: list[KnowledgeEntity], media_weights: dict[str, float], actor_names: set[str]) -> dict[str, Counter]:

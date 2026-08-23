@@ -63,8 +63,8 @@ def test_recommend_crack_signal_ignores_title_only_keywords():
 async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     backend = _load_backend()
 
-    monkeypatch.setattr(backend, "DATA_FILE", tmp_path / "feedback.json")
-    monkeypatch.setattr(backend, "TITLE_PROFILE_FILE", tmp_path / "title_profile.json")
+    monkeypatch.setattr(backend, "_data_file", lambda: tmp_path / "feedback.json")
+    monkeypatch.setattr(backend, "_title_profile_file", lambda: tmp_path / "title_profile.json")
     monkeypatch.setattr(backend, "_pool_path", lambda: tmp_path / "candidate_pool.json")
     backend._CACHE.update({"ts": 0, "key": "", "value": None})
     backend._LIVE_LIBRARY_CODES_CACHE.update({"ts": 0, "key": "", "codes": set(), "warning": ""})
