@@ -27,6 +27,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Stopped hidden sidebar widget polling. The desktop and mobile sidebars no longer mount the widget-system renderer simultaneously, and plugin widgets pause when the browser tab is hidden. System metrics sampling is also throttled for 1 second on the backend.
 - Unified recommendation resource quality features: resource enrichment now separates real uncensored resources from cracked/leak signals, exposes `has_uncensored`, and returns a consistent `resource_summary.quality_score`.
 - Converged plugin API calls in `av-recommend`, `mteam-plugin`, and `subscription-core` frontends onto `sdk.api.plugin()` with a raw fetch fallback; plugin validation no longer reports `PLUGIN_API_SHOULD_USE_SDK`.
+- Migrated M-Team's add-album dialog to `sdk.ui.modal`; the shared NOOR modal shell is verified in the browser.
 - Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
 - Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.
 - Plugin host now skips standalone page loading when a plugin has no `frontend.entry`; AVDB is restored as a resource provider only and no longer triggers an assets `page.js` 404.
@@ -86,10 +87,10 @@ ps -eo pid,ppid,etime,stat,comm,args | grep -E 'vite|npm run dev|pnpm run dev' |
 
 ## Git / Workspace Notes
 
-- The repository has many historical modified/untracked files.
+- Source changes are committed regularly; runtime files under `data/` are ignored.
 - Do not assume `git status` noise is from the current task.
-- `plugins/av-recommend/` is currently untracked but functional; decide whether to formally add it.
-- Plugin cache files under `data/plugin_cache/` create large git status noise. Consider `.gitignore` cleanup.
+- `plugins/av-recommend/` is formally tracked and functional.
+- Plugin cache files under `data/plugin_cache/` are ignored and do not create git status noise.
 - A repo-level `AGENTS.md` was added to prevent future agents from scanning NFS mounts.
 
 ## Architecture Direction
@@ -429,5 +430,5 @@ Notes:
 - Frontend build passed after adding `sdk.avatar.resolve()` and JavDB avatar override.
 - Plugin validation has no errors; remaining output is design/API advice only:
   - `av-graph` and `subscription-core` CSS design-token advice
-  - `mteam-plugin` and `qBittorrent` custom-modal migration advice
+  - `qBittorrent` custom-modal migration advice
   - `mteam-plugin` and `qbittorrent` custom modal migration advice

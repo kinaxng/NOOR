@@ -91,7 +91,8 @@
 - 插件前端 API 收敛：`av-recommend`、`mteam-plugin`、`subscription-core` 的
   自身接口调用统一改走 `sdk.api.plugin()`，并保留原始 fetch 兼容回退；
   `scripts/noor-plugin validate plugins` 不再报告
-  `PLUGIN_API_SHOULD_USE_SDK`，前端生产构建和浏览器冒烟均通过。
+  `PLUGIN_API_SHOULD_USE_SDK`；M-Team 添加片单弹窗同步迁移到
+  `sdk.ui.modal`。前端生产构建和浏览器冒烟均通过。
 
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
   `original-path-inventory.tsv`：补登记 `backend/app/pipeline/lada/source/pyproject.toml`

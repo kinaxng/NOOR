@@ -96,16 +96,33 @@ export async function mount(el, sdk = {}) {
   function renderModal() {
     modalRoot.innerHTML = ''
     if (!state.addOpen) return
-    modalRoot.innerHTML = `<div class="mteam-modal-mask"><div class="mteam-modal"><div class="mteam-modal-title">添加片单</div><input class="mteam-input" data-role="albumInput" placeholder="粘贴 M-Team 片单地址或 albumId" value="${escapeHtml(state.addValue)}"><div class="mteam-modal-actions"><button class="mteam-btn" data-role="cancelAlbum">取消</button><button class="mteam-btn mteam-btn--primary" data-role="submitAlbum">${state.adding ? '添加中' : '添加'}</button></div></div></div>`
-    const input = modalRoot.querySelector('[data-role="albumInput"]')
-    const cancel = modalRoot.querySelector('[data-role="cancelAlbum"]')
-    const submit = modalRoot.querySelector('[data-role="submitAlbum"]')
-    input?.focus()
+    const input = document.createElement('input')
+    input.className = 'mteam-input'
+    input.placeholder = '粘贴 M-Team 片单地址或 albumId'
+    input.value = state.addValue
+    const cancel = document.createElement('button')
+    cancel.className = 'mteam-btn'
+    cancel.textContent = '取消'
+    const submit = document.createElement('button')
+    submit.className = 'mteam-btn mteam-btn--primary'
+    submit.textContent = state.adding ? '添加中' : '添加'
+    submit.disabled = state.adding
     input.oninput = e => { state.addValue = e.target.value }
     input.onkeydown = e => { if (e.key === 'Enter') addAlbum() }
-    cancel.onclick = () => { if (!state.adding) { state.addOpen = false; render() } }
+    const closeModal = () => { if (!state.adding) { state.addOpen = false; render() } }
+    cancel.onclick = closeModal
     submit.onclick = () => addAlbum()
-    submit.disabled = state.adding
+    if (sdk.ui?.modal) {
+      const modal = sdk.ui.modal({ title: '添加片单', content: input, footer: [cancel, submit], closeOnMask: false, onClose: closeModal })
+      modalRoot.appendChild(modal.el)
+    } else {
+      modalRoot.innerHTML = `<div class="mteam-modal-mask"><div class="mteam-modal"><div class="mteam-modal-title">添加片单</div><div class="mteam-modal-fallback"></div><div class="mteam-modal-actions"></div></div></div>`
+      modalRoot.querySelector('.mteam-modal-fallback').appendChild(input)
+      const actions = modalRoot.querySelector('.mteam-modal-actions')
+      actions.appendChild(cancel)
+      actions.appendChild(submit)
+    }
+    input.focus()
   }
 
   function render() {
