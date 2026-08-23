@@ -69,6 +69,9 @@
 - `Jobs.vue` 已按最终原版回放版本核对并转 `verified`，当前文件与
   `forensics/recovered-sources/Jobs.vue.2026-06-13-final-replayed.vue` 字节一致；
   其职责是任务运行/后台 Tab，不含已迁移到 `History.vue` 的诊断链路面板。
+- `ActorManagementView.vue` 已核对为 `2a7fe62` 历史工作区源码回放版本并归档
+  `forensics/recovered-sources/ActorManagementView.vue.replayed.vue`，SHA256
+  与当前文件一致；演员管理页的映射、重名检测、TMDB 补全、语言批量同步入口齐全。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
   `operation_id`，消除 FastAPI OpenAPI 重复操作名告警；后端全量测试仍为
   216 项通过。
