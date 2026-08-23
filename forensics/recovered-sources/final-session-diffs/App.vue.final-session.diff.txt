@@ -1,0 +1,1061 @@
+
+
+===== 2026-06-22T06:44:59.142Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 223e5db..dc4d1b8 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { ref, computed, onMounted, watch } from 'vue'
++import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+ import { useRoute } from 'vue-router'
+ import { RouterView } from 'vue-router'
+ import BaseToast from './components/noor/BaseToast.vue'
+@@ -7,14 +7,16 @@ import ConfirmDialog from './components/noor/ConfirmDialog.vue'
+ import BaseIcon from './components/noor/BaseIcon.vue'
+ import AppSidebar from './components/noor/AppSidebar.vue'
+ import SystemLogPanel from './components/noor/SystemLogPanel.vue'
++import GlobalSearch from './components/noor/GlobalSearch.vue'
+ import { useBlurCover } from './composables/useBlurCover'
+ import { useI18n } from './composables/useI18n'
+ import { useJobsStore } from './stores/jobs'
+ import { useSystemLog } from './composables/useSystemLog'
+ import { usePlugins } from './composables/usePlugins'
++import api from './api'
+ 
+ const route = useRoute()
+-const { blurEnabled, toggleBlur } = useBlurCover()
++const { blurEnabled, globalBlurEnabled, browserBlurEnabled, toggleBrowserBlur } = useBlurCover()
+ const { currentLang, switchLang, t, i18nVersion, _currentLang, _initialized } = useI18n()
+ const jobsStore = useJobsStore()
+ const { show: showSystemLog, toggle: toggleSystemLog } = useSystemLog()
+@@ -22,6 +24,7 @@ const { enabledPagePlugins, loadPlugins } = usePlugins()
+ 
+ const sidebarCollapsed = ref(false)
+ const mobileSidebarOpen = ref(false)
++const globalSearchOpen = ref(false)
+ 
+ // Computed that always returns true but establishes reactive tracking of i18nVersion
+ // This forces Vue to re-render App.vue template when language changes
+@@ -60,6 +63,7 @@ const activeNavName = computed(() => {
+     const plugin = enabledPagePlugins.value.find(p => route.path === p.route || route.path.startsWith(`${p.route}/`))
+     return plugin?.contributions?.sidebar?.label || plugin?.name || '插件'
+   }
++  if (route.path.startsWith('/search/resources')) return '资源搜索'
+   if (route.path === '/plugins') return '插件'
+   return navItems.value.find(n => route.path === n.path || route.path.startsWith(`${n.path}/`))?.name || t('nav.settings')
+ })
+@@ -69,7 +73,8 @@ const blurTitle = computed(() => {
+   void _initialized.value
+   void currentLang.value
+   void i18nVersion.value
+-  return blurEnabled.value ? t('toolbar.blurOff') : t('toolbar.blurOn')
++  if (!globalBlurEnabled.value) return t('toolbar.blurUnavailable')
++  return browserBlurEnabled.value ? t('toolbar.blurOff') : t('toolbar.blurOn')
+ })
+ const langTitle = computed(() => {
+   void _currentLang.value
+@@ -90,12 +95,172 @@ function toggleSidebar() {
+   sidebarCollapsed.value = !sidebarCollapsed.value
+ }
+ 
++function handleGlobalKeydown(event: KeyboardEvent) {
++  const target = event.target as HTMLElement | null
++  const tagName = target?.tagName?.toLowerCase()
++  const isEditable = !!target?.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select'
++  if (isEditable) return
++
++  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
++    event.preventDefault()
++    globalSearchOpen.value = true
++    return
++  }
++
++  if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'h') {
++    event.preventDefault()
++    toggleBrowserBlur()
++  }
++}
++
++function reportClientDiagnostic(level: 'info' | 'warning' | 'error', message: string, stack?: string) {
++  if (!showSystemLog.value) return
++  const text = String(message || '').trim()
++  if (!text) return
++  if (isLifecycleCancelDiagnostic(text) || (stack && isLifecycleCancelDiagnostic(stack))) return
++  void api.post('/system/logs/client', {
++    level,
++    source: 'frontend',
++    message: text,
++    stack: stack ? String(stack).slice(0, 8000) : undefined,
++    route: window.location.pathname + window.location.search,
++  }).catch(() => {})
++}
++
++function isLifecycleCancelDiagnostic(value: unknown) {
++  const text = String(value || '').toLowerCase()
++  if (!text) return false
++  return [
++    'aborterror',
++    'err_canceled',
++    'operation was aborted',
++    'request aborted',
++    'request canceled',
++    'request cancelled',
++    'is unmounted',
++    'plugin unmounted',
++    'cancelederror',
++  ].some(token => text.includes(token))
++}
++
++function shouldLogMainApi(url?: string, level: 'info' | 'warning' | 'error' = 'info') {
++  const value = String(url || '').toLowerCase()
++  if (!value) return false
++  if (value.includes('/system/logs')) return false
++  if (value.includes('/system/metrics')) return false
++  if (value.includes('/plugins/')) return false
++  if (value.includes('/events')) return false
++  if (value.includes('/jobs') && value.includes('/logs')) return false
++  if (level !== 'info') return true
++  return false
++}
++
++function installMainApiDiagnostics() {
++  const requestId = api.interceptors.request.use((config: any) => {
++    config.metadata = { startedAt: performance.now() }
++    return config
++  })
++  const responseId = api.interceptors.response.use(
++    (response: any) => {
++      const startedAt = response.config?.metadata?.startedAt
++      const cost = typeof startedAt === 'number' ? Math.round(performance.now() - startedAt) : 0
++      const url = response.config?.url || ''
++      if (showSystemLog.value && cost >= 1500 && shouldLogMainApi(url, 'warning')) {
++        reportClientDiagnostic('warning', `[main-api] slow ${String(response.config?.method || 'GET').toUpperCase()} ${url} status=${response.status} cost=${cost}ms`)
++      }
++      return response
++    },
++    (error: any) => {
++      const config = error?.config || {}
++      const startedAt = config?.metadata?.startedAt
++      const cost = typeof startedAt === 'number' ? Math.round(performance.now() - startedAt) : 0
++      const url = config?.url || ''
++      const message = error?.response?.data?.detail || error.message || 'request failed'
++      if (showSystemLog.value && shouldLogMainApi(url, 'error') && !isLifecycleCancelDiagnostic(message) && !isLifecycleCancelDiagnostic(error?.code) && !isLifecycleCancelDiagnostic(error?.name)) {
++        const status = error?.response?.status ? ` status=${error.response.status}` : ''
++        reportClientDiagnostic('error', `[main-api] ${String(config?.method || 'GET').toUpperCase()} ${url} failed${status} cost=${cost}ms error=${message}`)
++      }
++      return Promise.reject(error)
++    },
++  )
++  return () => {
++    api.interceptors.request.eject(requestId)
++    api.interceptors.response.eject(responseId)
++  }
++}
++
++let uninstallMainApiDiagnostics: null | (() => void) = null
++
++function normalizeDiagnosticMessage(value: unknown) {
++  if (value instanceof Error) return { message: value.message, stack: value.stack }
++  if (typeof value === 'string') return { message: value }
++  try {
++    return { message: JSON.stringify(value) }
++  } catch {
++    return { message: String(value) }
++  }
++}
++
++function handleWindowError(event: ErrorEvent) {
++  if (isLifecycleCancelDiagnostic(event.message) || isLifecycleCancelDiagnostic(event.error?.message) || isLifecycleCancelDiagnostic(event.error?.name)) return
++  reportClientDiagnostic('error', event.message || 'Window error', event.error?.stack || `${event.filename}:${event.lineno}:${event.colno}`)
++}
++
++function handleUnhandledRejection(event: PromiseRejectionEvent) {
++  const detail = normalizeDiagnosticMessage(event.reason)
++  if (isLifecycleCancelDiagnostic(detail.message) || isLifecycleCancelDiagnostic(detail.stack) || isLifecycleCancelDiagnostic((event.reason as any)?.name) || isLifecycleCancelDiagnostic((event.reason as any)?.code)) return
++  reportClientDiagnostic('error', `Unhandled promise rejection: ${detail.message}`, detail.stack)
++}
++
++const originalConsoleWarn = console.warn.bind(console)
++const originalConsoleError = console.error.bind(console)
++
++function installConsoleDiagnostics() {
++  console.warn = (...args: unknown[]) => {
++    originalConsoleWarn(...args)
++    const message = args.map(arg => normalizeDiagnosticMessage(arg).message).join(' ')
++    if (isLifecycleCancelDiagnostic(message)) return
++    reportClientDiagnostic('warning', `[console.warn] ${message}`)
++  }
++  console.error = (...args: unknown[]) => {
++    originalConsoleError(...args)
++    const normalized = args.map(arg => normalizeDiagnosticMessage(arg))
++    const message = normalized.map(item => item.message).join(' ')
++    const stack = normalized.find(item => item.stack)?.stack
++    if (isLifecycleCancelDiagnostic(message) || isLifecycleCancelDiagnostic(stack)) return
++    reportClientDiagnostic('error', `[console.error] ${message}`, stack)
++  }
++}
++
++function uninstallConsoleDiagnostics() {
++  console.warn = originalConsoleWarn
++  console.error = originalConsoleError
++}
++
+ watch(blurEnabled, (enabled) => {
+   document.body.classList.toggle('noor-blur-images', enabled)
+ }, { immediate: true })
+ 
++watch(() => route.fullPath, (to, from) => {
++  if (!from || to === from) return
++  reportClientDiagnostic('info', `[main-route] ${from} -> ${to}`)
++})
++
++onUnmounted(() => {
++  window.removeEventListener('keydown', handleGlobalKeydown)
++  window.removeEventListener('error', handleWindowError)
++  window.removeEventListener('unhandledrejection', handleUnhandledRejection)
++  uninstallMainApiDiagnostics?.()
++  uninstallConsoleDiagnostics()
++})
++
+ onMounted(() => {
+   loadPlugins()
++  window.addEventListener('keydown', handleGlobalKeydown)
++  window.addEventListener('error', handleWindowError)
++  window.addEventListener('unhandledrejection', handleUnhandledRejection)
++  installConsoleDiagnostics()
++  uninstallMainApiDiagnostics = installMainApiDiagnostics()
+   // Don't auto-poll; only poll when user opens the log panel
+ })
+ </script>
+@@ -120,8 +285,11 @@ onMounted(() => {
+ 
+     <!-- Main Content Area -->
+     <main
+-      class="transition-all duration-300"
+-      :class="sidebarCollapsed ? 'lg:ml-[120px]' : 'lg:ml-[274px]'"
++      class="app-main transition-all duration-300"
++      :class="[
++        sidebarCollapsed ? 'lg:ml-[76px]' : 'lg:ml-[274px]',
++        showSystemLog ? 'app-main--with-log' : '',
++      ]"
+     >
+       <!-- Top Navbar -->
+       <header
+@@ -145,14 +313,25 @@ onMounted(() => {
+ 
+         <!-- Right: Controls -->
+         <div class="flex items-center gap-2 md:gap-3">
++          <!-- Global Search -->
++          <button
++            @click="globalSearchOpen = true"
++            class="navbar-search-trigger"
++            title="全局搜索 Ctrl/⌘ K"
++          >
++            <BaseIcon name="search" class="w-4 h-4" />
++            <span class="navbar-search-trigger__text">搜索</span>
++            <span class="navbar-search-trigger__kbd">⌘K</span>
++          </button>
++
+           <!-- Blur toggle -->
+           <button
+-            @click="toggleBlur"
++            @click="toggleBrowserBlur"
+             class="navbar-icon-btn"
+-            :class="{ 'navbar-icon-btn--active': blurEnabled }"
++            :class="{ 'navbar-icon-btn--active': browserBlurEnabled }"
+             :title="blurTitle"
+           >
+-            <BaseIcon :name="blurEnabled ? 'eye-off' : 'eye'" class="w-4 h-4" />
++            <BaseIcon :name="browserBlurEnabled ? 'eye-off' : 'eye'" class="w-4 h-4" />
+           </button>
+ 
+           <!-- Language toggle -->
+@@ -197,10 +376,23 @@ onMounted(() => {
+ 
+     <!-- System Log Panel -->
+     <SystemLogPanel />
++
++    <!-- Global Search -->
++    <GlobalSearch :open="globalSearchOpen" @close="globalSearchOpen = false" />
+   </div>
+ </template>
+ 
+ <style scoped>
++.app-main {
++  min-width: 0;
++}
++
++@media (min-width: 1024px) {
++  .app-main--with-log {
++    margin-right: 380px;
++  }
++}
++
+ .navbar-search {
+   display: flex;
+   align-items: center;
+@@ -242,6 +434,53 @@ onMounted(() => {
+   color: rgba(255, 255, 255, 0.4);
+ }
+ 
++.navbar-search-trigger {
++  width: 2.375rem;
++  height: 2.375rem;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: .5rem;
++  padding: 0;
++  border: 1px solid rgba(255,255,255,.08);
++  border-radius: var(--radius-md);
++  background: rgba(255,255,255,.05);
++  color: rgba(255,255,255,.52);
++  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
++}
++.navbar-search-trigger:hover {
++  background: rgba(255,255,255,.09);
++  color: rgba(255,255,255,.82);
++  border-color: rgba(255,255,255,.12);
++}
++.navbar-search-trigger__text {
++  flex: 1;
++  text-align: left;
++  font-size: .78rem;
++  display: none;
++}
++.navbar-search-trigger__kbd {
++  display: none;
++  border: 1px solid rgba(255,255,255,.08);
++  border-radius: .42rem;
++  padding: .08rem .32rem;
++  color: rgba(255,255,255,.34);
++  font-size: .62rem;
++}
++@media (min-width: 768px) {
++  .navbar-search-trigger {
++    width: auto;
++    min-width: 10rem;
++    justify-content: flex-start;
++    padding: 0 .72rem;
++  }
++
++  .navbar-search-trigger__text,
++  .navbar-search-trigger__kbd {
++    display: inline-flex;
++  }
++}
++
+ .navbar-icon-btn {
+   position: relative;
+   width: 2.375rem;
+diff --git a/frontend/src/composables/useBlurCover.ts b/frontend/src/composables/useBlurCover.ts
+index bf09fdc..101fffd 100644
+--- a/frontend/src/composables/useBlurCover.ts
++++ b/frontend/src/composables/useBlurCover.ts
+@@ -1,42 +1,52 @@
+ import { ref, computed } from 'vue'
+ 
+-const STORAGE_KEY = 'lada-blur-cover'
++const GLOBAL_STORAGE_KEY = 'noor-cover-blur-global'
++const BROWSER_STORAGE_KEY = 'noor-cover-blur-browser'
++const LEGACY_STORAGE_KEY = 'lada-blur-cover'
+ 
+-// Persisted master setting
+-const masterEnabled = ref<boolean>(
+-  localStorage.getItem(STORAGE_KEY) === null
++function readBooleanStorage(key: string, fallback: boolean) {
++  const value = localStorage.getItem(key)
++  return value === null ? fallback : value === 'true'
++}
++
++const legacyValue = localStorage.getItem(LEGACY_STORAGE_KEY)
++const initialGlobalEnabled = localStorage.getItem(GLOBAL_STORAGE_KEY) === null && legacyValue !== null
++  ? legacyValue === 'true'
++  : readBooleanStorage(GLOBAL_STORAGE_KEY, true)
++
++// System Settings: global master switch.
++const globalBlurEnabled = ref<boolean>(initialGlobalEnabled)
++
++// Topbar: browser-local preference.
++const browserBlurEnabled = ref<boolean>(
++  localStorage.getItem(BROWSER_STORAGE_KEY) === null
+     ? true
+-    : localStorage.getItem(STORAGE_KEY) === 'true'
++    : readBooleanStorage(BROWSER_STORAGE_KEY, true)
+ )
+ 
+-// Runtime override from toolbar (not persisted)
+-const toolbarOverride = ref<boolean | null>(null)
+-
+ export function useBlurCover() {
+-  // Effective value: toolbar override > master setting
+-  const blurEnabled = computed(() =>
+-    toolbarOverride.value !== null ? toolbarOverride.value : masterEnabled.value
+-  )
+-
+-  // Toolbar: temporary toggle, does NOT persist
+-  function toggleBlur() {
+-    if (toolbarOverride.value === null) {
+-      toolbarOverride.value = !masterEnabled.value
+-    } else {
+-      toolbarOverride.value = !toolbarOverride.value
+-    }
++  const blurEnabled = computed(() => globalBlurEnabled.value && browserBlurEnabled.value)
++
++  function setGlobalBlur(value: boolean) {
++    globalBlurEnabled.value = value
++    localStorage.setItem(GLOBAL_STORAGE_KEY, String(value))
++  }
++
++  function setBrowserBlur(value: boolean) {
++    browserBlurEnabled.value = value
++    localStorage.setItem(BROWSER_STORAGE_KEY, String(value))
+   }
+ 
+-  // Settings: persist to localStorage
+-  function setBlur(value: boolean) {
+-    masterEnabled.value = value
+-    toolbarOverride.value = null
+-    localStorage.setItem(STORAGE_KEY, String(value))
++  function toggleBrowserBlur() {
++    setBrowserBlur(!browserBlurEnabled.value)
+   }
+ 
+   return {
+     blurEnabled,
+-    toggleBlur,
+-    setBlur,
++    globalBlurEnabled,
++    browserBlurEnabled,
++    setGlobalBlur,
++    setBrowserBlur,
++    toggleBrowserBlur,
+   }
+ }
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index 9ad5bc2..316b81d 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -34,6 +34,7 @@ export const en: Record<string, string> = {
+   // Toolbar
+   'toolbar.blurOn': 'Enable cover blur',
+   'toolbar.blurOff': 'Disable cover blur',
++  'toolbar.blurUnavailable': 'Cover blur is disabled globally',
+   'toolbar.switchLang': 'Switch language',
+   'toolbar.langShortZh': '中',
+   'toolbar.langShortEn': 'EN',
+@@ -93,6 +94,7 @@ export const en: Record<string, string> = {
+   'hardlinks.status.unparsed': 'Unparsed Work',
+   'hardlinks.missingSource': 'No matching source file found',
+   'hardlinks.orphanSkipped': 'Orphan-only, skipped for now',
++  'hardlinks.reorganize': 'Reorganize',
+   'hardlinks.deleteHardlink': 'Delete Hardlink',
+   'hardlinks.deleteSourceChain': 'Delete Source Chain',
+   'hardlinks.previewDelete': 'Preview Delete',
+@@ -103,6 +105,8 @@ export const en: Record<string, string> = {
+   'hardlinks.deleteGroupConfirm': 'Delete entire work group {code}?\nWill process {entryCount} entries',
+   'hardlinks.deleteHardlinkSuccess': 'Hardlink deleted',
+   'hardlinks.deleteHardlinkFailed': 'Failed to delete hardlink',
++  'hardlinks.reorganizeSuccess': 'Submitted to MDC-NG for reorganize',
++  'hardlinks.reorganizeFailed': 'Failed to submit reorganize task',
+   'hardlinks.deleteSourceChainSuccess': 'Source chain deleted',
+   'hardlinks.deleteSourceChainFailed': 'Failed to delete source chain',
+   'hardlinks.deleteGroupSuccess': 'Work group deleted',
+@@ -359,6 +363,8 @@ export const en: Record<string, string> = {
+   'jobs.noRunning': 'No running or queued jobs',
+   'jobs.noCompleted': 'No completed jobs',
+   'jobs.noFailed': 'No failed, cancelled, or skipped jobs',
++  'jobs.background': 'Background',
++  'jobs.noBackground': 'No background tasks',
+   'jobs.logs': 'Logs',
+   'jobs.clickForLogs': 'Click a job to view logs',
+   'jobs.recent': 'Recent Jobs',
+@@ -375,6 +381,8 @@ export const en: Record<string, string> = {
+   'jobs.deleteFailed': 'Failed to delete job',
+   'jobs.type.lada': 'LADA',
+   'jobs.type.whisper': 'Whisper',
++  'jobs.type.mdc': 'MDC-NG',
++  'jobs.type.external': 'External',
+   'jobs.emptyTitle': 'No Jobs',
+   'jobs.logsTitle': 'Live Logs',
+   'jobs.diagnosticsTitle': 'Chain Diagnostics',
+@@ -499,6 +507,7 @@ export const en: Record<string, string> = {
+   'settings.network.proxyHint2': 'Use HTTP proxy for all downloads',
+   'settings.network.mirrorHint': 'Use ghproxy.com (GitHub), hf-mirror.com (HuggingFace), Tsinghua pip mirror',
+   'settings.network.githubMirror': 'GitHub Mirror',
++  'settings.network.githubToken': 'GitHub Token',
+   'settings.network.hfMirror': 'HuggingFace Mirror',
+   'settings.network.pipMirror': 'pip Mirror',
+   'settings.storage.title': 'Storage Paths',
+@@ -717,7 +726,7 @@ export const en: Record<string, string> = {
+   'settings.whisper.installDepsReady': 'All dependencies are ready; no installation needed',
+   'settings.whisper.installDepsPlan': 'Will install: {packages}',
+   'settings.whisper.translationTitle': 'OpenAI Translation',
+-  'settings.whisper.translationDesc': 'Uses the OpenAI-API compatible interface; works with Ollama / OpenAI / Groq / LM Studio and others',
++  'settings.whisper.translationDesc': 'Supports OpenAI-compatible endpoints and native Ollama /api/chat',
+   'settings.whisper.audioPreprocessLabel': 'Audio Preprocess',
+   'settings.whisper.audioPreprocessDesc': 'Experimental and off by default. It runs vocal isolation first, then normalizes the result back to a 16k mono WAV for ASR; end-to-end latency usually gets close to doubling, and quality does not improve consistently.',
+   'settings.whisper.audioPreprocessModelLabel': 'Preprocess Model',
+@@ -732,7 +741,7 @@ export const en: Record<string, string> = {
+   'settings.whisper.translateModelLabel': 'Model',
+   'settings.whisper.translateModelDesc': 'Some providers require a vendor prefix, such as anthropic/claude-3-5-sonnet, or simply gpt-4o-mini',
+   'settings.whisper.translateBaseUrlLabel': 'Base URL',
+-  'settings.whisper.translat
+
+
+===== 2026-07-01T08:27:18.068Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 67fc29e..3337489 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -53,7 +53,7 @@ const navItems = computed(() => {
+       return running + queued + blocked + pending || null
+     })},
+     { path: '/history', name: t('nav.history'), icon: 'history' },
+-    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },
++    { path: '/files', name: t('nav.files'), icon: 'folderOpen' },
+     { path: '/settings', name: t('nav.settings'), icon: 'settings' },
+   ]
+ })
+diff --git a/frontend/src/components/noor/AppSidebar.vue b/frontend/src/components/noor/AppSidebar.vue
+index 22c9378..c0299be 100644
+--- a/frontend/src/components/noor/AppSidebar.vue
++++ b/frontend/src/components/noor/AppSidebar.vue
+@@ -36,7 +36,7 @@ const navItems = computed(() => {
+     { path: '/library', name: t('nav.library'), icon: 'library' },
+     { path: '/jobs', name: t('nav.jobs'), icon: 'jobs' },
+     { path: '/history', name: t('nav.history'), icon: 'history' },
+-    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },
++    { path: '/files', name: t('nav.files'), icon: 'folderOpen' },
+     { path: '/settings', name: t('nav.settings'), icon: 'settings' },
+   ]
+ })
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index 6b377ea..e1bbcf3 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -28,9 +28,16 @@ export const en: Record<string, string> = {
+   'nav.library': 'Library',
+   'nav.jobs': 'Jobs',
+   'nav.history': 'History',
++  'nav.files': 'Files',
+   'nav.hardlinks': 'Hardlinks',
+   'nav.settings': 'Settings',
+ 
++  // Files
++  'files.title': 'Files',
++  'files.tab.hardlinks': 'Hardlinks',
++  'files.tab.actors': 'Actor Management',
++  'files.actors.empty': 'Actor management is not connected yet',
++
+   // Toolbar
+   'toolbar.blurOn': 'Enable cover blur (H)',
+   'toolbar.blurOff': 'Disable cover blur (H)',
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index a8f7d39..834fe20 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -28,9 +28,16 @@ export const zh: Record<string, string> = {
+   'nav.library': '媒体库',
+   'nav.jobs': '任务',
+   'nav.history': '历史',
++  'nav.files': '文件',
+   'nav.hardlinks': '硬链接',
+   'nav.settings': '设置',
+ 
++  // Files
++  'files.title': '文件',
++  'files.tab.hardlinks': '硬链接',
++  'files.tab.actors': '演员管理',
++  'files.actors.empty': '演员管理待接入',
++
+   // Toolbar
+   'toolbar.blurOn': '开启封面模糊 (H)',
+   'toolbar.blurOff': '关闭封面模糊 (H)',
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index 78fae81..462f7e3 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -23,10 +23,14 @@ const router = createRouter({
+       name: 'history',
+       component: () => import('../views/History.vue'),
+     },
++    {
++      path: '/files/:fileTab?',
++      name: 'files',
++      component: () => import('../views/FilesView.vue'),
++    },
+     {
+       path: '/hardlinks',
+-      name: 'hardlinks',
+-      component: () => import('../views/HardlinkView.vue'),
++      redirect: '/files/hardlinks',
+     },
+     {
+       path: '/search/resources',
+
+
+
+===== 2026-07-01T08:28:50.611Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 67fc29e..3337489 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -53,7 +53,7 @@ const navItems = computed(() => {
+       return running + queued + blocked + pending || null
+     })},
+     { path: '/history', name: t('nav.history'), icon: 'history' },
+-    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },
++    { path: '/files', name: t('nav.files'), icon: 'folderOpen' },
+     { path: '/settings', name: t('nav.settings'), icon: 'settings' },
+   ]
+ })
+diff --git a/frontend/src/components/noor/AppSidebar.vue b/frontend/src/components/noor/AppSidebar.vue
+index 22c9378..c0299be 100644
+--- a/frontend/src/components/noor/AppSidebar.vue
++++ b/frontend/src/components/noor/AppSidebar.vue
+@@ -36,7 +36,7 @@ const navItems = computed(() => {
+     { path: '/library', name: t('nav.library'), icon: 'library' },
+     { path: '/jobs', name: t('nav.jobs'), icon: 'jobs' },
+     { path: '/history', name: t('nav.history'), icon: 'history' },
+-    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },
++    { path: '/files', name: t('nav.files'), icon: 'folderOpen' },
+     { path: '/settings', name: t('nav.settings'), icon: 'settings' },
+   ]
+ })
+diff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts
+index 6b377ea..e1bbcf3 100644
+--- a/frontend/src/i18n/en.ts
++++ b/frontend/src/i18n/en.ts
+@@ -28,9 +28,16 @@ export const en: Record<string, string> = {
+   'nav.library': 'Library',
+   'nav.jobs': 'Jobs',
+   'nav.history': 'History',
++  'nav.files': 'Files',
+   'nav.hardlinks': 'Hardlinks',
+   'nav.settings': 'Settings',
+ 
++  // Files
++  'files.title': 'Files',
++  'files.tab.hardlinks': 'Hardlinks',
++  'files.tab.actors': 'Actor Management',
++  'files.actors.empty': 'Actor management is not connected yet',
++
+   // Toolbar
+   'toolbar.blurOn': 'Enable cover blur (H)',
+   'toolbar.blurOff': 'Disable cover blur (H)',
+diff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts
+index a8f7d39..834fe20 100644
+--- a/frontend/src/i18n/zh.ts
++++ b/frontend/src/i18n/zh.ts
+@@ -28,9 +28,16 @@ export const zh: Record<string, string> = {
+   'nav.library': '媒体库',
+   'nav.jobs': '任务',
+   'nav.history': '历史',
++  'nav.files': '文件',
+   'nav.hardlinks': '硬链接',
+   'nav.settings': '设置',
+ 
++  // Files
++  'files.title': '文件',
++  'files.tab.hardlinks': '硬链接',
++  'files.tab.actors': '演员管理',
++  'files.actors.empty': '演员管理待接入',
++
+   // Toolbar
+   'toolbar.blurOn': '开启封面模糊 (H)',
+   'toolbar.blurOff': '关闭封面模糊 (H)',
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index 78fae81..462f7e3 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -23,10 +23,14 @@ const router = createRouter({
+       name: 'history',
+       component: () => import('../views/History.vue'),
+     },
++    {
++      path: '/files/:fileTab?',
++      name: 'files',
++      component: () => import('../views/FilesView.vue'),
++    },
+     {
+       path: '/hardlinks',
+-      name: 'hardlinks',
+-      component: () => import('../views/HardlinkView.vue'),
++      redirect: '/files/hardlinks',
+     },
+     {
+       path: '/search/resources',
+
+
+
+===== 2026-08-11T19:24:55.556Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue\nindex 6c3cc37..e39566a 100644\n--- a/frontend/src/App.vue\n+++ b/frontend/src/App.vue\n@@ -53,7 +53,7 @@ const navItems = computed(() => {\n       return running + queued + blocked + pending || null\n     })},\n     { path: \'/history\', name: t(\'nav.history\'), icon: \'history\' },\n-    { path: \'/hardlinks\', name: t(\'nav.hardlinks\'), icon: \'hardlink\' },\n+    { path: \'/files\', name: t(\'nav.files\'), icon: \'folderOpen\' },\n     { path: \'/settings\', name: t(\'nav.settings\'), icon: \'settings\' },\n   ]\n })\n[master eaaf75f] Fix file workspace topbar title\n Committer: KINAX <kinax@NextLab>\nYour name and email address were configured automatically based\non your username and hostname. Please check that they are accurate.\nYou can suppress this message by setting them explicitly:\n\n    git config --global user.name "Your Name"\n    git config --global user.email you@example.com\n\nAfter doing this, you may fix the identity used for this commit with:\n\n    git commit --amend --reset-author\n\n 1 file changed, 1 insertion(+), 1 deletion(-)\n'}]
+
+
+===== 2026-08-23T09:10:02.376Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue\nindex 223e5db..dc4d1b8 100644\n--- a/frontend/src/App.vue\n+++ b/frontend/src/App.vue\n@@ -1,5 +1,5 @@\n <script setup lang=\"ts\">\n-import { ref, computed, onMounted, watch } from 'vue'\n+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'\n import { useRoute } from 'vue-router'\n import { RouterView } from 'vue-router'\n import BaseToast from './compo
+25362:{"timestamp":"2026-07-03T07:19:55.572Z","type":"response_item","payload":{"type":"funct…7625 tokens truncated…diagnosticsParticle|diagnosticsEcho|diagnosticsEmpty\\\" frontend/src/i18n/zh.ts frontend/src/i18n/en.ts | sed -n '1,200p'\"}","call_id":"call_00_ypvwq7jBScypCIGEeEVm7509","internal_chat_message_metadata_passthrough":{"turn_id":"01a02dde
+83086:{"timestamp":"2026-08-23T09:09:50.822Z","type":"response_item","payload":{"type":"reasoning","id":"a646179c-c349-4626-8efa-b10df986e0b1","summary":[],"content":[{"type":"reasoning_text","text":"No i18n keys. Original i18n may have jobs.diagnostics keys. We can add to zh/en. Need inspect archived i18n? Maybe source maps didn't include? Search archived files for `jobs.diagnosticsTitle` etc."}],"encrypted_content":"7438f087-6f2e-4cc1-8140-5157a8e1a24d-0","internal_chat_message_metadata_passthrough":{"turn_id":"01a02dde-e8a0-7960-83d6-a91585762083"}}}
+83087:{"timestamp":"2026-08-23T09:09:51.410Z","type":"response_item","payload":{"type":"function_call","id":"5b19b72c-04d4-491d-a4d4-64d04be75832","name":"exec_command","arguments":"{\"cmd\": \"cd /home/kinax/noor-restored && rg -n \\\"diagnosticsTitle|diagnosticsAligned|diagnosticsLargeV3|diagnosticsFallback|diagnosticsStepdown|diagnosticsReason|diagnosticsSegment|diagnosticsSubtitles|diagnosticsWindows|diagnosticsDeduped|diagnosticsNoise|diagnosticsTrimmed|diagnosticsParticle|diagnosticsEcho\\\" /tmp/noor-frontend-extract-chromium forensics/frontend-snapshots 2>/dev/null | sed -n '1,200p'\"}","call_id":"call_00_TfZwnJXZRiHa5tA1nOHQ6265","internal_chat_message_metadata_passthrough":{"turn_i
+83089:{"timestamp":"2026-08-23T09:09:51.824Z","type":"response_item","payload":{"type":"function_call_output","id":"fco_01a02de2-2a50-7a23-8ba6-fb5c16719739","call_id":"call_00_TfZwnJXZRiHa5tA1nOHQ6265","output":"Chunk ID: cf9365\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 8134\nOutput:\nWarning: truncated output (original token count: 8134)\nTotal output lines: 200\n\n/tmp/noor-frontend-extract-chromium/latest/src/pages/jobs.vue:352:                <h4 class=\"text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wider\">{{ t('jobs.diagnosticsTitle') }}</h4>\n/tmp/noor-frontend-extract-chromium/latest/src/pages/jobs.vue:359:                    <di
+83095:{"timestamp":"2026-08-23T09:09:56.144Z","type":"response_item","payload":{"type":"function_call_output","id":"fco_01a02de2-3b30-79c0-88e7-54583cb5ec3d","call_id":"call_00_Mc4z7JqkAJTF8prLRqRR1009","output":"Chunk ID: 358cdd\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 2650\nOutput:\nWarning: truncated output (original token count: 2650)\nTotal output lines: 231\n\n  if (!selectedJob.value) return [] as string[]\n  return getJobHeaderMetaTokens.value(selectedJob.value)\n})\n\nconst selectedJobStrategyHint = computed(() => {\n  if (!selectedJob.value) return ''\n  return getWhisperStrategyHint.value(selectedJob.value)\n})\n\nconst diagnosticsTitleLabel = 
+83096:{"timestamp":"2026-08-23T09:09:56.179Z","type":"response_item","payload":{"type":"function_call_output","id":"fco_01a02de2-3b53-7733-a990-e488761a5623","call_id":"call_01_knCWdfBuH5pwFU3BfZYs9889","output":"Chunk ID: 38f8e3\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 1044\nOutput:\n389:          <div v-if=\"selectedJobId && selectedJobRecommendedDiagnostics\" class=\"jobs-diagnostics\">\n390:            <div class=\"jobs-diagnostics__head\">\n391:              <div class=\"jobs-diagnostics__title-wrap\">\n392:                <div class=\"jobs-diagnostics__icon\">\n396:                  <p class=\"jobs-diagnostics__title\">{{ diagnosticsTitleLabel }}</p
+83102:{"timestamp":"2026-08-23T09:10:00.857Z","type":"response_item","payload":{"type":"reasoning","id":"a2eab21b-f398-4f9f-9596-e558b067f7fb","summary":[],"content":[{"type":"reasoning_text","text":"We can restore exactly this.\n\nNeed also restore `History.vue` diagnostics. Could add type and functions.\n\nLet's inspect current i18n keys for jobs. We'll add all diagnostics keys. Need find exact labels from original i18n? Search rollout session for diagnostics strings maybe Chinese. Use rg in June8 JSONL for `diagnosticsTitle`."}],"encrypted_content":"4914e9af-c016-4a4e-bb16-60a94e71644f-0","internal_chat_message_metadata_passthrough":{"turn_id":"01a02dde-e8a0-7960-83d6-a91585762083"}}}
+83103:{"timestamp":"2026-08-23T09:10:01.576Z","type":"response_item","payload":{"type":"function_call","id":"8a05b123-ebfc-4cb5-a80a-ee7dc9f3e317","name":"exec_command","arguments":"{\"cmd\": \"cd /home/kinax && rg -n \\\"diagnosticsTitle|diagnosticsAligned|diagnosticsLargeV3|diagnosticsFallback|diagnosticsStepdown|diagnosticsSegment|diagnosticsSubtitles|diagnosticsWindows|diagnosticsDeduped|diagnosticsNoise|diagnosticsTrimmed|diagnosticsParticle|diagnosticsEcho|diagnosticsReason|diagnosticsEmpty\\\" /home/kinax/.codex/sessions/2026/06/08/rollout-2026-06-08T16-08-55-019ea647-0e81-7d81-9b62-558364a36e3f.jsonl | cut -c1-700 | sed -n '1,120p'\"}","call_id":"call_00_M3I8UZMtTHetZ5ekmn2L2910","in
+
+
+
+===== 2026-08-23T09:14:30.755Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index e39566a..817d44e 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -301,8 +301,9 @@ onMounted(() => {
+         <div class="flex items-center gap-3">
+           <!-- Hamburger (mobile only) -->
+           <button
+-            class="navbar-icon-btn hidden lg:hidden"
++            class="navbar-icon-btn lg:hidden"
+             @click="mobileSidebarOpen = true"
++            title="打开导航"
+           >
+             <BaseIcon name="menu" class="w-4 h-4" />
+           </button>
+@@ -437,7 +438,7 @@ onMounted(() => {
+ .navbar-search-trigger {
+   min-width: 10rem;
+   height: 2.375rem;
+-  display: none;
++  display: inline-flex;
+   align-items: center;
+   gap: .5rem;
+   padding: 0 .72rem;
+@@ -467,6 +468,16 @@ onMounted(() => {
+ @media (min-width: 768px) {
+   .navbar-search-trigger { display: inline-flex; }
+ }
++@media (max-width: 767px) {
++  .navbar-search-trigger {
++    min-width: 2.375rem;
++    width: 2.375rem;
++    padding: 0;
++    justify-content: center;
++  }
++  .navbar-search-trigger__text,
++  .navbar-search-trigger__kbd { display: none; }
++}
+ 
+ .navbar-icon-btn {
+   position: relative;
+
+
+
+===== 2026-08-23T09:14:30.755Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 817d44e..c4bbbef 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -59,6 +59,7 @@ const navItems = computed(() => {
+ })
+ 
+ const activeNavName = computed(() => {
++  if (route.name === 'actor-detail' || route.path.startsWith('/actors/')) return t('files.actors.title')
+   if (route.path.startsWith('/plugins/')) {
+     const plugin = enabledPagePlugins.value.find(p => route.path === p.route || route.path.startsWith(`${p.route}/`))
+     return plugin?.contributions?.sidebar?.label || plugin?.name || '插件'
+
+
+
+===== 2026-08-23T09:14:30.756Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 7771265..6e0cf68 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -218,6 +218,15 @@ type Page =
+ 
+ const page = ref<Page>("overview");
+ let applyingBrowserRoute = false;
++
++function storedCoverBlurOverride(): boolean | null {
++  try {
++    const value = window.localStorage.getItem("noor.cover_blur.browser");
++    return value === "1" ? true : value === "0" ? false : null;
++  } catch {
++    return null;
++  }
++}
+ const loading = ref(true);
+ const error = ref("");
+ const healthy = ref(false);
+@@ -253,6 +262,9 @@ const networkSettings = ref<NetworkSettings>({
+ const coreSettingsLoading = ref(false);
+ const embySettingsSaving = ref(false);
+ const networkSettingsSaving = ref(false);
++const coverBlurGlobal = ref(false);
++const coverBlurBrowserOverride = ref<boolean | null>(storedCoverBlurOverride());
++const coverBlurSaving = ref(false);
+ const systemLogs = ref<SystemLog[]>([]);
+ const systemLogsLoading = ref(false);
+ const webhookInstructionsVisible = ref(false);
+@@ -439,6 +451,9 @@ const filteredActors = computed(() => {
+       .includes(query),
+   );
+ });
++const coverBlurActive = computed(
++  () => coverBlurBrowserOverride.value ?? coverBlurGlobal.value,
++);
+ const embyWebhookUrl = computed(() => {
+   if (typeof window === "undefined") return "/api/webhooks/emby";
+   return `${window.location.origin}/api/webhooks/emby`;
+@@ -687,6 +702,58 @@ async function loadSystemLogs() {
+   }
+ }
+ 
++async function loadUiSettings() {
++  try {
++    const settings = await request<{ cover_blur?: boolean }>("/api/ui-settings");
++    coverBlurGlobal.value = Boolean(settings.cover_blur);
++  } catch (cause) {
++    error.value = cause instanceof Error ? cause.message : "界面设置读取失败";
++  }
++}
++
++async function saveCoverBlurGlobal() {
++  coverBlurSaving.value = true;
++  error.value = "";
++  try {
++    const response = await fetch("/api/ui-settings", {
++      method: "PUT",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify({ cover_blur: coverBlurGlobal.value }),
++    });
++    if (!response.ok)
++      throw new Error(
++        (await response.text()) || `${response.status} ${response.statusText}`,
++      );
++    const result = (await response.json()) as { cover_blur?: boolean };
++    coverBlurGlobal.value = Boolean(result.cover_blur);
++  } catch (cause) {
++    error.value = cause instanceof Error ? cause.message : "封面模糊设置保存失败";
++  } finally {
++    coverBlurSaving.value = false;
++  }
++}
++
++function toggleCoverBlurBrowser() {
++  const next = !coverBlurActive.value;
++  coverBlurBrowserOverride.value = next;
++  try {
++    window.localStorage.setItem("noor.cover_blur.browser", next ? "1" : "0");
++  } catch {
++    // The control remains effective for this session when browser storage is unavailable.
++  }
++}
++
++function handleCoverBlurShortcut(event: KeyboardEvent) {
++  const target = event.target as HTMLElement | null;
++  if (
++    event.key.toLowerCase() !== "h" ||
++    target?.matches("input, textarea, select, [contenteditable='true']")
++  )
++    return;
++  event.preventDefault();
++  toggleCoverBlurBrowser();
++}
++
+ async function copyEmbyWebhookUrl() {
+   try {
+     await navigator.clipboard.writeText(embyWebhookUrl.value);
+@@ -2056,11 +2123,13 @@ onMounted(async () => {
+     applyingBrowserRoute = false;
+     await loadBrowserRoute();
+   });
++  window.addEventListener("keydown", handleCoverBlurShortcut);
++  await loadUiSettings();
+ });
+ </script>
+ 
+ <template>
+-  <div class="app-shell">
++  <div :class="['app-shell', { 'cover-blurred': coverBlurActive }]">
+     <aside class="sidebar">
+       <div class="brand">
+         <span class="brand-mark">N</span><span>NOOR</span>
+@@ -2134,6 +2203,7 @@ onMounted(async () => {
+             loadFacefusionSettings();
+             loadWhisperSettings();
+             loadLadaSettings();
++            loadUiSettings();
+           "
+         >
+           设置
+@@ -2159,6 +2229,13 @@ onMounted(async () => {
+           >
+             搜索</button
+           ><button
++            :class="['icon-button', { active: coverBlurActive }]"
++            title="封面模糊 (H)"
++            aria-label="封面模糊 (H)"
++            @click="toggleCoverBlurBrowser"
++          >
++            ◐
++          </button><button
+             class="icon-button"
+             title="刷新"
+             aria-label="刷新"
+@@ -3492,11 +3569,29 @@ onMounted(async () => {
+                 loadFacefusionSettings();
+                 loadWhisperSettings();
+                 loadLadaSettings();
++                loadUiSettings();
+               "
+             >
+               刷新
+             </button>
+           </div>
++          <section class="settings-section">
++            <div class="panel-heading">
++              <div>
++                <h3>界面</h3>
++                <small>设定所有浏览器的封面模糊默认状态</small>
++              </div>
++            </div>
++            <label class="settings-toggle">
++              <input
++                v-model="coverBlurGlobal"
++                type="checkbox"
++                :disabled="coverBlurSaving"
++                @change="saveCoverBlurGlobal"
++              />
++              <span>{{ coverBlurSaving ? "正在保存..." : "默认模糊作品封面" }}</span>
++            </label>
++          </section>
+           <section class="settings-section">
+             <div class="panel-heading">
+               <div>
+@@ -4129,6 +4224,26 @@ h2 {
+   border-radius: 5px;
+   font-size: 20px;
+ }
++.header-actions .icon-button {
++  width: 36px;
++  height: 36px;
++}
++.header-actions .icon-button.active {
++  background: #176fae;
++  border-color: #38a2ec;
++  color: #fff;
++}
++.cover-blurred .poster,
++.cover-blurred .media-poster {
++  overflow: hidden;
++}
++.cover-blurred .poster img,
++.cover-blurred .media-poster img,
++.cover-blurred .detail-cover,
++.cover-blurred .work-card img {
++  filter: blur(18px);
++  transform: scale(1.04);
++}
+ .overview-grid {
+   display: grid;
+   grid-template-columns: repeat(4, minmax(0, 1fr));
+@@ -4876,6 +4991,19 @@ pre {
+   color: #98a6b7;
+   font-size: 13px;
+ }
++.settings-toggle {
++  display: inline-flex;
++  align-items: center;
++  gap: 9px;
++  color: #dce5ee;
++  font-size: 13px;
++}
++.settings-toggle input {
++  width: 16px;
++  height: 16px;
++  margin: 0;
++  accent-color: #168bdf;
++}
+ .settings-inline {
+   display: flex;
+   gap: 8px;
+
+
+
+===== 2026-08-23T09:14:43.514Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index c4bbbef..6d0d4df 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -16,7 +16,7 @@ import { usePlugins } from './composables/usePlugins'
+ import api from './api'
+ 
+ const route = useRoute()
+-const { blurEnabled, globalBlurEnabled, browserBlurEnabled, toggleBrowserBlur } = useBlurCover()
++const { blurEnabled, globalBlurEnabled, browserBlurEnabled, syncGlobalBlur, toggleBrowserBlur } = useBlurCover()
+ const { currentLang, switchLang, t, i18nVersion, _currentLang, _initialized } = useI18n()
+ const jobsStore = useJobsStore()
+ const { show: showSystemLog, toggle: toggleSystemLog } = useSystemLog()
+@@ -257,6 +257,10 @@ onUnmounted(() => {
+ 
+ onMounted(() => {
+   loadPlugins()
++  api.get('/settings/ui').then(resp => {
++    const value = resp.data?.cover_blur_enabled
++    if (typeof value === 'boolean') syncGlobalBlur(value)
++  }).catch(() => {})
+   window.addEventListener('keydown', handleGlobalKeydown)
+   window.addEventListener('error', handleWindowError)
+   window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+
+
+===== 2026-08-23T11:36:53.877Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index f1fcc7b..6d1e599 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -11,12 +11,14 @@ import { useBlurCover } from './composables/useBlurCover'
+ import { useI18n } from './composables/useI18n'
+ import { useJobsStore } from './stores/jobs'
+ import { useSystemLog } from './composables/useSystemLog'
++import { usePlugins } from './composables/usePlugins'
+ 
+ const route = useRoute()
+ const { blurEnabled, toggleBlur } = useBlurCover()
+ const { currentLang, switchLang, t, i18nVersion, _currentLang, _initialized } = useI18n()
+ const jobsStore = useJo
+OUT 104197 2026-05-21T08:34:01.428Z call_8NKSDkwPRo8nIz5Upm9UeZ4Z Chunk ID: 2d4b59
+Wall time: 0.0000 seconds
+Process exited with code 0
+Original token count: 2692
+Output:
+   'hardlinks.deleteGroupConfirm': 'Delete entire work group {code}?\nWill process {entryCount} entries',
+   'hardlinks.deleteHardlinkSuccess': 'Hardlink deleted',
+   'hardlinks.deleteHardlinkFailed': 'Failed to delete hardlink',
++  'hardlinks.reorganizeSuccess': 'Submitted to MDC-NG for reorganize',
++  'hardlinks.reorganizeFailed': 'Failed to submit reorganize task',
+   'hardlinks.deleteSourceChainSuccess': 'Source chain deleted',
+   'hardlinks.deleteSourceChainFailed': 'Failed to delete source chain',
+   'hardlinks.deleteGroupSuccess': 'Work group deleted',
+@@ -375,6 +378,8 @@ export const en: Record<string, string> = {
+   'jobs.deleteFailed': 'Failed to delete job',
+   'jobs.type.lada': 'LADA',
+   'jobs.type.whisper': 'Whisper',
++  'jobs.type.mdc': 'MDC-NG',
++  'jobs.type.external': 'External',
+   'jobs.emptyTitle': 'No Jobs',
+   'jobs.logsTitle': 'Live Logs',
+   'jobs.diagnosticsTitle': 'Chain Diagnostics',
+@@ -814,10 +819,10 @@ export const en: Record<string, string> = {
+   'settings.system.fuzzyMatchDesc': 'When disabled, codes are matched strictly (for example IPX-916); w
+
+
+
+===== 2026-08-23T11:53:50.070Z =====
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue\nindex 67fc29e..3337489 100644\n--- a/frontend/src/App.vue\n+++ b/frontend/src/App.vue\n@@ -53,7 +53,7 @@ const navItems = computed(() => {\n       return running + queued + blocked + pending || null\n     })},\n     { path: '/history', name: t('nav.history'), icon: 'history' },\n-    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },\n+    { path: '/files', name: t('nav.files'), icon: 'folderOpen' },\n     { path: '/settings', name: t('nav.settings'), icon: 'settings' },\n   ]\n })\ndiff --git a/frontend/src/components/noor/AppSidebar.vue b/frontend/src/components/noor/AppSidebar.vue\nindex 22c9378..c0299be 100644\n--- a/frontend/src/components/noor/AppSidebar.vue\n+++ b/frontend/src/components/noor/AppSidebar.vue\n@@ -36,7 +36,7 @@ const navItems = computed(() => {\n     { path: '/library', name: t('nav.library'), icon: 'library' },\n     { path: '/jobs', name: t('nav.jobs'), icon: 'jobs' },\n     { path: '/history', name: t('nav.history'), icon: 'history' },\n-    { path: '/hardlinks', name: t('nav.hardlinks'), icon: 'hardlink' },\n+    { path: '/files', name: t('nav.files'), icon: 'folderOpen' },\n     { path: '/settings', name: t('nav.settings'), icon: 'settings' },\n   ]\n })\ndiff --git a/frontend/src/i18n/en.ts b/frontend/src/i18n/en.ts\nindex 6b377ea..e1bbcf3 100644\n--- a/frontend/src/i18n/en.ts\n+++ b/frontend/src/i18n/en.ts\n@@ -28,9 +28,16 @@ export const en: Record<string, string> = {\n   'nav.library': 'Library',\n   'nav.jobs': 'Jobs',\n   'nav.history': 'History',\n+  'nav.files': 'Files',\n   'nav.hardlinks': 'Hardlinks',\n   'nav.settings': 'Settings',\n \n+  // Files\n+  'files.title': 'Files',\n+  'files.tab.hardlinks': 'Hardlinks',\n+  'files.tab.actors': 'Actor Management',\n+  'files.actors.empty': 'Actor management is not connected yet',\n+\n   // Toolbar\n   'toolbar.blurOn': 'Enable cover blur (H)',\n   'toolbar.blurOff': 'Disable cover blur (H)',\ndiff --git a/frontend/src/i18n/zh.ts b/frontend/src/i18n/zh.ts\nindex a8f7d39..834fe20 100644\n--- a/frontend/src/i18n/zh.ts\n+++ b/frontend/src/i18n/zh.ts\n@@ -28,9 +28,16 @@ export const zh: Record<string, string> = {\n   'nav.library': '媒体库',\n   'nav.jobs': '任务',\n   'nav.history': '历史',\n+  'nav.files': '文件',\n   'nav.hardlinks': '硬链接',\n   'nav.settings': '设置',\n \n+  // Files\n+  'files.title': '文件',\n+  'files.tab.hardlinks': '硬链接',\n+  'files.tab.actors': '演员管理',\n+  'files.actors.empty': '演员管理待接入',\n+\n   // Toolbar\n   'toolbar.blurOn': '开启封面模糊 (H)',\n   'toolbar.blurOff': '关闭封面模糊 (H)',\ndiff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts\nindex 78fae81..462f7e3 100644\n--- a/frontend/src/router/index.ts\n+++ b/frontend/src/router/index.ts\n@@ -23,10 +23,14 @@ const router = createRouter({\n       name: 'history',\n       component: () => import('../views/History.vue'),\n     },\n+    {\n+      path: '/files/:fileTab?',\n+      name: 'files',\n+      component: () => import('../views/FilesView.vue'),\n+    },\n     {\n       path: '/hardlinks',\n-      name: 'hardlinks',\n-      component: () => import('../views/HardlinkView.vue'),\n+      redirect: '/files/hardlinks',\n     },\n     {\n       path: '/search/resources',\n","internal_chat_message_metadata_passthrough":{"turn_id":"019f1cc7-9046-7c31-a677-2f100b5c8639"}}}
+

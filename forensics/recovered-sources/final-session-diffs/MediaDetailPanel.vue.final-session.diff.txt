@@ -1,0 +1,135 @@
+
+
+===== 2026-08-23T11:55:33.852Z =====
+diff --git a/frontend/src/components/noor/MediaDetailPanel.vue b/frontend/src/components/noor/MediaDetailPanel.vue
+index 2fc1885..2b3c9d7 100644
+--- a/frontend/src/components/noor/MediaDetailPanel.vue
++++ b/frontend/src/components/noor/MediaDetailPanel.vue
+@@ -111,15 +111,56 @@ const emit = defineEmits<{
+ }>()
+ 
+ const previewVideoPath = ref('')
++const previewStreamUrl = ref('')
++const previewUseLocalFallback = ref(false)
+ const previewFailed = ref(false)
+ 
+-// Merge genres from NFO and Emby, removing duplicates
+-// Filter out genres containing ":" (these are labeled fields like "发行: kawaii", "片商: kawaii" from 刮削 tools)
++// Merge genres from NFO and Emby, removing duplicates.
++// Filter out scraper labels, media-type placeholders, and values that repeat
++// the work code, studio, series, or actor names.
+ const allGenres = computed(() => {
+   if (!props.detail) return []
+-  const nfoGenres = (props.detail.nfo?.genres || []).filter((g: string) => !g.includes(':'))
+-  const embyGenres = (props.detail.genres || []).filter((g: string) => !g.includes(':'))
+-  return [...new Set([...nfoGenres, ...embyGenres])]
++  const blocked = new Set<string>()
++  const codeLikeSources = [
++    props.detail.nfo?.num,
++    props.detail.nfo?.id,
++    props.detail.name,
++    props.detail.file_path?.split('/').pop()?.replace(/\.[^.]+$/, ''),
++  ]
++
++  for (const source of codeLikeSources) {
++    const match = source?.match(/[A-Za-z]{2,10}-?\d{2,6}/)
++    const code = match?.[0]?.trim()
++    const prefix = code?.split('-')?.[0]?.trim()
++    if (code) blocked.add(code.toLowerCase())
++    if (prefix) blocked.add(prefix.toLowerCase())
++  }
++
++  for (const value of [
++    props.detail.nfo?.set,
++    props.detail.nfo?.maker,
++    props.detail.nfo?.label,
++    props.detail.nfo?.publisher,
++    ...(props.detail.studios || []),
++    ...(props.detail.nfo?.actors || []).map((actor) => actor?.name),
++    ...(props.detail.actors || []).map((actor) => actor?.name),
++  ]) {
++    const normalized = value?.trim().toLowerCase()
++    if (normalized) blocked.add(normalized)
++  }
++
++  const mediaTypeLike = new Set(['单体作品', '合集', '系列', 'movie', 'video'])
++  const merged = [...(props.detail.nfo?.genres || []), ...(props.detail.genres || [])]
++  return [...new Set(
++    merged.filter((genre: string) => {
++      const value = genre?.trim()
++      if (!value) return false
++      if (value.includes(':')) return false
++      if (mediaTypeLike.has(value.toLowerCase())) return false
++      if (blocked.has(value.toLowerCase())) return false
++      return true
++    })
++  )]
+ })
+ 
+ // All file paths in the same folder (current + siblings)
+@@ -136,11 +177,16 @@ const allFolderPaths = computed(() => {
+ 
+ const previewVideoName = computed(() => previewVideoPath.value.split('/').pop() || previewVideoPath.value)
+ 
+-const previewVideoUrl = computed(() => {
++const previewLocalUrl = computed(() => {
+   if (!previewVideoPath.value) return ''
+   return `/api/media-library/hardlinks/preview-file?path=${encodeURIComponent(previewVideoPath.value)}`
+ })
+ 
++const previewVideoUrl = computed(() => {
++  if (previewUseLocalFallback.value || !previewStreamUrl.value) return previewLocalUrl.value
++  return previewStreamUrl.value
++})
++
+ const variantCount = computed(() => props.detail?.variant_count || allFolderPaths.value.length)
+ 
+ const displayTitle = computed(() => {
+@@ -201,6 +247,7 @@ const variantRows = computed(() => {
+   const current = {
+     id: props.detail.id,
+     path: props.detail.file_path,
++    streamUrl: props.detail.stream_url,
+     name: fileNameOf(props.detail.file_path, props.detail.name),
+     dir: dirNameOf(props.detail.file_path),
+     tags: props.detail.tags,
+@@ -210,6 +257,7 @@ const variantRows = computed(() => {
+     .map((s, index) => ({
+       id: s.id || `${props.detail?.id}-sib-${index}`,
+       path: s.file_path!,
++      streamUrl: s.stream_url,
+       name: fileNameOf(s.file_path, s.name || s.label || `${filesLabel.value} ${index + 1}`),
+       dir: dirNameOf(s.file_path),
+       tags: s.tags,
+@@ -257,18 +305,29 @@ function handleClose() {
+ }
+ 
+ function openPreview(path?: string) {
+-  const targetPath = path || selectedVariant.value?.path || props.detail?.file_path
++  const targetVariant = path
++    ? variantRows.value.find((variant) => variant.path === path)
++    : selectedVariant.value
++  const targetPath = path || targetVariant?.path || props.detail?.file_path
+   if (!targetPath) return
+   previewFailed.value = false
++  previewUseLocalFallback.value = false
+   previewVideoPath.value = targetPath
++  previewStreamUrl.value = targetVariant?.streamUrl || props.detail?.stream_url || ''
+ }
+ 
+ function closePreview() {
+   previewVideoPath.value = ''
++  previewStreamUrl.value = ''
++  previewUseLocalFallback.value = false
+   previewFailed.value = false
+ }
+ 
+ function handlePreviewError() {
++  if (!previewUseLocalFallback.value && previewLocalUrl.value) {
++    previewUseLocalFallback.value = true
++    return
++  }
+   previewFailed.value = true
+ }
+ 
+

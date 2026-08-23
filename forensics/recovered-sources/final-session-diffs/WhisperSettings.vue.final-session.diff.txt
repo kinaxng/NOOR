@@ -1,0 +1,418 @@
+
+
+===== 2026-06-16T14:49:15.258Z =====
+diff --git a/frontend/src/views/settings/WhisperSettings.vue b/frontend/src/views/settings/WhisperSettings.vue
+index e30936d..c3c33ff 100644
+--- a/frontend/src/views/settings/WhisperSettings.vue
++++ b/frontend/src/views/settings/WhisperSettings.vue
+@@ -51,10 +51,20 @@ const runtimeInstallableDeps = computed(() =>
+     Object.entries(checkingDepsResult.value).filter(([, v]) => (v as any).installable)
+   )
+ )
++const runtimeDisplayedDeps = computed(() =>
++  Object.fromEntries(
++    Object.entries(checkingDepsResult.value).filter(([name]) => !String(name).startsWith('_'))
++  )
++)
+ 
+ // 是否有缺失的运行时依赖（控制安装按钮显示）
+ const hasMissingRuntimeDeps = computed(() => {
+-  return Object.values(runtimeInstallableDeps.value).some((v: any) => !v.installed)
++  return Object.entries(runtimeInstallableDeps.value).some(([name, v]: [string, any]) => {
++    if (!v.installed) return true
++    if (v.in_noor_env === false) return true
++    if (name === 'onnxruntime' && torchVariant.value === 'gpu' && checkingDepsResult.value.torch?.cuda && !v.cuda) return true
++    return false
++  })
+ })
+ const installStatus = ref<{ status: string; progress: number; message: string; current_package?: string }>({
+   status: 'idle',
+@@ -62,6 +72,46 @@ const installStatus = ref<{ status: string; progress: number; message: string; c
+   message: '',
+ })
+ 
++function dependencyDisplayName(name: string, info: any) {
++  if (name === 'torch') return `torch (${torchVariant.value.toUpperCase()})`
++  if (name === 'onnxruntime' && torchVariant.value === 'gpu') return 'onnxruntime-gpu'
++  return String(name)
++}
++
++function dependencySourceLabel(info: any) {
++  if (!info?.installed) return ''
++  if (info.in_noor_env === false) {
++    if (info.source === 'user_site') return t('settings.whisper.depSourceUser')
++    if (info.source === 'system_site') return t('settings.whisper.depSourceSystem')
++    return t('settings.whisper.depSourceExternal')
++  }
++  return t('settings.whisper.depSourceNoor')
++}
++
++function dependencyStatusColor(name: string, info: any) {
++  if (!info?.installed) return 'error'
++  if (info.in_noor_env === false) return 'warning'
++  if (name === 'onnxruntime' && torchVariant.value === 'gpu' && checkingDepsResult.value.torch?.cuda && !info.cuda) return 'warning'
++  return 'success'
++}
++
++function dependencyStatusText(name: string, info: any) {
++  if (!info?.installed) return t('settings.whisper.notInstalled')
++  if (info.in_noor_env === false) return dependencySourceLabel(info)
++  if (name === 'onnxruntime' && torchVariant.value === 'gpu' && checkingDepsResult.value.torch?.cuda && !info.cuda) {
++    return t('settings.whisper.onnxNoCuda')
++  }
++  return info.version || t('settings.whisper.installed')
++}
++
++function dependencyDetail(info: any) {
++  const parts: string[] = []
++  if (info?.installed && info?.in_noor_env !== false) parts.push(dependencySourceLabel(info))
++  if (Array.isArray(info?.providers) && info.providers.length) parts.push(`Provider: ${info.providers.join(' / ')}`)
++  if (info?.path) parts.push(info.path)
++  return parts.join(' · ')
++}
++
+ onMounted(async () => {
+   await loadSettings()
+   await Promise.all([checkWhisperDeps(), loadWhisperModels()])
+@@ -183,12 +233,14 @@ async function testTranslateConnection() {
+ }
+ 
+ async function installDeps() {
++  const parts = Object.entries(runtimeInstallableDeps.value)
++    .filter(([, info]: [string, any]) => !info?.installed)
++    .map(([name]) => name === 'torch' ? `torch ${torchVariant.value.toUpperCase()}` : name)
+   const torchIsInstalled = !!checkingDepsResult.value.torch?.installed
+-  const librosaIsInstalled = !!checkingDepsResult.value.librosa?.installed
+   const variantChanged = torchIsInstalled && (torchVariant.value === 'gpu') !== !!checkingDepsResult.value.torch?.cuda
+-  const parts: string[] = []
+-  if (!librosaIsInstalled) parts.push('librosa')
+-  if (!torchIsInstalled || variantChanged) parts.push(`torch ${torchVariant.value.toUpperCase()}`)
++  if (variantChanged && !parts.some(item => item.startsWith('torch'))) {
++    parts.push(`torch ${torchVariant.value.toUpperCase()}`)
++  }
+   const msg = parts.length === 0
+     ? t('settings.whisper.installDepsReady')
+     : t('settings.whisper.installDepsPlan', { packages: parts.join(' + ') })
+@@ -457,13 +509,14 @@ const reazonPresentation = computed(() => getWhisperSelectableStrategyPresentati
+         <div class="collapsible-card__body" :class="{ 'collapsible-card__body--open': depsExpanded }">
+           <div class="collapsible-card__inner">
+             <div class="space-y-1.5 mt-3">
+-              <div v-for="(info, name) in runtimeInstallableDeps" :key="String(name)" class="dep-row">
++              <div v-for="(info, name) in runtimeDisplayedDeps" :key="String(name)" class="dep-row">
+                 <div class="flex items-center justify-between mb-1">
+-                  <span class="dep-row__name">{{ name === 'torch' ? 'torch (' + torchVariant.toUpperCase() + ')' : name }}</span>
+-                  <VuiBadge v-if="info.installed" color="success" variant="gradient" size="xs">{{ info.version || t('settings.whisper.installed') }}</VuiBadge>
++                  <span class="dep-row__name">{{ dependencyDisplayName(String(name), info) }}</span>
++                  <VuiBadge v-if="info.installed" :color="dependencyStatusColor(String(name), info)" variant="gradient" size="xs">{{ dependencyStatusText(String(name), info) }}</VuiBadge>
+                   <VuiBadge v-else-if="installStatus.status === 'running' && installStatus.message?.includes(String(name))" color="info" variant="gradient" size="xs">{{ t('settings.whisper.installingShort') }}</VuiBadge>
+                   <VuiBadge v-else color="error" variant="gradient" size="xs">{{ t('settings.whisper.notInstalled') }}</VuiBadge>
+                 </div>
++                <p v-if="dependencyDetail(info)" class="dep-row__detail">{{ dependencyDetail(info) }}</p>
+                 <div v-if="installStatus.status === 'running' && installStatus.message?.includes(String(name))">
+                   <VuiProgress :value="installStatus.progress" color="info" variant="gradient" />
+                 </div>
+@@ -1043,6 +1096,15 @@ const reazonPresentation = computed(() => getWhisperSelectableStrategyPresentati
+   color: #FFFFFF;
+ }
+ 
++.dep-row__detail {
++  margin: 0.25rem 0 0;
++  color: rgba(255, 255, 255, 0.34);
++  font-family: 'SF Mono', Monaco, monospace;
++  font-size: 0.625rem;
++  line-height: 1.35;
++  overflow-wrap: anywhere;
++}
++
+ .model-row {
+   background: rgba(255, 255, 255, 0.03);
+   border: 1px solid rgba(255, 255, 255, 0.05);
+
+
+
+===== 2026-07-07T08:59:57.649Z =====
+diff --git a/frontend/src/views/settings/WhisperSettings.vue b/frontend/src/views/settings/WhisperSettings.vue
+index cc0aada..e1fd9d1 100644
+--- a/frontend/src/views/settings/WhisperSettings.vue
++++ b/frontend/src/views/settings/WhisperSettings.vue
+@@ -10,7 +10,7 @@ import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+ import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+ import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+ import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+-import { WHISPER_MODEL_BACKENDS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend } from '../../composables/useWhisperProfiles'
++import { WHISPER_MODEL_BACKENDS, WHISPER_RUNTIME_TIERS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperRuntimeTierMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend, type WhisperRuntimeTier } from '../../composables/useWhisperProfiles'
+ 
+ const toast = useToast()
+ const { confirm } = useConfirm()
+@@ -23,6 +23,7 @@ const checkingModels = ref(false)
+ const downloadingModel = ref<string | null>(null)
+ const installingDeps = computed(() => installStatus.value.status === 'running')
+ const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
++const activeRuntimeTier = ref<WhisperRuntimeTier>('gpu_standard')
+ const activeModelBackend = ref<WhisperModelBackend>('chickenrice-zh')
+ const vadBackend = ref('energy')
+ const timingRefiner = ref('none')
+@@ -125,6 +126,7 @@ async function loadSettings() {
+       const w = resp.data.whisper
+       const defaults = resolveWhisperEditableDefaults(w)
+       whisperFeatures.value = w.features || {}
++      activeRuntimeTier.value = defaults.runtime_tier
+       activeModelBackend.value = defaults.model_backend
+       vadBackend.value = defaults.vad_backend
+       timingRefiner.value = defaults.timing_refiner
+@@ -184,6 +186,7 @@ async function loadWhisperModels() {
+ 
+ function buildWhisperSettingsPayload() {
+   return buildWhisperProfileWithTranslation(activeModelBackend.value, {
++    runtime_tier: activeRuntimeTier.value,
+     vad_backend: vadBackend.value,
+     timing_refiner: timingRefiner.value,
+     translate_enabled: translateEnabled.value,
+@@ -352,6 +355,10 @@ const modelBackendOptions = computed(() => WHISPER_MODEL_BACKENDS.map((backend)
+   meta: getWhisperModelBackendMeta(backend),
+   presentation: getWhisperSelectableStrategyPresentation(t, backend),
+ })))
++const runtimeTierOptions = computed(() => WHISPER_RUNTIME_TIERS.map((tier) => ({
++  tier,
++  meta: getWhisperRuntimeTierMeta(tier),
++})))
+ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBackend(activeModelBackend.value))
+ </script>
+ <template>
+@@ -366,6 +373,25 @@ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBack
+         <h2 class="settings-card__title">{{ t('settings.whisper.currentProfileTitle') }}</h2>
+         <p class="settings-card__desc settings-card__desc--compact">{{ t('settings.whisper.currentProfileDesc') }}</p>
+ 
++        <div class="whisper-section-label">{{ t('settings.whisper.runtimeTierTitle') }}</div>
++        <div class="settings-form mt-2.5 space-y-1.5">
++          <button
++            v-for="option in runtimeTierOptions"
++            :key="option.tier"
++            type="button"
++            class="whisper-strategy-card whisper-strategy-card--summary"
++            :class="{ 'whisper-strategy-card--active': activeRuntimeTier === option.tier }"
++            @click="activeRuntimeTier = option.tier"
++          >
++            <div class="whisper-strategy-card__head">
++              <div class="whisper-strategy-card__title">{{ t(option.meta.titleKey) }}</div>
++              <VuiBadge color="info" variant="gradient" size="sm">{{ t(option.meta.badgeKey) }}</VuiBadge>
++            </div>
++            <p class="whisper-strategy-card__summary">{{ t(option.meta.descKey) }}</p>
++          </button>
++        </div>
++
++        <div class="whisper-section-label whisper-section-label--spaced">{{ t('settings.whisper.modelBackendTitle') }}</div>
+         <div class="settings-form mt-2.5 space-y-1.5">
+           <button
+             v-for="option in modelBackendOptions"
+@@ -792,6 +818,17 @@ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBack
+   color: #fff;
+ }
+ 
++.whisper-section-label {
++  margin-top: 0.7rem;
++  color: rgba(255, 255, 255, 0.74);
++  font-size: 0.78rem;
++  font-weight: 700;
++}
+
+
+
+===== 2026-08-23T07:53:13.491Z =====
+diff --git a/frontend/src/views/settings/WhisperSettings.vue b/frontend/src/views/settings/WhisperSettings.vue
+index d0cd435..f9bd51c 100644
+--- a/frontend/src/views/settings/WhisperSettings.vue
++++ b/frontend/src/views/settings/WhisperSettings.vue
+@@ -10,7 +10,7 @@ import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+ import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+ import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+ import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+-import { WHISPER_MODEL_BACKENDS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend } from '../../composables/useWhisperProfiles'
++import { WHISPER_MODEL_BACKENDS, WHISPER_RUNTIME_TIERS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperRuntimeTierMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend, type WhisperRuntimeTier } from '../../composables/useWhisperProfiles'
+ 
+ const toast = useToast()
+ const { confirm } = useConfirm()
+@@ -23,6 +23,7 @@ const checkingModels = ref(false)
+ const downloadingModel = ref<string | null>(null)
+ const installingDeps = computed(() => installStatus.value.status === 'running')
+ const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
++const activeRuntimeTier = ref<WhisperRuntimeTier>('gpu_standard')
+ const activeModelBackend = ref<WhisperModelBackend>('chickenrice-zh')
+ const vadBackend = ref('energy')
+ const timingRefiner = ref('none')
+@@ -125,6 +126,7 @@ async function loadSettings() {
+       const w = resp.data.whisper
+       const defaults = resolveWhisperEditableDefaults(w)
+       whisperFeatures.value = w.features || {}
++      activeRuntimeTier.value = defaults.runtime_tier
+       activeModelBackend.value = defaults.model_backend
+       vadBackend.value = defaults.vad_backend
+       timingRefiner.value = defaults.timing_refiner
+@@ -184,6 +186,7 @@ async function loadWhisperModels() {
+ 
+ function buildWhisperSettingsPayload() {
+   return buildWhisperProfileWithTranslation(activeModelBackend.value, {
++    runtime_tier: activeRuntimeTier.value,
+     vad_backend: vadBackend.value,
+     timing_refiner: timingRefiner.value,
+     translate_enabled: translateEnabled.value,
+@@ -354,6 +357,10 @@ const modelBackendOptions = computed(() => WHISPER_MODEL_BACKENDS.map((backend)
+   meta: getWhisperModelBackendMeta(backend),
+   presentation: getWhisperSelectableStrategyPresentation(t, backend),
+ })))
++const runtimeTierOptions = computed(() => WHISPER_RUNTIME_TIERS.map((tier) => ({
++  tier,
++  meta: getWhisperRuntimeTierMeta(tier),
++})))
+ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBackend(activeModelBackend.value))
+ </script>
+ <template>
+@@ -368,6 +375,25 @@ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBack
+         <h2 class="settings-card__title">{{ t('settings.whisper.currentProfileTitle') }}</h2>
+         <p class="settings-card__desc settings-card__desc--compact">{{ t('settings.whisper.currentProfileDesc') }}</p>
+ 
++        <div class="whisper-section-label">{{ t('settings.whisper.runtimeTierTitle') }}</div>
++        <div class="settings-form mt-2.5 space-y-1.5">
++          <button
++            v-for="option in runtimeTierOptions"
++            :key="option.tier"
++            type="button"
++            class="whisper-strategy-card whisper-strategy-card--summary"
++            :class="{ 'whisper-strategy-card--active': activeRuntimeTier === option.tier }"
++            @click="activeRuntimeTier = option.tier"
++          >
++            <div class="whisper-strategy-card__head">
++              <div class="whisper-strategy-card__title">{{ t(option.meta.titleKey) }}</div>
++              <VuiBadge color="info" variant="gradient" size="sm">{{ t(option.meta.badgeKey) }}</VuiBadge>
++            </div>
++            <p class="whisper-strategy-card__summary">{{ t(option.meta.descKey) }}</p>
++          </button>
++        </div>
++
++        <div class="whisper-section-label whisper-section-label--spaced">{{ t('settings.whisper.modelBackendTitle') }}</div>
+         <div class="settings-form mt-2.5 space-y-1.5">
+           <button
+             v-for="option in modelBackendOptions"
+@@ -707,8 +733,19 @@ select.settings-input {
+ }
+ 
+ select.settings-input option {
+-  background: #0f123b;
+-  color: #FFFFFF;
++  background: #0a0e23;
++  color: #fff;
++}
++
++.whisper-section-label {
++  margin-top: 0.7rem;
++  color: rgba(255, 255, 255, 0.74);
++  font-size: 0.78rem;
++  font-weight: 700;
++}
++
++.whisper-section-label--spaced {
++  margin-top: 1rem;
+ }
+ 
+ .dep-row {
+
+
+
+===== 2026-08-23T11:54:35.081Z =====
+diff --git a/frontend/src/views/settings/WhisperSettings.vue b/frontend/src/views/settings/WhisperSettings.vue
+index d0cd435..f9bd51c 100644
+--- a/frontend/src/views/settings/WhisperSettings.vue
++++ b/frontend/src/views/settings/WhisperSettings.vue
+@@ -10,7 +10,7 @@ import VuiBadge from '../../components/ui/Badge/VuiBadge.vue'
+ import VuiProgress from '../../components/ui/Progress/VuiProgress.vue'
+ import FieldRow from '../../components/ui/FieldRow/FieldRow.vue'
+ import SettingsSwitch from '../../components/ui/SettingsSwitch.vue'
+-import { WHISPER_MODEL_BACKENDS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend } from '../../composables/useWhisperProfiles'
++import { WHISPER_MODEL_BACKENDS, WHISPER_RUNTIME_TIERS, buildWhisperProfileWithTranslation, formatWhisperTranslationSummary, getWhisperModelBackendMeta, getWhisperRuntimeTierMeta, getWhisperSelectableStrategyPresentation, isDirectWhisperTranslationBackend, resolveWhisperEditableDefaults, type WhisperModelBackend, type WhisperRuntimeTier } from '../../composables/useWhisperProfiles'
+ 
+ const toast = useToast()
+ const { confirm } = useConfirm()
+@@ -23,6 +23,7 @@ const checkingModels = ref(false)
+ const downloadingModel = ref<string | null>(null)
+ const installingDeps = computed(() => installStatus.value.status === 'running')
+ const modelDownloadStatus = ref<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
++const activeRuntimeTier = ref<WhisperRuntimeTier>('gpu_standard')
+ const activeModelBackend = ref<WhisperModelBackend>('chickenrice-zh')
+ const vadBackend = ref('energy')
+ const timingRefiner = ref('none')
+@@ -125,6 +126,7 @@ async function loadSettings() {
+       const w = resp.data.whisper
+       const defaults = resolveWhisperEditableDefaults(w)
+       whisperFeatures.value = w.features || {}
++      activeRuntimeTier.value = defaults.runtime_tier
+       activeModelBackend.value = defaults.model_backend
+       vadBackend.value = defaults.vad_backend
+       timingRefiner.value = defaults.timing_refiner
+@@ -184,6 +186,7 @@ async function loadWhisperModels() {
+ 
+ function buildWhisperSettingsPayload() {
+   return buildWhisperProfileWithTranslation(activeModelBackend.value, {
++    runtime_tier: activeRuntimeTier.value,
+     vad_backend: vadBackend.value,
+     timing_refiner: timingRefiner.value,
+     translate_enabled: translateEnabled.value,
+@@ -354,6 +357,10 @@ const modelBackendOptions = computed(() => WHISPER_MODEL_BACKENDS.map((backend)
+   meta: getWhisperModelBackendMeta(backend),
+   presentation: getWhisperSelectableStrategyPresentation(t, backend),
+ })))
++const runtimeTierOptions = computed(() => WHISPER_RUNTIME_TIERS.map((tier) => ({
++  tier,
++  meta: getWhisperRuntimeTierMeta(tier),
++})))
+ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBackend(activeModelBackend.value))
+ </script>
+ <template>
+@@ -368,6 +375,25 @@ const activeModelDirectTranslate = computed(() => isDirectWhisperTranslationBack
+         <h2 class="settings-card__title">{{ t('settings.whisper.currentProfileTitle') }}</h2>
+         <p class="settings-card__desc settings-card__desc--compact">{{ t('settings.whisper.currentProfileDesc') }}</p>
+ 
++        <div class="whisper-section-label">{{ t('settings.whisper.runtimeTierTitle') }}</div>
++        <div class="settings-form mt-2.5 space-y-1.5">
++          <button
++            v-for="option in runtimeTierOptions"
++            :key="option.tier"
++            type="button"
++            class="whisper-strategy-card whisper-strategy-card--summary"
++            :class="{ 'whisper-strategy-card--active': activeRuntimeTier === option.tier }"
++            @click="activeRuntimeTier = option.tier"
++          >
++            <div class="whisper-strategy-card__head">
++              <div class="whisper-strategy-card__title">{{ t(option.meta.titleKey) }}</div>
++              <VuiBadge color="info" variant="gradient" size="sm">{{ t(option.meta.badgeKey) }}</VuiBadge>
++            </div>
++            <p class="whisper-strategy-card__summary">{{ t(option.meta.descKey) }}</p>
++          </button>
++        </div>
++
++        <div class="whisper-section-label whisper-section-label--spaced">{{ t('settings.whisper.modelBackendTitle') }}</div>
+         <div class="settings-form mt-2.5 space-y-1.5">
+           <button
+             v-for="option in modelBackendOptions"
+@@ -707,8 +733,19 @@ select.settings-input {
+ }
+ 
+ select.settings-input option {
+-  background: #0f123b;
+-  color: #FFFFFF;
++  background: #0a0e23;
++  color: #fff;
++}
++
++.whisper-section-label {
++  margin-top: 0.7rem;
++  color: rgba(255, 255, 255, 0.74);
++  font-size: 0.78rem;
++  font-weight: 700;
++}
++
++.whisper-section-label--spaced {
++  margin-top: 1rem;
+ }
+ 
+ .dep-row {
+

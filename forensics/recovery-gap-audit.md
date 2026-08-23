@@ -75,6 +75,10 @@
 - 存储设置回写修复：`StorageSettings.vue` 的“模型路径/运行时路径”目录选择在
   `confirmDirPicker` 中补回 `modelRootDir` / `runtimeRootDir` 赋值，避免点击
   浏览后选择结果不生效。
+- 归档最终原版会话中的前端差异证据：
+  `forensics/recovered-sources/final-session-diffs/` 收录 `App.vue`、
+  `WhisperSettings.vue`、`MediaDetailPanel.vue` 的原始 `git diff` 片段，
+  并生成 SHA256SUMS；这些文件用于继续核对当前重建是否覆盖最终提交。
 - 给 `backend/app/api/endpoints/media_library_recovery.py` 的恢复路由补独立
   `operation_id`，消除 FastAPI OpenAPI 重复操作名告警；后端全量测试仍为
   216 项通过。
