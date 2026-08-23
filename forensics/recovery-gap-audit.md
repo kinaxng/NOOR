@@ -234,6 +234,9 @@
 - 将 `data/av_recommend/` 与 `data/subscription_core/` 加入 `.gitignore`，并从 Git
   索引移除候选池/订阅状态运行数据，磁盘文件保留。
 
+- 恢复原版前端 TypeScript 严格配置：`tsconfig.json` 已还原为预接管配置，
+  新增 `tsconfig.node.json`，并清理 6 处未使用/重复声明；`vue-tsc` 与生产构建均通过。
+
 ## 明确差距
 
 1. 前端源码不是“磁盘直接恢复”，而是从会话片段重建/回放出来的。

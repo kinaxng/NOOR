@@ -12,7 +12,6 @@ import VuiBadge from '../components/ui/Badge/VuiBadge.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
 import BaseIcon from '../components/noor/BaseIcon.vue'
 import NoorPagination from '../components/ui/Pagination.vue'
-import FilterPanel from '../components/ui/FilterPanel.vue'
 import type { HardlinkEntry, HardlinkGroup } from '../api/types'
 
 type SortKey = 'code' | 'entryCount' | 'hardlinkCount' | 'sourceSize'

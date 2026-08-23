@@ -659,47 +659,6 @@ function makeLoadingState(options: any = {}) {
   return d
 }
 
-function lastSavepathKey(downloaderId: string) {
-  return `noor:last-download-savepath:${downloaderId || 'default'}`
-}
-
-function readLastSavepath(downloaderId: string) {
-  try { return localStorage.getItem(lastSavepathKey(downloaderId)) || '' } catch { return '' }
-}
-
-function writeLastSavepath(downloaderId: string, value: string) {
-  try {
-    if (value) localStorage.setItem(lastSavepathKey(downloaderId), value)
-  } catch {}
-}
-
-function escapeHtml(value: any) {
-  return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]!))
-}
-
-function renderResourcePreview(resourceState: any) {
-  const d = document.createElement('div')
-  d.className = 'noor-downloader-preview'
-  if (!resourceState.options?.supports_resource_preview) return d
-  if (resourceState.loading) {
-    d.innerHTML = '<div class="noor-downloader-preview__head"><span>资源预览</span><em>读取中...</em></div>'
-    return d
-  }
-  if (resourceState.error) {
-    d.innerHTML = `<div class="noor-downloader-preview__head"><span>资源预览</span><em class="is-error">${escapeHtml(resourceState.error)}</em></div>`
-    return d
-  }
-  const files = Array.isArray(resourceState.data?.files) ? resourceState.data.files : []
-  if (!files.length) {
-    d.innerHTML = '<div class="noor-downloader-preview__head"><span>资源预览</span><em>暂无文件信息</em></div>'
-    return d
-  }
-  const visible = files.slice(0, 6)
-  d.innerHTML = `<div class="noor-downloader-preview__head"><span>资源预览</span><em>${escapeHtml(resourceState.data?.total_size_formatted || '')} · ${files.length} 个文件</em></div>
-  <div class="noor-downloader-preview__files">${visible.map((file: any) => `<div class="noor-downloader-preview__file"><span>${escapeHtml(file.name || file.full_path || '')}</span><em>${escapeHtml(file.size_formatted || '')}</em></div>`).join('')}${files.length > visible.length ? `<div class="noor-downloader-preview__more">还有 ${files.length - visible.length} 个文件</div>` : ''}</div>`
-  return d
-}
-
 function sdkFor(id: string) {
   const controller = sdkAbortController || new AbortController()
   sdkAbortController = controller

@@ -186,7 +186,7 @@ export function useJobRuntimePresentation(options: UseJobRuntimePresentationOpti
     return new Date(job.completed_at).toLocaleString()
   }
 
-  function getDiagnosticSummary(job: Job) {
+  function getDiagnosticSummary(_job: Job) {
     return [] as string[]
   }
 
