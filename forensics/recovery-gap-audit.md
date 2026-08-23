@@ -76,6 +76,10 @@
   （system/storage/lada/facefusion/whisper/local-library/plugins）、
   文件硬链接页、AV 图谱、Gfriends、MDC-NG、M-Team、迅雷远程及无独立入口的
   AVDB 页面；当前运行无 HTTP 4xx/5xx、无 console error。
+- 推荐中心补回原版交接中仍待实现的控制项：最低置信度、探索比例、中字/破解
+  偏好强度；`exploration_ratio` 和 `minimum_confidence_threshold` 已接入推荐
+  输出，`prefer_*_strength` 对旧布尔配置保持兼容。新增
+  `test_av_recommend_recovery.py` 回归覆盖，后端全量测试为 264 项通过。
 
 - 重新哈希当前源码与原始读取快照、Vite source map、浏览器缓存快照和
   `original-path-inventory.tsv`：未发现可新增登记的字节级匹配，

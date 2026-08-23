@@ -68,6 +68,35 @@ def test_recommend_crack_signal_ignores_title_only_keywords():
     assert backend._detail_has_cracked_signal({"is_cracked": True, "title": "MIDA-669"}) is True
 
 
+def test_recommendation_controls_filter_confidence_and_explore():
+    backend = _load_backend()
+
+    items = [
+        {"code": f"AB-{index:03d}", "title": f"AB-{index:03d}", "confidence": index * 10, "score": 100 - index}
+        for index in range(1, 11)
+    ]
+
+    selected = backend._apply_recommendation_controls(
+        items,
+        {"minimum_confidence_threshold": 30, "exploration_ratio": 0.2},
+        5,
+    )
+
+    assert len(selected) == 5
+    assert all(float(item["confidence"] or 0) >= 30 for item in selected)
+    assert selected[0]["code"] == "AB-003"
+    assert any(item["code"] in {"AB-008", "AB-009", "AB-010"} for item in selected)
+
+
+def test_preference_strength_preserves_legacy_behavior():
+    backend = _load_backend()
+
+    assert backend._preference_strength({}, "strength", "legacy") == 100
+    assert backend._preference_strength({"legacy": False}, "strength", "legacy") == -1
+    assert backend._preference_strength({"strength": 40}, "strength", "legacy") == 40
+    assert backend._preference_strength({"strength": 999}, "strength", "legacy") == 100
+
+
 async def _run_recommendations_exclude_live_emby_codes(monkeypatch, tmp_path):
     backend = _load_backend()
 

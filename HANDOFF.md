@@ -361,13 +361,17 @@ Recommended next implementation order:
    - score new-model uncensored/cracked/subtitle/size/source more consistently
 5. Add recommendation settings:
    - candidate sources on/off
-   - exploration ratio
-   - subtitle/cracked preference strength
-   - minimum confidence threshold
+   - exploration ratio: done in `plugins/av-recommend/plugin.json` and backend `_apply_recommendation_controls`
+   - subtitle/cracked preference strength: done as `prefer_subtitle_strength` / `prefer_cracked_strength`
+   - minimum confidence threshold: done as `minimum_confidence_threshold`
 6. Add performance controls:
    - cache recommendations per profile/config/feedback
    - limit concurrent JavDB/detail/resource calls
    - avoid plugin calls when dashboard card hidden/unmounted
+
+Latest recommendation verification: full backend pytest passes with
+`264 passed, 1 warning`; `test_av_recommend_recovery.py` covers confidence
+filtering, exploration slots, and legacy preference-strength compatibility.
 
 ## Known Pitfalls
 

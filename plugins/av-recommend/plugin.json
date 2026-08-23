@@ -16,7 +16,11 @@
     "full_scan_interval_minutes": {"type": "number", "label": "完整推荐扫描间隔（分钟）", "default": 360, "min": 30, "max": 1440, "step": 30},
     "library_exclusion_scan_limit": {"type": "number", "label": "媒体库排除扫描上限", "description": "推荐生成时从 Emby 实时读取的番号上限，用于排除尚未进入 Knowledge Core 的已入库作品。", "default": 5000, "min": 500, "max": 20000, "step": 500},
     "prefer_cracked": {"type": "boolean", "label": "推荐时偏好破解", "default": true},
-    "prefer_subtitle": {"type": "boolean", "label": "推荐时偏好中字", "default": true}
+    "prefer_subtitle": {"type": "boolean", "label": "推荐时偏好中字", "default": true},
+    "prefer_cracked_strength": {"type": "number", "label": "破解偏好强度", "description": "0 到 100，控制破解特征在动作分中的权重。", "default": 100, "min": 0, "max": 100, "step": 5},
+    "prefer_subtitle_strength": {"type": "number", "label": "中字偏好强度", "description": "0 到 100，控制中字特征在动作分中的权重。", "default": 100, "min": 0, "max": 100, "step": 5},
+    "exploration_ratio": {"type": "number", "label": "探索比例", "description": "在最终推荐列表中保留的低分探索位比例，0 到 0.5。", "default": 0, "min": 0, "max": 0.5, "step": 0.05},
+    "minimum_confidence_threshold": {"type": "number", "label": "最低置信度", "description": "过滤置信度低于该值的候选，0 到 80。", "default": 0, "min": 0, "max": 80, "step": 5}
   },
   "default_config": {
     "candidate_limit": 48,
@@ -27,7 +31,11 @@
     "full_scan_interval_minutes": 360,
     "library_exclusion_scan_limit": 5000,
     "prefer_cracked": true,
-    "prefer_subtitle": true
+    "prefer_subtitle": true,
+    "prefer_cracked_strength": 100,
+    "prefer_subtitle_strength": 100,
+    "exploration_ratio": 0,
+    "minimum_confidence_threshold": 0
   },
   "contributions": {
     "sidebar": {"label": "推荐中心", "route": "/plugins/av-recommend", "icon": "icons/service.svg"},

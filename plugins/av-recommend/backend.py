@@ -212,6 +212,21 @@ def _scan_interval_minutes(config: dict[str, Any]) -> int:
     return max(30, min(value, 1440))
 
 
+def _config_number(config: dict[str, Any], key: str, default: float, minimum: float, maximum: float) -> float:
+    raw = config.get(key, default)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def _preference_strength(config: dict[str, Any], key: str, legacy_key: str) -> float:
+    if config.get(key) is not None:
+        return _config_number(config, key, 100, 0, 100)
+    return 100 if config.get(legacy_key, True) else -1
+
+
 def _merge_candidate(existing: dict[str, Any] | None, item: dict[str, Any], source: str, label: str) -> dict[str, Any]:
     current = dict(existing or {})
     if not current:
@@ -1367,12 +1382,14 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         reasons.append(f"有 {magnets_count} 个磁链")
 
     if item.get("has_cnsub"):
-        boost = 9 if config.get("prefer_subtitle", True) else 5
+        subtitle_strength = _preference_strength(config, "prefer_subtitle_strength", "prefer_subtitle")
+        boost = 5 if subtitle_strength < 0 else 3 + subtitle_strength / 100 * 6
         score += boost
         actionability_score += boost
         reasons.append("中字资源")
     if item.get("is_cracked"):
-        boost = 10 if config.get("prefer_cracked", True) else 5
+        crack_strength = _preference_strength(config, "prefer_cracked_strength", "prefer_cracked")
+        boost = 5 if crack_strength < 0 else 4 + crack_strength / 100 * 6
         score += boost
         actionability_score += boost
         reasons.append("破解特征")
@@ -1642,6 +1659,46 @@ def _diversify_recommendations(items: list[dict[str, Any]]) -> list[dict[str, An
     return selected
 
 
+def _apply_recommendation_controls(items: list[dict[str, Any]], config: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+    """Apply confidence filtering and a small deterministic exploration slot."""
+    threshold = int(_config_number(config, "minimum_confidence_threshold", 0, 0, 80))
+    if threshold:
+        items = [item for item in items if float(item.get("confidence") or 0) >= threshold]
+
+    limit = max(1, int(limit))
+    if not items:
+        return []
+    if len(items) <= limit:
+        return items[:limit]
+
+    ratio = _config_number(config, "exploration_ratio", 0, 0, 0.5)
+    if ratio <= 0:
+        return items[:limit]
+
+    exploration_count = max(1, min(len(items) - limit, int(round(limit * ratio))))
+    if exploration_count <= 0:
+        return items[:limit]
+
+    seed = dt.date.today().isoformat()
+
+    def exploration_key(item: dict[str, Any]) -> bytes:
+        value = str(item.get("code") or item.get("title") or "")
+        return hashlib.sha256(f"{seed}:{value}".encode("utf-8")).digest()
+
+    top = items[:limit]
+    pool = sorted(items[limit:], key=exploration_key)
+    picks = pool[:exploration_count]
+    step = max(1, round(limit / (len(picks) + 1)))
+    position = step
+    for pick in picks:
+        if position < len(top):
+            top[position] = pick
+        else:
+            top.append(pick)
+        position += step
+    return top[:limit]
+
+
 async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     source_mode = str(payload.get("source_mode") or "latest").strip().lower()
     if source_mode not in {"latest", "full"}:
@@ -1713,14 +1770,15 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
     if resource_warnings:
         warnings.extend(resource_warnings)
     scored.sort(key=lambda x: (x["score"], (x.get("resource_summary") or {}).get("total") or 0, x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
-    scored = _diversify_recommendations(scored)
     limit = max(1, min(int(payload.get("limit") or 48), 100))
+    scored = _diversify_recommendations(scored)
+    scored = _apply_recommendation_controls(scored, config, limit)
     result = {
         "ok": True,
         "generated_at": _now_ms(),
         "source_mode": source_mode,
         "source_label": "完整推荐" if source_mode == "full" else "最新推荐",
-        "items": scored[:limit],
+        "items": scored,
         "total": len(scored),
         "profile": {
             "media_count": profile.get("media_count") or 0,
