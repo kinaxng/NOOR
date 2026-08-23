@@ -22,6 +22,10 @@ def test_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
     asyncio.run(_run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path))
 
 
+def test_candidate_pool_scan_enriches_detail_metadata(monkeypatch, tmp_path):
+    asyncio.run(_run_candidate_pool_scan_enriches_detail_metadata(monkeypatch, tmp_path))
+
+
 def test_image_candidates_keep_proxy_before_inner_url():
     backend = _load_backend()
 
@@ -301,6 +305,50 @@ async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
     assert result["ok"] is True
     pool = backend._pool()
     assert set(pool["items"]) == {"ABCD-123", "MIDA-669"}
+
+
+async def _run_candidate_pool_scan_enriches_detail_metadata(monkeypatch, tmp_path):
+    backend = _load_backend()
+
+    monkeypatch.setattr(backend, "_pool_path", lambda: tmp_path / "candidate_pool.json")
+
+    class FakeRuntime:
+        def is_enabled(self, plugin_id):
+            return plugin_id == "javdb"
+
+        async def handle_action(self, plugin_id, action, payload):
+            assert plugin_id == "javdb"
+            if action == "video":
+                return {
+                    "data": {
+                        "actors": [{"name": "测试演员"}],
+                        "categories": [{"name": "邻居"}],
+                        "maker": {"name": "S1 NO.1 STYLE"},
+                        "series": [{"name": "测试系列"}],
+                        "director": {"name": "测试导演"},
+                        "magnets": [{"name": "ABCD-123", "size_mb": 2048}],
+                    }
+                }
+            return {"items": [{"code": "ABCD-123", "title": "测试标题"}]}
+
+    import app.plugins.runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "runtime", FakeRuntime())
+    result = await backend._scan_candidate_pool({
+        "full_scan_pages": 1,
+        "candidate_latest_enabled": False,
+        "candidate_rankings_enabled": False,
+        "candidate_recommend_enabled": False,
+    }, force=True)
+
+    assert result["ok"] is True
+    item = backend._pool()["items"]["ABCD-123"]
+    assert item["actors"] == ["测试演员"]
+    assert item["categories"] == ["邻居"]
+    assert item["maker"] == "S1 NO.1 STYLE"
+    assert item["series"] == "测试系列"
+    assert item["director"] == "测试导演"
+    assert item["best_resource_size_mb"] == 2048
 
 
 async def _run_refresh_candidate_cover_persists_candidates(monkeypatch, tmp_path):

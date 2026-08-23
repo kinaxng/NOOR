@@ -1095,7 +1095,8 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
 
     pages = max(1, min(int(config.get("full_scan_pages") or 5), 30))
     requests = _candidate_pool_requests(config)
-    scanned = added = updated = 0
+    scanned = added = updated = detail_updated = 0
+    seen_codes: list[str] = []
     warnings: list[str] = ["所有候选源已关闭"] if not requests else []
     try:
         for action, label, request_payload in requests:
@@ -1114,6 +1115,8 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
                     code = _candidate_code(value)
                     if not code:
                         continue
+                    if code not in seen_codes:
+                        seen_codes.append(code)
                     existed = code in items
                     items[code] = _merge_candidate(items.get(code), value, f"{action}:{label}", label)
                     scanned += 1
@@ -1121,12 +1124,60 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
                     updated += 1 if existed else 0
                 pool["items"] = items
                 _save_pool(pool)
+
+        detail_limit = max(0, min(int(config.get("detail_limit") or 36), 80))
+        detail_targets = seen_codes[:detail_limit]
+        detail_semaphore = asyncio.Semaphore(4)
+
+        async def enrich_pool_detail(code: str) -> None:
+            nonlocal detail_updated
+            async with detail_semaphore:
+                try:
+                    detail = await runtime.handle_action("javdb", "video", {"code": code})
+                except Exception:
+                    return
+            data = detail.get("data") if isinstance(detail, dict) else {}
+            if not isinstance(data, dict):
+                return
+            async with _pool_lock:
+                pool = _pool()
+                pool_items = pool.get("items") if isinstance(pool.get("items"), dict) else {}
+                item = pool_items.get(code)
+                if not isinstance(item, dict):
+                    return
+                item["detail"] = data
+                item["actors"] = _names(data.get("actors"))
+                item["categories"] = _names(data.get("categories"))
+                item["maker"] = _name_one(data.get("maker") or data.get("publisher") or "") or item.get("maker") or ""
+                item["series"] = _name_one(data.get("series")) or item.get("series") or ""
+                item["director"] = _name_one(data.get("director")) or item.get("director") or ""
+                item["cover_url"] = data.get("cover_url") or item.get("cover_url")
+                item["fanart_url"] = item.get("cover_url") or data.get("cover_url") or item.get("thumb_url") or data.get("thumb_url") or ""
+                item["image_candidates"] = _image_candidates(data, data.get("preview_images")) or item.get("image_candidates") or []
+                item["has_cnsub"] = bool(item.get("has_cnsub") or _text_has_subtitle(data))
+                item["is_cracked"] = bool(item.get("is_cracked") or _detail_has_cracked_signal(data))
+                magnets = data.get("magnets") if isinstance(data.get("magnets"), list) else []
+                if magnets:
+                    item["magnets_count"] = max(int(item.get("magnets_count") or 0), len(magnets))
+                    item["best_resource_size_mb"] = max([float(x.get("size_mb") or 0) for x in magnets if isinstance(x, dict)] or [0])
+                _ensure_title_profile(item)
+                pool_items[code] = item
+                pool["items"] = pool_items
+                _save_pool(pool)
+                detail_updated += 1
+
+        if detail_targets:
+            await asyncio.gather(*(enrich_pool_detail(code) for code in detail_targets))
+
         async with _pool_lock:
             pool = _pool()
-            pool["last_full_scan"] = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), "pages": pages, "scanned": scanned, "added": added, "updated": updated, "warnings": warnings[:8]}
-            pool["background"] = {**(pool.get("background") or {}), "running": False, "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(), "last_error": ""}
+            pool["last_full_scan"] = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), "pages": pages, "scanned": scanned, "added": added, "updated": updated, "detail_updated": detail_updated, "warnings": warnings[:8]}
+            pool["background"] = {**(pool.get("background") or {}), "running": False, "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(), "last_error": "", "last_added": added, "last_scanned": scanned, "last_detail_updated": detail_updated}
             _save_pool(pool)
-            return {"ok": True, "scanned": scanned, "added": added, "updated": updated, "warnings": warnings, "pool": _candidate_pool_stats(pool)}
+            _CACHE["value"] = None
+            return {"ok": True, "scanned": scanned, "added": added, "updated": updated, "detail_updated": detail_updated, "warnings": warnings, "pool": _candidate_pool_stats(pool)}
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         async with _pool_lock:
             pool = _pool()
