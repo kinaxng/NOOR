@@ -571,3 +571,20 @@
   订阅动作与控制面板均正常渲染，DOM 中没有恢复期标记。
 - 文件级审计复跑保持 131 `verified`、0 `pending`、0 `missing`、
   6 `intentional`。
+
+## 插件校验器契约对齐（2026-08-24）
+
+- `tools/noor_plugin/validate.py` 的官方类型与能力清单已对齐当前插件集：
+  新增 `knowledge_app`、`source` 类型，以及 `knowledge_view`、
+  `recommendation_provider`、`resource_search`、`avatar_library`、
+  `external_task_provider`、`knowledge_provider`、`subscription_core`、
+  `resource_match`、`remote_tasks`、`sidebar_widget` 等能力。
+- CSS 前缀校验改为兼容插件 BEM 命名（`prefix__block`），并为
+  `av-recommend`、`mdc-ng-manual`、`subscription-core`、`xunlei-remote`
+  登记其实际官方短前缀，消除 `.av-rec-*`、`.mdc-*`、`.sub-*`、
+  `.xunlei-restore` 等误报。
+- 新增 `backend/tests/test_plugin_validation_tool.py`，断言官方插件目录
+  校验时不再出现未知 type、未知 capability 或 CSS 前缀误报。
+- 全量后端测试更新为 `239 passed`；`./scripts/noor-plugin validate plugins`
+  剩余仅 API SDK 建议、自定义弹窗建议和 design token 建议，不再把正式
+  插件类型/能力当未知项。

@@ -9,22 +9,35 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ALLOWED_TYPES = {
+    "knowledge_app",
     "rss_source",
     "downloader",
+    "source",
     "subtitle_provider",
     "dashboard_widget",
     "repository",
     "tool",
 }
 KNOWN_CAPABILITIES = {
+    "avatar_library",
+    "downloader",
+    "dashboard_widget",
+    "download_submit",
+    "external_task_provider",
+    "knowledge_provider",
+    "knowledge_view",
+    "local_metrics",
     "network_outbound",
+    "recommendation_provider",
+    "remote_tasks",
+    "resource_match",
+    "resource_search",
     "rss_fetch",
+    "sidebar_widget",
     "sidebar_page",
     "subtitle_search",
     "subtitle_search_local",
-    "download_submit",
-    "dashboard_widget",
-    "local_metrics",
+    "subscription_core",
 }
 FORBIDDEN_BROWSER_CALLS = ("alert(", "window.alert(", "window.confirm(", "prompt(", "window.prompt(")
 FORBIDDEN_HOST_PATTERNS = (
@@ -121,6 +134,14 @@ def validate_css(plugin_dir: Path, manifest: dict, issues: list[Issue]) -> None:
     allowed_prefixes = {prefix, "noor-plugin"}
     if plugin_id == "qbittorrent":
         allowed_prefixes.add("qb")
+    if plugin_id == "av-recommend":
+        allowed_prefixes.add("av-rec")
+    if plugin_id == "mdc-ng-manual":
+        allowed_prefixes.add("mdc")
+    if plugin_id == "subscription-core":
+        allowed_prefixes.add("sub")
+    if plugin_id == "xunlei-remote":
+        allowed_prefixes.add("xunlei")
     frontend = manifest.get("frontend") or {}
     css_files = []
     style = frontend.get("style")
@@ -139,7 +160,7 @@ def validate_css(plugin_dir: Path, manifest: dict, issues: list[Issue]) -> None:
         for cls in sorted(classes):
             if cls.startswith(("is-", "has-")):
                 continue
-            if not any(cls.startswith(p + "-") or cls == p for p in allowed_prefixes):
+            if not any(cls.startswith(p + "-") or cls.startswith(p + "__") or cls == p for p in allowed_prefixes):
                 issues.append(Issue("WARN", "CSS_PREFIX_MISSING", str(css), f".{cls} 未使用插件前缀或 noor-plugin 前缀"))
                 break
 
