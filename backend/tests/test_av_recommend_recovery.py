@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import asyncio
+import inspect
 import json
 from pathlib import Path
 
@@ -271,7 +272,6 @@ async def _run_live_library_codes_prefers_original_media_library_adapter(monkeyp
 
     import app.api.endpoints.media_library as media_library
     import app.api.endpoints.media_library_helpers as media_library_helpers
-    import app.api.endpoints.media_library_recovery as media_library_recovery
 
     media_config = {
         "server_url": "http://emby",
@@ -289,12 +289,12 @@ async def _run_live_library_codes_prefers_original_media_library_adapter(monkeyp
         assert force_refresh is True
         return [{"provider_ids": {"Javdb": "MIDA-669"}}], 1
 
-    async def fail_recovery_fetch(*args, **kwargs):
-        raise AssertionError("recovery media-library fallback should not be used")
-
     monkeypatch.setattr(media_library, "_list_libraries", fake_list_libraries)
     monkeypatch.setattr(media_library, "_list_items", fake_list_items)
-    monkeypatch.setattr(media_library_recovery, "_fetch_items", fail_recovery_fetch)
+    source = inspect.getsource(backend._live_library_codes)
+    assert "media_library_recovery" not in source
+    assert "media_library._list_libraries" in source
+    assert "media_library._list_items" in source
 
     codes, warning = await backend._live_library_codes({"library_exclusion_scan_limit": 100}, force=True)
 

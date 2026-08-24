@@ -684,3 +684,25 @@ Notes:
   (ignored ghost actors, FaceFusion 3.8.0, face tracker score, JavDB recent
   series directory), all 52 byte-level evidence matches still validate, and the
   restored runtime smoke passes every main route without HTTP or console errors.
+
+### Latest Recovery Update (2026-08-24 第十四轮)
+
+- Restored the final FileTags field ordering contract in
+  `frontend/src/api/types.ts` and locked it with
+  `backend/tests/test_final_frontend_recovery_contract.py` (commit `7746f42`).
+- Restored Xunlei residual handling to the original task-history matching path:
+  `restore_candidates` uses the original `_restore_candidates` signature and
+  the frontend residual button calls `delete_restore_file` instead of the
+  recovery-time local-scan fallback (commit `9970767`).
+- Removed the un-mounted recovery adapter
+  `backend/app/api/endpoints/media_library_recovery.py` and its standalone
+  tests from the active source tree. The evidence remains in
+  `noor-restored/forensics`; `main.py` only mounts the original Emby media
+  library router and the actor router. Recommendation live-library exclusion
+  now has a source-level contract asserting it cannot import that fallback.
+- Refreshed the original read-snapshot audit in `noor-restored`: `688`
+  snapshots, `40 exact / 9 likely / 98 review / 534 drift / 7 expected_absent /
+  0 missing`.
+- Verification: backend `308 passed, 8 skipped, 1 warning`; frontend production
+  build passes; all 14 official plugins report `NOOR_PLUGIN_OK`; restored-page
+  smoke reports `HTTP_ERRORS []` / `CONSOLE_ERRORS []`.
