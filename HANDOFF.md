@@ -25,6 +25,16 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Restored recommendation Emby-library exclusion and filtered summaries in
+  `plugins/av-recommend/backend.py`: `_library_profile()` now reads persisted
+  `EmbyItemCache` codes so already-imported works stay excluded after backend
+  restarts, and the recommendation cache key includes the library code count and
+  fingerprint. The API response now returns `filtered` with reason counts and
+  examples for missing code, ignored, disliked, upgrade-not-improved, and
+  score-too-low candidates. Added regression coverage. Backend full pytest:
+  `308 passed, 8 skipped, 1 warning`; frontend production build passes; all 14
+  official plugins report `NOOR_PLUGIN_OK`; restored-page smoke has no
+  HTTP/console errors.
 - Restored history/whisper diagnostics in `History.vue` and
   `useJobRuntimePresentation.ts`: recommended-diagnostic summaries and report
   scoring are back, task cards again show Whisper strategy chips, external tasks

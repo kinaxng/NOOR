@@ -357,7 +357,7 @@ async def _run_recommendation_cache_key_includes_requested_limit(monkeypatch):
     async def fake_enrich_resources(config, items):
         return []
 
-    def fake_candidate_score(item, profile, config, feedback):
+    def fake_candidate_score(item, profile, config, feedback, diagnostics=None):
         return {
             "code": item["code"],
             "title": item["code"],
@@ -511,3 +511,54 @@ def test_dedupe_recommendations_drops_same_normalized_code() -> None:
     deduped = backend._dedupe_recommendations(items)
 
     assert [item["code"] for item in deduped] == ["MIDA-727", "MIDA-728", "FC2-PPV-1844862"]
+
+
+def test_media_item_codes_extract_emby_cache_codes() -> None:
+    backend = _load_backend()
+
+    codes = backend._media_item_codes({
+        "name": "DVAJ-727-C.mp4",
+        "path": "/media/DVAJ-727/DVAJ-727-C.mp4",
+        "nfo": {"num": "mida669", "originaltitle": "MIDA-669"},
+    })
+
+    assert codes == {"DVAJ-727", "MIDA-669"}
+
+
+def test_filtered_summary_groups_reasons_and_examples() -> None:
+    backend = _load_backend()
+
+    diagnostics: list[dict[str, str]] = []
+    backend._record_filter(diagnostics, {"code": "MIDA-669", "title": "MIDA-669"}, "MIDA-669", "missing_code", "候选缺少可识别番号")
+    backend._record_filter(diagnostics, {"code": "MIDA-669", "title": "MIDA-669"}, "MIDA-669", "ignored", "用户已忽略")
+    backend._record_filter(diagnostics, {"code": "MIDA-669", "title": "MIDA-669"}, "MIDA-669", "ignored", "用户已忽略")
+
+    summary = backend._filtered_summary(diagnostics)
+
+    assert summary["total"] == 3
+    assert summary["reasons"] == [
+        {"reason": "ignored", "label": "已忽略", "count": 2},
+        {"reason": "missing_code", "label": "缺少番号", "count": 1},
+    ]
+    assert len(summary["examples"]) == 3
+
+
+def test_candidate_score_records_filter_diagnostics() -> None:
+    backend = _load_backend()
+
+    diagnostics: list[dict[str, str]] = []
+    result = backend._candidate_score(
+        {"title": "没有番号标题"},
+        {"media_count": 1},
+        {},
+        {},
+        diagnostics,
+    )
+
+    assert result is None
+    assert diagnostics == [{
+        "code": "",
+        "title": "没有番号标题",
+        "reason": "missing_code",
+        "detail": "候选缺少可识别番号",
+    }]

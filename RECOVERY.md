@@ -544,3 +544,15 @@ outside cache directories remain versioned as forensic evidence.
   dedupe. Verification: backend `305 passed, 8 skipped, 1 warning`, frontend
   production build passes, all 14 official plugins report `NOOR_PLUGIN_OK`, and
   the restored-page smoke has no HTTP/console errors.
+
+
+## 2026-08-24 第七轮：推荐中心 Emby 已入库排除与过滤摘要
+
+- 对照 `plugins/av-recommend` 的原始会话 diff，恢复推荐中心最终过滤契约：
+  候选评分前先读取持久化 `EmbyItemCache` 番号，媒体库中已存在的作品不再进入
+  推荐结果；推荐缓存键加入媒体库番号数量和指纹，避免媒体库变化后仍命中旧缓存。
+- 推荐接口响应新增 `filtered` 摘要，按 `missing_code / ignored / disliked /
+  upgrade_not_improved / score_too_low` 统计被过滤候选，并附带最多 12 条示例。
+- 新增回归测试覆盖 Emby 缓存番号提取、过滤摘要聚合、评分诊断记录。
+- 验证：后端 `308 passed, 8 skipped, 1 warning`，前端生产构建通过，14 个官方
+  插件全部 `NOOR_PLUGIN_OK`，恢复页 smoke `HTTP_ERRORS []` / `CONSOLE_ERRORS []`。

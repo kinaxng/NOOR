@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.database import async_session_maker
+from app.core.models import EmbyItemCache
 from app.core.runtime_paths import plugin_data_path
 from app.knowledge.models import KnowledgeActionState, KnowledgeEdge, KnowledgeEntity
 from app.plugins.contracts import PluginManifest, PluginTestResult
@@ -281,6 +282,59 @@ def _subscription_codes() -> set[str]:
         return set()
     rows = data.get("subscriptions") if isinstance(data, dict) else data
     return {_norm_code(row.get("code") if isinstance(row, dict) else row) for row in (rows or []) if _norm_code(row.get("code") if isinstance(row, dict) else row)}
+
+
+def _media_item_codes(item: dict[str, Any]) -> set[str]:
+    values = [
+        item.get("name"),
+        item.get("path"),
+        item.get("file_path"),
+        item.get("title"),
+        item.get("originaltitle"),
+        item.get("original_title"),
+    ]
+    nfo = item.get("nfo") if isinstance(item.get("nfo"), dict) else {}
+    values.extend([
+        nfo.get("num"),
+        nfo.get("title"),
+        nfo.get("originaltitle"),
+        nfo.get("original_title"),
+    ])
+    out: set[str] = set()
+    for value in values:
+        code = _norm_code(value)
+        if code:
+            out.add(code)
+    return out
+
+
+async def _emby_cache_codes(db: Any) -> set[str]:
+    try:
+        rows = await db.execute(select(EmbyItemCache.items_json))
+    except SQLAlchemyError:
+        return set()
+    out: set[str] = set()
+    for raw in rows.scalars().all():
+        try:
+            items = json.loads(raw or "[]")
+        except Exception:
+            continue
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, dict):
+                out.update(_media_item_codes(item))
+    return out
+
+
+def _code_fingerprint(codes: set[str]) -> str:
+    if not codes:
+        return ""
+    digest = hashlib.sha1()
+    for code in sorted(codes):
+        digest.update(code.encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _manifest() -> PluginManifest:
@@ -816,6 +870,8 @@ async def _library_profile() -> dict[str, Any]:
         "top_media": [],
     }
     async with async_session_maker() as db:
+        cached_codes = await _emby_cache_codes(db)
+        empty_profile["codes"].update(cached_codes)
         try:
             media_rows = await db.execute(select(KnowledgeEntity).where(KnowledgeEntity.entity_type == "media_item"))
         except SQLAlchemyError:
@@ -839,6 +895,7 @@ async def _library_profile() -> dict[str, Any]:
             "local_features": {},
             "top_media": [_entity_payload(item) for item in media[:8]],
         }
+        profile["codes"].update(cached_codes)
         if not media_ids:
             return profile
         try:
@@ -1269,7 +1326,41 @@ async def stop_background() -> None:
     _scheduler_stop = None
 
 
-def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict[str, Any], feedback: dict[str, Any]) -> dict[str, Any] | None:
+def _candidate_label(item: dict[str, Any], code: str = "") -> str:
+    return str(item.get("display_title") or item.get("title") or item.get("number") or item.get("code") or code or "").strip()
+
+
+def _record_filter(diagnostics: list[dict[str, Any]] | None, item: dict[str, Any], code: str, reason: str, detail: str = "") -> None:
+    if diagnostics is None:
+        return
+    diagnostics.append({
+        "code": code or _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title")),
+        "title": _candidate_label(item, code),
+        "reason": reason,
+        "detail": detail,
+    })
+
+
+def _filtered_summary(diagnostics: list[dict[str, Any]]) -> dict[str, Any]:
+    counts: Counter = Counter(str(item.get("reason") or "unknown") for item in diagnostics)
+    labels = {
+        "missing_code": "缺少番号",
+        "ignored": "已忽略",
+        "disliked": "不感兴趣",
+        "upgrade_not_improved": "已入库提升不足",
+        "score_too_low": "评分过低",
+    }
+    return {
+        "total": len(diagnostics),
+        "reasons": [
+            {"reason": key, "label": labels.get(key, key), "count": int(count)}
+            for key, count in counts.most_common()
+        ],
+        "examples": diagnostics[:12],
+    }
+
+
+def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict[str, Any], feedback: dict[str, Any], diagnostics: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     code = _norm_code(item.get("code") or item.get("number") or item.get("display_title") or item.get("title"))
     ignored = feedback.get("ignored_codes") or set()
     liked = feedback.get("liked_codes") or set()
@@ -1278,7 +1369,14 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
     disliked_categories: Counter = feedback.get("disliked_categories") or Counter()
     liked_actors: Counter = feedback.get("liked_actors") or Counter()
     liked_categories: Counter = feedback.get("liked_categories") or Counter()
-    if not code or code in ignored or code in disliked:
+    if not code:
+        _record_filter(diagnostics, item, code, "missing_code", "候选缺少可识别番号")
+        return None
+    if code in ignored:
+        _record_filter(diagnostics, item, code, "ignored", "用户已忽略")
+        return None
+    if code in disliked:
+        _record_filter(diagnostics, item, code, "disliked", "用户已标记不感兴趣")
         return None
     in_library = code in profile.get("codes", set()) or bool((item.get("library") or {}).get("in_library") if isinstance(item.get("library"), dict) else False)
     actors = _unique_names(item.get("actors") or [], 12)
@@ -1525,12 +1623,14 @@ def _candidate_score(item: dict[str, Any], profile: dict[str, Any], config: dict
         if size_mb >= 4096:
             improved.append("更高体积版本")
         if not improved:
+            _record_filter(diagnostics, item, code, "upgrade_not_improved", "已入库作品没有识别到中字、破解或更高体积版本提升")
             return None
         score += 10
         reasons.insert(0, "洗版：" + " / ".join(improved[:3]))
 
     score = max(0, min(92, round(score)))
     if score <= 0:
+        _record_filter(diagnostics, item, code, "score_too_low", "综合评分小于等于 0")
         return None
     match_bucket = _score_bucket(personalized_score)
     return {
@@ -1831,6 +1931,8 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         "disliked_actors": dict(feedback["disliked_actors"]),
         "disliked_categories": dict(feedback["disliked_categories"]),
         "library_codes": sorted(live_codes),
+        "library_code_count": len(profile.get("codes") or []),
+        "library_code_fingerprint": _code_fingerprint(profile.get("codes") or set()),
         "source_mode": source_mode,
         "requested_limit": requested_limit,
     }, sort_keys=True, ensure_ascii=False)
@@ -1869,8 +1971,9 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
     if live_warning:
         warnings.append(live_warning)
     scored = []
+    filtered_diagnostics: list[dict[str, Any]] = []
     for item in candidates:
-        rec = _candidate_score(item, profile, config, feedback)
+        rec = _candidate_score(item, profile, config, feedback, filtered_diagnostics)
         if rec:
             scored.append(rec)
     scored = _dedupe_recommendations(scored)
@@ -1909,6 +2012,7 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
             "disliked": len([x for x in feedback["disliked_codes"] if x]),
         },
         "candidate_meta": {"pool": _candidate_pool_stats(pool)},
+        "filtered": _filtered_summary(filtered_diagnostics),
         "warnings": warnings,
     }
     _CACHE.update({"ts": time.time(), "key": cache_key, "value": result})
