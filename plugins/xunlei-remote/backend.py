@@ -1324,18 +1324,6 @@ async def _restore_candidates(config: dict[str, Any], client: httpx.AsyncClient,
     }
 
 
-def _restore_candidates_local(config: dict[str, Any], limit: int = 200) -> dict[str, Any]:
-    files = _scan_restore_files(config, limit=limit)
-    return {
-        "ok": True,
-        "items": files,
-        "total": len(files),
-        "matched": 0,
-        "scan_roots": [str(root) for root in _restore_scan_roots(config)],
-        "path_mappings": [{"local": left, "remote": right} for left, right in _restore_path_mappings(config)],
-    }
-
-
 async def _delete_residual(config: dict[str, Any], raw_path: Any) -> dict[str, Any]:
     return await _delete_restore_file(config, {"path": raw_path})
 
@@ -1625,12 +1613,12 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
             if action == "mobile_submit":
                 return await _mobile_submit_download(config, client, payload)
             return await _mobile_status(config, client)
-    if action in {"restore_candidates", "delete_residual", "delete_restore_file"}:
-        if action == "restore_candidates":
-            return _restore_candidates_local(config, int(payload.get("limit") or 200))
+    if action in {"delete_residual", "delete_restore_file"}:
         return await _delete_residual(config, payload.get("path")) if action == "delete_residual" else await _delete_restore_file(config, payload)
     async with await _client(config, timeout=float(config.get("timeout") or 30)) as client:
         pan_auth, device_id, device_info = await _context(config, client)
+        if action == "restore_candidates":
+            return await _restore_candidates(config, client, pan_auth, device_id, limit=int(payload.get("limit") or 80))
         if action == "try_speed_info":
             return await _try_speed_info(config, client, pan_auth)
         if action == "try_speed_config":

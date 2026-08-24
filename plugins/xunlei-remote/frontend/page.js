@@ -246,7 +246,7 @@ export async function mount(el, sdk = {}) {
           if (!ok) return
           button.disabled = true
           try {
-            const result = await postAction('delete_residual', { path: item.path })
+            const result = await postAction('delete_restore_file', { path: item.path })
             const query = result.code || item.code || item.name.replace(/\.(?:xltd|xtld)$/i, '')
             modal.close()
             if (sdk.navigate) await sdk.navigate({ path: '/search/resources', query: { q: query } })

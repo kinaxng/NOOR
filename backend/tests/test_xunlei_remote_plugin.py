@@ -118,7 +118,7 @@ def test_restore_candidates_scans_only_residual_files(tmp_path):
     residual.write_text("partial", encoding="utf-8")
     (root / "movie.mp4").write_text("video", encoding="utf-8")
     config = {"restore_scan_roots": str(root)}
-    result = asyncio.run(xunlei_backend.handle_action("restore_candidates", config, {"limit": 50}))
+    result = asyncio.run(xunlei_backend._restore_candidates(config, FakeClient(), "pan-auth", "device", limit=50))
     assert result["total"] == 1
     assert result["items"][0]["path"] == str(residual)
 
