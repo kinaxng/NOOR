@@ -80,6 +80,16 @@ def test_plugin_host_final_contract() -> None:
     assert "onBeforeUnmount(clearMounted)" in source
 
 
+def test_javdb_avatar_uses_current_sdk_contract_only() -> None:
+    source = _read("plugins/javdb/frontend/page.js")
+
+    assert "renderActorAvatar" in source
+    assert "sdk.avatar?.resolve" not in source
+    assert "sdk.avatar.resolve" not in source
+    assert "avatarResolveCache" not in source
+    assert "detectAvatarProvider" not in source
+
+
 def test_lada_panel_final_contract() -> None:
     source = _read("frontend/src/components/noor/LadaPanel.vue")
 

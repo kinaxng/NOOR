@@ -54,6 +54,8 @@ Last updated: 2026-08-24 Asia/Shanghai
 - `plugins/javdb/frontend/page.js` 清除调用已不存在的 `sdk.avatar.resolve`
   死代码。最终 SDK 契约只提供 `sdk.avatar.candidates`，Gfriends 只作为演员
   资料编辑时的候选头像库，不再尝试全局接管 JavDB 头像。
+- `backend/tests/test_final_frontend_recovery_contract.py` 新增回归断言，
+  锁定 JavDB 不再出现旧 `avatarResolve` / `detectAvatarProvider` 路径。
 - 验证：JavDB 演员深链面板仍正常渲染，`node --check` 通过，14 个官方插件
   全部 `NOOR_PLUGIN_OK`。
 
