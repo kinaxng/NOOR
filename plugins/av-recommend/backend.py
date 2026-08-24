@@ -191,6 +191,28 @@ def _save_pool(pool: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _candidate_pool_background_stale(pool: dict[str, Any], background: dict[str, Any]) -> bool:
+    if not background.get("running"):
+        return False
+    if background.get("finished_at"):
+        return True
+    started_at = background.get("started_at")
+    last_scan_at = (pool.get("last_full_scan") or {}).get("at")
+    try:
+        if started_at and last_scan_at:
+            started = dt.datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+            last_scan = dt.datetime.fromisoformat(str(last_scan_at).replace("Z", "+00:00"))
+            if started < last_scan:
+                return True
+        started = dt.datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=dt.timezone.utc)
+        age = dt.datetime.now(dt.timezone.utc) - started.astimezone(dt.timezone.utc)
+        return age.total_seconds() > 24 * 3600
+    except (TypeError, ValueError):
+        return True
+
+
 def _pool_scan_due(pool: dict[str, Any], interval_minutes: int = 360) -> bool:
     previous = (pool.get("last_full_scan") or {}).get("at")
     try:
@@ -1146,7 +1168,12 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
         pool = _pool()
         background = pool.get("background") if isinstance(pool.get("background"), dict) else {}
         if background.get("running") and not force:
-            return {"ok": True, "skipped": True, "reason": "running", "pool": _candidate_pool_stats(pool)}
+            if _candidate_pool_background_stale(pool, background):
+                background = {**background, "running": False, "finished_at": background.get("finished_at") or background.get("started_at")}
+                pool["background"] = background
+                _save_pool(pool)
+            else:
+                return {"ok": True, "skipped": True, "reason": "running", "pool": _candidate_pool_stats(pool)}
         pool["background"] = {**background, "running": True, "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "last_error": ""}
         _save_pool(pool)
 
@@ -1310,6 +1337,11 @@ async def _scheduler_loop() -> None:
 
 async def start_background(_config: dict[str, Any] | None = None) -> None:
     global _scheduler_task
+    pool = _pool()
+    background = pool.get("background") if isinstance(pool.get("background"), dict) else {}
+    if _candidate_pool_background_stale(pool, background):
+        pool["background"] = {**background, "running": False, "finished_at": background.get("finished_at") or background.get("started_at")}
+        _save_pool(pool)
     if not _scheduler_task or _scheduler_task.done():
         _scheduler_task = asyncio.create_task(_scheduler_loop())
 
@@ -2093,7 +2125,7 @@ def background_tasks(config: dict[str, Any] | None = None) -> list[dict[str, Any
     background = stats.get("background") or {}
     last_scan = stats.get("last_full_scan") or {}
     interval = _scan_interval_minutes(config)
-    running = bool(background.get("running"))
+    running = bool(background.get("running")) and not _candidate_pool_background_stale(pool, background)
     failed = bool(background.get("last_error"))
     status = "failed" if failed else ("running" if running else "idle")
     return [{

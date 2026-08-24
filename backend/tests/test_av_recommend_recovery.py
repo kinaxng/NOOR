@@ -127,6 +127,48 @@ def test_preference_strength_preserves_legacy_behavior():
     assert backend._preference_strength({"strength": 999}, "strength", "legacy") == 100
 
 
+def test_candidate_pool_background_stale_state(monkeypatch, tmp_path):
+    backend = _load_backend()
+    monkeypatch.setattr(backend, "_pool_path", lambda: tmp_path / "candidate_pool.json")
+
+    now = backend.dt.datetime.now(backend.dt.timezone.utc).isoformat()
+    old = "2026-08-01T00:00:00+00:00"
+    older_finish = "2026-08-02T00:00:00+00:00"
+
+    assert backend._candidate_pool_background_stale(
+        {"last_full_scan": {"at": now}},
+        {"running": True, "started_at": old, "finished_at": older_finish},
+    ) is True
+    assert backend._candidate_pool_background_stale(
+        {"last_full_scan": {"at": now}},
+        {"running": True, "started_at": old},
+    ) is True
+    assert backend._candidate_pool_background_stale(
+        {"last_full_scan": {"at": old}},
+        {"running": True, "started_at": now},
+    ) is False
+
+
+def test_candidate_pool_background_tasks_hide_stale_running(monkeypatch, tmp_path):
+    backend = _load_backend()
+    pool_path = tmp_path / "candidate_pool.json"
+    monkeypatch.setattr(backend, "_pool_path", lambda: pool_path)
+    pool_path.write_text(backend.json.dumps({
+        "items": {},
+        "background": {
+            "running": True,
+            "started_at": "2026-08-01T00:00:00+00:00",
+            "finished_at": "2026-08-02T00:00:00+00:00",
+        },
+        "last_full_scan": {"at": "2026-08-03T00:00:00+00:00", "scanned": 596},
+    }), encoding="utf-8")
+
+    tasks = backend.background_tasks({})
+
+    assert tasks[0]["status"] == "idle"
+    assert tasks[0]["id"] == "av-recommend.candidate-pool"
+
+
 def test_candidate_pool_requests_respects_source_toggles():
     backend = _load_backend()
 

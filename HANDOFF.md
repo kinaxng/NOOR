@@ -24,6 +24,20 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Do not restore retired subscription/wash recommendation modes, online actor
   mapping upload, or the old Whisper multi-chain source.
 
+### 2026-08-24 第九轮：候选池后台 stale 状态恢复
+
+- `data/av_recommend/candidate_pool.json` 中残留 `background.running=true`，且
+  `finished_at` 早于 `started_at`，导致完整推荐候选池后台扫描在非 force 路径
+  上永久跳过。
+- `plugins/av-recommend/backend.py` 新增 stale 状态识别：存在 `finished_at`、
+  `last_full_scan.at` 新于 `started_at`，或启动时间超过 24 小时时，后台任务会
+  被修正为 idle，`background_tasks()` 不再展示为 running。
+- 后端重启后已验证 `127.0.0.1:9898/api/health` 健康，候选池任务
+  `av-recommend.candidate-pool` 状态为 `idle`，后台任务总数仍为 7。
+- 验证：后端 `310 passed, 8 skipped, 1 warning`；前端生产构建通过；14 个官方
+  插件全部 `NOOR_PLUGIN_OK`；恢复页 smoke 为 `HTTP_ERRORS []` /
+  `CONSOLE_ERRORS []`。
+
 ### Latest Recovery Update (2026-08-24)
 ### Latest Recovery Update (2026-08-24 第八轮)
 - Restored `frontend/src/components/ui/Tabs.vue` to the original sliding-indicator
