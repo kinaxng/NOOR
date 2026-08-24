@@ -19,6 +19,10 @@ def test_recommendations_exclude_library_and_subscription_codes(monkeypatch, tmp
     asyncio.run(_run_recommendations_exclude_library_and_subscription_codes(monkeypatch, tmp_path))
 
 
+def test_recommendation_cache_key_includes_requested_limit(monkeypatch):
+    asyncio.run(_run_recommendation_cache_key_includes_requested_limit(monkeypatch))
+
+
 def test_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
     asyncio.run(_run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path))
 
@@ -316,6 +320,102 @@ async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
     assert set(pool["items"]) == {"ABCD-123", "MIDA-669"}
 
 
+async def _run_recommendation_cache_key_includes_requested_limit(monkeypatch):
+    backend = _load_backend()
+    backend._CACHE.update({"ts": 0, "key": "", "value": None})
+    applied_limits: list[int] = []
+    monkeypatch.setattr(backend, "_subscription_codes", lambda: set())
+    monkeypatch.setattr(backend, "_pool", lambda: {"items": {}})
+
+    async def fake_library_profile():
+        return {
+            "media_count": 1,
+            "codes": set(),
+            "media_by_code": {},
+            "actors": backend.Counter(),
+            "genres": backend.Counter(),
+            "tags": backend.Counter(),
+            "studios": backend.Counter(),
+            "series": backend.Counter(),
+            "directors": backend.Counter(),
+            "title_traits": backend.Counter(),
+            "title_terms": backend.Counter(),
+            "actor_category": backend.Counter(),
+            "local_features": {},
+            "top_media": [],
+        }
+
+    async def fake_live_library_codes(config, *, force=False):
+        return set(), ""
+
+    async def fake_javdb_candidates(config):
+        return [
+            {"code": f"AB-{index:03d}", "title": f"AB-{index:03d}", "actors": [], "categories": []}
+            for index in range(30)
+        ], []
+
+    async def fake_enrich_resources(config, items):
+        return []
+
+    def fake_candidate_score(item, profile, config, feedback):
+        return {
+            "code": item["code"],
+            "title": item["code"],
+            "display_title": item["code"],
+            "cover_url": "",
+            "fanart_url": "",
+            "image_candidates": [],
+            "release_date": "",
+            "actors": [],
+            "categories": [],
+            "title_traits": [],
+            "title_profile": {},
+            "maker": "",
+            "series": "",
+            "director": "",
+            "score": 50,
+            "personalized_score": 0,
+            "actionability_score": 0,
+            "quality_score": 0,
+            "penalty_score": 0,
+            "match_level": "none",
+            "confidence": 50,
+            "score_breakdown": {},
+            "type": "recommendation",
+            "in_library": False,
+            "magnets_count": 0,
+            "has_cnsub": False,
+            "is_cracked": False,
+            "is_uncensored": False,
+            "best_resource_size_mb": 0,
+            "reasons": [],
+            "source_tags": [],
+            "is_today_increment": False,
+            "source": "javdb",
+            "source_label": "JavDB",
+            "route": "",
+            "raw": {},
+        }
+
+    def fake_apply_controls(items, config, limit):
+        applied_limits.append(int(limit))
+        return items[:limit]
+
+    monkeypatch.setattr(backend, "_library_profile", fake_library_profile)
+    monkeypatch.setattr(backend, "_live_library_codes", fake_live_library_codes)
+    monkeypatch.setattr(backend, "_javdb_candidates", fake_javdb_candidates)
+    monkeypatch.setattr(backend, "_enrich_recommendation_resources", fake_enrich_resources)
+    monkeypatch.setattr(backend, "_candidate_score", fake_candidate_score)
+    monkeypatch.setattr(backend, "_apply_recommendation_controls", fake_apply_controls)
+
+    first = await backend._recommendations({}, {"source_mode": "latest", "limit": 20, "refresh": False})
+    second = await backend._recommendations({}, {"source_mode": "latest", "limit": 60, "refresh": False})
+
+    assert applied_limits == [20, 60]
+    assert len(first["items"]) == 20
+    assert len(second["items"]) == 30
+
+
 async def _run_candidate_pool_scan_enriches_detail_metadata(monkeypatch, tmp_path):
     backend = _load_backend()
 
@@ -395,3 +495,19 @@ async def _run_refresh_candidate_cover_persists_candidates(monkeypatch, tmp_path
     assert saved["image_candidates"] == result["image_candidates"]
     assert saved["title"] == "测试"
     assert saved["cover_refreshed_at"]
+
+
+def test_dedupe_recommendations_drops_same_normalized_code() -> None:
+    backend = _load_backend()
+
+    items = [
+        {"code": "MIDA-727", "title": "MIDA-727", "score": 98},
+        {"code": "MIDA-727", "id": "DRX262", "title": "MIDA-727", "score": 91},
+        {"code": "MIDA-728", "title": "MIDA-728", "score": 81},
+        {"code": "FC2-PPV-1844862", "title": "FC2", "score": 80},
+        {"code": "FC2-1844862", "title": "FC2", "score": 79},
+    ]
+
+    deduped = backend._dedupe_recommendations(items)
+
+    assert [item["code"] for item in deduped] == ["MIDA-727", "MIDA-728", "FC2-PPV-1844862"]

@@ -1,6 +1,6 @@
 
 import { computed, type ComputedRef, type Ref } from 'vue'
-import type { Job } from '../api/types'
+import type { Job, RecommendedDiagnostics } from '../api/types'
 import type { JobCardViewModel } from '../components/noor/JobCard.vue'
 import type { JobChainMemberViewModel } from '../components/noor/JobChainPanel.vue'
 import { useI18n } from './useI18n'
@@ -52,7 +52,7 @@ export function useJobRuntimePresentation(options: UseJobRuntimePresentationOpti
     cancelLabel,
   } = options
 
-  const { t } = useI18n()
+  const { t, currentLang } = useI18n()
   const {
     getChainStepLabel,
     getChainRoleLabel,
@@ -69,8 +69,10 @@ export function useJobRuntimePresentation(options: UseJobRuntimePresentationOpti
     getChainProgressView,
     getDescriptionView,
     getDisplayState,
-    getJobTypeLabel,
+    getJobTypeLabelForJob,
     getJobTypeChipClass,
+    getWhisperStrategyLabel,
+    getWhisperStrategyChipClass,
     getJobDisplayName,
     fallbackStatusLabel,
   } = useJobPresentation(allJobs)
@@ -183,11 +185,21 @@ export function useJobRuntimePresentation(options: UseJobRuntimePresentationOpti
 
   function getJobCompletedAt(job: Job) {
     if (!job.completed_at) return ''
-    return new Date(job.completed_at).toLocaleString()
+    return new Date(job.completed_at).toLocaleString(currentLang.value === 'zh' ? 'zh-CN' : 'en-US')
   }
 
-  function getDiagnosticSummary(_job: Job) {
-    return [] as string[]
+  function getDiagnosticSummary(job: Job) {
+    const diagnostics = job.result_metadata?.recommended_diagnostics as RecommendedDiagnostics | undefined
+    if (!diagnostics || (job.job_type !== 'whisper' && job.job_type !== 'whisper_transcribe')) return [] as string[]
+
+    const summary = [
+      diagnostics.large_v3_retry_segments > 0 ? `${t('jobs.diagnosticsLargeV3')} ${diagnostics.large_v3_retry_segments}` : '',
+      diagnostics.qwen_retry_segments > 0 ? `${t('jobs.diagnosticsFallback')} ${diagnostics.qwen_retry_segments}` : '',
+      diagnostics.stepdown_segments > 0 ? `${t('jobs.diagnosticsStepdown')} ${diagnostics.stepdown_segments}` : '',
+      diagnostics.cleanup?.noise_only_segments ? `${t('jobs.diagnosticsNoise')} ${diagnostics.cleanup.noise_only_segments}` : '',
+    ].filter(Boolean)
+
+    return summary
   }
 
   function getJobCardModel(job: Job): JobCardViewModel {
@@ -205,15 +217,17 @@ export function useJobRuntimePresentation(options: UseJobRuntimePresentationOpti
       showSummaryLine: showJobSummaryLine.value,
       showMetaLine: showJobMetaLine.value,
       showCompletedAt: showJobCompletedAt.value,
-      typeChipLabel: getJobTypeLabel.value(job.job_type),
+      typeChipLabel: getJobTypeLabelForJob.value(job),
       typeChipClass: getJobTypeChipClass.value(job.job_type),
+      strategyChipLabel: getWhisperStrategyLabel.value(job),
+      strategyChipClass: getWhisperStrategyChipClass.value(job),
       phaseLabel: progressView.phaseLabel,
       chainLine: job.chain_id ? getChainFlowLabel.value(job) : '',
       showChainLine: activeTab.value !== 'running' && !!job.chain_id,
       summaryLine: descriptionView.summaryLine,
       metaLine: descriptionView.metaLine,
       completedAt: getJobCompletedAt(job),
-      canCancel: job.status === 'running' || job.status === 'queued' || job.status === 'blocked' || job.status === 'pending',
+      canCancel: (job.job_type !== 'external_task' || job.result_metadata?.external_task?.can_cancel === true) && (!job.result_metadata?.external_task || job.result_metadata.external_task.can_cancel === true) && (job.status === 'running' || job.status === 'queued' || job.status === 'blocked' || job.status === 'pending'),
       overallLabel: t('jobs.progress.overall'),
       phaseLabelText: t('jobs.progress.phase'),
       cancelLabel: cancelLabel.value,

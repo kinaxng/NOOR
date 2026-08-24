@@ -138,6 +138,30 @@ def test_whisper_settings_final_chickenrice_contract() -> None:
         assert marker not in source, f"retired Whisper multi-chain marker leaked: {marker}"
 
 
+def test_history_task_diagnostics_final_contract() -> None:
+    history = _read("frontend/src/views/History.vue")
+    runtime = _read("frontend/src/composables/useJobRuntimePresentation.ts")
+    types = _read("frontend/src/api/types.ts")
+
+    assert "RecommendedDiagnostics" in history
+    assert "job.result_metadata?.recommended_diagnostics" in history
+    assert "getDiagnosticsSummary(job: Job)" in history
+    assert "getDiagnosticsSummary(job).length" in history
+    assert "large-v3 补救" in history
+    assert "Qwen 补救" in history
+
+    assert "RecommendedDiagnostics" in runtime
+    assert "getDiagnosticSummary(job: Job)" in runtime
+    assert "diagnostics.large_v3_retry_segments > 0" in runtime
+    assert "currentLang.value === 'zh'" in runtime
+    assert "getDiagnosticSummary(_job)" not in runtime
+    assert "getJobTypeLabelForJob" in runtime
+    assert "getWhisperStrategyLabel" in runtime
+    assert "external_task?.can_cancel === true" in runtime
+
+    assert "export interface RecommendedDiagnosticsSegment" in types
+    assert "export interface RecommendedDiagnostics" in types
+
 def test_final_window_home_media_card_and_panel_markers() -> None:
     home = _read("frontend/src/views/Home.vue")
     media_card = _read("frontend/src/components/noor/MediaCard.vue")

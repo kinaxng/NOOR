@@ -12,7 +12,7 @@ import VisionTabs from '../components/ui/Tabs.vue'
 import NoorPagination from '../components/ui/Pagination.vue'
 import { useJobPresentation } from '../composables/useJobPresentation'
 import { sortJobsForList } from '../composables/jobOrdering'
-import type { Job } from '../api/types'
+import type { Job, RecommendedDiagnostics } from '../api/types'
 import api from '../api'
 
 const { t, i18nVersion } = useI18n()
@@ -126,8 +126,21 @@ function formatDuration(ms: number) {
   return `${seconds}s`
 }
 
+function getDiagnostics(job: Job) {
+  return job.result_metadata?.recommended_diagnostics as RecommendedDiagnostics | undefined
+}
+
 function getReportScore(job: Job) {
+  const diagnostics = getDiagnostics(job)
   let score = job.status === 'completed' ? 100 : 48
+  if (diagnostics) {
+    const segmentCount = Math.max(1, Number(diagnostics.segment_count || 1))
+    score -= Math.min(18, (diagnostics.large_v3_retry_segments || 0) / segmentCount * 18)
+    score -= Math.min(16, (diagnostics.qwen_retry_segments || 0) / segmentCount * 16)
+    score -= Math.min(14, (diagnostics.stepdown_segments || 0) / segmentCount * 14)
+    score -= Math.min(20, (diagnostics.aligner_empty_segments || 0) / segmentCount * 20)
+    score -= Math.min(8, (diagnostics.cleanup?.noise_only_segments || 0) / segmentCount * 8)
+  }
   if (job.error_message) score -= 12
   return Math.max(0, Math.min(100, Math.round(score)))
 }
@@ -185,8 +198,17 @@ function getLogInsights(job: Job) {
   }
 }
 
-function getDiagnosticsSummary() {
-  return [] as string[]
+function getDiagnosticsSummary(job: Job) {
+  const diagnostics = getDiagnostics(job)
+  if (!diagnostics) return []
+  return [
+    `对齐 ${diagnostics.aligned_segments}/${diagnostics.segment_count}`,
+    `large-v3 补救 ${diagnostics.large_v3_retry_segments}`,
+    `Qwen 补救 ${diagnostics.qwen_retry_segments}`,
+    `降级 ${diagnostics.stepdown_segments}`,
+    `空对齐 ${diagnostics.aligner_empty_segments}`,
+    diagnostics.cleanup ? `噪声 ${diagnostics.cleanup.noise_only_segments}` : '',
+  ].filter(Boolean)
 }
 
 function getStatusLabel(job: any) {
@@ -332,8 +354,8 @@ async function deleteJob(jobId: string) {
                         <span>最终进度：{{ getHistoryProgressValue(job) }}%</span>
                         <span>日志采样：{{ getLogInsights(job).total }} 行</span>
                       </div>
-                      <div v-if="getDiagnosticsSummary().length" class="history-report__chips">
-                        <span v-for="item in getDiagnosticsSummary()" :key="item">{{ item }}</span>
+                      <div v-if="getDiagnosticsSummary(job).length" class="history-report__chips">
+                        <span v-for="item in getDiagnosticsSummary(job)" :key="item">{{ item }}</span>
                       </div>
                       <div class="history-report__grid">
                         <div class="history-report__block">
@@ -349,7 +371,7 @@ async function deleteJob(jobId: string) {
                           <h5>执行摘要</h5>
                           <div class="history-report__lines">
                             <p v-for="line in getReportSummary(job)" :key="line">{{ line }}</p>
-                            <p v-if="!getReportSummary(job).length && !getDiagnosticsSummary().length">暂无详细链路记录，仅展示基础任务信息。</p>
+                            <p v-if="!getReportSummary(job).length && !getDiagnosticsSummary(job).length">暂无详细链路记录，仅展示基础任务信息。</p>
                           </div>
                         </div>
                         <div class="history-report__block">

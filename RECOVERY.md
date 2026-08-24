@@ -528,3 +528,19 @@ outside cache directories remain versioned as forensic evidence.
 - Restored original frontend TypeScript strictness: `tsconfig.json` now matches the pre-takeover configuration, `tsconfig.node.json` was restored, and six unused/dead frontend declarations were removed. `vue-tsc` and the production build both pass.
 - Restored the original Tailwind theme token map and the `/whisper` Vite proxy. Custom classes such as `text-accent-cyan` and `bg-bg-elevated` are generated again in the production CSS; the frontend build passes.
 - Restored missing original config/docs from the pre-takeover backup: `backend/requirements.txt`, `backend/run.py`, `frontend/nginx.conf`, and the frontend design/consistency documents. The backend entry imports and all declared runtime modules resolve in the current NOOR environment.
+
+
+## 2026-08-24 Final Frontend and Recommendation Contract Recovery
+
+- Restored history/whisper diagnostic rendering in `History.vue` and
+  `useJobRuntimePresentation.ts`: report scoring, diagnostic chips, Whisper
+  strategy labels, external task cancellation, and language-aware completion
+  times are covered by `test_final_frontend_recovery_contract.py`.
+- Restored recommendation pagination semantics in `plugins/av-recommend/backend.py`:
+  `_CACHE` keys include `requested_limit`, preventing one default 48-item result
+  from serving 20/60/100-item requests. Added `_dedupe_recommendations()` to drop
+  duplicate normalized codes from stale candidate-pool entries.
+- Added regression tests for recommendation cache limits and normalized-code
+  dedupe. Verification: backend `305 passed, 8 skipped, 1 warning`, frontend
+  production build passes, all 14 official plugins report `NOOR_PLUGIN_OK`, and
+  the restored-page smoke has no HTTP/console errors.

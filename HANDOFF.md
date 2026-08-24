@@ -25,6 +25,20 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Restored history/whisper diagnostics in `History.vue` and
+  `useJobRuntimePresentation.ts`: recommended-diagnostic summaries and report
+  scoring are back, task cards again show Whisper strategy chips, external tasks
+  honor `can_cancel`, and completion times use the current UI language.
+- Restored recommendation-card volume in `plugins/av-recommend/backend.py`:
+  recommendation cache keys now include the requested limit, so switching
+  between 最新推荐/完整推荐 no longer returns one fixed 48-item page. Added
+  normalized-code dedupe so stale candidate-pool duplicates such as `MIDA-727`
+  and `FC2-PPV-1844862` do not appear twice.
+- Added regression coverage for both fixes and verified the recommendation API
+  returns requested counts for latest/full modes (`20/48/60/100`). Backend full
+  pytest: `305 passed, 8 skipped, 1 warning`; frontend production build passes;
+  all 14 official plugins report `NOOR_PLUGIN_OK`; restored-page smoke has no
+  HTTP/console errors.
 - Restored the original local backend port contract: frontend proxy and runtime
   documentation now target `127.0.0.1:9898` instead of the recovery-time `9899`.
   Browser smoke after the switch reports no HTTP 4xx/5xx or console errors.

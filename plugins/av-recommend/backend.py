@@ -1718,6 +1718,22 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
     return warnings[:8]
 
 
+def _dedupe_recommendations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop stale candidate-pool duplicates that resolve to the same normalized code."""
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for item in items:
+        code = _norm_code(item.get("code"))
+        if not code:
+            deduped.append(item)
+            continue
+        if code in seen:
+            continue
+        seen.add(code)
+        deduped.append(item)
+    return deduped
+
+
 def _diversify_recommendations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Keep strong recommendations but avoid a front page monopolized by one actor/tag."""
     remaining = list(items)
@@ -1804,6 +1820,7 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
     }
     profile = await _library_profile()
     live_codes, live_warning = await _live_library_codes(config, force=bool(payload.get("refresh")))
+    requested_limit = max(1, min(int(payload.get("limit") or 48), 100))
     cache_key = json.dumps({
         "config": config,
         "ignored": sorted(feedback["ignored_codes"]),
@@ -1815,6 +1832,7 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         "disliked_categories": dict(feedback["disliked_categories"]),
         "library_codes": sorted(live_codes),
         "source_mode": source_mode,
+        "requested_limit": requested_limit,
     }, sort_keys=True, ensure_ascii=False)
     if not payload.get("refresh") and _CACHE.get("value") is not None and _CACHE.get("key") == cache_key and time.time() - float(_CACHE.get("ts") or 0) < CACHE_TTL:
         return _CACHE["value"]
@@ -1855,14 +1873,14 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         rec = _candidate_score(item, profile, config, feedback)
         if rec:
             scored.append(rec)
+    scored = _dedupe_recommendations(scored)
     scored.sort(key=lambda x: (x["score"], x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
     resource_warnings = await _enrich_recommendation_resources(config, scored)
     if resource_warnings:
         warnings.extend(resource_warnings)
     scored.sort(key=lambda x: (x["score"], (x.get("resource_summary") or {}).get("total") or 0, x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
-    limit = max(1, min(int(payload.get("limit") or 48), 100))
     scored = _diversify_recommendations(scored)
-    scored = _apply_recommendation_controls(scored, config, limit)
+    scored = _apply_recommendation_controls(scored, config, requested_limit)
     result = {
         "ok": True,
         "generated_at": _now_ms(),
