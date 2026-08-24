@@ -30,7 +30,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   local search, JAVDB loading skeletons match the original meta/badge structure,
   and `MediaDetailPanel.vue` returns to the original desktop width
   `lg:w-[min(50vw,960px)]`. The refreshed read-snapshot audit is now
-  `36 exact / 10 likely / 120 review / 515 drift / 7 missing`; verification is
+  `36 exact / 10 likely / 120 review / 515 drift / 7 expected_absent / 0 missing`; verification is
   backend `293 passed, 8 skipped`, frontend production build, all plugins
   `NOOR_PLUGIN_OK`, and a clean restored-page smoke run.
 - Rechecked the active tree after the latest convergence: backend full `pytest`
