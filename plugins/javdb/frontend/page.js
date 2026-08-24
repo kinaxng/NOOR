@@ -1334,6 +1334,9 @@ export async function mount(root, sdk) {
         card.appendChild(el('div', 'javdb-skeleton-avatar'))
         card.appendChild(el('div', 'javdb-skeleton-line javdb-skeleton-line--name'))
         card.appendChild(el('div', 'javdb-skeleton-line'))
+        const badgeRow = el('div', 'javdb-actor-badges')
+        badgeRow.appendChild(el('span', 'noor-plugin-badge javdb-skeleton-badge'))
+        card.appendChild(badgeRow)
         grid.appendChild(card)
         continue
       }
@@ -1341,6 +1344,14 @@ export async function mount(root, sdk) {
       card.appendChild(el('div', 'noor-plugin-media-card__cover javdb-skeleton-cover'))
       const body = el('div', 'noor-plugin-media-card__body')
       body.appendChild(el('div', 'noor-plugin-media-card__title javdb-skeleton-title'))
+      const meta = el('div', 'noor-plugin-media-card__meta')
+      meta.appendChild(el('span', 'javdb-skeleton-meta'))
+      meta.appendChild(el('span', 'javdb-skeleton-meta javdb-skeleton-meta--short'))
+      body.appendChild(meta)
+      const badges = el('div', 'noor-plugin-media-card__badges')
+      badges.appendChild(el('span', 'noor-plugin-badge javdb-skeleton-badge'))
+      badges.appendChild(el('span', 'noor-plugin-badge javdb-skeleton-badge javdb-skeleton-badge--short'))
+      body.appendChild(badges)
       card.appendChild(body)
       grid.appendChild(card)
     }
@@ -1550,7 +1561,9 @@ export async function mount(root, sdk) {
   function renderPager() {
     pager.innerHTML = ''
     let totalItems = Number(state.total || 0)
-    if (state.tab === 'latest' && state.latestSelectedFilters.length && latestRemoteFilter() === 'all') {
+    if (isActorDirectoryFrame()) {
+      totalItems = filteredItems().length
+    } else if (state.tab === 'latest' && state.latestSelectedFilters.length && latestRemoteFilter() === 'all') {
       totalItems = filteredItems().length
     }
     if (totalItems <= state.limit) return

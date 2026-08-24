@@ -25,6 +25,14 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Continued the final-window missing-line review and fixed the remaining real
+  gaps: JAVDB actor-directory pagination now uses filtered actor count after
+  local search, JAVDB loading skeletons match the original meta/badge structure,
+  and `MediaDetailPanel.vue` returns to the original desktop width
+  `lg:w-[min(50vw,960px)]`. The refreshed read-snapshot audit is now
+  `36 exact / 10 likely / 120 review / 515 drift / 7 missing`; verification is
+  backend `293 passed, 8 skipped`, frontend production build, all plugins
+  `NOOR_PLUGIN_OK`, and a clean restored-page smoke run.
 - Rechecked the active tree after the latest convergence: backend full `pytest`
   passes with `293 passed, 8 skipped`, frontend production build passes, and the
   restored-page browser smoke has no HTTP 4xx/5xx or console errors.

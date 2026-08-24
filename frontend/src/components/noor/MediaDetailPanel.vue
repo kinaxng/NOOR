@@ -365,7 +365,7 @@ function formatDate(dateStr: string | undefined): string {
         ></div>
 
         <!-- Panel -->
-        <div class="relative bg-bg-surface border-l border-border-default flex flex-col overflow-hidden shadow-2xl h-full w-full max-w-md">
+        <div class="relative bg-bg-surface border-l border-border-default flex flex-col overflow-hidden shadow-2xl h-full w-full lg:w-[min(50vw,960px)]">
 
           <!-- Loading State -->
           <div v-if="loading" class="flex items-center justify-center flex-1">
