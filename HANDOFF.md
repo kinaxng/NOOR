@@ -2,6 +2,16 @@
 
 Last updated: 2026-08-24 Asia/Shanghai
 
+### 2026-08-24 第十五轮：FaceFusion / JavDB 逐页行为固化
+
+- 从恢复会话 `019ea647-0e81-7d81-9b62-558364a36e3f` 接续逐页行为核对，
+  实测媒体库卡片打开 FaceFusion 并扩展到全宽后，预览区稳定位于右上，
+  其下源脸区与执行/输出参数区保持两列且没有重叠。
+- JavDB 演员目录实测进入演员详情再返回后，卡片数和三行布局均保持不变；
+  实时卡片数量不作为固定契约。
+- `forensics/smoke_restored_pages.js` 已加入上述两项回归检查。完整 smoke
+  通过：`HTTP_ERRORS []` / `CONSOLE_ERRORS []`。本轮未改活动业务源码。
+
 ## Recovery Note (2026-08-23)
 
 - The original `/home/kinax/noor` source tree was deleted. Recovery evidence,
