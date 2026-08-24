@@ -148,7 +148,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Verification after the audit correction: recovery-workspace backend full
   `pytest` passes with `290 passed, 1 warning`, and the frontend production build
   passes.
-- Expanded byte-level original-source matches from the pre-takeover backup: stable backend/frontend config, tooling, docs, and UI files that were unchanged in the original commit index now have 53 verified rows in `forensics/current-byte-level-matches.tsv`. `test_forensic_byte_matches.py` still rechecks every row against the current tree.
+- Expanded byte-level original-source matches from the pre-takeover backup: stable backend/frontend config, tooling, docs, and UI files that were unchanged in the original commit index now have 52 verified rows in `forensics/current-byte-level-matches.tsv`. `test_forensic_byte_matches.py` still rechecks every row against the current tree.
 - Verification after the evidence expansion: recovery-workspace backend full `pytest` passes with `283 passed, 1 warning`, frontend production build passes, and plugin validation remains all `NOOR_PLUGIN_OK`.
 - Restored the subscription center original card workflow: source/quality metadata, expanded candidate comparison, edit mode, and old-version acknowledgment are back.
 - Recommendation center now returns `type: recommendation` and renders maker/series/director as clean names when DBOnline returns Python-style dict strings. Latest mode pulls 最新更新 plus 日榜/周榜/月榜 and keeps only those latest source tags on cards. Full candidate-pool background scans also enrich up to `detail_limit` candidates with actors, categories, maker/series/director, covers, subtitles, cracked signals, and magnet metadata.
@@ -634,5 +634,5 @@ Notes:
   It also asserts retired Whisper multi-chain markers do not return.
 - Final convergence recheck: the last four pre-delete commits are present
   (ignored ghost actors, FaceFusion 3.8.0, face tracker score, JavDB recent
-  series directory), all 53 byte-level evidence matches still validate, and the
+  series directory), all 52 byte-level evidence matches still validate, and the
   restored runtime smoke passes every main route without HTTP or console errors.

@@ -218,7 +218,7 @@ the recovered bytecode modules remain unchanged.
 
 - 2026-08-24 将预接管原始工作树中无后续提交证据的稳定文件并入字节级匹配清单，
   新增 `backend/requirements.txt`、前端工具链/配置/文档/主题/背景图等 12 个路径，
-  `forensics/current-byte-level-matches.tsv` 当前为 53 个有效匹配。
+  `forensics/current-byte-level-matches.tsv` 当前为 52 个有效匹配。
 
 - 2026-08-23 新增原始 `git status` 路径清单
   `forensics/original-status-inventory.tsv`，并汇总全部 diff/status/stat 输出为
