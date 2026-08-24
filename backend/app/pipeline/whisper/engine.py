@@ -13,14 +13,27 @@ from .types import WhisperConfig, WhisperModel, SubtitleSegment, TranscriptionRe
 from .runtime import raise_if_cancelled, run_cancellable_subprocess
 
 
+def _model_cache_candidates(base_dir: str, model_id: str) -> list[Path]:
+    from app.api.settings_whisper_models import resolve_model_cache_candidates
+
+    return resolve_model_cache_candidates(base_dir, model_id)
+
+
+def _resolve_whisper_storage() -> tuple[str, str, str]:
+    from app.core.config import get_settings
+    from app.core.runtime_paths import apply_whisper_cache_env, ensure_directory
+
+    settings = get_settings()
+    model_dir = ensure_directory(settings.whisper_model_dir)
+    cache_dir = ensure_directory(settings.whisper_cache_dir)
+    temp_dir = ensure_directory(settings.whisper_temp_dir)
+    settings.apply_network_env()
+    apply_whisper_cache_env(model_dir, cache_dir)
+    return model_dir, cache_dir, temp_dir
+
+
 def _iter_hf_repo_paths(base_dir: str, model_id: str) -> list[Path]:
-    base = Path(base_dir)
-    repo_dir = f"models--{model_id.replace('/', '--')}"
-    return [
-        base / repo_dir,
-        base / "hub" / repo_dir,
-        base / "huggingface" / "hub" / repo_dir,
-    ]
+    return _model_cache_candidates(base_dir, model_id)
 
 
 def _hf_model_cached(base_dir: str, model_id: str) -> bool:
@@ -341,9 +354,7 @@ class FasterWhisperProcessor:
 
         model_size = self.config.model.value
 
-        from app.core.config import get_settings
-        settings = get_settings()
-        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        whisper_model_dir, _, _ = _resolve_whisper_storage()
 
         device = "cuda" if self.config.device == "auto" else self.config.device
         compute_type = self.config.compute_type if self.config.compute_type != "default" else "float16"

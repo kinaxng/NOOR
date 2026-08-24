@@ -157,6 +157,24 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Media-library legacy private signatures now match the original recovered surface: actor listing uses `q`/`include_ignored`, hardlink scan/save/enrich helpers use their original parameter names, mapping index/save/preview wrappers were restored with the original arity and keyword order, and `_fetch_emby_item_info` is again the original config-only wrapper. A signature regression test was added beside the symbol-parity tests.
 - Verification: frontend production build passes; backend full pytest passes with `262 passed, 1 warning`; media-library libraries/items/detail, qBittorrent overview, FaceFusion preview metadata, source image library, Emby webhook system log, and full-mode recommendation responses all returned healthy results.
 
+## Latest Recovery Update (2026-08-24 第四轮)
+
+- Restored the Whisper runtime path contract in `backend/app/pipeline/whisper/engine.py`:
+  `_resolve_whisper_storage()` now returns NOOR `whisper_model_dir` /
+  `whisper_cache_dir` / `whisper_temp_dir`, applies network and HuggingFace cache
+  environment, and `_get_model_runtime()` uses it when loading faster-whisper
+  models.
+- Restored the same runtime path wiring in `whisper/orchestrator.py`:
+  `_get_output_dir()` falls back to `whisper_temp_dir/whisper_jav` and segment WAV
+  files are written under `whisper_temp_dir` instead of the OS temp directory.
+- Added regression tests for runtime directory return values and orchestrator
+  output placement. Backend full pytest: `301 passed, 8 skipped, 1 warning`.
+- Refreshed the original snapshot audit after these fixes:
+  `37 exact / 10 likely / 120 review / 514 drift / 7 expected_absent / 0 missing`.
+- Restarted the recovered backend on `127.0.0.1:9899`; `/api/health` is healthy.
+- Source changes since the previous audit commit are `df2d4fd`, `3b79fa6`,
+  `33c4e75`, and the Whisper runtime-path commit in this round.
+
 # Hard Rules
 
 - Audit/evidence workspace: `/home/kinax/noor-restored`

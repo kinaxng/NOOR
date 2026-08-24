@@ -13,7 +13,7 @@ from typing import Callable, Optional
 
 from app.api.settings_whisper_models import resolve_model_cache_candidates
 
-from .engine import AudioExtractor, AnimeWhisperProcessor, FasterWhisperProcessor, generate_srt
+from .engine import AudioExtractor, AnimeWhisperProcessor, FasterWhisperProcessor, generate_srt, _resolve_whisper_storage
 from .japanese_post import JapanesePostProcessor
 from .runtime import raise_if_cancelled
 from .scene_detector import AudioSceneDetector, WhisperVadOnnxSceneDetector
@@ -28,6 +28,11 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _get_whisper_runtime_paths() -> tuple[str, str, str]:
+    return _resolve_whisper_storage()
+
 
 WHISPER_VAD_ONNX_REPO_ID = "TransWithAI/Whisper-Vad-EncDec-ASMR-onnx"
 MODEL_REPOSITORIES = {
@@ -70,13 +75,11 @@ class WhisperPipeline:
     def _get_output_dir(self) -> Path:
         if self.config.output_dir:
             return Path(self.config.output_dir)
-        return Path(tempfile.gettempdir()) / "whisper_jav"
+        _, _, temp_dir = _get_whisper_runtime_paths()
+        return Path(temp_dir) / "whisper_jav"
 
     def _whisper_model_dir(self) -> str:
-        from app.core.config import get_settings
-
-        settings = get_settings()
-        return settings.whisper_model_dir or "/volume1/models"
+        return _get_whisper_runtime_paths()[0]
 
     def _check_model_cached(self, repository: str) -> bool:
         for candidate in resolve_model_cache_candidates(self._whisper_model_dir(), repository):
@@ -236,7 +239,11 @@ class WhisperPipeline:
         import soundfile as sf
 
         self._raise_if_cancelled()
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
+        with tempfile.NamedTemporaryFile(
+            suffix=".wav",
+            delete=False,
+            dir=_get_whisper_runtime_paths()[2],
+        ) as handle:
             segment_path = handle.name
         try:
             samples, sample_rate = librosa.load(
