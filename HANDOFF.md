@@ -38,6 +38,12 @@ Last updated: 2026-08-24 Asia/Shanghai
   插件全部 `NOOR_PLUGIN_OK`；恢复页 smoke 为 `HTTP_ERRORS []` /
   `CONSOLE_ERRORS []`。
 
+### 2026-08-24 第十轮：后台任务页纳入浏览器冒烟
+
+- `forensics/smoke_restored_pages.js` 新增 `/jobs/background` 路由覆盖，并验证
+  `完整推荐候选池` 后台卡片存在、状态为 `待命`。
+- 当前恢复页 smoke 仍为 `HTTP_ERRORS []` / `CONSOLE_ERRORS []`。
+
 ### Latest Recovery Update (2026-08-24)
 ### Latest Recovery Update (2026-08-24 第八轮)
 - Restored `frontend/src/components/ui/Tabs.vue` to the original sliding-indicator
