@@ -229,19 +229,6 @@ export async function mount(root, sdk) {
   let tabControl = null
   let resizeTimer = null
   let loadSeq = 0
-  const avatarResolveCache = new Map()
-  let avatarResolveDisabled = false
-
-  async function detectAvatarProvider() {
-    try {
-      const res = await sdk.api.get('/plugins')
-      const list = Array.isArray(res?.data) ? res.data : []
-      const provider = list.find(item => item?.id === 'gfriends')
-      avatarResolveDisabled = !provider?.enabled
-    } catch {
-      // Fall back to per-card resolve when plugin state cannot be read.
-    }
-  }
   const initialCode = new URLSearchParams(window.location.search).get('code')?.trim() || ''
   let initialCodeOpened = false
   let syncingRoute = false
@@ -927,15 +914,7 @@ export async function mount(root, sdk) {
     return `${option.label} ${state.videosOrder === 'asc' ? '↑' : '↓'}`
   }
 
-  function actorAvatarNames(actorName, meta = {}) {
-    return [actorName, meta.name_zht, meta.name, meta.other_name, meta.label]
-      .flatMap(value => String(value || '').split(/[、,，/／|]/))
-      .map(value => value.trim())
-      .filter(Boolean)
-      .filter((value, index, list) => list.indexOf(value) === index)
-  }
-
-  function renderActorAvatar(avatar, actorName, currentUrl = '', meta = {}) {
+  function renderActorAvatar(avatar, actorName, currentUrl = '') {
     const applyImage = url => {
       avatar.innerHTML = ''
       const img = el('img')
@@ -949,24 +928,6 @@ export async function mount(root, sdk) {
     }
     if (currentUrl) applyImage(currentUrl)
     else applyFallback()
-
-    if (!sdk.avatar?.resolve || !actorName || avatarResolveDisabled) return
-    const names = actorAvatarNames(actorName, meta)
-    const cacheKey = names.join('|')
-    if (!cacheKey) return
-    let pending = avatarResolveCache.get(cacheKey)
-    if (!pending) {
-      pending = sdk.avatar.resolve({ name: names[0], aliases: names.slice(1) })
-        .then(result => {
-          if (result?.disabled === true) avatarResolveDisabled = true
-          return result?.ok && result?.url ? result.url : ''
-        })
-        .catch(() => '')
-      avatarResolveCache.set(cacheKey, pending)
-    }
-    pending.then(url => {
-      if (url && avatar.isConnected) applyImage(url)
-    })
   }
 
   function renderActorRelationPanel(chip, select) {
@@ -999,7 +960,7 @@ export async function mount(root, sdk) {
     const avatar = el('div', 'javdb-actor-panel__avatar')
     const actorName = actor?.name_zht || actor?.label || actor?.name || state.relation.label
     const avatarUrl = actor?.avatar_url || ''
-    renderActorAvatar(avatar, actorName, avatarUrl, actor || {})
+    renderActorAvatar(avatar, actorName, avatarUrl)
 
     const bio = el('div', 'javdb-actor-panel__bio')
     bio.appendChild(el('strong', '', actorName))
@@ -1495,7 +1456,7 @@ export async function mount(root, sdk) {
         actorCard.type = 'button'
         actorCard.onclick = () => setRelation('actor', item.id || item.external_id || item.value, actorTitle, { meta: { ...item, value: item.id || item.external_id || item.value, label: actorTitle } })
         const avatar = el('div', 'javdb-actor-avatar')
-        renderActorAvatar(avatar, actorTitle, item.avatar_url || '', item)
+        renderActorAvatar(avatar, actorTitle, item.avatar_url || '')
         actorCard.appendChild(avatar)
         actorCard.appendChild(el('div', 'javdb-actor-name', actorTitle))
         actorCard.appendChild(el('div', 'javdb-actor-meta', actorMeta || ''))
@@ -1888,7 +1849,6 @@ export async function mount(root, sdk) {
     }
   }
 
-  await detectAvatarProvider()
   renderTabs()
   loadData()
 

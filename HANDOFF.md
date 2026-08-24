@@ -49,6 +49,14 @@ Last updated: 2026-08-24 Asia/Shanghai
 - `/home/kinax/noor-restored` 内残留的恢复期 `9899` 引用已统一收敛回 `9898`，
   包括 `AGENTS.md`、`frontend/vite.config.ts`、`HANDOFF.md`、`RECOVERY.md`。
 
+### 2026-08-24 第十二轮：JavDB 移除失效 Gfriends 自动接管
+
+- `plugins/javdb/frontend/page.js` 清除调用已不存在的 `sdk.avatar.resolve`
+  死代码。最终 SDK 契约只提供 `sdk.avatar.candidates`，Gfriends 只作为演员
+  资料编辑时的候选头像库，不再尝试全局接管 JavDB 头像。
+- 验证：JavDB 演员深链面板仍正常渲染，`node --check` 通过，14 个官方插件
+  全部 `NOOR_PLUGIN_OK`。
+
 ### Latest Recovery Update (2026-08-24)
 ### Latest Recovery Update (2026-08-24 第八轮)
 - Restored `frontend/src/components/ui/Tabs.vue` to the original sliding-indicator
