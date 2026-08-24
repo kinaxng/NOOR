@@ -174,7 +174,7 @@ def _detect_language(filepath: str) -> str:
 
 
 def _result(filename: str, ext: str, full_path: str) -> dict:
-    return {"id": f"local:{filename}:{full_path}", "filename": filename, "ext": ext, "language": _detect_language(full_path), "source": "本地字幕库", "source_key": "local_library", "source_type": "local_library", "url": full_path, "score": 1.0}
+    return {"id": f"local:{filename}:{full_path}", "filename": filename, "ext": ext, "language": _detect_language(full_path), "source": "本地字幕库", "source_key": "local-subtitle-library", "source_type": "local_library", "url": full_path, "score": 1.0}
 
 
 def search_local_library_with_config(video_code: str, config: dict, video_path: str = "") -> list[dict]:

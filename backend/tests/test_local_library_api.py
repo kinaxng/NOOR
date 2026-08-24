@@ -38,3 +38,18 @@ def test_local_library_config_round_trip(monkeypatch):
     response = client.post("/api/local-library/config", json={"config": payload})
     assert response.status_code == 200
     assert saved == [payload]
+
+def test_local_library_result_uses_original_source_key(monkeypatch, tmp_path):
+    lib_dir = tmp_path / "subtitles"
+    lib_dir.mkdir()
+    subtitle = lib_dir / "DASS-927.srt"
+    subtitle.write_text("1\n00:00:00,000 --> 00:00:01,000\nhello\n", encoding="utf-8")
+
+    results = local_library.search_local_library_with_config(
+        "DASS-927",
+        {"library_paths": str(lib_dir), "index_enabled": False, "match_fuzzy": False},
+    )
+
+    assert results
+    assert results[0]["source_key"] == "local-subtitle-library"
+    assert results[0]["source_type"] == "local_library"

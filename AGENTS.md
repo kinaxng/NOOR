@@ -14,7 +14,7 @@ audits live in `/home/kinax/noor-restored`.
 
 ## Runtime
 
-- Active backend: `127.0.0.1:9899`
+- Active backend: `127.0.0.1:9898`
 - Active frontend: `http://192.168.31.3:5173/` or `127.0.0.1:5173`
 - Backend tests:
 

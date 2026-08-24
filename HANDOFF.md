@@ -11,7 +11,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   original path carries the current recovery runtime data; the pre-restore
   `data/` backup is at `/home/kinax/noor-data-original-20260824`.
 - The recovered frontend runs at `http://192.168.31.3:5173/` and the recovered
-  backend listens on `127.0.0.1:9899`, both launched from `/home/kinax/noor`.
+  backend listens on `127.0.0.1:9898`, both launched from `/home/kinax/noor`.
 - Original-handoff evidence is archived at
   `/home/kinax/noor-restored/forensics/original-handoff.md`.
 - Disk/browser source-map evidence is archived under
@@ -25,6 +25,16 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Restored the original local backend port contract: frontend proxy and runtime
+  documentation now target `127.0.0.1:9898` instead of the recovery-time `9899`.
+  Browser smoke after the switch reports no HTTP 4xx/5xx or console errors.
+- Locked two remaining final contracts found during the port recheck:
+  `backend/app/api/local_library.py` now returns `source_key=local-subtitle-library`
+  exactly as the 2026-06-26 original snapshot, and `settings_helpers.WHISPER_MODELS`
+  restores the original order plus the `ChickenRice JA→ZH` display name. Added
+  regression assertions for both. Backend full pytest: `302 passed, 8 skipped,
+  1 warning`; frontend production build passes; all 14 official plugins report
+  `NOOR_PLUGIN_OK`.
 - Final convergence recheck after the last FaceFusion fix: refreshed the 2026-07-08 final-window missing-line scan, reran `version_gap_audit.py` (`131 verified / 0 pending / 0 missing / 6 intentional`), exercised FaceFusion metadata/source-image/background-task APIs, and reran backend tests, frontend build, plugin validation, and restored-page smoke. Backend: `301 passed, 8 skipped, 1 warning`; frontend production build passes; all 14 official plugins report `NOOR_PLUGIN_OK`; browser smoke has no HTTP 4xx/5xx or console errors.
 - Restored the final FaceFusion source-image library interaction in
   `frontend/src/components/noor/FaceFusionPanel.vue`: library images now toggle
@@ -78,7 +88,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   remains all `NOOR_PLUGIN_OK`, and restored-page smoke reports no HTTP/console errors.
 - Verified the restored translator against the live Ollama at
   `192.168.31.3:11434` through both `/v1/chat/completions` and `/api/chat`; the
-  restored backend on `127.0.0.1:9899` was restarted so the new translator code is
+  restored backend on `127.0.0.1:9898` was restarted so the new translator code is
   active for real Whisper/translation tasks.
 - Rechecked the remaining high-similarity restored files against their final
   session diffs and original snapshots: JavDB backend/page/style, subscription
@@ -181,7 +191,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   output placement. Backend full pytest: `301 passed, 8 skipped, 1 warning`.
 - Refreshed the original snapshot audit after these fixes:
   `37 exact / 10 likely / 120 review / 514 drift / 7 expected_absent / 0 missing`.
-- Restarted the recovered backend on `127.0.0.1:9899`; `/api/health` is healthy.
+- Restarted the recovered backend on `127.0.0.1:9898`; `/api/health` is healthy.
 - Source changes since the previous audit commit are `df2d4fd`, `3b79fa6`,
   `33c4e75`, and the Whisper runtime-path commit in this round.
 
@@ -196,7 +206,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Audit/evidence workspace: `/home/kinax/noor-restored`
 - Active source workspace: `/home/kinax/noor`
 - Frontend dev server: Vite on `5173`
-- Recovered backend dev server: FastAPI/Uvicorn on `9899`
+- Recovered backend dev server: FastAPI/Uvicorn on `9898`
 - Do **not** touch Docker backend on `19898`.
 - Do **not** recursively search `/home/kinax`, `$HOME`, `/`, `/home/kinax/Videos`, or `/home/kinax/Music`.
 - NFS mounts under home:
@@ -219,11 +229,11 @@ Last updated: 2026-08-24 Asia/Shanghai
 Backend restart:
 
 ```bash
-tmux kill-session -t noor-backend-9899 2>/dev/null || true
-tmux new-session -d -s noor-backend-9899 -c /home/kinax/noor/backend \
-  "/home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9899 --forwarded-allow-ips='*'"
+tmux kill-session -t noor-backend-9898 2>/dev/null || true
+tmux new-session -d -s noor-backend-9898 -c /home/kinax/noor/backend \
+  "/home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9898 --forwarded-allow-ips='*'"
 sleep 3
-curl -s http://127.0.0.1:9899/api/health
+curl -s http://127.0.0.1:9898/api/health
 ```
 
 Frontend usually runs on `5173`; check before restarting:
@@ -484,7 +494,7 @@ Recent validation:
 ```bash
 python3 -m py_compile plugins/av-recommend/backend.py
 node --check plugins/av-recommend/frontend/page.js
-curl -s -X POST http://127.0.0.1:9899/api/plugins/av-recommend/actions/recommendations \
+curl -s -X POST http://127.0.0.1:9898/api/plugins/av-recommend/actions/recommendations \
   -H 'Content-Type: application/json' \
   -d '{"payload":{"limit":3,"refresh":true}}' | jq
 ```
@@ -559,7 +569,7 @@ cat HANDOFF.md
 cat AGENTS.md
 git status --short | sed -n '1,120p'
 ps -eo pid,ppid,etime,stat,comm,args | grep -E 'uvicorn app.main:app|vite|npm run dev|pnpm run dev' | grep -v grep
-curl -s http://127.0.0.1:9899/api/health
+curl -s http://127.0.0.1:9898/api/health
 ```
 
 ## Latest Gfriends Validation

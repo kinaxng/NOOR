@@ -8,11 +8,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:9899',
+        target: 'http://127.0.0.1:9898',
         changeOrigin: true,
       },
       '/whisper': {
-        target: 'http://127.0.0.1:9899',
+        target: 'http://127.0.0.1:9898',
         changeOrigin: true,
       },
     },

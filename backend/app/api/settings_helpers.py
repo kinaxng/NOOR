@@ -27,14 +27,12 @@ ENV_FILE = Path(os.environ.get("NOOR_ENV_FILE", str(PROJECT_ROOT / ".env")))
 
 WHISPER_MODELS = {
     "chickenrice-zh": {
-        "name": "ChickenRice JA->ZH",
+        "name": "ChickenRice JA→ZH",
         "size": "~3GB",
         "type": "faster-whisper",
         "repo": "chickenrice0721/whisper-large-v2-translate-zh-v0.2-st-ct2",
         "description": "Japanese audio to Chinese subtitle CTranslate2 model",
     },
-    "anime-whisper": {"name": "Anime-Whisper", "size": "~3GB", "type": "transformers", "repo": "litagin/anime-whisper", "description": "Optimized for anime vocals, Japanese"},
-    "large-v3": {"name": "Large V3", "size": "~3GB", "type": "faster-whisper"},
     "whisper-vad-onnx": {
         "name": "Whisper-VAD ONNX",
         "size": "~250MB",
@@ -42,6 +40,14 @@ WHISPER_MODELS = {
         "repo": "TransWithAI/Whisper-Vad-EncDec-ASMR-onnx",
         "description": "Smart VAD chunk detector for Whisper subtitle pipeline",
     },
+    "anime-whisper": {
+        "name": "Anime-Whisper",
+        "size": "~3GB",
+        "type": "transformers",
+        "repo": "litagin/anime-whisper",
+        "description": "Optimized for anime vocals, Japanese"
+    },
+    "large-v3": {"name": "Large V3", "size": "~3GB", "type": "faster-whisper"},
 }
 
 

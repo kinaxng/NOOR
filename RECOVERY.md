@@ -229,7 +229,7 @@ the recovered bytecode modules remain unchanged.
 ## Validated Recovery Progress (2026-08-11)
 
 - The isolated frontend and backend are running at `http://192.168.31.3:5173/` and
-  `127.0.0.1:9899` respectively.
+  `127.0.0.1:9898` respectively.
 - Emby media paths returned as `/data/...` or `/volume1/data/...` are translated to
   the host's `~/Videos/...` mount before being passed to LADA, Whisper, FaceFusion,
   or subtitle operations.

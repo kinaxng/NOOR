@@ -134,7 +134,8 @@ def test_lada_model_weights_fallback_uses_noor_data_dir():
 def test_whisper_model_catalogue_is_final_single_chain_contract():
     models = settings_helpers.WHISPER_MODELS
 
-    assert "chickenrice-zh" in models
+    assert list(models) == ["chickenrice-zh", "whisper-vad-onnx", "anime-whisper", "large-v3"]
+    assert models["chickenrice-zh"]["name"] == "ChickenRice JA→ZH"
     assert models["whisper-vad-onnx"]["type"] == "onnx-vad"
     assert models["whisper-vad-onnx"]["size"] == "~250MB"
     assert "reazonspeech-nemo-v2" not in models
