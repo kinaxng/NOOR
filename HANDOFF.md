@@ -4,9 +4,9 @@ Last updated: 2026-08-24 Asia/Shanghai
 
 ## Recovery Note (2026-08-23)
 
-- The original `/home/kinax/noor` source tree was deleted. The isolated recovery
-  workspace is `/home/kinax/noor-restored`; do not treat the current
-  `/home/kinax/noor` directory as the source of truth.
+- The original `/home/kinax/noor` source tree was deleted. Recovery evidence,
+  forensics, and the audit workspace live in `/home/kinax/noor-restored`;
+  the active restored application source is `/home/kinax/noor`.
 - Restored application source is now running from `/home/kinax/noor`. The
   original path carries the current recovery runtime data; the pre-restore
   `data/` backup is at `/home/kinax/noor-data-original-20260824`.
@@ -25,13 +25,21 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Rechecked the active tree after the latest convergence: backend full `pytest`
+  passes with `293 passed, 8 skipped`, frontend production build passes, and the
+  restored-page browser smoke has no HTTP 4xx/5xx or console errors.
+- Completed another backup sweep: `/volume1/noor-recovery-20260810`,
+  `/volume1/.1panel_clash`, and the local `noor-*` directories contain no later
+  full original source snapshot. The only complete pre-takeover snapshot remains
+  the 2026-04-12 tarball; later source is reconstructed from session/source-map/
+  runtime evidence rather than a byte-for-byte backup.
 - Restored the Whisper translator to the original final behavior: native Ollama
   `/api/chat` plus full `/v1/chat` / `/v1/chat/completions` endpoint preservation,
   structured JSON output, local collapse of nonverbal/repetitive subtitle cues,
   and sanitization of runaway translation loops. Regression tests cover native
   Ollama, structured output, non-dialogue prefiltering, single unnumbered replies,
   and repetitive translation cleanup. Verification: backend full `pytest` passes
-  with `291 passed, 8 skipped`, frontend production build passes, plugin validation
+  with `293 passed, 8 skipped`, frontend production build passes, plugin validation
   remains all `NOOR_PLUGIN_OK`, and restored-page smoke reports no HTTP/console errors.
 - Verified the restored translator against the live Ollama at
   `192.168.31.3:11434` through both `/v1/chat/completions` and `/api/chat`; the
@@ -126,7 +134,8 @@ Last updated: 2026-08-24 Asia/Shanghai
 
 # Hard Rules
 
-- Recovery workspace: `/home/kinax/noor-restored`
+- Audit/evidence workspace: `/home/kinax/noor-restored`
+- Active source workspace: `/home/kinax/noor`
 - Frontend dev server: Vite on `5173`
 - Recovered backend dev server: FastAPI/Uvicorn on `9899`
 - Do **not** touch Docker backend on `19898`.
@@ -136,7 +145,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   - `/home/kinax/Music`
 - Safe code search pattern:
   ```bash
-  cd /home/kinax/noor-restored
+  cd /home/kinax/noor
   grep -R -n "pattern" backend frontend plugins \
     --exclude-dir=node_modules \
     --exclude-dir=dist \
@@ -152,7 +161,7 @@ Backend restart:
 
 ```bash
 tmux kill-session -t noor-backend-9899 2>/dev/null || true
-tmux new-session -d -s noor-backend-9899 -c /home/kinax/noor-restored/backend \
+tmux new-session -d -s noor-backend-9899 -c /home/kinax/noor/backend \
   "/home/kinax/.venvs/noor-backend/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 9899 --forwarded-allow-ips='*'"
 sleep 3
 curl -s http://127.0.0.1:9899/api/health
@@ -486,7 +495,7 @@ uncensored/cracked resource separation.
 ## Good First Commands in a Fresh Context
 
 ```bash
-cd /home/kinax/noor-restored
+cd /home/kinax/noor
 cat HANDOFF.md
 cat AGENTS.md
 git status --short | sed -n '1,120p'
