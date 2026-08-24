@@ -48,9 +48,11 @@ def test_face_tracker_score_settings_and_cli_contract() -> None:
 def test_facefusion_source_library_panel_contract() -> None:
     panel = _read("frontend/src/components/noor/FaceFusionPanel.vue")
 
-    assert "const selectedLibraryImageIds = ref<string[]>([])" in panel
-    assert "function addSelectedLibraryImages()" in panel
-    assert "uploadedSourceImages.value = uniqueSourceImages([" in panel
+    assert "const selectedLibraryImageIds = ref<string[]>([])" not in panel
+    assert "function addSelectedLibraryImages()" not in panel
+    assert "function toggleLibraryImage(image: { id: string; name: string; path: string; preview_url: string })" in panel
+    assert "点击图片即可加入或移除" in panel
+    assert "isSourceSelected(image.path) ? '移除' : '使用'" in panel
     assert "sourceLibraryImages.value = sourceLibraryImages.value.filter(item => item.id !== image.id)" in panel
     assert "uploadedSourceImages.value = uploadedSourceImages.value.filter(item => item.path !== image.path)" in panel
 

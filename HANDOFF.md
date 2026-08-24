@@ -25,6 +25,15 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Restored the final FaceFusion source-image library interaction in
+  `frontend/src/components/noor/FaceFusionPanel.vue`: library images now toggle
+  directly between 使用/移除 on click, removing the intermediate multi-select and
+  add-selected state. This matches the 2026-07-08 21:04 final snapshot and the
+  `eaae7fcbb85d` final session diff. Updated the two frontend recovery contracts
+  to lock the final behavior. Backend full pytest: `301 passed, 8 skipped, 1 warning`;
+  frontend production build passes; restored-page smoke has no HTTP/console errors.
+- Refreshed the original snapshot audit after the FaceFusion correction:
+  `39 exact / 11 likely / 116 review / 515 drift / 7 expected_absent / 0 missing`.
 - Restored the original `NOOR_ENV_FILE` behavior in
   `backend/app/api/settings_helpers.py`: `ENV_FILE` now falls back to
   `PROJECT_ROOT/.env` only when `NOOR_ENV_FILE` is unset, matching the
@@ -87,8 +96,8 @@ Last updated: 2026-08-24 Asia/Shanghai
   locks the 35 original snapshot segments that still match the restored tree at
   `1.000` within the drift window.
 - FaceFusion source-map evidence is a baseline, not the final file. Current
-  `FaceFusionPanel.vue` retains final source-image library multi-select /
-  add-selected behavior, and current `FaceFusionSettings.vue` retains
+  `FaceFusionPanel.vue` now matches the final source-image library direct
+  click-to-use/remove behavior, and current `FaceFusionSettings.vue` retains
   `badgeAlwaysVisible` / `faceTrackerScore`; do not overwrite them with the older
   raw source-map versions.
 - Verification after the audit correction: recovery-workspace backend full
@@ -113,7 +122,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   as classified in `forensics/read-snapshot-audit-classification.md`.
 - Locked the final Whisper runtime contract with `backend/tests/test_subtitle_panel_runtime_contract.py`: `SubtitlePanel.vue` starts Whisper with `runtime_tier`, `vad_backend`, and `timing_refiner`, and the settings/profile files keep the runtime-tier UI and payload. Verification is now `269 passed, 6 skipped` plus a clean frontend production build.
 - Added reproducible session-diff and final-commit audits under `forensics/audit_session_diffs.py` and `forensics/audit_final_commit_paths.py`. The session-diff manifest covers 520 sections / 477 unique diffs / 126 paths; final commits after 2026-07-14 are all present, and the embedded FaceFusion runtime reports 3.8.0.
-- Restored the final FaceFusion `facefusion_face_tracker_score` core setting and added `backend/tests/test_facefusion_final_contract.py` to lock the tracker score, source-image library multi-select, add-selected behavior, and deletion cleanup.
+- Restored the final FaceFusion `facefusion_face_tracker_score` core setting and added `backend/tests/test_facefusion_final_contract.py` to lock the tracker score, direct source-image library click-to-use/remove behavior, and deletion cleanup.
 - Added `backend/tests/test_javdb_series_directory_contract.py` for the recent series directory: series normalization, bounded directory aggregation, series tab/routing, and series cards.
 - Verification now passes with `277 passed, 6 skipped`, a clean frontend production
   build, plugin validation, and no restored-page HTTP/console errors.
@@ -140,7 +149,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Restored the original qBittorrent management page shape: NOOR topbar tabs, original search card, new-task modal, task time column, 10-per-page pagination, and the original 8-second polling fallback are back. The page now opens a live WebSocket when the plugin SDK exposes `net.webSocket`, sends `overview` updates every 4 seconds, and falls back to polling on any socket failure.
 - Restored the original generic plugin WebSocket route `/{plugin_id}/ws/{action}` in `backend/app/api/plugins.py`; noisy overview/metrics streams remain excluded from system logs. `test_plugin_compat_api.py` now locks the route with a WebSocket round trip.
 - Converted `av-graph` and `subscription-core` CSS to NOOR design tokens for surface/border/radius colors.
-- Restored FaceFusion source image library multi-select, including batch use-selected actions and cached-image selection cleanup.
+- Restored the final FaceFusion source-image library direct click-to-use/remove interaction and cached-image deletion cleanup.
 - Removed two runtime 400s found in restored-page checks: Gfriends avatar helper now returns `ok:false` when the plugin is disabled, and TMDB actor preview returns `ok:false` when no TMDB API key/TMDB ID is available. Actor detail no longer sends an automatic TMDB preview unless a key is configured.
 - Plugin host now skips standalone page loading when a plugin has no `frontend.entry`; AVDB is restored as a resource provider only and no longer triggers an assets `page.js` 404.
 - Disabled read-only plugin actions (`stats/sync/overview/device_info/tasks/about/device_config`) now return `200 ok:false` empty state instead of 400. Gfriends, MDC-NG manual, qBittorrent, and Xunlei remote pages render an unavailable state without console errors.

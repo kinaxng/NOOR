@@ -158,7 +158,8 @@ def test_final_window_home_media_card_and_panel_markers() -> None:
     assert "const referenceFaces = ref<" in panel
     assert "const referenceFacesLoading = ref(false)" in panel
     assert "const deepModelDialogOpen = ref(false)" in panel
-    assert "function addSelectedLibraryImages()" in panel
-    assert "function toggleLibraryImage(image: { id: string; path: string })" in panel
+    assert "function addSelectedLibraryImages()" not in panel
+    assert "function toggleLibraryImage(image: { id: string; name: string; path: string; preview_url: string })" in panel
+    assert "点击图片即可加入或移除" in panel
     assert ".facefusion-native-grid" in panel
     assert "grid-template-columns: minmax(26rem, 0.9fr) minmax(44rem, 1.35fr)" in panel
