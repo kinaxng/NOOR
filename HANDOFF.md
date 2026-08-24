@@ -44,6 +44,11 @@ Last updated: 2026-08-24 Asia/Shanghai
   `完整推荐候选池` 后台卡片存在、状态为 `待命`。
 - 当前恢复页 smoke 仍为 `HTTP_ERRORS []` / `CONSOLE_ERRORS []`。
 
+### 2026-08-24 第十一轮：审计工作区端口文档收敛
+
+- `/home/kinax/noor-restored` 内残留的恢复期 `9899` 引用已统一收敛回 `9898`，
+  包括 `AGENTS.md`、`frontend/vite.config.ts`、`HANDOFF.md`、`RECOVERY.md`。
+
 ### Latest Recovery Update (2026-08-24)
 ### Latest Recovery Update (2026-08-24 第八轮)
 - Restored `frontend/src/components/ui/Tabs.vue` to the original sliding-indicator
