@@ -67,7 +67,7 @@ Last updated: 2026-08-24 Asia/Shanghai
 - `previewImage` 现在为 JavDB / 推荐中心详情图库提供统一的 NOOR 预览弹窗；
   qBittorrent / Xunlei / MDC-NG 的文本域已切换到共享 `sdk.ui.textarea`。
 - `PLUGIN_SDK.md` 的已可用清单与实现对齐；恢复页 smoke 新增 qBittorrent
-  新建任务共享文本域验证。
+  新建任务共享文本域、系统 Webhook 教程/复制、Whisper 保存验证。
 - 验证：后端 `311 passed, 8 skipped, 1 warning`；前端生产构建通过；14 个官方
   插件全部 `NOOR_PLUGIN_OK`；恢复页 smoke 为 `HTTP_ERRORS []` /
   `CONSOLE_ERRORS []`。
