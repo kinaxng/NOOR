@@ -2,6 +2,18 @@
 
 Last updated: 2026-08-24 Asia/Shanghai
 
+### 2026-08-24 第十六轮：媒体详情 NFO 与演员 TMDB 联合核对
+
+- 使用真实 Emby 项目 `19815` 核对 `DVAJ-727-C.mp4`：详情接口按精确
+  stem 读取 `DVAJ-727-C.nfo`，原文标题、简介、演员和文件路径均与 NFO
+  一致。该 NFO 不含 director/uniqueid，空 `directors/provider_ids` 属正确空态。
+- 演员 `4201` 的 Emby ProviderIds、TMDB/IMDb 外链和详情页图标动作一致；
+  当前未配置 TMDB Key 时，单人补全返回明确配置提示，批量预览显示 0 候选、
+  空态和禁用的应用按钮，未触发任何写入。
+- 恢复 smoke 新增精确 NFO 详情、TMDB 批量空态及演员外链检查，并将 JavDB
+  稳定性检查改为等待非 skeleton 卡片。完整 smoke 通过：
+  `HTTP_ERRORS []` / `CONSOLE_ERRORS []`。未修改活动业务源码。
+
 ### 2026-08-24 第十五轮：FaceFusion / JavDB 逐页行为固化
 
 - 从恢复会话 `019ea647-0e81-7d81-9b62-558364a36e3f` 接续逐页行为核对，
