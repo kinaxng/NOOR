@@ -199,6 +199,8 @@ def test_final_window_home_media_card_and_panel_markers() -> None:
     assert "tag-facefusion--active" in media_card
 
     assert "has_facefusion?: boolean" in types
+    assert "has_facefusion?: boolean // FaceFusion / FF 换脸版本" in types
+    assert "has_chinese: boolean    // -c 中文\n  has_facefusion?: boolean" in types
 
     assert "const referenceFaces = ref<" in panel
     assert "const referenceFacesLoading = ref(false)" in panel
