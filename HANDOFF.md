@@ -25,6 +25,16 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+### Latest Recovery Update (2026-08-24 第八轮)
+- Restored `frontend/src/components/ui/Tabs.vue` to the original sliding-indicator
+  implementation. The recovery-time `scrollIntoView`/`offsetLeft` variant was a
+  reconstruction-only drift; original read snapshots and the Chromium Vite cache
+  both use `getBoundingClientRect()` for the active tab indicator. The file is now
+  byte-identical to `vite-cache-chromium/latest/src/components/ui/Tabs.vue`.
+- Verification after the restoration: backend full pytest `308 passed, 8 skipped,
+  1 warning`; frontend production build passes; all 14 official plugins report
+  `NOOR_PLUGIN_OK`; restored-page smoke has no HTTP/console errors.
+
 - Restored recommendation Emby-library exclusion and filtered summaries in
   `plugins/av-recommend/backend.py`: `_library_profile()` now reads persisted
   `EmbyItemCache` codes so already-imported works stay excluded after backend

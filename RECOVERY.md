@@ -556,3 +556,10 @@ outside cache directories remain versioned as forensic evidence.
 - 新增回归测试覆盖 Emby 缓存番号提取、过滤摘要聚合、评分诊断记录。
 - 验证：后端 `308 passed, 8 skipped, 1 warning`，前端生产构建通过，14 个官方
   插件全部 `NOOR_PLUGIN_OK`，恢复页 smoke `HTTP_ERRORS []` / `CONSOLE_ERRORS []`。
+
+
+## 2026-08-24 第八轮：Tabs 组件原版定位恢复
+
+- `frontend/src/components/ui/Tabs.vue` 已恢复为原版滑动指示条计算
+  （`getBoundingClientRect()`），与 Chromium Vite 缓存逐字节一致。
+- 该文件已加入 `current-byte-level-matches.tsv` 字节级匹配清单。

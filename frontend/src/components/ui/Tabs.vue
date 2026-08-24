@@ -23,13 +23,12 @@ function updateIndicator() {
     if (activeIdx < 0 || !containerRef.value) return
     const tabEl = tabRefs.value[activeIdx]
     if (!tabEl) return
-    tabEl.scrollIntoView({ block: 'nearest', inline: 'center' })
-    requestAnimationFrame(() => {
-      indicator.value = {
-        left: tabEl.offsetLeft,
-        width: tabEl.offsetWidth,
-      }
-    })
+    const containerRect = containerRef.value.getBoundingClientRect()
+    const tabRect = tabEl.getBoundingClientRect()
+    indicator.value = {
+      left: tabRect.left - containerRect.left,
+      width: tabRect.width,
+    }
   })
 }
 
@@ -143,4 +142,3 @@ function selectTab(key: string) {
   font-size: 0.8125rem;
 }
 </style>
-
