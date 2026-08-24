@@ -428,14 +428,17 @@ async def plugin_action_ws(websocket: WebSocket, plugin_id: str, action: str):
                 if should_log:
                     _plugin_log('info', plugin_id, f'WebSocket 已断开 action={action}')
                 return
-            except Exception as exc:
+            except Exception as e:
+                # Broken client connections may surface as transport errors
+                # instead of FastAPI's WebSocketDisconnect in tests/proxies.
                 if should_log:
-                    _plugin_log('warning', plugin_id, f'WebSocket 发送中断 action={action} error={exc}')
+                    _plugin_log('warning', plugin_id, f'WebSocket 发送中断 action={action} error={e}')
                 return
             await asyncio.sleep(interval)
     except WebSocketDisconnect:
         if should_log:
             _plugin_log('info', plugin_id, f'WebSocket 已断开 action={action}')
+        return
 
 
 @router.delete('/{plugin_id}/images/cache')
