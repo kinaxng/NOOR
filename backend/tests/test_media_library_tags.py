@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.api.endpoints.media_library_helpers import parse_tags
+from app.api.endpoints.media_library_helpers import parse_item, parse_tags
 from app.api.endpoints.media_library_listing import apply_filter_and_paginate, merge_group_metadata
 
 
@@ -93,3 +93,20 @@ def test_media_library_pagination_response_shape():
         'offset': 1,
         'limit': 1,
     }
+
+
+def test_parse_item_exposes_fanart_path():
+    item = {
+        "Id": "123",
+        "Name": "ABC-123",
+        "Type": "Movie",
+        "MediaType": "Video",
+        "ImageTags": {"Primary": "poster-tag"},
+        "BackdropImageTags": ["backdrop-tag"],
+        "MediaSources": [],
+    }
+
+    parsed = parse_item(item, {"server_url": "http://emby"})
+
+    assert parsed["poster_path"] == "http://emby/emby/Items/123/Images/Primary?tag=poster-tag"
+    assert parsed["fanart_path"] == "http://emby/emby/Items/123/Images/Backdrop?tag=backdrop-tag"

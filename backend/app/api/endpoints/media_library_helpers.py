@@ -226,6 +226,15 @@ def parse_item(item: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
             poster_url = f"{server_url(config)}/emby/Items/{item['Id']}/Images/{img_type}?tag={tag}"
             break
 
+    fanart_url = None
+    backdrop_tags = item.get("BackdropImageTags", [])
+    if backdrop_tags:
+        fanart_url = f"{server_url(config)}/emby/Items/{item['Id']}/Images/Backdrop?tag={backdrop_tags[0]}"
+    elif item.get("ImageTags", {}).get("Backdrop"):
+        fanart_url = f"{server_url(config)}/emby/Items/{item['Id']}/Images/Backdrop?tag={item['ImageTags']['Backdrop']}"
+    elif item.get("ImageTags", {}).get("Thumb"):
+        fanart_url = f"{server_url(config)}/emby/Items/{item['Id']}/Images/Thumb?tag={item['ImageTags']['Thumb']}"
+
     file_path = None
     media_sources = item.get("MediaSources", [])
     for source in media_sources:
@@ -263,6 +272,7 @@ def parse_item(item: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
         "type": item.get("Type", "unknown"),
         "media_type": item.get("MediaType"),
         "poster_path": poster_url,
+        "fanart_path": fanart_url,
         "date_created": item.get("DateCreated"),
         "path": file_path,
         "tags": parse_tags(item.get("Name", ""), studios, file_path),
