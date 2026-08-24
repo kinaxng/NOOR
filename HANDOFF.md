@@ -597,10 +597,10 @@ uncensored/cracked resource separation.
   - backend builds an alias index from `https://github.com/gfriends/gfriends` `Filetree.json`
   - default asset URLs use jsDelivr `https://cdn.jsdelivr.net/gh/xinxin8816/gfriends/Content/`
   - file names that include cache query strings such as `?t=1607433807` must preserve the query; `_content_url()` now encodes only path segments
-  - plugin actions: `sync`, `stats`, `resolve`
+  - plugin actions: `sync`, `stats`, `candidates`; backend keeps `resolve` for legacy compatibility
   - cached avatar route uses `/api/plugins/gfriends/images/{image_id}`
-  - `PluginHost.vue` exposes `sdk.avatar.resolve({ name, aliases })`, currently wired to `/plugins/gfriends/actions/resolve`
-  - `plugins/javdb/frontend/page.js` uses `sdk.avatar.resolve()` for actor directory/ranking cards and actor detail header, falling back to JavDB avatars or initial-letter placeholders
+  - `PluginHost.vue` exposes `sdk.avatar.candidates({ name, aliases })`, wired to `/plugins/gfriends/actions/candidates`
+  - `plugins/javdb/frontend/page.js` still keeps the older `sdk.avatar.resolve` guard, but the final PluginHost SDK only exposes `candidates`; JavDB auto-replacement is therefore inert and actor-management Gfriends candidate selection is the active avatar workflow
   - current main app has no broader actor-avatar surface beyond plugins; future non-plugin pages need their own call site or a shared frontend avatar helper
 - Do not reintroduce Nuxt UI full rewrite; project is currently Vite-based.
 - Do not use direct JavDB API credentials/token approach; current chosen path is DBOnline API.
@@ -631,8 +631,8 @@ cd frontend && npm run build
 
 Notes:
 
-- Gfriends direct resolve for `波多野結衣` returns a correct URL ending in `AI-Fix-波多野結衣.jpg?t=1607433807`.
-- Frontend build passed after adding `sdk.avatar.resolve()` and JavDB avatar override.
+- Gfriends candidates for `波多野結衣` return the expected image URLs, including `AI-Fix-波多野結衣.jpg?t=1607433807`.
+- Frontend build passed after locking `sdk.avatar.candidates()` and the final plugin-host contract.
 - Plugin validation is clean: `scripts/noor-plugin validate plugins` reports all official plugins as OK.
   - `mteam-plugin` and `qbittorrent` custom modal migration advice
 
