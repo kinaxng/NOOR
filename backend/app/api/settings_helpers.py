@@ -23,7 +23,7 @@ _version_cache: dict[str, dict] = {}
 _version_cache_lock = threading.Lock()
 _VERSION_CACHE_TTL = 3600
 LADA_MODEL_WEIGHTS_ENV = "LADA_MODEL_WEIGHTS_DIR"
-ENV_FILE = PROJECT_ROOT / ".env"
+ENV_FILE = Path(os.environ.get("NOOR_ENV_FILE", str(PROJECT_ROOT / ".env")))
 
 WHISPER_MODELS = {
     "chickenrice-zh": {

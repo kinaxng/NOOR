@@ -25,6 +25,15 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Restored the original `NOOR_ENV_FILE` behavior in
+  `backend/app/api/settings_helpers.py`: `ENV_FILE` now falls back to
+  `PROJECT_ROOT/.env` only when `NOOR_ENV_FILE` is unset, matching the
+  2026-07-07 original read snapshot and the env-backed config path used by
+  `core/config.py`. Added a regression test that reloads the helper under a
+  custom `NOOR_ENV_FILE` and verifies both `ENV_FILE` and `read_env_file()`.
+  Verification: backend full `pytest` passes with `294 passed, 8 skipped`,
+  frontend production build passes, all plugins validate `NOOR_PLUGIN_OK`,
+  and the restored-page smoke run has no HTTP/console errors.
 - Continued the final-window missing-line review and fixed the remaining real
   gaps: JAVDB actor-directory pagination now uses filtered actor count after
   local search, JAVDB loading skeletons match the original meta/badge structure,

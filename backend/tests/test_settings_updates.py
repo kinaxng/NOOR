@@ -119,3 +119,20 @@ def test_settings_helpers_env_file_respects_noor_env_file(monkeypatch, tmp_path)
 
     assert env_path.read_text() == 'EMBY_SERVER=http://emby\nPORT=9898\n'
     assert settings_helpers.read_env_file() == {'EMBY_SERVER': 'http://emby', 'PORT': '9898'}
+
+
+def test_settings_helpers_env_file_default_uses_noor_env_file(monkeypatch, tmp_path):
+    import importlib
+
+    from app.api import settings_helpers
+
+    env_path = tmp_path / "noor.env"
+    env_path.write_text("EMBY_SERVER=http://custom\n", encoding="utf-8")
+    original = settings_helpers.ENV_FILE
+    monkeypatch.setenv("NOOR_ENV_FILE", str(env_path))
+    try:
+        importlib.reload(settings_helpers)
+        assert settings_helpers.ENV_FILE == env_path
+        assert settings_helpers.read_env_file() == {"EMBY_SERVER": "http://custom"}
+    finally:
+        settings_helpers.ENV_FILE = original
