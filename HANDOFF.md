@@ -175,6 +175,12 @@ Last updated: 2026-08-24 Asia/Shanghai
 - Source changes since the previous audit commit are `df2d4fd`, `3b79fa6`,
   `33c4e75`, and the Whisper runtime-path commit in this round.
 
+- Restored the missing `WhisperSettings.vue` strategy-card CSS from the original
+  `2026-07-07T0857_37b2f1b9..._800-875` snapshot, plus the card head/title/meta/chip
+  styles used by the current runtime-tier and model-backend cards. Added contract
+  assertions so this style surface cannot disappear again. Frontend production
+  build passes; computed Whisper strategy card styling is active in the browser.
+
 # Hard Rules
 
 - Audit/evidence workspace: `/home/kinax/noor-restored`

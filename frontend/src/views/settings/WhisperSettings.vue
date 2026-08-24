@@ -747,6 +747,104 @@ select.settings-input option {
 .whisper-section-label--spaced {
   margin-top: 1rem;
 }
+.whisper-strategy-card {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  padding: 0.72rem 0.84rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+}
+
+.whisper-strategy-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.whisper-strategy-card__title {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.whisper-strategy-card__summary {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.whisper-strategy-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.whisper-strategy-card__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.whisper-strategy-card__actions {
+  min-height: 2rem;
+  display: flex;
+  align-items: flex-end;
+}
+
+.whisper-strategy-card__actions :deep(.vui-button) {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.whisper-strategy-card:hover .whisper-strategy-card__actions :deep(.vui-button),
+.whisper-strategy-card:focus-within .whisper-strategy-card__actions :deep(.vui-button) {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.whisper-strategy-card--active {
+  border-color: rgba(0, 117, 255, 0.4);
+  background: rgba(0, 117, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(0, 117, 255, 0.08) inset;
+}
+
+.whisper-strategy-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.whisper-strategy-grid--duo {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.whisper-strategy-card--primary {
+  min-height: 100%;
+}
+
+.whisper-strategy-card--summary {
+  padding: 0.66rem 0.82rem;
+  gap: 0.34rem;
+}
+
+
 
 .dep-row {
   background: rgba(255, 255, 255, 0.03);

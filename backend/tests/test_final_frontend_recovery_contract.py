@@ -113,6 +113,9 @@ def test_whisper_settings_final_chickenrice_contract() -> None:
     assert "vad_backend: vadBackend.value" in source
     assert "timing_refiner: timingRefiner.value" in source
     assert "api.put('/settings/whisper', buildWhisperSettingsPayload())" in source
+    assert ".whisper-strategy-card {" in source
+    assert ".whisper-strategy-card--active {" in source
+    assert ".whisper-strategy-card:hover .whisper-strategy-card__actions" in source
 
     assert "WHISPER_RUNTIME_TIERS" in profiles
     assert "export function getWhisperRuntimeTierMeta" in profiles
