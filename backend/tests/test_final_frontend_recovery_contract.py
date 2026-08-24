@@ -72,9 +72,20 @@ def test_plugin_host_final_contract() -> None:
     assert "function makeControlPanelGroup(options: any = {})" in source
     assert "function makeControlPanelRow(options: any = {})" in source
     assert "function makeControlPanelSection(options: any = {})" in source
+    assert "function makePage(options: any = {})" in source
+    assert "function makeSearch(options: any = {})" in source
+    assert "function makeTextarea(options: any = {})" in source
+    assert "function makeSkeletonGrid(options: any = {})" in source
+    assert "function makePreviewImage(src: string, images: any = [])" in source
 
     assert "avatar: {" in source
     assert "'/plugins/gfriends/actions/candidates'" in source
+    assert "page: makePage," in source
+    assert "search: makeSearch," in source
+    assert "textarea: makeTextarea," in source
+    assert "dialog: makeModal," in source
+    assert "skeletonGrid: makeSkeletonGrid," in source
+    assert "previewImage: makePreviewImage," in source
     assert "function pluginDiagnostic(" in source
     assert "function clearMounted()" in source
     assert "onBeforeUnmount(clearMounted)" in source

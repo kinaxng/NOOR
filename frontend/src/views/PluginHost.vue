@@ -97,7 +97,7 @@ function clearMounted() {
 function makeButton(options: any = {}) {
   const btn = document.createElement('button')
   btn.type = 'button'
-  btn.className = ['noor-plugin-btn', options.tone === 'primary' ? 'noor-plugin-btn--primary' : '', options.tone === 'danger' ? 'noor-plugin-btn--danger' : '', options.className || ''].filter(Boolean).join(' ')
+  btn.className = ['noor-plugin-btn', options.tone === 'primary' ? 'noor-plugin-btn--primary' : '', options.tone === 'danger' ? 'noor-plugin-btn--danger' : '', options.active ? 'is-active' : '', options.className || ''].filter(Boolean).join(' ')
   btn.textContent = options.label || ''
   if (options.title) btn.title = options.title
   if (options.disabled) btn.disabled = true
@@ -107,12 +107,57 @@ function makeButton(options: any = {}) {
 
 function makeInput(options: any = {}) {
   const input = document.createElement('input')
+  input.type = options.type || 'text'
   input.className = ['noor-plugin-input', options.className || ''].filter(Boolean).join(' ')
   input.value = options.value ?? ''
   input.placeholder = options.placeholder || ''
   input.readOnly = !!options.readonly
+  input.disabled = !!options.disabled
   input.oninput = () => options.onInput?.(input.value)
+  input.onkeydown = options.onKeydown ? event => options.onKeydown(event, input) : null
   return input
+}
+
+function makeTextarea(options: any = {}) {
+  const input = document.createElement('textarea')
+  input.className = ['noor-plugin-input', 'noor-plugin-textarea', options.className || ''].filter(Boolean).join(' ')
+  input.value = options.value ?? ''
+  input.placeholder = options.placeholder || ''
+  input.readOnly = !!options.readonly
+  input.disabled = !!options.disabled
+  if (options.rows) input.rows = Number(options.rows)
+  input.oninput = () => options.onInput?.(input.value)
+  input.onkeydown = options.onKeydown ? event => options.onKeydown(event, input) : null
+  return input
+}
+
+function makeSearch(options: any = {}) {
+  const wrap = document.createElement('div')
+  wrap.className = ['noor-plugin-search', options.className || ''].filter(Boolean).join(' ')
+  const input = makeInput({ value: options.value, placeholder: options.placeholder, disabled: options.disabled, className: 'noor-plugin-search__input' })
+  const clearBtn = makeButton({
+    label: '×',
+    title: '清空',
+    className: 'noor-plugin-search__clear',
+    onClick: () => {
+      input.value = ''
+      sync()
+      options.onInput?.('')
+      options.onClear?.()
+    },
+  })
+  const sync = () => {
+    clearBtn.disabled = !input.value
+    wrap.classList.toggle('has-value', !!input.value)
+  }
+  input.oninput = () => {
+    options.onInput?.(input.value)
+    sync()
+  }
+  input.onkeydown = options.onKeydown ? event => options.onKeydown(event, input) : null
+  wrap.append(input, clearBtn)
+  sync()
+  return wrap
 }
 
 function makeSelect(options: any = {}) {
@@ -654,6 +699,13 @@ function makeControlPanel(options: any = {}) {
   return panel
 }
 
+function makePage(options: any = {}) {
+  const page = document.createElement('div')
+  page.className = ['noor-plugin-page', options.className || ''].filter(Boolean).join(' ')
+  appendChildren(page, options.children || options.items)
+  return page
+}
+
 function makeSubmitButton(options: any = {}) {
   const btn = makeButton({ label: '', tone: 'primary', className: ['noor-submit-btn', options.className || ''].filter(Boolean).join(' ') })
   const bar = document.createElement('i')
@@ -823,6 +875,71 @@ function makeLoadingState(options: any = {}) {
   return d
 }
 
+function makeSkeletonCard(options: any = {}) {
+  const d = document.createElement('div')
+  d.className = ['noor-plugin-skeleton', options.className || ''].filter(Boolean).join(' ')
+  return d
+}
+
+function makeSkeletonGrid(options: any = {}) {
+  const grid = document.createElement('div')
+  grid.className = ['noor-plugin-skeleton-grid', options.className || ''].filter(Boolean).join(' ')
+  const count = Math.max(1, Number(options.count || 6))
+  for (let index = 0; index < count; index++) grid.appendChild(makeSkeletonCard())
+  return grid
+}
+
+function makePreviewImage(src: string, images: any = []) {
+  const list = (Array.isArray(images) ? images : [images]).map(item => {
+    if (typeof item === 'string') return item
+    return item?.url || item?.src || item?.image || ''
+  }).filter(Boolean)
+  const resolved = list.length ? list : [src].filter(Boolean)
+  if (!resolved.length) return null
+  let index = Math.max(0, resolved.indexOf(src))
+  const mask = document.createElement('div')
+  mask.className = 'noor-plugin-preview-mask'
+  const stage = document.createElement('div')
+  stage.className = 'noor-plugin-preview-stage'
+  const img = document.createElement('img')
+  img.className = 'noor-plugin-preview__image'
+  img.alt = '图片预览'
+  const head = document.createElement('div')
+  head.className = 'noor-plugin-preview__head'
+  const counter = document.createElement('span')
+  const closeBtn = makeButton({ label: '×', title: '关闭', className: 'noor-plugin-preview__close' })
+  head.append(counter, closeBtn)
+  const nav = document.createElement('div')
+  nav.className = 'noor-plugin-preview__nav'
+  const prevBtn = makeButton({ label: '‹', title: '上一张', onClick: () => show(index - 1) })
+  const nextBtn = makeButton({ label: '›', title: '下一张', onClick: () => show(index + 1) })
+  nav.append(prevBtn, nextBtn)
+  stage.append(head, img, nav)
+  mask.appendChild(stage)
+  const show = (next: number) => {
+    index = (next + resolved.length) % resolved.length
+    img.src = resolved[index]
+    counter.textContent = `${index + 1} / ${resolved.length}`
+    prevBtn.disabled = resolved.length <= 1
+    nextBtn.disabled = resolved.length <= 1
+  }
+  const close = () => {
+    mask.remove()
+    document.removeEventListener('keydown', onKeydown)
+  }
+  const onKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') close()
+    if (event.key === 'ArrowLeft') show(index - 1)
+    if (event.key === 'ArrowRight') show(index + 1)
+  }
+  closeBtn.onclick = close
+  mask.onclick = event => { if (event.target === mask) close() }
+  document.addEventListener('keydown', onKeydown)
+  document.body.appendChild(mask)
+  show(index)
+  return { el: mask, close }
+}
+
 function sdkFor(id: string) {
   const controller = sdkAbortController || new AbortController()
   sdkAbortController = controller
@@ -964,11 +1081,15 @@ function sdkFor(id: string) {
       candidates: (options: any = {}) => sdkPost('/plugins/gfriends/actions/candidates', { payload: options }).then((r: any) => r.data),
     },
     ui: {
+      page: makePage,
       button: makeButton,
       input: makeInput,
+      search: makeSearch,
+      textarea: makeTextarea,
       select: makeSelect,
       field: makeField,
       modal: makeModal,
+      dialog: makeModal,
       panel: makePanel,
       tabs: makeTabs,
       pagination: makePagination,
@@ -992,9 +1113,11 @@ function sdkFor(id: string) {
       notice: (o: any) => { const d = document.createElement('div'); d.className = `noor-plugin-notice noor-plugin-notice--${o.tone || 'info'}`; d.textContent = o.text || ''; return d },
       emptyState: (o: any) => { const d = document.createElement('div'); d.className = 'noor-plugin-state'; d.textContent = o.text || '暂无内容'; return d },
       errorState: (o: any) => { const d = document.createElement('div'); d.className = 'noor-plugin-state noor-plugin-state--error'; d.textContent = o.text || '加载失败'; return d },
-      skeletonCard: (o: any) => { const d = document.createElement('div'); d.className = `noor-plugin-skeleton ${o.className || ''}`; return d },
+      skeletonCard: makeSkeletonCard,
+      skeletonGrid: makeSkeletonGrid,
       card: (o: any) => { const a = document.createElement(o.href ? 'a' : 'div'); a.className = `noor-plugin-card ${o.className || ''}`; if (o.href) { (a as HTMLAnchorElement).href = o.href; (a as HTMLAnchorElement).target = o.target || '_self' }; return a },
       confirm: (o: any) => confirm.confirm({ title: o.title || '确认操作', message: o.message || '', confirmText: o.confirmText || '确认', danger: !!o.danger }),
+      previewImage: makePreviewImage,
     },
   }
 }
@@ -1090,6 +1213,11 @@ onBeforeUnmount(clearMounted)
 .noor-plugin-input { width: 100%; min-height: 36px; padding: .5rem .75rem; border-radius: var(--radius-md); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: white; outline: none; }
 .noor-plugin-input:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgba(0,117,255,.12); }
 .noor-plugin-input option, .noor-plugin-select option { background: #111936; color: white; }
+.noor-plugin-textarea { min-height: 7.5rem; resize: vertical; line-height: 1.45; }
+.noor-plugin-search { position: relative; min-width: 0; }
+.noor-plugin-search__input { padding-right: 2.35rem; }
+.noor-plugin-search__clear { position: absolute; top: 50%; right: .35rem; width: 1.65rem; min-width: 1.65rem; height: 1.65rem; min-height: 1.65rem; padding: 0; border-radius: 50%; transform: translateY(-50%); }
+.noor-plugin-page { display: grid; gap: 1rem; }
 .noor-plugin-select { position: relative; min-width: 0; }
 .noor-plugin-select__trigger { width: 100%; min-height: 1.85rem; display: inline-flex; align-items: center; justify-content: space-between; gap: .35rem; padding: .32rem .68rem; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(255,255,255,.04); color: var(--color-text-primary,#fff); font-size: .76rem; font-weight: 700; line-height: 1.1; white-space: nowrap; cursor: pointer; transition: border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease; }
 .noor-plugin-select__trigger:hover:not(:disabled), .noor-plugin-select.is-open .noor-plugin-select__trigger { border-color: color-mix(in srgb, var(--color-brand,#0075ff) 45%, transparent); background: color-mix(in srgb, var(--color-brand,#0075ff) 10%, transparent); }
@@ -1136,7 +1264,14 @@ onBeforeUnmount(clearMounted)
 .noor-plugin-notice--error, .noor-plugin-state--error { color: #ff8a80; background: rgba(227,26,26,.1); border-color: rgba(227,26,26,.25); }
 .noor-plugin-card { background: rgb(26,31,55); border: 1px solid rgba(255,255,255,.06); color: inherit; text-decoration: none; }
 .noor-plugin-skeleton { min-height: 180px; border-radius: var(--radius-lg); background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.08), rgba(255,255,255,.04)); background-size: 200% 100%; animation: noor-skeleton 1.2s linear infinite; }
+.noor-plugin-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
 @keyframes noor-skeleton { to { background-position: -200% 0; } }
+.noor-plugin-preview-mask { position: fixed; inset: 0; z-index: calc(var(--z-modal, 1000) + 40); display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(0,0,0,.78); backdrop-filter: blur(12px); }
+.noor-plugin-preview-stage { position: relative; width: min(920px, 100%); max-height: min(820px, 92vh); display: grid; grid-template-rows: auto 1fr auto; gap: .65rem; border: 1px solid rgba(255,255,255,.12); border-radius: var(--radius-xl); background: rgb(16,20,38); box-shadow: var(--shadow-xl); overflow: hidden; }
+.noor-plugin-preview__head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .8rem 1rem; color: rgba(255,255,255,.72); font-size: .8rem; }
+.noor-plugin-preview__image { width: 100%; min-height: 0; max-height: calc(92vh - 7rem); object-fit: contain; display: block; background: #05070d; }
+.noor-plugin-preview__nav { display: flex; justify-content: center; gap: .5rem; padding: .6rem 1rem; }
+.noor-plugin-preview__close, .noor-plugin-preview__nav .noor-plugin-btn { min-width: 2rem; border-radius: 50%; }
 @media (max-width: 640px) { .noor-plugin-topbar { flex-direction: column-reverse; align-items: stretch; } .noor-plugin-topbar__actions { order: -1; } }
 /* SDK visual contract: plugins must share main NOOR component metrics. */
 .plugin-host-mount, .plugin-host-mount * { box-sizing: border-box; }

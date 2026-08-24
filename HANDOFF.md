@@ -59,6 +59,19 @@ Last updated: 2026-08-24 Asia/Shanghai
 - 验证：JavDB 演员深链面板仍正常渲染，`node --check` 通过，14 个官方插件
   全部 `NOOR_PLUGIN_OK`。
 
+### 2026-08-24 第十三轮：补齐插件 SDK 已声明基础 UI
+
+- `PluginHost.vue` 补齐 `page`、`search`、`textarea`、`skeletonGrid`、
+  `dialog` 和 `previewImage` 等 SDK 组件，`button`/`input` 也补上
+  `active`、`disabled`、`onKeydown` 等文档契约字段。
+- `previewImage` 现在为 JavDB / 推荐中心详情图库提供统一的 NOOR 预览弹窗；
+  qBittorrent / Xunlei / MDC-NG 的文本域已切换到共享 `sdk.ui.textarea`。
+- `PLUGIN_SDK.md` 的已可用清单与实现对齐；恢复页 smoke 新增 qBittorrent
+  新建任务共享文本域验证。
+- 验证：后端 `311 passed, 8 skipped, 1 warning`；前端生产构建通过；14 个官方
+  插件全部 `NOOR_PLUGIN_OK`；恢复页 smoke 为 `HTTP_ERRORS []` /
+  `CONSOLE_ERRORS []`。
+
 ### Latest Recovery Update (2026-08-24)
 ### Latest Recovery Update (2026-08-24 第八轮)
 - Restored `frontend/src/components/ui/Tabs.vue` to the original sliding-indicator

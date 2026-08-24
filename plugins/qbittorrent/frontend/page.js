@@ -599,10 +599,15 @@ export async function mount(el, sdk = {}) {
     } catch {}
     const defaultPath = state.downloadOptions?.default_savepath || '/downloads/av'
     const defaultCategory = state.downloadOptions?.default_category || ''
-    const urlInput = document.createElement('textarea')
-    urlInput.className = 'noor-plugin-input qb-textarea'
-    urlInput.rows = 6
-    urlInput.placeholder = '每行一个 magnet / BT URL / 普通 URL，最多 50 条'
+    const urlInput = sdk.ui?.textarea
+      ? sdk.ui.textarea({ placeholder: '每行一个 magnet / BT URL / 普通 URL，最多 50 条', rows: 6, className: 'qb-textarea' })
+      : (() => {
+          const input = document.createElement('textarea')
+          input.className = 'noor-plugin-input qb-textarea'
+          input.rows = 6
+          input.placeholder = '每行一个 magnet / BT URL / 普通 URL，最多 50 条'
+          return input
+        })()
     const pathInput = document.createElement('input')
     pathInput.className = 'noor-plugin-input qb-input'
     pathInput.value = defaultPath

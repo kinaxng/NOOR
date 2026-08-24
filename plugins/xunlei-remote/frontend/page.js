@@ -119,6 +119,7 @@ export async function mount(el, sdk = {}) {
   }
 
   function textarea(options = {}) {
+    if (sdk.ui?.textarea) return sdk.ui.textarea(options)
     const el = document.createElement('textarea')
     el.className = options.className ? `noor-plugin-input xunlei-remote-textarea ${options.className}` : 'noor-plugin-input xunlei-remote-textarea'
     el.placeholder = options.placeholder || ''

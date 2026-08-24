@@ -283,9 +283,12 @@ sdk.ui.skeletonCard()
 sdk.ui.skeletonGrid({ count })
 sdk.ui.field({ label, hint, control })
 sdk.ui.input({ value, placeholder, readonly, onInput })
+sdk.ui.textarea({ value, placeholder, rows, readonly, onInput })
 sdk.ui.select({ value, options, onChange })
 sdk.ui.modal({ title, content, width, footer, onClose })
 sdk.ui.confirm({ title, message, confirmText, danger })
+sdk.ui.previewImage(src, images)
+sdk.ui.dialog(options) // modal alias
 ```
 
 约束：
@@ -347,6 +350,7 @@ sdk.ui.tabs({ value, tabs, onChange })
 sdk.ui.pagination({ page, total, pageSize, totalPages, siblingCount, onPage })
 sdk.ui.search({ value, placeholder, onInput, onClear })
 sdk.ui.input({ value, placeholder, readonly, disabled, onInput, onKeydown })
+sdk.ui.textarea({ value, placeholder, rows, readonly, disabled, onInput, onKeydown })
 sdk.ui.select({ value, options, disabled, onChange })
 sdk.ui.field({ label, hint, control })
 sdk.ui.card({ children, href, target, onClick })
@@ -356,6 +360,7 @@ sdk.ui.loadingState({ text })
 sdk.ui.errorState({ text })
 sdk.ui.skeletonCard()
 sdk.ui.skeletonGrid({ count })
+sdk.ui.previewImage(src, images)
 sdk.ui.modal({ title, content, width, footer, onClose })
 sdk.ui.dialog(options) // modal alias
 sdk.ui.confirm({ title, message, confirmText, danger })
