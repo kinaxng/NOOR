@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from app.api.settings_response import build_settings_payload
@@ -132,3 +135,27 @@ def test_apply_network_env_clears_old_malformed_mirror_key(monkeypatch):
         ["git", "config", "--global", "--unset", "url.https://ghproxy.com/https://github.com/.insteadOf"],
     ]
     assert "GITHUB_TOKEN" not in os.environ
+
+
+def test_config_project_root_env_controls_runtime_paths():
+    repo_root = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env["PROJECT_ROOT"] = "/tmp/noor-test-project"
+    env["PYTHONPATH"] = str(repo_root / "backend")
+    env.pop("NOOR_ENV_FILE", None)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.core.config import ENV_FILE_PATH, PROJECT_ROOT; print(PROJECT_ROOT); print(ENV_FILE_PATH)",
+        ],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    lines = proc.stdout.strip().splitlines()
+
+    assert lines[0] == "/tmp/noor-test-project"
+    assert lines[1] == "/tmp/noor-test-project/.env"

@@ -15,7 +15,12 @@ from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+# Or use PROJECT_ROOT env var (useful for Docker).
+if "PROJECT_ROOT" in os.environ:
+    PROJECT_ROOT = Path(os.environ["PROJECT_ROOT"])
+else:
+    PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+
 ENV_FILE_PATH = Path(os.environ.get("NOOR_ENV_FILE", str(PROJECT_ROOT / ".env")))
 DEFAULT_NOOR_DATA_DIR = str(PROJECT_ROOT / "data")
 WHISPER_MODEL_DIR = Path(
