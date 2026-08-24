@@ -33,9 +33,17 @@ Last updated: 2026-08-24 Asia/Shanghai
   `36 exact / 10 likely / 120 review / 515 drift / 7 expected_absent / 0 missing`; verification is
   backend `293 passed, 8 skipped`, frontend production build, all plugins
   `NOOR_PLUGIN_OK`, and a clean restored-page smoke run.
+- Completed the remaining read-snapshot review classification. The 120 `review`
+  rows are accounted for as earlier evidence, documented evolutions, or final
+  behavior that must not be reverted; examples include Jobs background tab,
+  MDC-NG actor mapping, qBittorrent 5.2 API mode, Xunlei residual delete-and-search,
+  and JAVDB deliberately ignoring title-only crack keywords. No further real
+  source gap was found in this pass.
 - Rechecked the active tree after the latest convergence: backend full `pytest`
-  passes with `293 passed, 8 skipped`, frontend production build passes, and the
-  restored-page browser smoke has no HTTP 4xx/5xx or console errors.
+  passes with `293 passed, 8 skipped`, frontend production build passes, all
+  plugins validate `NOOR_PLUGIN_OK`, the read-snapshot audit remains
+  `36 exact / 10 likely / 120 review / 515 drift / 7 expected_absent / 0 missing`,
+  and the restored-page browser smoke has no HTTP 4xx/5xx or console errors.
 - Completed another backup sweep: `/volume1/noor-recovery-20260810`,
   `/volume1/.1panel_clash`, and the local `noor-*` directories contain no later
   full original source snapshot. The only complete pre-takeover snapshot remains
