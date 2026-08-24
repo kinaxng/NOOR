@@ -25,6 +25,7 @@ Last updated: 2026-08-24 Asia/Shanghai
   mapping upload, or the old Whisper multi-chain source.
 
 ### Latest Recovery Update (2026-08-24)
+- Final convergence recheck after the last FaceFusion fix: refreshed the 2026-07-08 final-window missing-line scan, reran `version_gap_audit.py` (`131 verified / 0 pending / 0 missing / 6 intentional`), exercised FaceFusion metadata/source-image/background-task APIs, and reran backend tests, frontend build, plugin validation, and restored-page smoke. Backend: `301 passed, 8 skipped, 1 warning`; frontend production build passes; all 14 official plugins report `NOOR_PLUGIN_OK`; browser smoke has no HTTP 4xx/5xx or console errors.
 - Restored the final FaceFusion source-image library interaction in
   `frontend/src/components/noor/FaceFusionPanel.vue`: library images now toggle
   directly between 使用/移除 on click, removing the intermediate multi-select and
