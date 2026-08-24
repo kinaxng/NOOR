@@ -169,12 +169,12 @@ class EmbyNFO(BaseModel):
 class FileTags(BaseModel):
     """File tag information parsed from filename."""
 
-    is_uncensored: bool = False
-    has_chinese: bool = False
-    is_cracked: bool = False
-    is_leaked: bool = False
-    release_type: Optional[str] = None
-    release_type_key: Optional[str] = None
+    is_uncensored: bool = False  # 片商/目录等结构性来源判定的无码
+    has_chinese: bool = False    # -c 中文
+    is_cracked: bool = False     # 破解/去码版本
+    is_leaked: bool = False      # 流出
+    release_type: Optional[str] = None  # 流出 / 无码
+    release_type_key: Optional[str] = None  # leaked / uncensored
 
 
 class EmbyLibrary(BaseModel):

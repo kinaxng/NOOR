@@ -26,6 +26,10 @@ ADAPTER_NOT_ACTIVATED = "媒体库适配器未配置，请在设置中配置 Emb
 MEDIA_LIBRARY_SCAN_GROUPS_ENV = "MEDIA_LIBRARY_SCAN_GROUPS"
 MEDIA_LIBRARY_PATH_PREFIX_ENV = "MEDIA_LIBRARY_PATH_PREFIX"
 MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV = "MEDIA_LIBRARY_LOCAL_PATH_PREFIX"
+MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV = "MEDIA_LIBRARY_WEBHOOK_TOKEN"
+TMDB_API_KEY_ENV = "TMDB_API_KEY"
+TMDB_API_TOKEN_ENV = "TMDB_API_TOKEN"
+MDC_NG_ACTOR_MAPPING_PATH_ENV = "MDC_NG_ACTOR_MAPPING_PATH"
 
 
 def config_path() -> Path:
@@ -77,10 +81,10 @@ def _env_backed_config(env_data: dict[str, str]) -> dict[str, Any]:
         "path_prefix": env_data.get(MEDIA_LIBRARY_PATH_PREFIX_ENV, "/data/media"),
         "local_path_prefix": env_data.get(MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV, env_data.get("SOURCE_DIR", "")),
         "scan_groups": _parse_scan_groups(env_data.get(MEDIA_LIBRARY_SCAN_GROUPS_ENV, "")),
-        "webhook_token": env_data.get("MEDIA_LIBRARY_WEBHOOK_TOKEN", ""),
-        "tmdb_api_key": env_data.get("TMDB_API_KEY", ""),
-        "tmdb_api_token": env_data.get("TMDB_API_TOKEN", ""),
-        "mdc_ng_actor_mapping_path": env_data.get("MDC_NG_ACTOR_MAPPING_PATH", ""),
+        "webhook_token": env_data.get(MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV, ""),
+        "tmdb_api_key": env_data.get(TMDB_API_KEY_ENV, ""),
+        "tmdb_api_token": env_data.get(TMDB_API_TOKEN_ENV, ""),
+        "mdc_ng_actor_mapping_path": env_data.get(MDC_NG_ACTOR_MAPPING_PATH_ENV, ""),
     }
 
 
@@ -93,10 +97,10 @@ def _build_env_updates_from_config(config: dict[str, Any]) -> dict[str, str]:
         MEDIA_LIBRARY_PATH_PREFIX_ENV: str(config.get("path_prefix", "/data/media") or "/data/media"),
         MEDIA_LIBRARY_LOCAL_PATH_PREFIX_ENV: str(config.get("local_path_prefix", "") or ""),
         MEDIA_LIBRARY_SCAN_GROUPS_ENV: _scan_groups_to_env(config.get("scan_groups", []) or []),
-        "MEDIA_LIBRARY_WEBHOOK_TOKEN": str(config.get("webhook_token", "") or ""),
-        "TMDB_API_KEY": str(config.get("tmdb_api_key", "") or ""),
-        "TMDB_API_TOKEN": str(config.get("tmdb_api_token", "") or ""),
-        "MDC_NG_ACTOR_MAPPING_PATH": str(config.get("mdc_ng_actor_mapping_path", "") or ""),
+        MEDIA_LIBRARY_WEBHOOK_TOKEN_ENV: str(config.get("webhook_token", "") or ""),
+        TMDB_API_KEY_ENV: str(config.get("tmdb_api_key", "") or ""),
+        TMDB_API_TOKEN_ENV: str(config.get("tmdb_api_token", "") or ""),
+        MDC_NG_ACTOR_MAPPING_PATH_ENV: str(config.get("mdc_ng_actor_mapping_path", "") or ""),
     }
 
 

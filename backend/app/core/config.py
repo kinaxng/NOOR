@@ -24,6 +24,24 @@ WHISPER_MODEL_DIR = Path(
 DEFAULT_LADA_MODEL_WEIGHTS_DIR = "/volume1/models/lada_model_weights"
 DEFAULT_FACEFUSION_DIR = ""
 
+def _normalize_github_mirror_instead_of_prefix(mirror: str) -> str:
+    """Return the git `url.<prefix>.insteadOf` value for GitHub mirrors.
+
+    Proxy mirrors such as ghproxy expect the original GitHub URL to remain in the
+    path, e.g.:
+        https://ghproxy.com/https://github.com/ladaapp/lada.git
+
+    The previous implementation used `https://ghproxy.com/` as the replacement
+    prefix, producing `https://ghproxy.com/ladaapp/lada.git`, which ghproxy then
+    rejects with "unable to update url base from redirection".
+    """
+    value = (mirror or "https://ghproxy.com").strip().rstrip("/")
+    if not value:
+        value = "https://ghproxy.com"
+    if "github.com" in value:
+        return value.rstrip("/") + "/"
+    return value + "/https://github.com/"
+
 
 class Settings(BaseSettings):
     lada_cli_path: str = "python3 -m lada.cli.main"
@@ -192,54 +210,59 @@ class Settings(BaseSettings):
     def emby_headers(self) -> dict:
         return {"X-Emby-Token": self.emby_api_key}
 
-    def apply_network_env(self) -> None:
+    def apply_network_env(self):
+        """Apply network settings to the long-running process environment.
+
+        Mirror and proxy can be configured at the same time. For one-shot
+        operations that can retry (for example LADA upgrade), the actual
+        fallback order is implemented by the caller: mirror -> proxy -> direct.
+        """
         import subprocess
 
-        for key in (
-            "HTTP_PROXY",
-            "HTTPS_PROXY",
-            "http_proxy",
-            "https_proxy",
-            "HF_ENDPOINT",
-            "HF_TOKEN",
-        ):
-            os.environ.pop(key, None)
+        # Reset all
+        for k in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "HF_ENDPOINT", "HF_TOKEN", "GITHUB_TOKEN"]:
+            os.environ.pop(k, None)
 
+        if self.github_token:
+            os.environ["GITHUB_TOKEN"] = self.github_token
+
+        # HF token is only authentication, not a routing switch. Keep mirror as
+        # the default endpoint; callers can fallback to official HF when needed.
         if self.hf_token:
             os.environ["HF_TOKEN"] = self.hf_token
-            os.environ["HF_ENDPOINT"] = "https://huggingface.co"
-        elif self.acceleration_mode == "mirror":
+        if self.hf_mirror:
             os.environ["HF_ENDPOINT"] = self.hf_mirror or "https://hf-mirror.com"
 
-        if self.acceleration_mode == "proxy" and self.http_proxy:
+        if self.http_proxy:
             os.environ["HTTP_PROXY"] = self.http_proxy
             os.environ["HTTPS_PROXY"] = self.http_proxy
             os.environ["http_proxy"] = self.http_proxy
             os.environ["https_proxy"] = self.http_proxy
+
+        if self.github_mirror:
+            # Configure git to use GitHub mirror
+            mirror_prefix = _normalize_github_mirror_instead_of_prefix(self.github_mirror)
+            # Remove the old malformed ghproxy rewrite before writing the fixed
+            # prefix. Git config keys are case-insensitive, so either spelling is
+            # fine for cleanup.
             subprocess.run(
                 ["git", "config", "--global", "--unset", "url.https://ghproxy.com/.insteadOf"],
-                capture_output=True,
+                capture_output=True
             )
-            return
-
-        if self.acceleration_mode == "mirror":
-            github_mirror = self.github_mirror or "https://ghproxy.com"
             subprocess.run(
-                [
-                    "git",
-                    "config",
-                    "--global",
-                    f"url.https://{github_mirror.replace('https://', '')}/.insteadOf",
-                    "https://github.com/",
-                ],
-                capture_output=True,
+                ["git", "config", "--global", f"url.{mirror_prefix}.insteadOf", "https://github.com/"],
+                capture_output=True
             )
-            return
-
-        subprocess.run(
-            ["git", "config", "--global", "--unset", "url.https://ghproxy.com/.insteadOf"],
-            capture_output=True,
-        )
+        else:
+            # Reset git mirror config
+            subprocess.run(
+                ["git", "config", "--global", "--unset", "url.https://ghproxy.com/.insteadOf"],
+                capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "--global", "--unset", "url.https://ghproxy.com/https://github.com/.insteadOf"],
+                capture_output=True
+            )
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE_PATH),
