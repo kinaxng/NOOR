@@ -39,16 +39,14 @@ def test_legacy_enable_disable_routes_forward_to_runtime(monkeypatch):
     assert calls == [("javdb", True), ("javdb", False)]
 
 
-def test_legacy_test_route_forwards_to_plugin_action(monkeypatch):
-    async def fake_handle_action(plugin_id: str, action: str, payload: dict | None = None):
-        return {"ok": True, "plugin_id": plugin_id, "action": action, "payload": payload}
+def test_legacy_test_route_forwards_to_runtime_test(monkeypatch):
+    async def fake_test(plugin_id: str):
+        return {"ok": True, "plugin_id": plugin_id}
 
-    monkeypatch.setattr(plugins.runtime, "_manifests", {"qbittorrent": {}})
-    monkeypatch.setattr(plugins.runtime, "is_enabled", lambda plugin_id: True)
-    monkeypatch.setattr(plugins.runtime, "handle_action", fake_handle_action)
+    monkeypatch.setattr(plugins.runtime, "test", fake_test)
     response = TestClient(_app()).post("/api/plugins/qbittorrent/test")
     assert response.status_code == 200
-    assert response.json()["action"] == "test"
+    assert response.json() == {"ok": True, "plugin_id": "qbittorrent"}
 
 
 def test_plugin_websocket_overview_forwards_to_runtime(monkeypatch):

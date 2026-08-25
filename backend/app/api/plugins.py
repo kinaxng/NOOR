@@ -519,7 +519,12 @@ async def disable_plugin(plugin_id: str):
 
 @router.post('/{plugin_id}/test')
 async def test_plugin(plugin_id: str):
-    return await _handle_plugin_action(plugin_id, 'test', PluginActionPayload())
+    try:
+        return await runtime.test(plugin_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='Plugin not found') from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 async def _handle_plugin_action(

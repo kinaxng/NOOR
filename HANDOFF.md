@@ -755,3 +755,15 @@ Notes:
   视口下全宽，关闭按钮正常；真实详情没有横向溢出，剧照、作品信息、26 条
   资源及内部滚动完整。完整恢复 smoke 的新增 JavDB 契约持续通过；其余运行中
   偶发的 M-Team 等待、MDC 未配置 400 和 Gfriends 空候选均与本次改动无关。
+
+### Latest Recovery Update (2026-08-25：插件连接测试端点)
+
+- 恢复 `POST /api/plugins/{plugin_id}/test` 的原版路由：直接调用
+  `runtime.test(plugin_id)`，不再错误转发为通用 action `test`。原始读取快照
+  `20260705T17_7cf1aa8b_backend__app__api__plugins.py_300-340.txt` 明确支持该实现。
+- MDC-NG 真实连接测试从 `400 unsupported action: test` 恢复为 HTTP 200，
+  当前返回目标目录、3 个监控目录及任务统计。
+- Gfriends 演员候选并未丢失：演员 4201 当前可返回 17 个候选；恢复 smoke 将
+  冷缓存等待从 6 秒放宽到最多 30 秒，避免逐张建立头像缓存时误报。
+- 验证：后端全量 `308 passed, 8 skipped, 1 warning`；完整恢复页 smoke
+  `HTTP_ERRORS []` / `CONSOLE_ERRORS []`。
