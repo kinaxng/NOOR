@@ -9,8 +9,8 @@
   "enabled_by_default": true,
   "config_schema": {
     "candidate_limit": {"type": "number", "label": "候选扫描数量", "default": 48, "min": 12, "max": 120, "step": 12},
-    "detail_limit": {"type": "number", "label": "详情分析数量", "description": "用于读取演员、类型和资源特征的候选数量。", "default": 36, "min": 8, "max": 80, "step": 4},
-    "resource_enrich_limit": {"type": "number", "label": "资源确认数量", "description": "对排序靠前的作品确认各资源源站的可用资源。", "default": 16, "min": 0, "max": 48, "step": 4},
+    "detail_limit": {"type": "number", "label": "详情分析数量", "description": "用于读取演员、类型和资源特征的候选数量。", "default": 48, "min": 8, "max": 80, "step": 4},
+    "resource_enrich_limit": {"type": "number", "label": "资源确认数量", "description": "对排序靠前的作品确认各资源源站的可用资源。", "default": 32, "min": 0, "max": 48, "step": 4},
     "resource_enrich_concurrency": {"type": "number", "label": "资源确认并发数", "description": "同时向资源源站确认的作品数量。", "default": 4, "min": 1, "max": 12, "step": 1},
     "full_scan_pages": {"type": "number", "label": "完整推荐扫描页数", "description": "后台增量扫描 JavDB 完整作品列表的页数。", "default": 5, "min": 1, "max": 30, "step": 1},
     "full_scan_background_enabled": {"type": "boolean", "label": "启用完整推荐后台扫描", "default": true},
@@ -29,8 +29,8 @@
   },
   "default_config": {
     "candidate_limit": 48,
-    "detail_limit": 36,
-    "resource_enrich_limit": 16,
+    "detail_limit": 48,
+    "resource_enrich_limit": 32,
     "resource_enrich_concurrency": 4,
     "full_scan_pages": 5,
     "full_scan_background_enabled": true,

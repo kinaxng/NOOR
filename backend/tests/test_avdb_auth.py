@@ -25,3 +25,16 @@ def test_legacy_api_key_remains_supported() -> None:
 
     assert headers["X-API-Key"] == "legacy"
     assert "Authorization" not in headers
+
+
+def test_resource_features_are_detected_from_title_when_tags_are_empty() -> None:
+    item = _backend()._normalize({
+        "id": 1,
+        "title": "PRED-878 [无码破解] 中文字幕",
+        "download_url": "https://avdb.test/torrent/1",
+        "tags": [],
+    }, 0)
+
+    assert item is not None
+    assert item["features"]["is_cracked"] is True
+    assert item["features"]["has_subtitle"] is True

@@ -1737,7 +1737,12 @@ def _resource_features(resource: dict[str, Any]) -> dict[str, bool]:
     }
 
 
-async def _enrich_recommendation_resources(config: dict[str, Any], items: list[dict[str, Any]]) -> list[str]:
+async def _enrich_recommendation_resources(
+    config: dict[str, Any],
+    items: list[dict[str, Any]],
+    *,
+    limit: int | None = None,
+) -> list[str]:
     warnings: list[str] = []
     if not items:
         return warnings
@@ -1745,7 +1750,8 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
         from app.plugins.runtime import runtime
     except Exception as exc:
         return [f"资源插件运行时不可用：{exc}"]
-    enrich_limit = max(0, min(int(config.get("resource_enrich_limit") or 16), 48))
+    configured_limit = int(config.get("resource_enrich_limit") or 32)
+    enrich_limit = max(0, min(configured_limit if limit is None else int(limit), 48))
     if enrich_limit <= 0:
         return warnings
     targets = items[:enrich_limit]
@@ -1753,6 +1759,8 @@ async def _enrich_recommendation_resources(config: dict[str, Any], items: list[d
     semaphore = asyncio.Semaphore(concurrency)
 
     async def enrich_one(item: dict[str, Any]) -> None:
+        if isinstance(item.get("resource_summary"), dict):
+            return
         code = str(item.get("code") or "").strip()
         if not code:
             return
@@ -2010,12 +2018,21 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
             scored.append(rec)
     scored = _dedupe_recommendations(scored)
     scored.sort(key=lambda x: (x["score"], x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
-    resource_warnings = await _enrich_recommendation_resources(config, scored)
+    # A small first pass lets resource actionability influence ranking without
+    # making the initial recommendation request excessively expensive.
+    initial_resource_config = {**config, "resource_enrich_limit": 16}
+    resource_warnings = await _enrich_recommendation_resources(initial_resource_config, scored)
     if resource_warnings:
         warnings.extend(resource_warnings)
     scored.sort(key=lambda x: (x["score"], (x.get("resource_summary") or {}).get("total") or 0, x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
     scored = _diversify_recommendations(scored)
     scored = _apply_recommendation_controls(scored, config, requested_limit)
+    # Diversification can promote candidates that were outside the first-pass
+    # window. Confirm the cards that will actually be displayed as a second
+    # pass, skipping rows already enriched above.
+    display_resource_warnings = await _enrich_recommendation_resources(config, scored)
+    if display_resource_warnings:
+        warnings.extend(display_resource_warnings)
     result = {
         "ok": True,
         "generated_at": _now_ms(),

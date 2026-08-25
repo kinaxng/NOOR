@@ -155,6 +155,14 @@ function compactResourceSubtitle(resource) {
   return compact.join(' · ')
 }
 
+function resourceProviderOrder(resource) {
+  const provider = String(resource?.provider || resource?.key || '').trim()
+  if (provider === 'avdb') return 0
+  if (provider === 'mteam-plugin') return 1
+  if (provider === 'javdb') return 2
+  return 9
+}
+
 function badge(label, tone = 'neutral') {
   const b = el('span', `av-rec-badge av-rec-badge--${tone}`, label)
   return b
@@ -617,7 +625,7 @@ export async function mount(root, sdk) {
           current.isPrivateTracker = current.isPrivateTracker || !!resource?.features?.is_private_tracker
           providerMap.set(key, current)
         })
-        providerGroups.push(...Array.from(providerMap.values()))
+        providerGroups.push(...Array.from(providerMap.values()).sort((a, b) => resourceProviderOrder(a) - resourceProviderOrder(b)))
         if (!providerGroups.some(group => group.key === selectedProvider)) selectedProvider = providerGroups[0]?.key || ''
         providerGroups.forEach(group => {
           const pill = el('button', `av-rec-resource-pill${selectedProvider === group.key ? ' is-active' : ''}`, `${group.label} ${group.count}`)

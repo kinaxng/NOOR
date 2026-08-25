@@ -788,3 +788,11 @@ Notes:
 - 从原恢复会话找回 M-Team 运行配置，明文未进入源码、测试或审计；`SSIS-001` 实测 3 条。
 - AVDB 历史地址和运行凭据已恢复；双模式验证确认该令牌使用 `X-API-Key`，不是 Bearer Token。
 - AVDB 插件也补充 Bearer 兼容并保留旧 API Key。聚合实测为 AVDB 4、JavDB 6、M-Team 3。
+
+### Latest Recovery Update (2026-08-26：资源优先级与推荐破解信号)
+
+- 统一资源来源顺序为 AVDB、M-Team、JavDB；JavDB 详情和推荐详情均默认选中 AVDB。
+- AVDB 资源特征同时检查标题与 tags，可识别标题中的“无码破解”和中文字幕。
+- 推荐资源确认改为初排与最终展示两阶段，避免多样化选卡后卡片漏掉资源信号。
+- `PRED-878` 实测恢复 `is_cracked=true`、10 条资源和“资源确认：破解”。
+- 验证：后端 `313 passed, 8 skipped, 1 warning`；前端生产构建通过。

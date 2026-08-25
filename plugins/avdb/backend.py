@@ -80,6 +80,9 @@ def _normalize(item: dict[str, Any], index: int) -> dict[str, Any] | None:
     code = _code(item.get("code") or item.get("number") or title)
     tags_raw = item.get("tags") or item.get("labels") or []
     tags = [str(value).strip() for value in tags_raw] if isinstance(tags_raw, list) else [str(tags_raw).strip()] if tags_raw else []
+    feature_text = " ".join([title, *tags])
+    is_cracked = bool(re.search(r"破解|uncensored\s*(?:crack|leak)|crack|leak|流出", feature_text, re.I))
+    has_subtitle = bool(re.search(r"中字|中文字幕|中文|字幕|\b(?:chs|cht)\b", feature_text, re.I))
     private = bool(item.get("private") or item.get("is_private") or item.get("private_tracker"))
     requirements: dict[str, bool] = {}
     if url.startswith("magnet:?"):
@@ -94,7 +97,7 @@ def _normalize(item: dict[str, Any], index: int) -> dict[str, Any] | None:
         "title": title, "subtitle": " · ".join(part for part in (str(item.get("size") or item.get("size_text") or ""), str(item.get("date") or item.get("created_at") or ""), "AVDB") if part),
         "url": url, "size_bytes": _number(item.get("size_bytes") or item.get("bytes") or item.get("size")), "file_count": _number(item.get("file_count")),
         "tags": tags, "cover_url": str(item.get("cover_url") or item.get("image_url") or item.get("image") or ""), "source_url": str(item.get("source_url") or item.get("link") or ""),
-        "features": {"has_subtitle": any("字幕" in tag or "中字" in tag for tag in tags), "is_cracked": any("破解" in tag for tag in tags), "is_private_tracker": private},
+        "features": {"has_subtitle": has_subtitle, "is_cracked": is_cracked, "is_private_tracker": private},
         "requirements": requirements, "compatible_downloaders": compatible, "preferred_downloader": "qbittorrent" if private else "xunlei-remote",
         "metadata": {"source_plugin": PLUGIN_ID, "video_code": code, "site": "AVDB", "raw": item},
     }

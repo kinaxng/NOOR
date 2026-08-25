@@ -489,6 +489,9 @@ class PluginRuntime:
                 continue
             groups.append(group)
             items.extend(normalized_items)
+        provider_priority = {"avdb": 0, "mteam-plugin": 1, "javdb": 2}
+        groups.sort(key=lambda group: (provider_priority.get(str(group.get("provider") or ""), 99), str(group.get("provider") or "")))
+        items.sort(key=lambda item: (provider_priority.get(str(item.get("provider") or ""), 99), str(item.get("provider") or "")))
         await self._borrow_resource_covers_from_javdb(items, groups)
         return {
             "ok": True,
