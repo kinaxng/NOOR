@@ -26,8 +26,11 @@ def _timeout(config: dict[str, Any]) -> float:
 
 def _headers(config: dict[str, Any]) -> dict[str, str]:
     headers = {"Accept": "application/json", "User-Agent": "NOOR-AVDB-Plugin/0.1"}
+    access_token = str(config.get("access_token") or "").strip()
     api_key = str(config.get("api_key") or "").strip()
-    if api_key:
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    elif api_key:
         headers["X-API-Key"] = api_key
     return headers
 

@@ -9,13 +9,15 @@
   "default_config": {
     "base_url": "",
     "torrents_path": "/api/v1/articles/torrents",
+    "access_token": "",
     "api_key": "",
     "timeout": 15
   },
   "config_schema": {
     "base_url": {"type": "string", "label": "AVDB API 地址", "description": "填写实际 AVDB 服务根地址，不使用 DBOnline 地址。"},
     "torrents_path": {"type": "string", "label": "种子搜索路径"},
-    "api_key": {"type": "password", "label": "API Key（可选）"},
+    "access_token": {"type": "password", "label": "访问令牌", "description": "AVDB 登录接口签发的 Bearer Token；填写后优先使用。"},
+    "api_key": {"type": "password", "label": "旧版 API Key（可选）"},
     "timeout": {"type": "number", "label": "请求超时（秒）", "min": 3, "max": 60}
   }
 }

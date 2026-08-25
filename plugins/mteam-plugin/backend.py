@@ -751,12 +751,12 @@ async def search_resources(query: dict[str, Any], config: dict[str, Any]) -> dic
         return {"items": []}
     limit = max(5, min(_resource_number(query.get("limit")) or 30, 100))
     payload = await _mteam_post(config, "/api/torrent/search", json_body={
-        "mode": "normal",
-        "categories": [],
-        "visible": 1,
-        "keyword": keyword,
         "pageNumber": max(1, _resource_number(query.get("page")) or 1),
         "pageSize": limit,
+        "keyword": keyword,
+        "mode": "adult",
+        "status": "NORMAL",
+        "withCache": True,
     })
     resources = [_normalize_resource(config, item) for item in _resource_items(payload)]
     return {"items": [item for item in resources if item], "raw": payload}

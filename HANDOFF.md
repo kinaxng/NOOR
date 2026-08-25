@@ -781,3 +781,10 @@ Notes:
   计划可正确解析目标演员 1344、1 个源演员和 4 部关联影片，未执行写入。
 - 常规测试现直接锁定全部历史演员路径和 HTTP 方法，不再只依赖活动仓库里会被
   跳过的外部取证目录 parity 测试；相关测试 `19 passed, 1 skipped`。
+
+### Latest Recovery Update (2026-08-26：JavDB 资源来源恢复)
+
+- 恢复 M-Team 成人区搜索请求；恢复阶段误用 `mode=normal` 会让番号搜索返回空列表。
+- 从原恢复会话找回 M-Team 运行配置，明文未进入源码、测试或审计；`SSIS-001` 实测 3 条。
+- AVDB 历史地址和运行凭据已恢复；双模式验证确认该令牌使用 `X-API-Key`，不是 Bearer Token。
+- AVDB 插件也补充 Bearer 兼容并保留旧 API Key。聚合实测为 AVDB 4、JavDB 6、M-Team 3。
