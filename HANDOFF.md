@@ -767,3 +767,6 @@ Notes:
   冷缓存等待从 6 秒放宽到最多 30 秒，避免逐张建立头像缓存时误报。
 - 验证：后端全量 `308 passed, 8 skipped, 1 warning`；完整恢复页 smoke
   `HTTP_ERRORS []` / `CONSOLE_ERRORS []`。
+- 继续对全部 14 个插件执行真实连接测试：所有端点均为 HTTP 200。AVDB、
+  Transmission、Xunlei Remote 在未配置或凭据失效时按契约返回 `ok:false`，
+  其余 11 个返回 `ok:true`；未发现第二个通用测试路由缺口。
