@@ -742,3 +742,13 @@ Notes:
 - Verification: backend `308 passed, 8 skipped, 1 warning`; frontend production
   build passes; all 14 official plugins report `NOOR_PLUGIN_OK`; restored-page
   smoke reports `HTTP_ERRORS []` / `CONSOLE_ERRORS []`.
+
+### Latest Recovery Update (2026-08-25：JavDB 详情抽屉)
+
+- 修正插件 SDK 共享影片详情面板被恢复成桌面端 `100vw` 的问题；JavDB
+  点击作品后现在与媒体库一致，从右侧显示 `min(50vw, 960px)` 的抽屉，低于
+  `1024px` 时保持全宽。
+- 同一共享面板也供推荐中心影片详情使用，因此两处交互保持一致。
+- 前端生产构建通过；浏览器验证 1600px 视口下抽屉宽 800px、贴右侧，800px
+  视口下全宽，关闭按钮正常。完整恢复 smoke 的新增 JavDB 契约通过；该轮唯一
+  报告为既有 M-Team 异步片单弹窗偶发超时，随后单独复测通过。

@@ -1285,7 +1285,8 @@ onBeforeUnmount(clearMounted)
 .detail-panel-topbar__close { width: 2.1rem; height: 2.1rem; flex: none; border-radius: .7rem; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-secondary); background: var(--color-bg-elevated); border: 1px solid var(--color-border-default); transition: color .16s ease, background .16s ease, border-color .16s ease, transform .16s ease; }
 .detail-panel-topbar__close:hover { color: var(--color-text-primary); background: var(--color-bg-hover); border-color: var(--color-border-strong); transform: translateY(-1px); }
 .noor-plugin-panel-mask { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; justify-content: flex-end; background: rgba(0,0,0,.8); backdrop-filter: blur(8px); }
-.noor-plugin-panel { position: relative; width: 100vw; height: 100vh; background: var(--color-bg-surface); border-left: 1px solid var(--color-border-default); box-shadow: var(--shadow-xl); overflow: hidden; }
+.noor-plugin-panel { position: relative; width: 100%; height: 100vh; background: var(--color-bg-surface); border-left: 1px solid var(--color-border-default); box-shadow: var(--shadow-xl); overflow: hidden; }
+@media (min-width: 1024px) { .noor-plugin-panel { width: min(50vw, 960px); } }
 .noor-plugin-panel__scroll { height: 100%; overflow-y: auto; padding: 1rem; display: grid; gap: 1rem; }
 .noor-plugin-panel__head { padding: 0; }
 .noor-plugin-panel__meta { min-width: 0; display: grid; gap: .2rem; }
