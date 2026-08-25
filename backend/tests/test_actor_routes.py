@@ -10,27 +10,43 @@ from app.main import app
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_main_app_exposes_actor_api_routes() -> None:
-    paths = app.openapi()["paths"]
-
+def test_main_app_exposes_complete_legacy_actor_api_routes() -> None:
     expected = {
-        "/api/media-library/actors",
-        "/api/media-library/actors/mapping/status",
-        "/api/media-library/actors/mapping/sync-mdc-ng",
-        "/api/media-library/actors/duplicates",
-        "/api/media-library/actors/mapping/matches",
-        "/api/media-library/actors/tmdb-backfill/preview",
-        "/api/media-library/actors/name-sync/preview",
-        "/api/media-library/actors/mapping/merge-plan",
-        "/api/media-library/actor/{actor_id}",
-        "/api/media-library/actor/{actor_id}/movies",
-        "/api/media-library/actor/{actor_id}/delete-diagnostics",
-        "/api/media-library/actor/{actor_id}/avatar",
-        "/api/media-library/actor/{actor_id}/metadata/tmdb-preview",
-        "/api/media-library/actor/{actor_id}/metadata/tmdb-apply",
+        ("GET", "/api/media-library/actors"),
+        ("GET", "/api/media-library/actors/duplicates"),
+        ("GET", "/api/media-library/actors/mapping/latest-upload"),
+        ("GET", "/api/media-library/actors/mapping/matches"),
+        ("GET", "/api/media-library/actors/mapping/merge-plan"),
+        ("GET", "/api/media-library/actors/mapping/status"),
+        ("GET", "/api/media-library/actors/name-sync/preview"),
+        ("GET", "/api/media-library/actors/name-sync/progress/{progress_key}"),
+        ("GET", "/api/media-library/actors/tmdb-backfill/preview"),
+        ("GET", "/api/media-library/actors/tmdb-backfill/progress/{progress_key}"),
+        ("POST", "/api/media-library/actors/mapping/import-latest"),
+        ("POST", "/api/media-library/actors/mapping/merge-batch"),
+        ("POST", "/api/media-library/actors/mapping/merge-execute"),
+        ("POST", "/api/media-library/actors/mapping/sync-mdc-ng"),
+        ("POST", "/api/media-library/actors/mapping/sync-online"),
+        ("POST", "/api/media-library/actors/mapping/upload"),
+        ("DELETE", "/api/media-library/actors/mapping"),
+        ("POST", "/api/media-library/actors/name-sync/apply"),
+        ("POST", "/api/media-library/actors/tmdb-backfill/apply"),
+        ("GET", "/api/media-library/actor/{actor_id}"),
+        ("GET", "/api/media-library/actor/{actor_id}/delete-diagnostics"),
+        ("GET", "/api/media-library/actor/{actor_id}/movies"),
+        ("POST", "/api/media-library/actor/{actor_id}"),
+        ("POST", "/api/media-library/actor/{actor_id}/avatar"),
+        ("POST", "/api/media-library/actor/{actor_id}/avatar-url"),
+        ("POST", "/api/media-library/actor/{actor_id}/metadata/tmdb-apply"),
+        ("POST", "/api/media-library/actor/{actor_id}/metadata/tmdb-preview"),
+        ("DELETE", "/api/media-library/actor/{actor_id}"),
     }
-
-    assert expected <= set(paths)
+    actual = {
+        (method, route.path)
+        for route in app.routes
+        for method in (getattr(route, "methods", set()) or set())
+    }
+    assert expected <= actual
 
 
 def test_actor_router_keeps_media_library_prefix() -> None:
