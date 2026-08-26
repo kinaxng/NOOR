@@ -3,7 +3,7 @@
   "name": "迅雷远程",
   "version": "0.1.0",
   "type": "downloader",
-  "description": "通过群晖迅雷 NAS Web API 管理远程下载任务，并支持账号远程探针与移动端 fallback。",
+  "description": "通过群晖迅雷 NAS Web API 管理远程下载任务，并自动使用可用的试用加速次数。",
   "tags": [
     "xunlei",
     "thunder",
@@ -31,22 +31,8 @@
     "cookie": "",
     "file_indices": "auto",
     "min_file_size_mb": 100,
-    "account_access_token": "",
-    "account_target": "",
-    "account_parent_folder_id": "",
-    "account_device_id": "",
-    "mobile_access_token": "",
-    "mobile_captcha_token": "",
-    "mobile_shumei_boxid": "",
-    "mobile_device_id": "",
-    "mobile_peer_id": "",
-    "mobile_target": "",
-    "mobile_parent_folder_id": "",
-    "mobile_client_id": "XoL5lqbDWNW0e7QA",
-    "mobile_version_name": "2.6.10",
-    "mobile_version_code": "21565",
-    "mobile_package_name": "com.xunlei.mvideo",
-    "mobile_device_model": "iPhone18"
+    "auto_try_speed": true,
+    "auto_try_speed_interval": 15
   },
   "config_schema": {
     "base_url": {
@@ -112,77 +98,16 @@
       "min": 0,
       "max": 4096
     },
-    "account_access_token": {
-      "type": "password",
-      "label": "账号远程 Access Token",
-      "placeholder": "不带 Bearer 前缀，来自 pan.xunlei.com 请求头",
-      "description": "实验模式。用于验证迅雷账号远程链路是否可列出设备和创建任务；不影响 NAS 模式。"
+    "auto_try_speed": {
+      "type": "boolean",
+      "label": "自动使用试用加速",
+      "description": "检测到等待中或下载中的任务时，自动领取可用的迅雷试用加速次数。"
     },
-    "account_target": {
-      "type": "string",
-      "label": "账号远程设备 Target",
-      "placeholder": "device_id#..."
-    },
-    "account_parent_folder_id": {
-      "type": "string",
-      "label": "账号远程目录 ID",
-      "placeholder": "从账号远程路径探针返回中选择"
-    },
-    "account_device_id": {
-      "type": "string",
-      "label": "账号远程 Device ID",
-      "placeholder": "可留空，NOOR 自动生成固定 device id"
-    },
-    "mobile_access_token": {
-      "type": "password",
-      "label": "移动端 Access Token",
-      "placeholder": "Bearer ...",
-      "description": "配额受限时自动 fallback 到移动端下载。"
-    },
-    "mobile_captcha_token": {
-      "type": "textarea",
-      "label": "移动端 Captcha Token"
-    },
-    "mobile_shumei_boxid": {
-      "type": "textarea",
-      "label": "移动端 Shumei Box ID"
-    },
-    "mobile_device_id": {
-      "type": "string",
-      "label": "移动端 Device ID / GUID"
-    },
-    "mobile_peer_id": {
-      "type": "string",
-      "label": "移动端 Peer ID"
-    },
-    "mobile_target": {
-      "type": "string",
-      "label": "移动端 Target",
-      "placeholder": "device_id#..."
-    },
-    "mobile_parent_folder_id": {
-      "type": "string",
-      "label": "移动端目录 ID"
-    },
-    "mobile_client_id": {
-      "type": "string",
-      "label": "移动端 Client ID"
-    },
-    "mobile_version_name": {
-      "type": "string",
-      "label": "移动端版本名"
-    },
-    "mobile_version_code": {
-      "type": "string",
-      "label": "移动端版本号"
-    },
-    "mobile_package_name": {
-      "type": "string",
-      "label": "移动端包名"
-    },
-    "mobile_device_model": {
-      "type": "string",
-      "label": "移动端设备型号"
+    "auto_try_speed_interval": {
+      "type": "number",
+      "label": "加速检测间隔（秒）",
+      "min": 10,
+      "max": 300
     }
   },
   "contributions": {

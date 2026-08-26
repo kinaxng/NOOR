@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
 import importlib.util
 import json
 import sys
@@ -61,56 +59,6 @@ class FakeClient:
         return FakeResponse({})
 
 
-def _expired_mobile_token() -> str:
-    header = base64.urlsafe_b64encode(b'{"alg":"HS256"}').rstrip(b"=").decode()
-    payload = base64.urlsafe_b64encode(json.dumps({"exp": 1, "aud": "mobile"}).encode()).rstrip(b"=").decode()
-    return f"{header}.{payload}.signature"
-
-
-def test_account_constants_and_captcha_sign():
-    config = {"account_device_id": "device-abc"}
-    sign = xunlei_backend._account_captcha_sign(config, "123")
-    value = f"{xunlei_backend.ACCOUNT_CLIENT_ID}2.9.0pan.xunlei.comdevice-abc123"
-    for item in xunlei_backend.ACCOUNT_ALGORITHMS:
-        value = hashlib.md5(f"{value}{item['salt']}".encode()).hexdigest()
-    assert sign == f"1.{value}"
-    assert xunlei_backend.ACCOUNT_CLIENT_ID
-
-
-def test_account_headers_strips_bearer_and_sets_captcha():
-    config = {
-        "account_access_token": "Bearer abc123",
-        "account_device_id": "device-abc",
-    }
-    headers = xunlei_backend._account_headers(config, captcha_token="captcha-x")
-    assert headers["Authorization"] == "Bearer abc123"
-    assert headers["x-captcha-token"] == "captcha-x"
-    assert headers["x-client-id"] == xunlei_backend.ACCOUNT_CLIENT_ID
-    assert headers["x-device-id"] == "device-abc"
-
-
-def test_account_user_me_uses_user_api():
-    client = FakeClient()
-    result = asyncio.run(xunlei_backend._account_user_me({"account_access_token": "abc"}, client))
-    assert result["user"]["sub"] == "user-1"
-    assert client.gets[0]["url"] == f"{xunlei_backend.ACCOUNT_USER_BASE}/v1/user/me"
-    assert client.gets[0]["headers"]["Authorization"] == "Bearer abc"
-
-
-def test_mobile_status_reports_expired_jwt():
-    config = {
-        "mobile_access_token": _expired_mobile_token(),
-        "mobile_captcha_token": "captcha",
-        "mobile_device_id": "device",
-        "mobile_parent_folder_id": "folder",
-    }
-    client = FakeClient()
-    result = asyncio.run(xunlei_backend._mobile_status(config, client))["mobile"]
-    assert result["configured"] is True
-    assert result["token_expired"] is True
-    assert result["connected"] is False
-
-
 def test_restore_candidates_scans_only_residual_files(tmp_path):
     root = tmp_path / "downloads"
     root.mkdir()
@@ -151,14 +99,48 @@ def test_explicit_savepath_fails_closed_when_unknown():
         asyncio.run(xunlei_backend._require_parent_folder_id_for_explicit_savepath(config, client, "pan-auth", "/volume1/data/downloads/av/"))
 
 
-def test_plugin_json_has_account_and_mobile_schema():
+def test_plugin_json_only_exposes_nas_and_auto_speed_schema():
     plugin = json.loads((ROOT / "plugins/xunlei-remote/plugin.json").read_text(encoding="utf-8"))
     defaults = plugin["default_config"]
-    for key in ("account_access_token", "account_target", "account_parent_folder_id", "account_device_id",
-                "mobile_access_token", "mobile_captcha_token", "mobile_shumei_boxid", "mobile_device_id",
-                "mobile_peer_id", "mobile_target", "mobile_parent_folder_id"):
-        assert key in defaults
-        assert key in plugin["config_schema"]
+    assert defaults["auto_try_speed"] is True
+    assert defaults["auto_try_speed_interval"] == 15
+    assert "auto_try_speed" in plugin["config_schema"]
+    assert not any(key.startswith(("account_", "mobile_")) for key in defaults)
+    assert not any(key.startswith(("account_", "mobile_")) for key in plugin["config_schema"])
+
+
+def test_auto_try_speed_applies_only_when_active_task_exists(monkeypatch):
+    async def client_factory(_config, timeout=15.0):
+        return FakeClient()
+
+    async def context(_config, _client):
+        return "pan-auth", "device", {}
+
+    async def tasks(_config, _client, _pan_auth, _device_id, **_kwargs):
+        return {"tasks": [{"id": "active", "phase": "PHASE_TYPE_RUNNING"}]}
+
+    async def apply(_config, _client, _pan_auth):
+        return {"ok": True, "applied": True, "try_speed": {"usage_used": 1, "usage_total": 3}}
+
+    monkeypatch.setattr(xunlei_backend, "_client", client_factory)
+    monkeypatch.setattr(xunlei_backend, "_context", context)
+    monkeypatch.setattr(xunlei_backend, "_tasks", tasks)
+    monkeypatch.setattr(xunlei_backend, "_try_speed_apply", apply)
+
+    result = asyncio.run(xunlei_backend._auto_try_speed_once({}))
+
+    assert result["applied"] is True
+    assert xunlei_backend._speed_scheduler_status["last_message"] == "已自动使用试用加速"
+
+
+def test_removed_experimental_paths_are_absent_from_plugin_contract():
+    backend = (ROOT / "plugins/xunlei-remote/backend.py").read_text(encoding="utf-8")
+    frontend = (ROOT / "plugins/xunlei-remote/frontend/page.js").read_text(encoding="utf-8")
+
+    for removed in ("account_static_info", "account_user_me", "account_clients", "mobile_submit", "mobile_status", "_mobile_submit_download"):
+        assert removed not in backend
+    assert "账号探针" not in frontend
+    assert "移动端" not in frontend
 
 
 def test_toolbar_uses_one_active_filter_and_embeds_search_in_stats():
@@ -167,5 +149,8 @@ def test_toolbar_uses_one_active_filter_and_embeds_search_in_stats():
     assert "{ key: 'active', label: '进行中' }" in source
     assert "{ key: 'running', label: '下载中' }" not in source
     assert "云盘用量" not in source
+    assert "任务额度 ${limitText} · 加速 ${speedUsed}/${speedTotal || '—'}" in source
+    assert "账号探针" not in source
+    assert "移动端" not in source
     assert 'class="xunlei-remote-stat xunlei-remote-stat--search"' in source
     assert "['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING'].includes(t.phase)" in source

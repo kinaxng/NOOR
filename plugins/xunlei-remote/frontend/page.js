@@ -10,10 +10,7 @@ export async function mount(el, sdk = {}) {
     about: null,
     config: null,
     dailyLimit: null,
-    mobile: null,
     trySpeed: null,
-    trySpeedApplying: false,
-    trySpeedAppliedKey: '',
     submitModal: null,
     submitStatus: 'idle',
     submitProgress: 0,
@@ -33,12 +30,10 @@ export async function mount(el, sdk = {}) {
       <div class="xunlei-remote-toolbar">
         <div data-role="tabs"></div>
         <div class="xunlei-remote-actions">
-          <span data-role="dailyLimit" class="xunlei-remote-badge xunlei-remote-badge--warning" style="display:none"></span>
-          <span data-role="mobile" class="xunlei-remote-badge">移动端检查中</span>
+          <span data-role="usage" class="xunlei-remote-badge xunlei-remote-badge--info">额度读取中</span>
           <span data-role="device" class="xunlei-remote-badge">未连接</span>
           <button data-role="newTask" class="xunlei-remote-btn xunlei-remote-btn--primary">新建任务</button>
           <button data-role="residual" class="xunlei-remote-btn">残留处理</button>
-          <button data-role="accountProbe" class="xunlei-remote-btn">账号探针</button>
           <button data-role="refresh" class="xunlei-remote-btn xunlei-remote-btn--primary">刷新</button>
         </div>
       </div>
@@ -67,13 +62,11 @@ export async function mount(el, sdk = {}) {
 
   const $ = role => el.querySelector(`[data-role="${role}"]`)
   const tabsHost = $('tabs')
-  const dailyLimit = $('dailyLimit')
-  const mobileBadge = $('mobile')
+  const usageBadge = $('usage')
   const device = $('device')
   const refresh = $('refresh')
   const newTask = $('newTask')
   const residual = $('residual')
-  const accountProbe = $('accountProbe')
   const statTotal = $('statTotal')
   const statActive = $('statActive')
   const statDone = $('statDone')
@@ -87,19 +80,9 @@ export async function mount(el, sdk = {}) {
   const fmtBytes = n => { n = Number(n || 0); if (!n) return '0 B'; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ } return `${n.toFixed(i >= 3 ? 2 : 1)} ${u[i]}` }
   const fmtSpeed = n => Number(n || 0) ? `${fmtBytes(n)}/s` : '0 B/s'
   const fmtTime = s => { if (!s) return '-'; const d = new Date(s); return Number.isNaN(d.getTime()) ? s : `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
-  const fmtRemain = sec => { sec = Number(sec || 0); if (sec <= 0) return '已过期'; const h = Math.floor(sec / 3600); const m = Math.floor((sec % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m` }
   const pct = n => `${Math.round(Number(n || 0) * 1000) / 10}%`
   const phaseText = p => ({ PHASE_TYPE_PENDING: '等待中', PHASE_TYPE_RUNNING: '下载中', PHASE_TYPE_PAUSED: '暂停', PHASE_TYPE_COMPLETE: '完成', PHASE_TYPE_ERROR: '错误' }[p] || p || '-')
   const phaseTone = p => p === 'PHASE_TYPE_COMPLETE' ? 'success' : p === 'PHASE_TYPE_ERROR' ? 'error' : p === 'PHASE_TYPE_PAUSED' ? 'muted' : p === 'PHASE_TYPE_RUNNING' ? 'info' : 'warning'
-  const trySpeedLabel = ts => {
-    if (!ts) return ''
-    const remain = Number(ts.usage_remaining || 0)
-    const total = Number(ts.usage_total || 0)
-    const prefix = remain > 0 ? '加速可用' : (String(ts.status) === '1' ? '加速中' : '加速用完')
-    return `${prefix} ${remain}/${total}`
-  }
-
-
   function modalApi(options) {
     if (sdk.ui?.modal) return sdk.ui.modal(options)
     const mask = document.createElement('div')
@@ -183,51 +166,6 @@ export async function mount(el, sdk = {}) {
     const data = await r.json().catch(() => ({}))
     if (!r.ok || data.ok === false) throw new Error(data.detail || data.message || data.error || '请求失败')
     return data
-  }
-
-  async function openAccountProbeModal() {
-    const box = document.createElement('div')
-    box.className = 'xunlei-account-probe'
-    box.innerHTML = '<div class="xunlei-account-probe__state">读取静态参数中...</div>'
-    const closeBtn = sdk.ui?.button ? sdk.ui.button({ label: '关闭', onClick: () => modal.close() }) : document.createElement('button')
-    if (!sdk.ui?.button) { closeBtn.type = 'button'; closeBtn.className = 'xunlei-remote-btn'; closeBtn.textContent = '关闭'; closeBtn.onclick = () => modal.close() }
-    const modal = modalApi({ title: '迅雷账号远程探针', width: 'lg', content: box, footer: [closeBtn] })
-    const renderJson = value => `<pre>${esc(JSON.stringify(value, null, 2))}</pre>`
-    try {
-      const stat = await postAction('account_static_info')
-      box.innerHTML = `
-        <div class="xunlei-account-probe__grid">
-          <div><span>clientId</span><strong>${esc(stat.client_id || '-')}</strong></div>
-          <div><span>deviceId</span><strong>${esc(stat.device_id || '-')}</strong></div>
-          <div><span>算法</span><strong>${esc(stat.algorithms_count || 0)} salts</strong></div>
-        </div>
-        <div class="xunlei-account-probe__actions">
-          <button data-probe="user" class="xunlei-remote-btn">测试用户</button>
-          <button data-probe="clients" class="xunlei-remote-btn">读取设备</button>
-        </div>
-        <div class="xunlei-account-probe__hint">需要在插件设置里填写 pan.xunlei.com 请求头中的 Bearer Access Token。未填写时这里只能显示静态参数。</div>
-        <div class="xunlei-account-probe__result">${renderJson(stat)}</div>
-      `
-      const result = box.querySelector('.xunlei-account-probe__result')
-      for (const btn of box.querySelectorAll('[data-probe]')) {
-        btn.onclick = async () => {
-          btn.disabled = true
-          const old = btn.textContent
-          btn.textContent = '读取中'
-          try {
-            const data = await postAction(btn.dataset.probe === 'user' ? 'account_user_me' : 'account_clients')
-            result.innerHTML = renderJson(data)
-          } catch (e) {
-            result.innerHTML = `<div class="xunlei-account-probe__error">${esc(e.message || '读取失败')}</div>`
-          } finally {
-            btn.disabled = false
-            btn.textContent = old
-          }
-        }
-      }
-    } catch (e) {
-      box.innerHTML = `<div class="xunlei-account-probe__error">${esc(e.message || '读取失败')}</div>`
-    }
   }
 
   async function openResidualModal() {
@@ -651,23 +589,12 @@ export async function mount(el, sdk = {}) {
     if (state.destroyed) return
     renderTabs()
     renderStats()
-    dailyLimit.style.display = state.dailyLimit?.title ? 'inline-flex' : 'none'
-    dailyLimit.textContent = state.dailyLimit?.title ? '额度受限' : ''
-    dailyLimit.title = state.dailyLimit?.title || ''
-    const mobile = state.mobile
-    mobileBadge.style.display = 'inline-flex'
-    if (mobile) {
-      mobileBadge.textContent = !mobile.configured ? '移动端未配置' : (mobile.connected ? `移动端已通 · ${fmtRemain(mobile.token_expires_in)}` : `移动端异常 · ${mobile.token_expired ? '已过期' : '未连通'}`)
-      mobileBadge.classList.toggle('xunlei-remote-badge--success', !!mobile.connected)
-      mobileBadge.classList.toggle('xunlei-remote-badge--warning', !mobile.configured || (!mobile.connected && !mobile.token_expired))
-      mobileBadge.classList.toggle('xunlei-remote-badge--error', !!mobile.configured && !mobile.connected && !!mobile.token_expired)
-      mobileBadge.title = !mobile.configured ? (mobile.error || '移动端 fallback 未配置') : (mobile.connected ? `runner ${mobile.running_runner_count || 0}/${mobile.runner_count || 0} · token 剩余 ${fmtRemain(mobile.token_expires_in)}` : (mobile.error || '移动端链路不可用'))
-    } else {
-      mobileBadge.textContent = '移动端未检查'
-      mobileBadge.classList.remove('xunlei-remote-badge--success', 'xunlei-remote-badge--error')
-      mobileBadge.classList.add('xunlei-remote-badge--warning')
-      mobileBadge.title = 'mobile_status 尚未返回'
-    }
+    const limitMatch = String(state.dailyLimit?.title || '').match(/今日(\d+)个/)
+    const limitText = state.dailyLimit?.limited ? `${limitMatch?.[1] || '—'}/${limitMatch?.[1] || '—'}` : '可用'
+    const speedUsed = Number(state.trySpeed?.usage_used || 0)
+    const speedTotal = Number(state.trySpeed?.usage_total || 0)
+    usageBadge.textContent = `任务额度 ${limitText} · 加速 ${speedUsed}/${speedTotal || '—'}`
+    usageBadge.title = state.dailyLimit?.title || `试用加速剩余 ${Number(state.trySpeed?.usage_remaining || 0)} 次`
     const connected = !!state.device?.user?.name
     device.textContent = connected ? `已连接 · ${state.device.user.name}` : '未连接'
     device.classList.toggle('xunlei-remote-badge--success', connected)
@@ -677,26 +604,6 @@ export async function mount(el, sdk = {}) {
     stateBox.className = 'xunlei-remote-state' + (state.error ? ' is-error' : '')
     stateBox.textContent = state.error || '暂无任务'
     renderTable()
-  }
-
-  async function maybeApplyTrySpeed() {
-    const running = state.tasks.some(t => t.phase === 'PHASE_TYPE_RUNNING' || t.phase === 'PHASE_TYPE_PENDING')
-    const ts = state.trySpeed
-    if (!running || !ts?.can_prompt || state.trySpeedApplying) return
-    const key = `${ts.status}|${ts.usage_used}|${ts.usage_remaining}|${ts.start_time || ''}`
-    if (state.trySpeedAppliedKey === key) return
-    state.trySpeedApplying = true
-    state.trySpeedAppliedKey = key
-    try {
-      const data = await postAction('try_speed_apply')
-      if (data?.try_speed) state.trySpeed = data.try_speed
-      if (data?.applied) toast('success', '已自动领取迅雷试用加速')
-    } catch (e) {
-      toast('error', e.message || '迅雷试用加速领取失败')
-    } finally {
-      state.trySpeedApplying = false
-      renderStats()
-    }
   }
 
   async function load(options = {}) {
@@ -722,8 +629,6 @@ export async function mount(el, sdk = {}) {
       state.tasks = Array.isArray(tasks.tasks) ? tasks.tasks : []
       state.about = about?.about || null
       state.config = cfg?.config || null
-      state.mobile = dev.mobile_status || null
-      maybeApplyTrySpeed()
     } catch (e) {
       if (!silent) state.error = e.message || '加载失败'
     } finally {
@@ -756,7 +661,6 @@ export async function mount(el, sdk = {}) {
   refresh.onclick = () => load()
   newTask.onclick = openNewTaskModal
   residual.onclick = openResidualModal
-  accountProbe.onclick = openAccountProbeModal
   search.oninput = e => { state.query = e.target.value; state.page = 1; state.tableSignature = ''; render() }
   await load()
   state.timer = setInterval(() => { if (!state.destroyed && !state.loading) load({ silent: true }) }, 10000)

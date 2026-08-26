@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import base64
-import hashlib
+import asyncio
+import contextlib
 import json
 import re
-import secrets
 import time
 from pathlib import Path
 from typing import Any
@@ -26,82 +25,15 @@ DEFAULT_RESTORE_PATH_MAPPINGS = [
     ("/home/kinax/Videos/downloads", "/volume1/data/downloads"),
     ("/home/kinax/Videos/#recycle/downloads", "/volume1/data/downloads"),
 ]
-ACCOUNT_API_BASE = "https://api-pan.xunlei.com"
-ACCOUNT_USER_BASE = "https://xluser-ssl.xunlei.com"
-ACCOUNT_CLIENT_ID = "Yd0uSVGrNJhCC2oE"
-ACCOUNT_ALG_VERSION = "1"
-ACCOUNT_ALGORITHMS = [
-    {"alg": "md5", "salt": "t24w3VjaHB++4RM"},
-    {"alg": "md5", "salt": "pgA9zT3GQqQhXyWwL"},
-    {"alg": "md5", "salt": "35Nt1aQOI67"},
-    {"alg": "md5", "salt": "lKwoU/SK0AJ3y6vn+l3n"},
-    {"alg": "md5", "salt": "h3OGLCTCzmbhJLmb6WTNq8ogHNuI8GnpVUJ"},
-    {"alg": "md5", "salt": "v0Br3m00h2g5cXF1Zbpbt4DNh9/8tt8"},
-    {"alg": "md5", "salt": "vOSCqn9uXdX02Nt4pQCoRmj0WiY7AvDh6"},
-    {"alg": "md5", "salt": "oa2PBcypZ"},
-    {"alg": "md5", "salt": "NeNF/rCYnaA1Yp"},
-    {"alg": "md5", "salt": "yDCpWLF5b"},
-    {"alg": "md5", "salt": "xK9k"},
-    {"alg": "md5", "salt": "K0ACI+Yf"},
-    {"alg": "md5", "salt": "XDWXowjmmnp1GF"},
-    {"alg": "md5", "salt": "cX5DR4LoIKZy2hbC2xmVy"},
-    {"alg": "md5", "salt": "VZVfriR9"},
-]
-
-
-
-def _account_device_id(config: dict[str, Any]) -> str:
-    configured = str(config.get("account_device_id") or "").strip()
-    if configured:
-        return configured
-    seed = str(config.get("account_device_seed") or "noor-xunlei-account-remote")
-    return hashlib.md5(seed.encode()).hexdigest()
-
-
-def _account_headers(config: dict[str, Any], token: str = "", *, captcha_token: str = "") -> dict[str, str]:
-    token = token or str(config.get("account_access_token") or "").strip()
-    if token.lower().startswith("bearer "):
-        token = token.split(" ", 1)[1].strip()
-    headers = {
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Content-Type": "application/json",
-        "Origin": "https://pan.xunlei.com",
-        "Referer": "https://pan.xunlei.com/yc/home/",
-        "User-Agent": str(config.get("account_user_agent") or config.get("user_agent") or "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
-        "x-client-id": ACCOUNT_CLIENT_ID,
-        "x-device-id": _account_device_id(config),
-    }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    if captcha_token:
-        headers["x-captcha-token"] = captcha_token
-    return headers
-
-
-def _account_captcha_sign(config: dict[str, Any], timestamp: str) -> str:
-    value = f"{ACCOUNT_CLIENT_ID}2.9.0pan.xunlei.com{_account_device_id(config)}{timestamp}"
-    for item in ACCOUNT_ALGORITHMS:
-        value = hashlib.md5(f"{value}{item['salt']}".encode()).hexdigest()
-    return f"{ACCOUNT_ALG_VERSION}.{value}"
-
-
-def _account_token(config: dict[str, Any]) -> str:
-    token = str(config.get("account_access_token") or "").strip()
-    if token.lower().startswith("bearer "):
-        token = token.split(" ", 1)[1].strip()
-    if not token:
-        raise ValueError("账号远程实验模式缺少 Access Token：请从 pan.xunlei.com 请求头复制 Authorization Bearer 值")
-    return token
-
-
-def _account_error(resp: httpx.Response, fallback: str = "迅雷账号远程请求失败") -> str:
-    try:
-        data = resp.json()
-    except Exception:
-        data = None
-    return _extract_xunlei_message(data, getattr(resp, "text", ""), fallback=fallback)
-
+_speed_scheduler_task: asyncio.Task[None] | None = None
+_speed_scheduler_stop: asyncio.Event | None = None
+_speed_scheduler_status: dict[str, Any] = {
+    "status": "idle",
+    "last_checked_at": None,
+    "last_applied_at": None,
+    "last_message": "等待检测下载任务",
+    "last_error": "",
+}
 def _base(config: dict[str, Any]) -> str:
     raw = str(config.get("base_url") or "").strip()
     if not raw:
@@ -777,10 +709,9 @@ async def _require_parent_folder_id_for_explicit_savepath(
 ) -> str:
     """Resolve a user-specified save path and fail closed when it is unknown.
 
-    Xunlei mobile fallback creates tasks by folder id, not by path. If NOOR accepts
-    an explicit savepath but cannot map it to a folder id, falling back to
-    mobile_parent_folder_id silently sends the task to the default folder. That is
-    worse than failing because it downloads large files into the wrong directory.
+    Xunlei creates tasks by folder id, not by path. If NOOR accepts an explicit
+    savepath but cannot map it to a folder id, it must fail instead of silently
+    downloading a large file into the wrong directory.
     """
     folder_id = await _resolve_parent_folder_id(config, client, pan_auth, savepath)
     if folder_id:
@@ -897,286 +828,6 @@ async def _resource_info(config: dict[str, Any], client: httpx.AsyncClient, pan_
 
 
 
-async def _account_user_summary(config: dict[str, Any], client: httpx.AsyncClient) -> dict[str, str]:
-    try:
-        user = (await _account_user_me(config, client)).get("user") or {}
-    except Exception:
-        user = {}
-    return {
-        "user_id": str(user.get("sub") or user.get("id") or ""),
-        "user_name": str(user.get("name") or ""),
-    }
-
-
-async def _account_captcha_token(config: dict[str, Any], client: httpx.AsyncClient, action: str, user: dict[str, str] | None = None) -> str:
-    user = user or await _account_user_summary(config, client)
-    timestamp = str(int(time.time() * 1000))
-    meta = {
-        "user_id": str(user.get("user_id") or ""),
-        "user_name": str(user.get("user_name") or ""),
-        "client_version": "2.9.0",
-        "package_name": "pan.xunlei.com",
-        "timestamp": timestamp,
-        "captcha_sign": _account_captcha_sign(config, timestamp),
-    }
-    body = {
-        "client_id": ACCOUNT_CLIENT_ID,
-        "action": action,
-        "device_id": _account_device_id(config),
-        "captcha_token": str(config.get("account_captcha_token") or ""),
-        "meta": meta,
-    }
-    resp = await client.post(
-        f"{ACCOUNT_USER_BASE}/v1/shield/captcha/init",
-        headers=_account_headers(config, ""),
-        content=json.dumps(body, separators=(",", ":")),
-    )
-    if resp.status_code >= 400:
-        raise ValueError(_account_error(resp, "账号远程 captcha token 获取失败"))
-    data = resp.json() if resp.text else {}
-    token = str(data.get("captcha_token") or "")
-    if not token:
-        url = str(data.get("url") or "")
-        if url:
-            raise ValueError("账号远程需要人工验证码，请在浏览器完成验证后重新复制 Access Token")
-        raise ValueError(_extract_xunlei_message(data, fallback="账号远程 captcha token 为空"))
-    return token
-
-async def _account_user_me(config: dict[str, Any], client: httpx.AsyncClient) -> dict[str, Any]:
-    token = _account_token(config)
-    resp = await client.get(f"{ACCOUNT_USER_BASE}/v1/user/me", headers=_account_headers(config, token))
-    if resp.status_code >= 400:
-        raise ValueError(_account_error(resp, "账号远程用户信息读取失败"))
-    return {"ok": True, "user": resp.json(), "client_id": ACCOUNT_CLIENT_ID, "device_id": _account_device_id(config)}
-
-
-async def _account_clients(config: dict[str, Any], client: httpx.AsyncClient) -> dict[str, Any]:
-    token = _account_token(config)
-    user = await _account_user_summary(config, client)
-    captcha = await _account_captcha_token(config, client, "GET:CAPTCHA_TOKEN", user)
-    resp = await client.get(
-        f"{ACCOUNT_API_BASE}/drive/v1/tasks",
-        params={"type": "user#runner", "space": ""},
-        headers=_account_headers(config, token, captcha_token=captcha),
-    )
-    if resp.status_code >= 400:
-        raise ValueError(_account_error(resp, "账号远程设备列表读取失败"))
-    data = resp.json()
-    return {"ok": True, "tasks": data.get("tasks") or [], "raw": data, "client_id": ACCOUNT_CLIENT_ID, "device_id": _account_device_id(config)}
-
-
-async def _account_paths(config: dict[str, Any], client: httpx.AsyncClient, payload: dict[str, Any]) -> dict[str, Any]:
-    token = _account_token(config)
-    target = str(payload.get("target") or config.get("account_target") or "").strip()
-    if not target:
-        raise ValueError("缺少账号远程设备 target")
-    params = {
-        "device_space": "",
-        "space": target,
-        "parent_id": str(payload.get("parent_id") or payload.get("folder_id") or ""),
-        "limit": str(max(1, min(int(payload.get("limit") or 50), 200))),
-        "with_audit": "true",
-        "filters": json.dumps({"trashed": {"eq": False}, "phase": {"eq": "PHASE_TYPE_COMPLETE"}, "kind": {"eq": "drive#folder"}}, separators=(",", ":")),
-        "page_token": str(payload.get("page_token") or ""),
-        "with": ["withCategoryDiskMountPath", "withCategoryHistoryDownloadPath"],
-        "order": "TYPE_DESC",
-    }
-    user = await _account_user_summary(config, client)
-    captcha = await _account_captcha_token(config, client, "GET:CAPTCHA_TOKEN", user)
-    resp = await client.get(f"{ACCOUNT_API_BASE}/drive/v1/files", params=params, headers=_account_headers(config, token, captcha_token=captcha))
-    if resp.status_code >= 400:
-        raise ValueError(_account_error(resp, "账号远程目录读取失败"))
-    return {"ok": True, **resp.json()}
-
-
-async def _account_submit(config: dict[str, Any], client: httpx.AsyncClient, payload: dict[str, Any]) -> dict[str, Any]:
-    token = _account_token(config)
-    target = str(payload.get("target") or config.get("account_target") or "").strip()
-    folder_id = str(payload.get("parent_folder_id") or payload.get("folder_id") or config.get("account_parent_folder_id") or "").strip()
-    url = str(payload.get("url") or payload.get("magnet") or "").strip()
-    if not target or not folder_id or not url:
-        raise ValueError("账号远程提交缺少 target / parent_folder_id / url")
-    body = {
-        "space": target,
-        "type": "user#download-url",
-        "file_name": str(payload.get("name") or "NOOR 迅雷远程任务"),
-        "file_size": str(payload.get("file_size") or 0),
-        "params": {
-            "target": target,
-            "platform": str(payload.get("platform") or ""),
-            "parent_folder_id": folder_id,
-            "url": url,
-            "total_file_count": str(payload.get("total_file_count") or 1),
-            "sub_file_index": str(payload.get("file_indices") or payload.get("sub_file_index") or "--1"),
-        },
-    }
-    user = await _account_user_summary(config, client)
-    captcha = await _account_captcha_token(config, client, "POST:/drive/v1/task", user)
-    resp = await client.post(f"{ACCOUNT_API_BASE}/drive/v1/task", headers=_account_headers(config, token, captcha_token=captcha), content=json.dumps(body, separators=(",", ":")))
-    if resp.status_code >= 400:
-        raise ValueError(_account_error(resp, "账号远程任务创建失败"))
-    data = resp.json() if resp.text else {}
-    return {"ok": True, "result": data, "task": data.get("task") if isinstance(data, dict) else data}
-
-
-def _mobile_token(config: dict[str, Any]) -> str:
-    token = str(config.get("mobile_access_token") or "").strip()
-    if token.lower().startswith("bearer "):
-        token = token.split(" ", 1)[1].strip()
-    return token
-
-
-def _mobile_configured(config: dict[str, Any]) -> bool:
-    return bool(_mobile_token(config) and str(config.get("mobile_captcha_token") or "").strip() and str(config.get("mobile_device_id") or "").strip())
-
-
-def _mobile_headers(config: dict[str, Any]) -> dict[str, str]:
-    token = _mobile_token(config)
-    if not token:
-        raise ValueError("缺少迅雷移动端 Access Token")
-    client_id = str(config.get("mobile_client_id") or "XoL5lqbDWNW0e7QA").strip()
-    device_id = str(config.get("mobile_device_id") or "").strip()
-    peer_id = str(config.get("mobile_peer_id") or "").strip()
-    if not device_id:
-        raise ValueError("缺少迅雷移动端 Device ID / GUID")
-    headers = {
-        "accept": "*/*",
-        "accept-language": "zh-CN",
-        "content-type": "application/json",
-        "user-agent": str(config.get("mobile_user_agent") or "com.xunlei.mvideo/2.6.10 (iOS 26.4.2;iPhone18,2) Net/WiFi"),
-        "authorization": f"Bearer {token}",
-        "x-client-id": client_id,
-        "client_id": client_id,
-        "x-device-id": device_id,
-        "x-guid": device_id,
-        "guid": device_id,
-        "x-client-version-code": str(config.get("mobile_version_code") or "21565"),
-        "version-code": str(config.get("mobile_version_code") or "21565"),
-        "version-name": str(config.get("mobile_version_name") or "2.6.10"),
-        "mobile-type": str(config.get("mobile_type") or "iOS"),
-        "platform": str(config.get("mobile_platform") or "iOS"),
-        "app-type": str(config.get("mobile_app_type") or "apple_TDMVideo"),
-        "product-id": str(config.get("mobile_product_id") or "31"),
-        "device-model": str(config.get("mobile_device_model_header") or "iPhone"),
-    }
-    if peer_id:
-        headers.update({"peerid": peer_id, "peer-id": peer_id, "x-peer-id": peer_id})
-    captcha = str(config.get("mobile_captcha_token") or "").strip()
-    if captcha:
-        headers["x-captcha-token"] = captcha
-    shumei = str(config.get("mobile_shumei_boxid") or "").strip()
-    if shumei:
-        headers["shumei_boxid"] = shumei
-    return headers
-
-
-def _target_from_device(device_id: str) -> str:
-    return device_id if device_id.startswith("device_id#") else f"device_id#{device_id}"
-
-
-async def _mobile_submit_download(config: dict[str, Any], client: httpx.AsyncClient, payload: dict[str, Any], *, device_id: str = "", url: str = "", file_indices: str = "--1", total_files: int = 1, total_size: int = 0, task_name: str = "NOOR 迅雷任务", parent_folder_id: str = "") -> dict[str, Any]:
-    url = url or str(payload.get("url") or payload.get("magnet") or payload.get("urls") or "").strip()
-    if not url:
-        raise ValueError("missing url/magnet")
-    target = str(payload.get("target") or config.get("mobile_target") or "").strip()
-    if not target:
-        target = _target_from_device(device_id or str(config.get("device_id") or ""))
-    folder_id = str(parent_folder_id or payload.get("parent_folder_id") or payload.get("folder_id") or config.get("mobile_parent_folder_id") or "").strip()
-    if not target or not folder_id:
-        raise ValueError("移动端 fallback 缺少 target 或 parent_folder_id")
-    body = {
-        "space": target,
-        "type": "user#download-url",
-        "name": task_name,
-        "file_name": task_name,
-        "file_size": str(total_size or payload.get("file_size") or 0),
-        "params": {
-            "target": target,
-            "platform": "web",
-            "parent_folder_id": folder_id,
-            "url": url,
-            "total_file_count": str(total_files or payload.get("total_file_count") or 1),
-            "sub_file_index": str(file_indices or payload.get("file_indices") or "--1"),
-            "guid": str(config.get("mobile_device_id") or ""),
-            "client_id": str(config.get("mobile_client_id") or "XoL5lqbDWNW0e7QA"),
-            "client_version": str(config.get("mobile_version_name") or "2.6.10"),
-            "package_name": str(config.get("mobile_package_name") or "com.xunlei.mvideo"),
-            "device_model": str(config.get("mobile_device_model") or "iPhone18"),
-        },
-    }
-    ip = str(config.get("mobile_ip") or "").strip()
-    if ip:
-        body["params"]["ip"] = ip
-    resp = await client.post(f"{ACCOUNT_API_BASE}/drive/v1/task", headers=_mobile_headers(config), content=json.dumps(body, separators=(",", ":"), ensure_ascii=False))
-    data = resp.json() if resp.text else {}
-    if resp.status_code >= 400:
-        raise ValueError(_extract_xunlei_message(data, resp.text, fallback="迅雷移动端任务创建失败"))
-    return {"ok": True, "message": "submitted to xunlei mobile remote", "mode": "mobile", "task": data.get("task") if isinstance(data, dict) else data, "result": data}
-
-
-def _jwt_payload(token: str) -> dict[str, Any]:
-    token = token.strip()
-    if token.lower().startswith("bearer "):
-        token = token.split(" ", 1)[1].strip()
-    try:
-        part = token.split(".")[1]
-        part += "=" * (-len(part) % 4)
-        return json.loads(base64.urlsafe_b64decode(part.encode()).decode())
-    except Exception:
-        return {}
-
-
-async def _mobile_status(config: dict[str, Any], client: httpx.AsyncClient) -> dict[str, Any]:
-    token = _mobile_token(config)
-    payload = _jwt_payload(token) if token else {}
-    now = int(time.time())
-    exp = int(payload.get("exp") or 0) if payload else 0
-    configured = _mobile_configured(config)
-    status = {
-        "configured": configured,
-        "connected": False,
-        "client_id": str(config.get("mobile_client_id") or "XoL5lqbDWNW0e7QA"),
-        "device_id": str(config.get("mobile_device_id") or ""),
-        "target": str(config.get("mobile_target") or ""),
-        "parent_folder_id": str(config.get("mobile_parent_folder_id") or ""),
-        "token_aud": payload.get("aud"),
-        "token_scope": payload.get("scope"),
-        "token_iat": payload.get("iat"),
-        "token_exp": exp or None,
-        "token_expires_in": exp - now if exp else None,
-        "token_expired": bool(exp and exp <= now),
-        "captcha_present": bool(str(config.get("mobile_captcha_token") or "").strip()),
-        "shumei_present": bool(str(config.get("mobile_shumei_boxid") or "").strip()),
-        "error": "",
-    }
-    if not configured:
-        status["error"] = "移动端凭据未配置完整"
-        return {"ok": True, "mobile": status}
-    if status["token_expired"]:
-        status["error"] = "移动端 Access Token 已过期"
-        return {"ok": True, "mobile": status}
-    try:
-        resp = await client.get(f"{ACCOUNT_API_BASE}/drive/v1/tasks", headers=_mobile_headers(config), params={"type": "user#runner", "space": ""})
-        data = resp.json() if resp.text else {}
-        if resp.status_code >= 400:
-            raise ValueError(_extract_xunlei_message(data, resp.text, fallback="移动端链路检查失败"))
-        tasks = data.get("tasks") if isinstance(data.get("tasks"), list) else []
-        running = [t for t in tasks if isinstance(t, dict) and t.get("phase") == "PHASE_TYPE_RUNNING"]
-        status.update({
-            "connected": True,
-            "runner_count": len(tasks),
-            "running_runner_count": len(running),
-            "runners": [{
-                "name": str(t.get("name") or t.get("file_name") or ""),
-                "phase": str(t.get("phase") or ""),
-                "target": str((t.get("params") or {}).get("target") or ""),
-                "platform": str((t.get("params") or {}).get("platform") or ""),
-            } for t in tasks[:5] if isinstance(t, dict)],
-        })
-    except Exception as exc:
-        status["error"] = str(exc)
-    return {"ok": True, "mobile": status}
-
 def _try_speed_preview(info: Any, config: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or {}
     data = info if isinstance(info, dict) else {}
@@ -1220,7 +871,7 @@ def _try_speed_preview(info: Any, config: dict[str, Any] | None = None) -> dict[
         "saved_sec": statistic.get("saved_sec"),
         "start_time": statistic.get("start_time"),
         "can_prompt": can_prompt,
-        "note": "官方 NAS 前端只在有运行中 user#download-url 任务、账号不是超级会员、状态未禁用且剩余试用次数大于 0 时弹出试用提示。NOOR 只读取状态，不自动领取/消耗试用。",
+        "note": "启用自动试用加速后，NOOR 会在存在等待中或下载中的任务且仍有可用次数时自动领取。",
         "raw": data if bool(config.get("debug_raw_try_speed")) else {},
     }
 
@@ -1256,6 +907,91 @@ async def _try_speed_apply(config: dict[str, Any], client: httpx.AsyncClient, pa
         return {"ok": True, "applied": False, "reason": message, "result": data, "try_speed": preview}
     after = await _try_speed_info(config, client, pan_auth)
     return {"ok": True, "applied": True, "result": data, "try_speed": after.get("try_speed") or preview}
+
+
+async def _auto_try_speed_once(config: dict[str, Any]) -> dict[str, Any]:
+    global _speed_scheduler_status
+    checked_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    async with await _client(config, timeout=float(config.get("timeout") or 30)) as client:
+        pan_auth, device_id, _device_info = await _context(config, client)
+        tasks = await _tasks(config, client, pan_auth, device_id, phase="running", limit=100)
+        active = tasks.get("tasks") if isinstance(tasks.get("tasks"), list) else []
+        if not active:
+            result = {"ok": True, "applied": False, "reason": "没有等待中或下载中的任务"}
+        else:
+            result = await _try_speed_apply(config, client, pan_auth)
+    applied = bool(result.get("applied"))
+    _speed_scheduler_status = {
+        "status": "running" if applied else "idle",
+        "last_checked_at": checked_at,
+        "last_applied_at": checked_at if applied else _speed_scheduler_status.get("last_applied_at"),
+        "last_message": "已自动使用试用加速" if applied else str(result.get("reason") or "当前无需领取"),
+        "last_error": "",
+    }
+    return result
+
+
+async def _speed_scheduler_loop() -> None:
+    global _speed_scheduler_stop, _speed_scheduler_status
+    _speed_scheduler_stop = asyncio.Event()
+    while not _speed_scheduler_stop.is_set():
+        interval = 15
+        try:
+            from app.plugins.runtime import runtime
+
+            config = runtime.get_config(PLUGIN_ID)
+            interval = max(10, min(int(config.get("auto_try_speed_interval") or 15), 300))
+            if bool(config.get("auto_try_speed", True)):
+                await _auto_try_speed_once(config)
+            else:
+                _speed_scheduler_status = {**_speed_scheduler_status, "status": "disabled", "last_message": "自动试用加速已关闭", "last_error": ""}
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _speed_scheduler_status = {
+                **_speed_scheduler_status,
+                "status": "failed",
+                "last_checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "last_message": "自动试用加速检测失败",
+                "last_error": str(exc),
+            }
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(_speed_scheduler_stop.wait(), timeout=interval)
+
+
+async def start_background(_config: dict[str, Any] | None = None) -> None:
+    global _speed_scheduler_task
+    if not _speed_scheduler_task or _speed_scheduler_task.done():
+        _speed_scheduler_task = asyncio.create_task(_speed_scheduler_loop())
+
+
+async def stop_background() -> None:
+    global _speed_scheduler_task, _speed_scheduler_stop
+    if _speed_scheduler_stop:
+        _speed_scheduler_stop.set()
+    if _speed_scheduler_task:
+        _speed_scheduler_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _speed_scheduler_task
+    _speed_scheduler_task = None
+    _speed_scheduler_stop = None
+
+
+def background_tasks(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    config = config or {}
+    enabled = bool(config.get("auto_try_speed", True))
+    interval = max(10, min(int(config.get("auto_try_speed_interval") or 15), 300))
+    status = dict(_speed_scheduler_status)
+    return [{
+        "id": "xunlei-remote.auto-try-speed",
+        "title": "迅雷试用加速",
+        "status": status.get("status") if enabled else "disabled",
+        "last_run_at": status.get("last_checked_at"),
+        "last_finished_at": status.get("last_checked_at"),
+        "summary": f"每 {interval} 秒检测 · {'自动领取' if enabled else '已关闭'}",
+        "detail": status.get("last_error") or status.get("last_message"),
+        "metrics": {"enabled": enabled, "interval_seconds": interval, "last_applied_at": status.get("last_applied_at")},
+    }]
 
 
 async def _try_speed_config(config: dict[str, Any], client: httpx.AsyncClient, pan_auth: str) -> dict[str, Any]:
@@ -1452,33 +1188,7 @@ async def _submit_single_download(config: dict[str, Any], payload: dict[str, Any
         except Exception as exc:
             message = _extract_xunlei_message(result, getattr(resp, "text", ""), fallback=str(exc) or "迅雷任务创建失败")
             if _is_task_daily_limit_message(message, daily_limit):
-                quota_message = _task_daily_limit_message(daily_limit)
-                if _mobile_configured(config):
-                    try:
-                        mobile = await _mobile_submit_download(
-                            config,
-                            client,
-                            payload,
-                            device_id=device_id,
-                            url=url,
-                            file_indices=file_indices,
-                            total_files=download_count,
-                            total_size=download_size,
-                            task_name=task_name,
-                            parent_folder_id=parent_folder_id,
-                        )
-                        mobile["fallback_from"] = "nas_task_create_count_limit"
-                        mobile["nas_error"] = message
-                        mobile["savepath"] = savepath
-                        mobile["file_indices"] = file_indices
-                        mobile["resource"] = {k: resource[k] for k in ("total_files", "total_size_bytes", "total_size_formatted")}
-                        return mobile
-                    except Exception as mobile_exc:
-                        mobile_message = str(mobile_exc) or "移动端 fallback 失败"
-                        if "unauthenticated" in mobile_message.lower() or "unauthorized" in mobile_message.lower() or "401" in mobile_message:
-                            raise ValueError(f"{quota_message}；移动端令牌未认证或已过期，无法自动 fallback") from mobile_exc
-                        raise ValueError(f"{quota_message}；移动端 fallback 失败：{mobile_message}") from mobile_exc
-                raise ValueError(quota_message) from exc
+                raise ValueError(_task_daily_limit_message(daily_limit)) from exc
             if daily_limit and daily_limit.get("title") and daily_limit["title"] not in message:
                 message = f"{daily_limit['title']}；{message}"
             raise ValueError(message) from exc
@@ -1597,22 +1307,6 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
         except Exception as exc:
             out["warning"] = str(exc)
         return out
-    async with await _client(config, timeout=float(config.get("timeout") or 30)) as client:
-        if action == "account_static_info":
-            timestamp = str(int(time.time() * 1000))
-            return {"ok": True, "client_id": ACCOUNT_CLIENT_ID, "device_id": _account_device_id(config), "alg_version": ACCOUNT_ALG_VERSION, "algorithms_count": len(ACCOUNT_ALGORITHMS), "captcha_sign_sample": _account_captcha_sign(config, timestamp)}
-        if action in {"account_user_me", "account_clients", "account_paths", "account_submit", "mobile_submit", "mobile_status"}:
-            if action == "account_user_me":
-                return await _account_user_me(config, client)
-            if action == "account_clients":
-                return await _account_clients(config, client)
-            if action == "account_paths":
-                return await _account_paths(config, client, payload)
-            if action == "account_submit":
-                return await _account_submit(config, client, payload)
-            if action == "mobile_submit":
-                return await _mobile_submit_download(config, client, payload)
-            return await _mobile_status(config, client)
     if action in {"delete_residual", "delete_restore_file"}:
         return await _delete_residual(config, payload.get("path")) if action == "delete_residual" else await _delete_restore_file(config, payload)
     async with await _client(config, timeout=float(config.get("timeout") or 30)) as client:
@@ -1636,11 +1330,6 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
                 out.update(await _try_speed_info(config, client, pan_auth))
             except Exception as try_exc:
                 out["try_speed_warning"] = str(try_exc)
-            try:
-                mobile = await _mobile_status(config, client)
-                out["mobile_status"] = mobile.get("mobile") or mobile
-            except Exception as mobile_exc:
-                out["mobile_status"] = {"configured": _mobile_configured(config), "connected": False, "error": str(mobile_exc)}
             return out
         if action == "tasks":
             return await _tasks(
