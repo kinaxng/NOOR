@@ -465,6 +465,7 @@ class PluginRuntime:
                 ),
                 "next_page": data.get("next_page") if isinstance(data, dict) else None,
                 "max_items": data.get("max_items") if isinstance(data, dict) else None,
+                "covers": data.get("covers") if isinstance(data, dict) and isinstance(data.get("covers"), dict) else {},
             }
             return group, normalized_items
 
@@ -517,6 +518,13 @@ class PluginRuntime:
             return re.sub(r"[_ ]+", "-", match.group(1).upper())
 
         cover_by_code: dict[str, str] = {}
+        for group in groups:
+            if str(group.get("provider") or "") != "javdb":
+                continue
+            for raw_code, cover in (group.get("covers") or {}).items():
+                code = norm_code(raw_code)
+                if code and str(cover or "").strip():
+                    cover_by_code[code] = str(cover).strip()
         for item in items:
             code = norm_code(item.get("query_key") or item.get("title"))
             cover = str(item.get("cover_url") or "").strip()
@@ -532,12 +540,41 @@ class PluginRuntime:
         if not missing:
             return
 
+        unresolved_codes: list[str] = []
+        for item in missing:
+            code = norm_code(item.get("query_key") or item.get("title"))
+            if code and code not in cover_by_code and code not in unresolved_codes:
+                unresolved_codes.append(code)
+            if len(unresolved_codes) >= 48:
+                break
+
+        semaphore = asyncio.Semaphore(12)
+
+        async def load_cover(code: str) -> tuple[str, str]:
+            try:
+                async with semaphore:
+                    result = await asyncio.wait_for(
+                        self.handle_action("javdb", "video", {"code": code}),
+                        timeout=8.0,
+                    )
+                detail = result.get("data") if isinstance(result, dict) and isinstance(result.get("data"), dict) else result
+                if not isinstance(detail, dict):
+                    return code, ""
+                return code, str(detail.get("cover_url") or detail.get("thumb_url") or detail.get("fanart_url") or "").strip()
+            except Exception:
+                return code, ""
+
+        if unresolved_codes:
+            for code, cover in await asyncio.gather(*(load_cover(code) for code in unresolved_codes)):
+                if cover:
+                    cover_by_code[code] = cover
+
         for item in missing:
             code = norm_code(item.get("query_key") or item.get("title"))
             if code and code in cover_by_code:
                 item["cover_url"] = cover_by_code[code]
                 metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-                item["metadata"] = {**metadata, "cover_borrowed_from": "javdb"}
+                item["metadata"] = {**metadata, "cover_borrowed_from": "javdb_detail"}
 
     async def resolve_resource_download(self, plugin_id: str, resource: dict[str, Any]) -> dict[str, Any]:
         handler = self._handler(plugin_id)

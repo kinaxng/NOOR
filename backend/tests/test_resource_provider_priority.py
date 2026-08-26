@@ -13,6 +13,12 @@ class _Handler:
         return {"items": [{"id": self.provider, "title": self.provider, "url": "magnet:?xt=urn:btih:test"}]}
 
 
+class _CoverHandler:
+    async def handle_action(self, action, payload, _config):
+        assert action == "video"
+        return {"ok": True, "data": {"cover_url": f"https://covers.test/{payload['code']}.jpg"}}
+
+
 def test_resource_search_prioritizes_avdb_then_mteam_then_javdb() -> None:
     runtime = PluginRuntime()
     runtime._manifests = {
@@ -27,3 +33,15 @@ def test_resource_search_prioritizes_avdb_then_mteam_then_javdb() -> None:
 
     assert [group["provider"] for group in result["groups"]] == ["avdb", "mteam-plugin", "javdb"]
     assert [item["provider"] for item in result["items"]] == ["avdb", "mteam-plugin", "javdb"]
+
+
+def test_resource_search_enriches_missing_cover_from_javdb_detail() -> None:
+    runtime = PluginRuntime()
+    items = [{"provider": "avdb", "query_key": "SNIS-201", "title": "SNIS-201", "cover_url": "", "metadata": {}}]
+    runtime._handlers["javdb"] = _CoverHandler()
+    runtime._manifests["javdb"] = {"id": "javdb", "name": "JavDB", "capabilities": ["resource_search"]}
+
+    asyncio.run(runtime._borrow_resource_covers_from_javdb(items, []))
+
+    assert items[0]["cover_url"] == "https://covers.test/SNIS-201.jpg"
+    assert items[0]["metadata"]["cover_borrowed_from"] == "javdb_detail"

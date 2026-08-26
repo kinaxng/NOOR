@@ -670,7 +670,22 @@ async def _resource_search(config: dict[str, Any], payload: dict[str, Any]) -> l
 
 async def search_resources(query: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
     """PluginRuntime resource-search contract used by search and subscriptions."""
-    return {"items": await _resource_search(config or {}, query or {})}
+    resolved_config = config or {}
+    payload = query or {}
+    items = await _resource_search(resolved_config, payload)
+    keyword = str(payload.get("keyword") or payload.get("q") or payload.get("code") or payload.get("number") or "").strip()
+    covers: dict[str, str] = {}
+    if keyword and not _extract_video_code(keyword):
+        try:
+            searched = await _search(resolved_config, keyword, 1, 50)
+            for movie in searched.get("items") or []:
+                code = _code(movie.get("code") or movie.get("number") or "")
+                cover = str(movie.get("cover_url") or movie.get("thumb_url") or "").strip()
+                if code and cover:
+                    covers[code] = cover
+        except Exception:
+            pass
+    return {"items": items, "covers": covers}
 
 
 async def _resource_search_paged(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
