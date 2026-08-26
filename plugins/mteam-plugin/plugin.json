@@ -18,10 +18,20 @@
     "rss_url": {"type": "string", "label": "RSS 地址"},
     "cache_days": {"type": "number", "label": "DMM 图片缓存天数", "default": 7, "min": 1, "max": 60, "step": 1},
     "downloader_binding": {
-      "type": "string",
+      "type": "select",
       "label": "下载器绑定",
+      "multi": true,
       "options": [
-        {"label": "不绑定", "value": "none"},
+        {"label": "qBittorrent", "value": "qbittorrent"},
+        {"label": "Transmission", "value": "transmission"}
+      ],
+      "default": []
+    },
+    "default_downloader": {
+      "type": "select",
+      "label": "默认下载器",
+      "options": [
+        {"label": "跟随绑定", "value": "none"},
         {"label": "qBittorrent", "value": "qbittorrent"},
         {"label": "Transmission", "value": "transmission"}
       ],
@@ -39,7 +49,8 @@
     "timeout": 15,
     "subtitle_search_enabled": false,
     "subtitle_search_limit": 20,
-    "downloader_binding": "none",
+    "downloader_binding": [],
+    "default_downloader": "none",
     "use_default_acceleration": true,
     "cache_days": 7,
     "filter_dmm_images": true,

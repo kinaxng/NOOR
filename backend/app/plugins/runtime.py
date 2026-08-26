@@ -238,9 +238,9 @@ class PluginRuntime:
             raise ValueError("not rss_source plugin")
         if not self.is_enabled(plugin_id):
             raise ValueError("plugin disabled")
-        cfg = self.get_config(plugin_id)
-        downloader_id = str(cfg.get("downloader_binding") or "none").strip()
-        if not downloader_id or downloader_id == "none":
+        bindings = self._normalize_plugin_downloader_preferences(plugin_id)
+        downloader_id = bindings[0] if bindings else ""
+        if not downloader_id:
             raise ValueError("未绑定下载器")
         downloader_manifest = self.get_manifest(downloader_id)
         if downloader_manifest.type != "downloader":
@@ -378,10 +378,9 @@ class PluginRuntime:
         source_preferences = self._normalize_plugin_downloader_preferences(source_plugin_id)
 
         enabled_downloaders = {str(item.get("id") or ""): item for item in self.list_enabled_downloaders()}
-        ordered_downloader_ids = list(source_preferences) if source_preferences else []
-        for downloader_id in enabled_downloaders:
-            if downloader_id not in ordered_downloader_ids:
-                ordered_downloader_ids.append(downloader_id)
+        # Bindings are opt-in per source. The push card must never broaden an
+        # empty binding to every active downloader.
+        ordered_downloader_ids = list(source_preferences)
 
         compatible: list[str] = []
         for downloader_id in ordered_downloader_ids:
@@ -578,10 +577,9 @@ class PluginRuntime:
             downloader_info = {}
         compatible = [str(x) for x in downloader_info.get("compatible_downloaders") or [] if str(x or "").strip()]
         preferred = str(downloader_info.get("preferred_downloader") or "").strip() or None
-        if compatible:
-            item["compatible_downloaders"] = compatible
-        if preferred:
-            item["preferred_downloader"] = preferred
+        item["compatible_downloaders"] = compatible
+        item["source_bound_downloaders"] = [str(x) for x in downloader_info.get("source_bound_downloaders") or [] if str(x or "").strip()]
+        item["preferred_downloader"] = preferred
         resolved["item"] = item
         return resolved
 

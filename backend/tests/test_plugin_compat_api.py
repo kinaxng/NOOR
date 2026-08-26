@@ -221,7 +221,7 @@ async def test_resource_resolve_download_backfills_compatible_downloaders(monkey
             "capabilities": {"accepts_public_magnet": True},
         }],
     )
-    monkeypatch.setattr(runtime, "_normalize_plugin_downloader_preferences", lambda plugin_id: [])
+    monkeypatch.setattr(runtime, "_normalize_plugin_downloader_preferences", lambda plugin_id: ["qbittorrent"])
 
     result = await runtime.resolve_resource_download("javdb", {
         "url": "magnet:?xt=urn:btih:abc",
@@ -231,6 +231,53 @@ async def test_resource_resolve_download_backfills_compatible_downloaders(monkey
     assert result["item"]["requirements"] == {"accepts_public_magnet": True}
     assert result["item"]["compatible_downloaders"] == ["qbittorrent"]
     assert result["item"]["preferred_downloader"] == "qbittorrent"
+
+
+@pytest.mark.asyncio
+async def test_resource_resolve_does_not_offer_unbound_downloaders(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.plugins.runtime import runtime
+
+    class FakeHandler:
+        async def resolve_resource_download(self, resource, config):
+            return {"item": resource, "url": resource["url"]}
+
+    monkeypatch.setattr(runtime, "_handlers", {"avdb": FakeHandler()})
+    monkeypatch.setattr(runtime, "get_manifest", lambda plugin_id: SimpleNamespace(name="AVDB", type="source"))
+    monkeypatch.setattr(runtime, "list_enabled_downloaders", lambda: [{
+        "id": "xunlei-remote", "name": "迅雷远程",
+        "capabilities": {"accepts_public_magnet": True},
+    }])
+    monkeypatch.setattr(runtime, "_normalize_plugin_downloader_preferences", lambda plugin_id: [])
+
+    result = await runtime.resolve_resource_download("avdb", {"url": "magnet:?xt=urn:btih:abc"})
+
+    assert result["item"]["compatible_downloaders"] == []
+    assert result["item"]["source_bound_downloaders"] == []
+    assert result["item"]["preferred_downloader"] is None
+
+
+def test_pt_resource_only_keeps_bound_active_pt_downloaders(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.plugins.runtime import runtime
+
+    monkeypatch.setattr(runtime, "get_manifest", lambda plugin_id: SimpleNamespace(name="M-Team", type="rss_source"))
+    monkeypatch.setattr(runtime, "_normalize_plugin_downloader_preferences", lambda plugin_id: ["xunlei-remote", "qbittorrent", "transmission"])
+    monkeypatch.setattr(runtime, "list_enabled_downloaders", lambda: [
+        {"id": "xunlei-remote", "capabilities": {"accepts_private_tracker": False, "accepts_http_torrent": True}},
+        {"id": "qbittorrent", "capabilities": {"accepts_private_tracker": True, "accepts_http_torrent": True}},
+    ])
+
+    result = runtime.resolve_downloaders_for_resource("mteam-plugin", {
+        "url": "https://m-team.test/torrent/1",
+        "requirements": {"accepts_private_tracker": True, "accepts_http_torrent": True},
+    })
+
+    assert result["source_bound_downloaders"] == ["xunlei-remote", "qbittorrent", "transmission"]
+    assert result["compatible_downloaders"] == ["qbittorrent"]
+    assert result["preferred_downloader"] == "qbittorrent"
 
 
 @pytest.mark.asyncio

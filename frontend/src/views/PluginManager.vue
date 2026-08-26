@@ -136,6 +136,12 @@ const activeDownloaderOptions = computed(() => {
     .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
 })
 
+const bindingDownloaderOptions = computed(() => {
+  const declared = configSchema.value.downloader_binding?.options || []
+  const allowed = new Set(declared.map(option => String(option.value || '')).filter(Boolean))
+  return activeDownloaderOptions.value.filter(option => !allowed.size || allowed.has(option.value))
+})
+
 const pluginCards = computed<PluginCardItem[]>(() => {
   const byId = new Map<string, PluginCardItem>()
 
@@ -324,8 +330,8 @@ function emptyDraftFromSchema(schema: Record<string, PluginConfigField>, current
 }
 
 function normalizeDownloaderDraft() {
-  if (configPlugin.value?.id !== 'javdb') return
-  const activeIds = new Set(activeDownloaderOptions.value.map(item => item.value))
+  if (!configSchema.value.downloader_binding) return
+  const activeIds = new Set(bindingDownloaderOptions.value.map(item => item.value))
   const bindings = Array.isArray(configDraft.value.downloader_binding)
     ? configDraft.value.downloader_binding.map((item: any) => String(item || '').trim()).filter(Boolean)
     : String(configDraft.value.downloader_binding || '').trim()
@@ -473,12 +479,18 @@ function isSelectField(meta: PluginConfigField) {
   return Array.isArray(meta.options) && meta.options.length > 0
 }
 
-function isJavdbDownloaderBindingField(key: string | number) {
-  return configPlugin.value?.id === 'javdb' && String(key) === 'downloader_binding'
+function isDownloaderBindingField(key: string | number) {
+  return String(key) === 'downloader_binding' && !!configSchema.value.downloader_binding
 }
 
-function isHiddenJavdbDefaultDownloaderField(key: string | number) {
-  return configPlugin.value?.id === 'javdb' && String(key) === 'default_downloader'
+function isHiddenDefaultDownloaderField(key: string | number) {
+  return String(key) === 'default_downloader' && !!configSchema.value.downloader_binding
+}
+
+function bindingHint() {
+  return configPlugin.value?.id === 'mteam-plugin'
+    ? 'PT 资源只允许绑定已激活的 qBittorrent 或 Transmission；默认项会在推送时优先选中。'
+    : '只显示已激活且该来源允许使用的下载器；推送卡片只会提供这里已绑定的选项。'
 }
 
 function boundDownloaders() {
@@ -687,16 +699,16 @@ onMounted(() => {
           <FieldRow
             v-for="(meta, key) in configSchema"
             :key="key"
-            v-show="!isHiddenJavdbDefaultDownloaderField(key)"
+            v-show="!isHiddenDefaultDownloaderField(key)"
             :label="meta.label || key"
             :description="isBooleanField(meta) ? '' : meta.description || ''"
           >
-            <div v-if="isJavdbDownloaderBindingField(key)" class="plugin-downloader-binding">
-              <div v-if="!activeDownloaderOptions.length" class="plugin-downloader-binding__empty">
+            <div v-if="isDownloaderBindingField(key)" class="plugin-downloader-binding">
+              <div v-if="!bindingDownloaderOptions.length" class="plugin-downloader-binding__empty">
                 当前没有已激活的下载器。请先启用 qBittorrent、Transmission 或迅雷远程等下载器插件。
               </div>
               <label
-                v-for="option in activeDownloaderOptions"
+                v-for="option in bindingDownloaderOptions"
                 v-else
                 :key="option.value"
                 class="plugin-downloader-binding__item"
@@ -723,7 +735,7 @@ onMounted(() => {
                 </button>
               </label>
               <div class="plugin-downloader-binding__hint">
-                只显示已激活的下载器；勾选表示 JavDB 可以推送到该下载器，“默认”表示资源兼容多个下载器时优先使用它。
+                {{ bindingHint() }}
               </div>
             </div>
 

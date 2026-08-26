@@ -886,3 +886,10 @@ Notes:
 - `MIDV-131` 被拆成两个作品的根因是 M-Team 4K 条目的 `smallDescr=4K` 抢先参与番号提取，失败后未继续从标题提取，最终把完整标题写进 `query_key`。
 - M-Team 现在依次尝试简介、描述、标题、DMM 产品号和链接；资源搜索前端也会先从插件声明的 `query_key` 中提取标准番号，再作为作品分组键。
 - 真实复搜返回 AVDB 2、M-Team 2、JavDB 6 共 10 条资源，唯一作品键为 `MIDV-131`。后端 `343 passed, 8 skipped`，前端生产构建通过。
+
+### Latest Recovery Update (2026-08-26：资源来源下载器绑定契约)
+
+- 下载器候选严格改为“来源已绑定 ∩ 资源能力兼容 ∩ 插件已启用”，不再在来源未绑定时偷偷补入全部下载器；解析接口也会显式返回空候选，避免沿用插件原始提示。
+- 插件管理器的多下载器绑定与默认选择从 JavDB 特例升级为通用资源来源能力。AVDB/JavDB 展示所有已启用且声明允许的下载器；M-Team 作为 PT 来源只声明 qBittorrent / Transmission，未启用项不显示。
+- 当前配置迁移为：AVDB 绑定迅雷+qB、默认迅雷；JavDB 保持 qB+迅雷、默认迅雷；M-Team 绑定并默认 qB。RSS 推送同步支持多绑定并使用默认项。
+- 真实 `MIDV-131` 搜索验证：AVDB/JavDB 候选仅迅雷+qB，M-Team 仅 qB；Transmission 未启用所以所有设置与推送卡均不出现。验证：后端 `345 passed, 8 skipped, 1 warning`，前端生产构建通过。

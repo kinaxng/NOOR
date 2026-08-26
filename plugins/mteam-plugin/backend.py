@@ -744,7 +744,7 @@ def _normalize_resource(config: dict[str, Any], item: dict[str, Any]) -> dict[st
         "cover_url": str(item.get("poster") or item.get("image") or item.get("cover") or ""),
         "source_url": str(item.get("detailUrl") or item.get("detail_url") or ""),
         "features": {"has_subtitle": False, "is_cracked": False, "is_private_tracker": True},
-        "requirements": {"accepts_private_torrent": True, "accepts_http_torrent": True},
+        "requirements": {"accepts_private_tracker": True, "accepts_http_torrent": True},
         "compatible_downloaders": ["qbittorrent", "transmission"],
         "preferred_downloader": "qbittorrent",
         "metadata": {"source_plugin": PLUGIN_ID, "torrent_id": torrent_id, "video_code": code, "site": "M-Team", "raw": item},
