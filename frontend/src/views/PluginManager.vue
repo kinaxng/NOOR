@@ -6,6 +6,7 @@ import PluginIcon from '../components/noor/PluginIcon.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
 import FieldRow from '../components/ui/FieldRow/FieldRow.vue'
 import api from '../api'
+import { usePlugins } from '../composables/usePlugins'
 import { useToast } from '../composables/useToast'
 
 type PluginListItem = {
@@ -91,6 +92,7 @@ type PluginCardItem = {
 }
 
 const toast = useToast()
+const { loadPlugins: refreshSidebarPlugins } = usePlugins()
 
 const loading = ref(false)
 const error = ref('')
@@ -245,7 +247,7 @@ async function setEnabled(plugin: PluginCardItem, enabled: boolean) {
   try {
     await api.post(`/plugins/${plugin.id}/${enabled ? 'enable' : 'disable'}`)
     toast.success(enabled ? '插件已启用' : '插件已停用')
-    await loadData(true)
+    await Promise.all([loadData(true), refreshSidebarPlugins(true)])
   } catch (e: any) {
     toast.error(e?.response?.data?.detail || e?.message || '操作失败')
   }
@@ -262,7 +264,7 @@ async function installPlugin(plugin: PluginCardItem) {
       plugin_id: plugin.id,
     })
     toast.success('插件已安装')
-    await loadData(true)
+    await Promise.all([loadData(true), refreshSidebarPlugins(true)])
   } catch (e: any) {
     toast.error(e?.response?.data?.detail || e?.message || '安装失败')
   }
@@ -289,7 +291,7 @@ async function uninstallPlugin() {
     })
     toast.success(preserveUninstallData.value ? '插件已卸载，数据已保留' : '插件及其数据已卸载')
     uninstallTarget.value = null
-    await loadData(true)
+    await Promise.all([loadData(true), refreshSidebarPlugins(true)])
   } catch (e: any) {
     toast.error(e?.response?.data?.detail || e?.message || '卸载失败')
   } finally {

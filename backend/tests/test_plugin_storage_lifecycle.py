@@ -97,6 +97,14 @@ def test_plugin_manager_exposes_purge_or_preserve_uninstall_choice() -> None:
     assert "删除数据并卸载" in text
 
 
+def test_plugin_manager_refreshes_shared_sidebar_after_lifecycle_changes() -> None:
+    source = Path(__file__).resolve().parents[2] / "frontend" / "src" / "views" / "PluginManager.vue"
+    text = source.read_text(encoding="utf-8")
+
+    assert "loadPlugins: refreshSidebarPlugins" in text
+    assert text.count("refreshSidebarPlugins(true)") == 3
+
+
 def test_official_plugins_use_explicit_private_storage_ids() -> None:
     root = Path(__file__).resolve().parents[2] / "plugins"
     sources = "\n".join(path.read_text(encoding="utf-8") for path in root.glob("*/backend.py"))
