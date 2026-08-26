@@ -674,7 +674,7 @@ onMounted(async () => {
     </div>
 
     <div v-if="!hasGroups" class="empty-state">
-        <BaseIcon name="hardlink" class="w-16 h-16 text-white/10 mb-4" />
+        <BaseIcon name="hardlink" class="hardlink-empty-icon" />
         <p class="empty-state__title">{{ noGroupsLabel }}</p>
         <p class="empty-state__desc">{{ emptyDescLabel }}</p>
         <VuiButton variant="text" color="secondary" size="small" @click="openSettings">
@@ -683,7 +683,7 @@ onMounted(async () => {
     </div>
 
     <div v-else-if="visibleGroups.length === 0" class="empty-state">
-        <BaseIcon name="search" class="w-16 h-16 text-white/10 mb-4" />
+        <BaseIcon name="search" class="hardlink-empty-icon" />
         <p class="empty-state__title">{{ emptyFilteredLabel }}</p>
     </div>
 
@@ -1098,6 +1098,25 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
+
+.empty-state {
+  min-height: 18rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.hardlink-empty-icon {
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 0.25rem;
+  color: rgba(255, 255, 255, 0.1);
+  flex: 0 0 auto;
+}
 
 .empty-state__title {
   color: var(--color-text-secondary);

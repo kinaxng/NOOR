@@ -200,6 +200,7 @@ def enrich_hardlink_groups_impl(groups: list[dict], *, source_file_size_fn: Call
         enriched_groups.append({
             **group,
             'entries': enriched_entries,
+            'entry_count': len(enriched_entries),
             'hardlink_count': group_hardlinks,
             'orphan_count': group_orphans,
             'issue_count': len(group_issues),

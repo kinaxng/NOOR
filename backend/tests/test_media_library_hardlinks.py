@@ -56,10 +56,12 @@ def test_enrich_hardlink_groups_marks_orphan_and_unparsed_groups():
     assert 'orphan_source' in first['issues']
     assert first['entries'][0]['status'] == 'issue'
     assert first['entries'][0]['issues'] == ['orphan_source']
+    assert first['entry_count'] == 1
     assert first['entries'][0]['hardlink_count'] == 2
 
     second = payload['groups'][1]
     assert second['status'] == 'healthy'
+    assert second['entry_count'] == 1
     assert len(second['entries']) == 1
     assert second['hardlink_count'] == 1
 

@@ -430,14 +430,19 @@ export const useMediaLibraryStore = defineStore('media-library', () => {
       const resp = await api.post('/media-library/hardlinks/scan')
       hardlinkGroups.value = resp.data.groups || []
       hardlinkLastScannedAt.value = resp.data.last_scanned_at || null
-      hardlinkSummary.value = resp.data.summary || {
+      const summary = resp.data.summary || {
         total_groups: 0,
         total_entries: 0,
         total_hardlinks: 0,
         issue_groups: 0,
         orphan_entries: 0,
       }
-      return { ok: true, count: resp.data.total_count, totalEntries: resp.data.total_entries }
+      hardlinkSummary.value = summary
+      return {
+        ok: true,
+        count: summary.total_groups ?? resp.data.total_count ?? 0,
+        totalEntries: summary.total_entries ?? resp.data.total_entries ?? 0,
+      }
     } catch (e: any) {
       return { ok: false, error: e?.response?.data?.detail || e.message }
     } finally {

@@ -802,3 +802,10 @@ Notes:
 - 浏览器 smoke 发现异步聚合完成后仍保留 fallback JavDB 选中态；现两个详情入口都会在最终资源到达时重选优先来源 AVDB。
 - 推荐第二阶段资源确认覆盖全部 60 张默认展示卡，不再因动态排名越过固定窗口而漏掉破解信号。
 - 完整 smoke 新增 AVDB 首位且 active、`PRED-878` 破解及资源汇总断言；运行结果 `HTTP_ERRORS []`、`CONSOLE_ERRORS []`。
+
+### Latest Recovery Update (2026-08-26：文件 / 硬链接首轮)
+
+- 修复硬链接无数据空态依赖失效 utility class 导致 SVG 撑满页面的问题；空态现在以 64px 图标居中显示，标题、说明和设置入口均在首屏可见。
+- 扫描响应统一从嵌套 `summary` 返回 toast 计数，避免扫描成功提示出现 `undefined`；后端分组补齐 `entry_count`，主文件数排序恢复有效。
+- 当前 `MEDIA_LIBRARY_SCAN_GROUPS=[]`，原会话、恢复仓和历史环境样例均没有真实 source/hardlink 配对证据，因此未猜测路径、未运行真实扫描或删除。
+- 验证：硬链接定向测试通过；后端全量 `314 passed, 8 skipped, 1 warning`；前端生产构建通过；空态浏览器契约通过。

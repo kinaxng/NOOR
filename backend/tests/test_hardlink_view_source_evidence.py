@@ -21,3 +21,12 @@ def test_hardlink_view_keeps_original_mdc_source_action() -> None:
     assert "applyRouteSearchQuery" not in text
     assert "useRoute," not in text
     assert "route.query" not in text
+
+
+def test_hardlink_empty_state_has_component_owned_icon_geometry() -> None:
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'class="hardlink-empty-icon"' in text
+    assert ".hardlink-empty-icon" in text
+    assert "width: 4rem" in text
+    assert "height: 4rem" in text

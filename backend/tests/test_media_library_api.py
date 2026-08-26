@@ -222,6 +222,7 @@ async def test_media_library_hardlink_groups_response_contract(monkeypatch: pyte
     assert payload["summary"]["total_groups"] == 1
     assert payload["summary"]["total_entries"] == 1
     assert payload["groups"][0]["status"] == "healthy"
+    assert payload["groups"][0]["entry_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -251,4 +252,6 @@ async def test_media_library_hardlink_scan_saves_groups(monkeypatch: pytest.Monk
 
     assert saved == [groups]
     assert payload["summary"]["total_groups"] == 1
+    assert payload["summary"]["total_entries"] == 1
+    assert payload["groups"][0]["entry_count"] == 1
     assert payload["summary"]["total_hardlinks"] == 1
