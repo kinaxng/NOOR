@@ -10,7 +10,7 @@ from app.plugins.contracts import PluginTestResult
 
 
 PLUGIN_ID = "avdb"
-PLUGIN_CACHE_DIR = plugin_cache_path()
+PLUGIN_CACHE_DIR = plugin_cache_path("avdb")
 
 
 def _base(config: dict[str, Any]) -> str:

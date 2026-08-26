@@ -11,6 +11,7 @@ data/actor_merge_ignored_ghosts.json
 data/actor_merge_backups/
 data/facefusion_settings.json
 data/plugin_cache/
+data/plugins/
 data/av_recommend/
 data/subscription_core/
 .env

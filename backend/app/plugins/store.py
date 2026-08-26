@@ -11,8 +11,16 @@ def _state_file() -> Path:
     return data_path("plugins_state.json")
 
 
-def _config_file() -> Path:
+def _legacy_config_file() -> Path:
     return data_path("plugins_config.json")
+
+
+def _plugin_config_file(plugin_id: str) -> Path:
+    return data_path("plugins", plugin_id, "config.json")
+
+
+def _config_migration_marker() -> Path:
+    return data_path("plugins", ".config_migrated")
 
 
 def _market_repos_file() -> Path:
@@ -42,11 +50,25 @@ def save_state(state: dict[str, Any]) -> None:
 
 
 def load_config() -> dict[str, Any]:
-    return _read_json(_config_file())
+    merged = {} if _config_migration_marker().exists() else _read_json(_legacy_config_file())
+    root = data_path("plugins")
+    if root.is_dir():
+        for child in root.iterdir():
+            if not child.is_dir():
+                continue
+            config = _read_json(child / "config.json")
+            if config:
+                merged[child.name] = config
+    return merged
 
 
 def save_config(cfg: dict[str, Any]) -> None:
-    _write_json(_config_file(), cfg)
+    for plugin_id, config in cfg.items():
+        if isinstance(config, dict):
+            _write_json(_plugin_config_file(plugin_id), config)
+    marker = _config_migration_marker()
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch(exist_ok=True)
 
 
 def load_market_repos() -> list[dict[str, str]]:

@@ -20,7 +20,7 @@ from app.core.runtime_paths import plugin_cache_path
 from app.plugins.contracts import PluginManifest, PluginTestResult
 
 PLUGIN_ID = "mteam-plugin"
-PLUGIN_CACHE_DIR = plugin_cache_path()
+PLUGIN_CACHE_DIR = plugin_cache_path(PLUGIN_ID)
 _IMG_RE = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
@@ -61,7 +61,7 @@ def _with_display_title(item: dict[str, Any]) -> dict[str, Any]:
 
 def _plugin_cache_file(plugin_id: str, namespace: str, key: str) -> Path:
     safe_key = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
-    return PLUGIN_CACHE_DIR / plugin_id / f"{namespace}-{safe_key}.json"
+    return PLUGIN_CACHE_DIR / f"{namespace}-{safe_key}.json"
 
 
 def _read_cache(path: Path, ttl_days: int) -> dict[str, Any] | None:
@@ -91,7 +91,7 @@ def _write_cache(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _cover_cache_path(torrent_id: int) -> Path:
-    return PLUGIN_CACHE_DIR / PLUGIN_ID / "covers" / f"{torrent_id}.json"
+    return PLUGIN_CACHE_DIR / "covers" / f"{torrent_id}.json"
 
 
 def _read_cover_cache(torrent_id: int, ttl_days: int) -> dict[str, Any] | None:
@@ -236,7 +236,7 @@ def _image_cache_id(url: str) -> str:
 
 
 def _image_cache_dir(plugin_id: str) -> Path:
-    return PLUGIN_CACHE_DIR / plugin_id / "images"
+    return PLUGIN_CACHE_DIR / "images"
 
 
 def _image_meta_path(plugin_id: str, image_id: str) -> Path:
@@ -773,7 +773,7 @@ def get_cached_image(image_id: str) -> tuple[Path, str] | None:
 
 def clear_image_cache() -> dict[str, Any]:
     result = clear_cached_plugin_images(PLUGIN_ID)
-    covers_dir = PLUGIN_CACHE_DIR / PLUGIN_ID / "covers"
+    covers_dir = PLUGIN_CACHE_DIR / "covers"
     cover_files = 0
     if covers_dir.exists():
         cover_files = sum(1 for x in covers_dir.rglob("*") if x.is_file())
@@ -784,7 +784,7 @@ def clear_image_cache() -> dict[str, Any]:
 
 def _subtitle_cache_path(subtitle_id: str) -> Path:
     safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(subtitle_id or ""))
-    return PLUGIN_CACHE_DIR / PLUGIN_ID / "subtitles" / f"mteam-{safe_id}.srt"
+    return PLUGIN_CACHE_DIR / "subtitles" / f"mteam-{safe_id}.srt"
 
 
 def _read_subtitle_cache(subtitle_id: str) -> dict[str, Any] | None:
@@ -899,7 +899,7 @@ _ALBUM_ID_RE = re.compile(r"(?:albumId=|album/|albumId/|id=)(\d+)")
 
 
 def _albums_store_path() -> Path:
-    return PLUGIN_CACHE_DIR / PLUGIN_ID / "albums.json"
+    return PLUGIN_CACHE_DIR / "albums.json"
 
 
 def _normalize_album_entry(value: Any) -> dict[str, Any] | None:

@@ -119,6 +119,9 @@ const localSubtitleRebuildResult = ref<null | {
 const configPlugin = ref<PluginCardItem | null>(null)
 const configSchema = ref<Record<string, PluginConfigField>>({})
 const configDraft = ref<Record<string, any>>({})
+const uninstallTarget = ref<PluginCardItem | null>(null)
+const preserveUninstallData = ref(false)
+const uninstalling = ref(false)
 
 const activeDownloaderOptions = computed(() => {
   return installedPlugins.value
@@ -262,6 +265,35 @@ async function installPlugin(plugin: PluginCardItem) {
     await loadData(true)
   } catch (e: any) {
     toast.error(e?.response?.data?.detail || e?.message || '安装失败')
+  }
+}
+
+function openUninstall(plugin: PluginCardItem) {
+  uninstallTarget.value = plugin
+  preserveUninstallData.value = false
+}
+
+function closeUninstall() {
+  if (uninstalling.value) return
+  uninstallTarget.value = null
+  preserveUninstallData.value = false
+}
+
+async function uninstallPlugin() {
+  const plugin = uninstallTarget.value
+  if (!plugin || uninstalling.value) return
+  uninstalling.value = true
+  try {
+    await api.delete(`/plugins/${plugin.id}`, {
+      params: { purge_data: !preserveUninstallData.value },
+    })
+    toast.success(preserveUninstallData.value ? '插件已卸载，数据已保留' : '插件及其数据已卸载')
+    uninstallTarget.value = null
+    await loadData(true)
+  } catch (e: any) {
+    toast.error(e?.response?.data?.detail || e?.message || '卸载失败')
+  } finally {
+    uninstalling.value = false
   }
 }
 
@@ -583,6 +615,14 @@ onMounted(() => {
             >
               安装
             </button>
+            <button
+              v-if="plugin.status === 'inactive'"
+              class="plugin-action plugin-action--danger"
+              type="button"
+              @click="openUninstall(plugin)"
+            >
+              卸载
+            </button>
           </div>
         </div>
       </article>
@@ -800,12 +840,61 @@ onMounted(() => {
         </FieldRow>
       </div>
     </BaseModal>
+
+    <BaseModal
+      v-if="uninstallTarget"
+      :title="`卸载 ${uninstallTarget.name}`"
+      size="md"
+      @close="closeUninstall"
+    >
+      <div class="plugin-uninstall-sheet">
+        <p>卸载会移除插件代码、配置以及插件私有运行目录。</p>
+        <code>data/plugins/{{ uninstallTarget.id }}/</code>
+        <label class="plugin-uninstall-preserve">
+          <input v-model="preserveUninstallData" type="checkbox" :disabled="uninstalling" />
+          <span>保留插件数据，便于以后重新安装恢复</span>
+        </label>
+      </div>
+      <template #footer>
+        <div class="plugin-modal-actions">
+          <button class="plugin-action" type="button" :disabled="uninstalling" @click="closeUninstall">取消</button>
+          <button class="plugin-action plugin-action--danger" type="button" :disabled="uninstalling" @click="uninstallPlugin">
+            {{ uninstalling ? '卸载中' : preserveUninstallData ? '保留数据并卸载' : '删除数据并卸载' }}
+          </button>
+        </div>
+      </template>
+    </BaseModal>
   </section>
 </template>
 <style scoped>
 .plugin-page {
   display: grid;
   gap: 0.9rem;
+}
+
+.plugin-uninstall-sheet {
+  display: grid;
+  gap: 0.9rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.plugin-uninstall-sheet code {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  overflow-wrap: anywhere;
+}
+
+.plugin-uninstall-preserve {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
 }
 
 .plugin-page__header {

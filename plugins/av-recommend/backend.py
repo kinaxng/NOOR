@@ -27,15 +27,15 @@ PLUGIN_ID = "av-recommend"
 
 
 def _data_file() -> Path:
-    return plugin_data_path("av_recommend", "feedback.json")
+    return plugin_data_path("av-recommend", "feedback.json")
 
 
 def _candidate_pool_file() -> Path:
-    return plugin_data_path("av_recommend", "candidate_pool.json")
+    return plugin_data_path("av-recommend", "candidate_pool.json")
 
 
 def _title_profile_file() -> Path:
-    return plugin_data_path("av_recommend", "title_profile.json")
+    return plugin_data_path("av-recommend", "title_profile.json")
 
 
 TITLE_PROFILE_VERSION = 2
@@ -171,7 +171,7 @@ def _pool_path() -> Path:
 
 
 def _subscription_path() -> Path:
-    return plugin_data_path("subscription_core", "subscriptions.json")
+    return plugin_data_path("subscription-core", "subscriptions.json")
 
 
 def _pool() -> dict[str, Any]:

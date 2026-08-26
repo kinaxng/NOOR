@@ -359,3 +359,31 @@ await sdk.api.post('/plugins/subscription-core/actions/create', {
 - `evaluate_resource`：按统一规则为资源计算特征与评分。
 
 洗版删除旧版本必须由后续确认链路执行：下载完成 → 媒体库刷新 → 确认新版本入库且番号一致 → 标记洗版 → 删除旧版本。不要在下载提交后立即删除旧文件。
+
+## Plugin-private storage and lifecycle
+
+插件不得把运行数据写入源码目录、共享 `data/plugin_cache` 或顶层 `data/<name>`。统一使用：
+
+```python
+from app.core.runtime_paths import plugin_cache_path, plugin_data_path, plugin_logs_path
+
+data_file = plugin_data_path(PLUGIN_ID, "state.json")
+cache_file = plugin_cache_path(PLUGIN_ID, "covers", "123.jpg")
+log_file = plugin_logs_path(PLUGIN_ID, "runtime.log")
+```
+
+物理布局固定为：
+
+```text
+data/plugins/<plugin-id>/
+├── config.json
+├── data/
+├── cache/
+└── logs/
+```
+
+- 插件配置由 runtime 写入 `config.json`；插件不应另建第二份配置。
+- 禁用和升级保留整个私有目录。
+- 卸载默认删除代码、配置、数据、缓存和日志；用户可选择保留私有目录，以便重新安装时恢复。
+- 如需卸载前释放外部资源，可实现 `async on_uninstall(config, *, purge_data: bool)`。
+- 路径 helper 会将旧 `data/<plugin_id>`、下划线别名和 `data/plugin_cache/<plugin_id>` 非破坏性复制到新目录；旧目录只作为迁移回滚证据，不再写入。

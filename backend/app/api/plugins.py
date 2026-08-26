@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -451,12 +451,11 @@ async def clear_plugin_image_cache(plugin_id: str):
 
 
 @router.delete('/{plugin_id}')
-async def uninstall_plugin(plugin_id: str):
+async def uninstall_plugin(plugin_id: str, purge_data: bool = Query(default=True)):
     try:
-        await runtime.uninstall_plugin(plugin_id)
+        return await runtime.uninstall_plugin(plugin_id, purge_data=purge_data)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {'ok': True}
 
 
 @router.post('/{plugin_id}/downloads')

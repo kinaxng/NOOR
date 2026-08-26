@@ -14,6 +14,7 @@ from app.plugins.contracts import PluginManifest
 from app.plugins.handlers import clear_handler_cache, get_plugin_handler
 from app.plugins.market import MarketError, fetch_repo_index, install_from_market_item
 from app.plugins.runtime_paths import PLUGINS_DIR
+from app.core.runtime_paths import purge_plugin_storage
 from app.plugins.store import load_config, load_market_repos, load_state, save_config, save_market_repos, save_state
 
 LEGACY_DOWNLOADER_CAPABILITIES: dict[str, dict[str, Any]] = {
@@ -724,14 +725,22 @@ class PluginRuntime:
                 errors.append({"plugin_id": plugin_id, "error": str(exc)})
         return {"checked": checked, "updated": updated, "errors": errors}
 
-    async def uninstall_plugin(self, plugin_id: str) -> None:
+    async def uninstall_plugin(self, plugin_id: str, *, purge_data: bool = True) -> dict[str, Any]:
         async with self._lock:
             target = self.plugin_root / plugin_id
             if not target.exists():
                 raise KeyError("plugin not found")
             await self._stop_plugin_background(plugin_id)
+            handler = self._handler(plugin_id)
+            callback = getattr(handler, "on_uninstall", None) if handler is not None else None
+            if callable(callback):
+                result = callback(self.get_config(plugin_id), purge_data=purge_data)
+                if asyncio.iscoroutine(result):
+                    await result
             shutil.rmtree(target)
+            data_removed = purge_plugin_storage(plugin_id) if purge_data else False
             self.reload()
+            return {"ok": True, "plugin_id": plugin_id, "purge_data": purge_data, "data_removed": data_removed}
 
     async def test(self, plugin_id: str) -> dict[str, Any]:
         manifest = self.get_manifest(plugin_id)

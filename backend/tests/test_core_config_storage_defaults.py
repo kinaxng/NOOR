@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.core.config import Settings
-from app.core.runtime_paths import apply_whisper_cache_env, build_whisper_cache_env, data_path, plugin_cache_path, plugin_data_path
+from app.core.runtime_paths import apply_whisper_cache_env, build_whisper_cache_env, data_path, plugin_cache_path, plugin_data_path, plugin_logs_path, plugin_storage_path
 
 
 def test_storage_defaults_derive_from_noor_data_dir():
@@ -53,8 +53,10 @@ def test_runtime_data_helpers_derive_from_noor_data_dir():
     settings = Settings(_env_file=None, noor_data_dir="/noor-data")
 
     assert data_path("plugins_config.json", settings=settings) == Path("/noor-data/plugins_config.json")
-    assert plugin_cache_path("gfriends", "images", settings=settings) == Path("/noor-data/plugin_cache/gfriends/images")
-    assert plugin_data_path("av_recommend", "feedback.json", settings=settings) == Path("/noor-data/av_recommend/feedback.json")
+    assert plugin_storage_path("gfriends", settings=settings) == Path("/noor-data/plugins/gfriends")
+    assert plugin_cache_path("gfriends", "images", settings=settings) == Path("/noor-data/plugins/gfriends/cache/images")
+    assert plugin_data_path("av-recommend", "feedback.json", settings=settings) == Path("/noor-data/plugins/av-recommend/data/feedback.json")
+    assert plugin_logs_path("javdb", "runtime.log", settings=settings) == Path("/noor-data/plugins/javdb/logs/runtime.log")
 
 
 def test_whisper_cache_env_uses_current_huggingface_keys():

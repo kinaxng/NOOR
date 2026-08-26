@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -34,15 +36,58 @@ def data_path(*parts: str | Path, settings: Any | None = None) -> Path:
     return noor_data_dir(settings).joinpath(*parts)
 
 
-def plugin_cache_path(plugin_id: str | None = None, *parts: str | Path, settings: Any | None = None) -> Path:
-    base = data_path("plugin_cache", settings=settings)
-    if plugin_id:
-        base = base / plugin_id
-    return base.joinpath(*parts)
+def _safe_plugin_id(plugin_id: str) -> str:
+    value = str(plugin_id or "").strip()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value):
+        raise ValueError("invalid plugin id")
+    return value
+
+
+def plugin_storage_path(plugin_id: str, *parts: str | Path, settings: Any | None = None) -> Path:
+    return data_path("plugins", _safe_plugin_id(plugin_id), *parts, settings=settings)
+
+
+def _migrate_legacy_plugin_dir(plugin_id: str, kind: str, target: Path, settings: Any | None = None) -> None:
+    if target.exists():
+        return
+    aliases = {plugin_id, plugin_id.replace("-", "_")}
+    candidates = (
+        [data_path(alias, settings=settings) for alias in aliases]
+        if kind == "data"
+        else [data_path("plugin_cache", alias, settings=settings) for alias in aliases]
+    )
+    source = next((path for path in candidates if path.is_dir()), None)
+    if source is not None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source, target, dirs_exist_ok=True)
+
+
+def plugin_cache_path(plugin_id: str, *parts: str | Path, settings: Any | None = None) -> Path:
+    target = plugin_storage_path(plugin_id, "cache", settings=settings)
+    _migrate_legacy_plugin_dir(plugin_id, "cache", target, settings=settings)
+    return target.joinpath(*parts)
 
 
 def plugin_data_path(plugin_id: str, *parts: str | Path, settings: Any | None = None) -> Path:
-    return data_path(plugin_id, *parts, settings=settings)
+    target = plugin_storage_path(plugin_id, "data", settings=settings)
+    _migrate_legacy_plugin_dir(plugin_id, "data", target, settings=settings)
+    return target.joinpath(*parts)
+
+
+def plugin_logs_path(plugin_id: str, *parts: str | Path, settings: Any | None = None) -> Path:
+    return plugin_storage_path(plugin_id, "logs", *parts, settings=settings)
+
+
+def purge_plugin_storage(plugin_id: str, settings: Any | None = None) -> bool:
+    target = plugin_storage_path(plugin_id, settings=settings)
+    root = data_path("plugins", settings=settings).resolve()
+    resolved = target.resolve()
+    if resolved.parent != root:
+        raise ValueError("unsafe plugin storage path")
+    if not resolved.exists():
+        return False
+    shutil.rmtree(resolved)
+    return True
 
 
 def model_dir(settings: Any, module: str, configured: str | None = None) -> Path:

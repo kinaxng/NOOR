@@ -18,7 +18,7 @@ PLUGIN_ID = "subscription-core"
 
 
 def _data_file() -> Path:
-    return plugin_data_path("subscription_core", "subscriptions.json")
+    return plugin_data_path("subscription-core", "subscriptions.json")
 
 
 EVENT_LIMIT = 200
