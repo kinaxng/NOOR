@@ -1213,7 +1213,13 @@ onBeforeUnmount(clearMounted)
 </template>
 
 <style>
-.plugin-host-page { min-height: 40vh; }
+.plugin-host-page {
+  min-height: 40vh;
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.plugin-host-mount { font: inherit; }
 .plugin-host-state { padding: 1rem; margin-bottom: 1rem; border-radius: var(--radius-lg); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.7); }
 .plugin-host-state--error { color: var(--color-error); border-color: rgba(227,26,26,.25); background: rgba(227,26,26,.1); }
 .plugin-host-mount.is-loading { opacity: .6; }

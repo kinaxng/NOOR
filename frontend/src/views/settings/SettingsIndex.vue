@@ -83,6 +83,33 @@ const currentComponent = computed(() => {
   margin-bottom: 1rem;
 }
 
+/* Readability baseline shared by every settings panel. Individual panels
+   historically drifted as low as 9–11px, which is too small for form copy. */
+.settings-page__content :deep(.settings-card__title) {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.settings-page__content :deep(:is(.settings-card__subtitle, .settings-card__desc, .settings-card__hint)) {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.settings-page__content :deep(:is(.field-row__label-text, .whisper-section-label, .info-label)) {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.settings-page__content :deep(:is(.field-row__label-desc, .field-row__hint, .model-row__desc, .dir-modal__hint, .plugin-card__desc, .plugin-downloader-binding__hint)) {
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.settings-page__content :deep(:is(.plugin-card__meta, .plugin-card__meta-item, .plugin-inline-status__label)) {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
 @media (max-width: 768px) {
 }
 </style>

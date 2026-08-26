@@ -21,6 +21,7 @@
   --color-bg-surface:  #1A1F3A;   /* Cards / panels */
   --color-bg-elevated: #1E2544;  /* Elevated elements */
   --color-bg-hover:    #252A40;   /* Hover state */
+  --color-surface-card: var(--color-bg-surface); /* Legacy settings alias */
 
   /* Glass / Card */
   --color-glass-bg:    rgba(17, 25, 54, 0.65);
@@ -36,6 +37,8 @@
   --color-text-primary:   #FFFFFF;
   --color-text-secondary: #A0AEC0;
   --color-text-muted:    #718096;
+  --color-text-body:      var(--color-text-secondary);
+  --color-text-tertiary:  var(--color-text-muted);
 
   /* ── Brand ── */
   --color-brand:       #0075FF;
@@ -145,7 +148,10 @@
 /* =============================================
    Base Styles
    ============================================= */
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
 
 body {
   font-family: var(--font-body);
@@ -154,7 +160,8 @@ body {
   background-size: cover;
   background-position: 0% 0%;
   color: var(--color-text-secondary);
-  line-height: 1.625;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -1244,7 +1244,7 @@ onMounted(async () => {
 
 .hl-group__meta {
   color: var(--color-text-secondary);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .hl-group__entries {
@@ -1271,7 +1271,7 @@ onMounted(async () => {
 .hl-entry__count,
 .hl-col__label {
   color: var(--color-text-muted);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .hl-entry__cols {
@@ -1317,7 +1317,7 @@ onMounted(async () => {
   border-radius: var(--radius-button);
   background: rgba(255, 255, 255, 0.03);
   color: var(--color-text-primary);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   padding: 0.15rem 0.38rem;
   transition: all var(--transition-fast);
@@ -1348,7 +1348,7 @@ onMounted(async () => {
   border-radius: 0;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
   padding: 0;
