@@ -19,6 +19,18 @@ class _CoverHandler:
         return {"ok": True, "data": {"cover_url": f"https://covers.test/{payload['code']}.jpg"}}
 
 
+class _FilteredHandler:
+    def __init__(self) -> None:
+        self.query = ""
+
+    async def search_resources(self, config, payload):
+        self.query = payload["keyword"]
+        return {"items": [
+            {"id": "plain", "query_key": "SNIS-001", "title": "SNIS-001", "features": {"is_cracked": False}},
+            {"id": "cracked", "query_key": "SNIS-002", "title": "SNIS-002 破解", "features": {"is_cracked": True}},
+        ]}
+
+
 def test_resource_search_prioritizes_avdb_then_mteam_then_javdb() -> None:
     runtime = PluginRuntime()
     runtime._manifests = {
@@ -45,3 +57,23 @@ def test_resource_search_enriches_missing_cover_from_javdb_detail() -> None:
 
     assert items[0]["cover_url"] == "https://covers.test/SNIS-201.jpg"
     assert items[0]["metadata"]["cover_borrowed_from"] == "javdb_detail"
+
+
+def test_resource_search_parses_feature_keyword_as_and_filter() -> None:
+    runtime = PluginRuntime()
+    handler = _FilteredHandler()
+    runtime._manifests = {"avdb": {"id": "avdb", "name": "AVDB", "capabilities": ["resource_search"]}}
+    runtime._handlers = {"avdb": handler}
+
+    result = asyncio.run(runtime.search_resources("吉泽明步 破解"))
+
+    assert handler.query == "吉泽明步"
+    assert [item["id"] for item in result["items"]] == ["cracked"]
+
+
+def test_resource_search_supports_negative_and_source_filters() -> None:
+    payload, filters, sources = PluginRuntime._parse_resource_query_filters({"keyword": "吉泽明步 -中文 来源:AVDB"})
+
+    assert payload["keyword"] == "吉泽明步"
+    assert filters == {"chinese": False}
+    assert sources == {"avdb"}
