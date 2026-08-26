@@ -1028,7 +1028,7 @@ onMounted(async () => {
 .filter-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
+  gap: 0.4rem;
   align-items: center;
 }
 
@@ -1037,31 +1037,35 @@ onMounted(async () => {
 }
 
 .sort-label {
-  color: rgba(113, 128, 150, 0.72);
-
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
 .sort-btn,
 .filter-btn {
-  border: none;
-  border-radius: 0;
+  min-height: 2rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
   font-family: var(--font-display);
   font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.2;
-  padding: 0.125rem 0;
-  transition: color var(--transition-fast), opacity var(--transition-fast);
-  background: transparent;
+  line-height: 1.4;
+  padding: 0.25rem 0.75rem;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), opacity var(--transition-fast);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--color-text-secondary);
-  opacity: 0.72;
+  cursor: pointer;
 }
 
-.sort-btn:hover,
-.filter-btn:hover {
+.sort-btn:hover:not(:disabled),
+.filter-btn:hover:not(:disabled) {
   color: var(--color-text-primary);
-  opacity: 1;
+  border-color: rgba(0, 117, 255, 0.32);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .sort-btn:disabled,
@@ -1074,10 +1078,9 @@ onMounted(async () => {
 .filter-btn--active {
   color: var(--color-text-primary);
   opacity: 1;
-  text-decoration: underline;
-  text-decoration-color: rgba(0, 117, 255, 0.65);
-  text-underline-offset: 0.28rem;
-  text-decoration-thickness: 2px;
+  border-color: rgba(0, 117, 255, 0.48);
+  background: rgba(0, 117, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(0, 117, 255, 0.08);
 }
 
 .pagination-bar {

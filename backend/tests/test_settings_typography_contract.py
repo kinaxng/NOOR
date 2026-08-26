@@ -70,6 +70,18 @@ def test_hardlink_work_code_uses_noor_display_typography() -> None:
     assert paths is not None and "font-family: var(--font-display)" in paths.group(1)
 
 
+def test_hardlink_sort_and_filter_controls_use_noor_chips() -> None:
+    source = (ROOT / "frontend" / "src" / "views" / "HardlinkView.vue").read_text(encoding="utf-8")
+    controls = re.search(r"\.sort-btn,\s*\n\.filter-btn\s*\{([^}]*)\}", source, re.S)
+    active = re.search(r"\.sort-btn--active,\s*\n\.filter-btn--active\s*\{([^}]*)\}", source, re.S)
+
+    assert controls is not None
+    assert "border-radius: var(--radius-pill)" in controls.group(1)
+    assert "background: rgba(255, 255, 255, 0.04)" in controls.group(1)
+    assert active is not None and "background: rgba(0, 117, 255, 0.16)" in active.group(1)
+    assert "text-decoration: underline" not in active.group(1)
+
+
 def test_global_typography_tokens_have_complete_readable_fallbacks() -> None:
     source = (ROOT / "frontend" / "src" / "style.css").read_text(encoding="utf-8")
 

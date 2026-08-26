@@ -839,3 +839,4 @@ Notes:
 - 硬链接作品番号（如 `FC2-4720819`）移除 `font-mono`，改用 NOOR display 字体；Emby Webhook URL 同样从 mono 改为 14px display 字体。
 - 字体契约测试 `8 passed`；前端类型检查与生产构建通过。
 - 后续按用户复核将主文件与硬链接列中的完整路径也由 mono 改为 13px NOOR display 字体，整张分组卡片的内容值风格保持一致。
+- 硬链接排序和筛选从裸文字下划线改为 NOOR 轻量胶囊控件，统一默认、悬停、禁用和品牌蓝选中态。
