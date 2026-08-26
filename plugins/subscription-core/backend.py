@@ -726,6 +726,106 @@ def _public_subscription(sub: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _download_identity(sub: dict[str, Any]) -> dict[str, str]:
+    result = sub.get("submitted_result") if isinstance(sub.get("submitted_result"), dict) else {}
+    torrent = result.get("torrent") if isinstance(result.get("torrent"), dict) else {}
+    task = result.get("task") if isinstance(result.get("task"), dict) else {}
+    if not task:
+        nested = result.get("result") if isinstance(result.get("result"), dict) else {}
+        task = nested.get("task") if isinstance(nested.get("task"), dict) else {}
+    best = sub.get("best_resource") if isinstance(sub.get("best_resource"), dict) else {}
+    resource = best.get("resource") if isinstance(best.get("resource"), dict) else best
+    return {
+        "hash": str(torrent.get("hash") or "").lower(),
+        "task_id": str(task.get("id") or ""),
+        "name": str(torrent.get("name") or task.get("name") or sub.get("code") or "").strip().lower(),
+        "url": str(resource.get("url") or best.get("url") or "").strip(),
+    }
+
+
+def _download_stage(downloader_id: str, task: dict[str, Any]) -> dict[str, Any]:
+    progress = max(0.0, min(float(task.get("progress") or 0), 1.0))
+    raw_state = str(task.get("state") or task.get("phase") or "").strip()
+    state = raw_state.lower()
+    if downloader_id == "qbittorrent":
+        if progress >= 1 or state in {"uploading", "stalledup", "queuedup", "forcedup", "stoppedup", "pausedup", "checkingup"}:
+            stage, label, tone = "completed", "下载完成 · 等待入库", "success"
+        elif state in {"error", "missedfiles", "unknown"}:
+            stage, label, tone = "error", "下载异常", "danger"
+        elif state in {"stoppeddl", "pauseddl"}:
+            stage, label, tone = "paused", "下载已暂停", "warning"
+        elif state in {"metadl", "checkingdl", "queueddl", "forcedmeta"}:
+            stage, label, tone = "queued", "等待下载", "info"
+        else:
+            stage, label, tone = "downloading", "下载中", "primary"
+    else:
+        if progress >= 1 or "complete" in state:
+            stage, label, tone = "completed", "下载完成 · 等待入库", "success"
+        elif "error" in state or "fail" in state:
+            stage, label, tone = "error", "下载异常", "danger"
+        elif "paused" in state:
+            stage, label, tone = "paused", "下载已暂停", "warning"
+        elif "pending" in state:
+            stage, label, tone = "queued", "等待下载", "info"
+        else:
+            stage, label, tone = "downloading", "下载中", "primary"
+    return {
+        "available": True,
+        "downloader_id": downloader_id,
+        "stage": stage,
+        "label": label,
+        "tone": tone,
+        "progress": progress,
+        "state": raw_state,
+        "name": str(task.get("name") or ""),
+        "savepath": str(task.get("save_path") or task.get("savepath") or task.get("real_path") or ""),
+        "speed": int(task.get("dlspeed") or task.get("speed") or 0),
+        "message": str(task.get("message") or ""),
+    }
+
+
+async def _attach_download_statuses(subscriptions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from app.plugins.runtime import runtime
+
+    public = [_public_subscription(sub) for sub in subscriptions]
+    groups: dict[str, list[tuple[dict[str, Any], dict[str, str]]]] = {}
+    for item in public:
+        downloader_id = str(item.get("submitted_downloader_id") or "").strip()
+        if item.get("push_status") == "submitted" and downloader_id:
+            groups.setdefault(downloader_id, []).append((item, _download_identity(item)))
+    for downloader_id, targets in groups.items():
+        try:
+            if downloader_id == "qbittorrent":
+                response = await runtime.handle_action(downloader_id, "torrents", {"limit": 500})
+                tasks = response.get("items") if isinstance(response, dict) else []
+            elif downloader_id == "xunlei-remote":
+                response = await runtime.handle_action(downloader_id, "tasks", {"phase": "all", "limit": 500})
+                tasks = response.get("tasks") if isinstance(response, dict) else []
+            else:
+                continue
+            tasks = [task for task in (tasks or []) if isinstance(task, dict)]
+            for item, identity in targets:
+                match = next((task for task in tasks if identity["hash"] and str(task.get("hash") or "").lower() == identity["hash"]), None)
+                if not match:
+                    match = next((task for task in tasks if identity["task_id"] and str(task.get("id") or "") == identity["task_id"]), None)
+                if not match:
+                    match = next((task for task in tasks if identity["url"] and str(task.get("url") or "") == identity["url"]), None)
+                if not match:
+                    match = next((task for task in tasks if identity["name"] and identity["name"] in str(task.get("name") or "").lower()), None)
+                item["download_status"] = _download_stage(downloader_id, match) if match else {
+                    "available": False, "downloader_id": downloader_id, "stage": "missing",
+                    "label": "下载器中未找到任务", "tone": "warning", "progress": 0,
+                }
+        except Exception as exc:
+            for item, _identity in targets:
+                item["download_status"] = {
+                    "available": False, "downloader_id": downloader_id, "stage": "unavailable",
+                    "label": "下载器状态不可用", "tone": "warning", "progress": 0,
+                    "message": _public_error_message(exc),
+                }
+    return public
+
+
 async def _create_subscription(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     raw_code = _extract_raw_code(payload.get("code") or payload.get("number") or payload.get("title"))
     code = _extract_code(payload.get("code") or payload.get("number") or payload.get("title"))
@@ -1255,6 +1355,7 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
         _save(data)
     if action == "overview":
         subs = [s for s in data.get("subscriptions") or [] if s.get("status") != "deleted"]
+        public_subs = await _attach_download_statuses(subs)
         stats = {
             "total": len(subs),
             "subscribe": sum(1 for s in subs if s.get("type") == "subscribe"),
@@ -1264,8 +1365,10 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
             "waiting_quota": sum(1 for s in subs if s.get("status") == "waiting_quota"),
             "active": sum(1 for s in subs if s.get("status") == "active"),
             "cleanup_pending": sum(1 for s in subs if isinstance(s.get("cleanup_suggestion"), dict) and s.get("cleanup_suggestion", {}).get("status") == "pending"),
+            "downloading": sum(1 for s in public_subs if (s.get("download_status") or {}).get("stage") in {"queued", "downloading", "paused"}),
+            "downloaded": sum(1 for s in public_subs if (s.get("download_status") or {}).get("stage") == "completed"),
         }
-        return {"ok": True, "stats": stats, "items": [_public_subscription(s) for s in subs], "events": data.get("events", [])[:50], "defaults": {"mode": config.get("default_mode") or "loose", "require_cracked": bool(config.get("default_require_cracked", False)), "require_subtitle": bool(config.get("default_require_subtitle", False)), "savepath": str(config.get("default_savepath") or "")}}
+        return {"ok": True, "stats": stats, "items": public_subs, "events": data.get("events", [])[:50], "defaults": {"mode": config.get("default_mode") or "loose", "require_cracked": bool(config.get("default_require_cracked", False)), "require_subtitle": bool(config.get("default_require_subtitle", False)), "savepath": str(config.get("default_savepath") or "")}}
     if action == "classify":
         raw_code = _extract_raw_code(payload.get("code") or payload.get("title"))
         code = _extract_code(payload.get("code") or payload.get("title"))

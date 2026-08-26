@@ -16,6 +16,15 @@ function fmtSize(bytes) {
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1 }
   return `${v.toFixed(i ? 1 : 0)} ${units[i]}`
 }
+function fmtSpeed(bytes) {
+  const value = fmtSize(bytes)
+  return value ? `${value}/s` : ''
+}
+function downloaderLabel(value) {
+  if (value === 'qbittorrent') return 'qBittorrent'
+  if (value === 'xunlei-remote') return '迅雷远程'
+  return value || '下载器'
+}
 function esc(value) {
   return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
@@ -146,10 +155,10 @@ export async function mount(root, sdk = {}) {
     const host = $('topbar')
     host.innerHTML = ''
     const stats = [
-      badge(`全部 ${state.stats.total || 0}`, 'primary'),
-      badge(`订阅 ${state.stats.subscribe || 0}`, 'info'),
-      badge(`洗版 ${state.stats.upgrade || 0}`, 'warning'),
-      badge(`已匹配 ${state.stats.matched || 0}`, 'success'),
+      badge(`监控 ${state.stats.total || 0}`, 'primary'),
+      badge(`待提交 ${state.stats.matched || 0}`, 'info'),
+      badge(`下载中 ${state.stats.downloading || 0}`, 'warning'),
+      badge(`待入库 ${state.stats.downloaded || 0}`, 'success'),
     ]
     const createBtn = sdk.ui?.button ? sdk.ui.button({ label: '新建订阅', tone: 'primary', onClick: () => { state.formOpen = !state.formOpen; state.editingId = ''; state.form = { code: '', title: '', mode: state.defaults.mode || 'loose', require_cracked: !!state.defaults.require_cracked, require_subtitle: !!state.defaults.require_subtitle }; render() } }) : h('button', '', '新建订阅')
     if (!sdk.ui?.button) createBtn.onclick = () => { state.formOpen = !state.formOpen; state.editingId = ''; state.form = { code: '', title: '', mode: state.defaults.mode || 'loose', require_cracked: !!state.defaults.require_cracked, require_subtitle: !!state.defaults.require_subtitle }; render() }
@@ -181,7 +190,9 @@ export async function mount(root, sdk = {}) {
       ['all', '全部'],
       ['subscribe', '订阅'],
       ['upgrade', '洗版'],
-      ['matched', '已匹配'],
+      ['matched', '待提交'],
+      ['downloading', '下载中'],
+      ['downloaded', '待入库'],
     ]
     const filterWrap = h('div', 'sub-filter')
     const modesWrap = h('div', 'sub-filter__modes')
@@ -261,7 +272,10 @@ export async function mount(root, sdk = {}) {
     out.push(badge(item.mode === 'strict' ? '严格' : '宽松', 'info'))
     if (item.require_cracked) out.push(badge('破解', 'warning'))
     if (item.require_subtitle) out.push(badge('中字', 'success'))
-    if (item.status === 'matched') out.push(badge('已匹配', 'success'))
+    const download = item.download_status || null
+    if (download) out.push(badge(download.label || '已提交', download.tone || 'info'))
+    else if (item.status === 'submitted') out.push(badge('已提交', 'primary'))
+    else if (item.status === 'matched') out.push(badge('待提交', 'success'))
     else if (item.status === 'active') out.push(badge('监控中', 'info'))
     if ((item.cleanup_suggestion || {}).status === 'pending') out.push(badge('待处理旧版', 'danger'))
     return out
@@ -322,6 +336,33 @@ export async function mount(root, sdk = {}) {
     return box.outerHTML
   }
 
+  function renderDownload(item) {
+    const status = item.download_status
+    if (!status && item.push_status !== 'submitted') return ''
+    const downloader = downloaderLabel(status?.downloader_id || item.submitted_downloader_id)
+    const progress = Math.round(Number(status?.progress || 0) * 100)
+    const details = [downloader]
+    if (status?.state) details.push(status.state)
+    if (status?.speed) details.push(fmtSpeed(status.speed))
+    if (status?.savepath) details.push(status.savepath)
+    if (status?.message) details.push(status.message)
+    return `<div class="sub-download is-${esc(status?.tone || 'info')}">
+      <div class="sub-download__head"><strong>${esc(status?.label || '已提交下载器')}</strong><span>${progress}%</span></div>
+      <div class="sub-download__track"><i style="width:${progress}%"></i></div>
+      <div class="sub-download__meta">${esc(details.join(' · '))}</div>
+    </div>`
+  }
+
+  function renderCandidates(item) {
+    const candidates = Array.isArray(item.recent_candidates) ? item.recent_candidates : []
+    if (!candidates.length) return ''
+    return `<div class="sub-candidates"><div class="sub-section-title">本次候选 <span>${candidates.length}</span></div>${candidates.map((candidate, index) => `
+      <div class="sub-candidate${index === 0 ? ' is-best' : ''}">
+        <span>${index + 1}</span><strong>${esc(candidate.title || candidate.id || '未知资源')}</strong>
+        <small>${esc(candidate.provider_label || candidate.provider || '')}${candidate.size_bytes ? ` · ${fmtSize(candidate.size_bytes)}` : ''} · ${Number(candidate.score || 0)} 分</small>
+      </div>`).join('')}</div>`
+  }
+
   function row(label, value) {
     const line = h('div', 'sub-compare__row')
     line.innerHTML = `<span>${esc(label)}</span><strong>${esc(String(value || '-'))}</strong>`
@@ -349,6 +390,8 @@ export async function mount(root, sdk = {}) {
       if (state.filter === 'subscribe' && item.type !== 'subscribe') return false
       if (state.filter === 'upgrade' && item.type !== 'upgrade') return false
       if (state.filter === 'matched' && item.status !== 'matched') return false
+      if (state.filter === 'downloading' && !['queued', 'downloading', 'paused'].includes(item.download_status?.stage)) return false
+      if (state.filter === 'downloaded' && item.download_status?.stage !== 'completed') return false
       if (state.keyword) {
         const text = `${item.code || ''} ${item.title || ''} ${sourceText(item)} ${item.current_file_path || ''}`.toLowerCase()
         if (!text.includes(state.keyword.toLowerCase())) return false
@@ -374,14 +417,15 @@ export async function mount(root, sdk = {}) {
       card.innerHTML = `
         <div class="sub-card__head">
           <div class="sub-card__title"><strong>${esc(item.code)}</strong><span>${esc(item.title || '')}</span></div>
-          <div class="sub-card__actions"><button data-action="detail" type="button">${state.expanded.has(item.id) ? '收起' : '详情'}</button>${(item.cleanup_suggestion || {}).status === 'pending' ? '<button data-action="ack-cleanup" type="button">已处理旧版</button>' : ''}<button data-action="edit" type="button">编辑</button><button data-action="check" type="button">检测</button><button data-action="delete" type="button">取消</button></div>
+          <div class="sub-card__actions"><button data-action="detail" type="button">${state.expanded.has(item.id) ? '收起' : '展开'}</button><button data-action="check" type="button">检测</button><button data-action="more" type="button">•••</button></div>
         </div>
         <div class="sub-card__main">
           <div class="sub-card__badges"></div>
           <div class="sub-card__meta">上次检测：${fmtDate(item.last_checked_at)}${sourceText(item) ? ` · 来源：${esc(sourceText(item))}` : ''}${item.current_file_path ? ` · 当前：${esc(item.current_file_path)}` : ''}</div>
           ${best ? `<div class="sub-best"><strong>最佳候选</strong><span>${esc(best.provider_label || best.provider)} · ${esc(best.title || '')} · ${fmtSize(best.size_bytes)}</span><small>${esc(qualityText(item, best))}</small></div>` : '<div class="sub-best is-empty">暂无匹配资源</div>'}
+          ${renderDownload(item)}
           ${item.last_submit_error ? `<div class="sub-best is-error"><strong>${item.last_submit_error_kind === 'downloader_quota_limited' ? '等待重试' : item.last_submit_error_kind === 'upgrade_not_improved' ? '未达洗版条件' : '推送异常'}</strong><span>${esc(item.last_submit_error)}${item.retry_after_at ? ` · 下次尝试：${fmtDate(item.retry_after_at)}` : ''}</span></div>` : ''}
-          ${state.expanded.has(item.id) ? renderCompare(item) : ''}
+          ${state.expanded.has(item.id) ? `${renderCompare(item)}${renderCandidates(item)}<div class="sub-expanded-actions">${(item.cleanup_suggestion || {}).status === 'pending' ? '<button data-action="ack-cleanup" type="button">已处理旧版</button>' : ''}<button data-action="edit" type="button">编辑规则</button><button data-action="delete" type="button">取消订阅</button></div>` : ''}
         </div>
       `
       card.prepend(cover)
@@ -392,11 +436,17 @@ export async function mount(root, sdk = {}) {
         else state.expanded.add(item.id)
         renderItems()
       }
+      card.querySelector('[data-action="more"]').onclick = () => {
+        state.expanded.add(item.id)
+        renderItems()
+      }
       const ackCleanupBtn = card.querySelector('[data-action="ack-cleanup"]')
       if (ackCleanupBtn) ackCleanupBtn.onclick = () => ackCleanup(item.id)
-      card.querySelector('[data-action="edit"]').onclick = () => openEdit(item)
+      const editBtn = card.querySelector('[data-action="edit"]')
+      if (editBtn) editBtn.onclick = () => openEdit(item)
       card.querySelector('[data-action="check"]').onclick = () => checkOne(item.id)
-      card.querySelector('[data-action="delete"]').onclick = () => deleteOne(item.id)
+      const deleteBtn = card.querySelector('[data-action="delete"]')
+      if (deleteBtn) deleteBtn.onclick = () => deleteOne(item.id)
       host.appendChild(card)
     }
   }

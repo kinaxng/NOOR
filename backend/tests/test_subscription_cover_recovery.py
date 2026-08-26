@@ -22,6 +22,36 @@ def test_subscription_image_candidates_keep_proxy_before_inner_url():
     assert backend._image_candidates({"cover_url": proxy}) == [proxy, "https://cdn.test/cover.jpg"]
 
 
+def test_subscription_qb_completed_task_waits_for_library_import():
+    backend = _load_backend()
+
+    status = backend._download_stage("qbittorrent", {
+        "name": "MIDA-727",
+        "state": "stoppedUP",
+        "progress": 1,
+        "save_path": "/downloads/av",
+    })
+
+    assert status["stage"] == "completed"
+    assert status["label"] == "下载完成 · 等待入库"
+    assert status["tone"] == "success"
+    assert status["progress"] == 1
+
+
+def test_subscription_xunlei_error_task_is_exposed():
+    backend = _load_backend()
+
+    status = backend._download_stage("xunlei-remote", {
+        "name": "TEST-001",
+        "phase": "PHASE_TYPE_ERROR",
+        "message": "磁盘空间不足",
+    })
+
+    assert status["stage"] == "error"
+    assert status["label"] == "下载异常"
+    assert status["message"] == "磁盘空间不足"
+
+
 def test_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path):
     asyncio.run(_run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path))
 
