@@ -72,8 +72,31 @@ def test_resource_search_parses_feature_keyword_as_and_filter() -> None:
 
 
 def test_resource_search_supports_negative_and_source_filters() -> None:
-    payload, filters, sources = PluginRuntime._parse_resource_query_filters({"keyword": "吉泽明步 -中文 来源:AVDB"})
+    payload, filters, sources, title_terms = PluginRuntime._parse_resource_query_filters({"keyword": "吉泽明步 -中文 来源:AVDB"})
 
     assert payload["keyword"] == "吉泽明步"
     assert filters == {"chinese": False}
     assert sources == {"avdb"}
+    assert title_terms == []
+
+
+def test_resource_search_treats_following_plain_words_as_title_and_filters() -> None:
+    payload, filters, sources, title_terms = PluginRuntime._parse_resource_query_filters({"keyword": "吉泽明步 教师 诱惑 -合集 破解"})
+
+    assert payload["keyword"] == "吉泽明步"
+    assert filters == {"cracked": True}
+    assert sources == set()
+    assert title_terms == [("教师", True), ("诱惑", True), ("合集", False)]
+    assert PluginRuntime._resource_matches_query_filters(
+        {"title": "被诱惑的美女教师", "features": {"is_cracked": True}}, filters, title_terms,
+    ) is True
+    assert PluginRuntime._resource_matches_query_filters(
+        {"title": "美女教师合集", "features": {"is_cracked": True}}, filters, title_terms,
+    ) is False
+
+
+def test_resource_search_keeps_quoted_phrase_as_one_title_term() -> None:
+    payload, _filters, _sources, title_terms = PluginRuntime._parse_resource_query_filters({"keyword": '吉泽明步 "家庭 教师"'})
+
+    assert payload["keyword"] == "吉泽明步"
+    assert title_terms == [("家庭 教师", True)]

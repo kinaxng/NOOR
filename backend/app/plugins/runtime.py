@@ -408,8 +408,9 @@ class PluginRuntime:
         }
 
     @staticmethod
-    def _parse_resource_query_filters(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, bool], set[str]]:
+    def _parse_resource_query_filters(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, bool], set[str], list[tuple[str, bool]]]:
         import re
+        import shlex
 
         raw = str(payload.get("keyword") or payload.get("q") or "").strip()
         feature_aliases = {
@@ -423,7 +424,12 @@ class PluginRuntime:
         filters: dict[str, bool] = {}
         sources: set[str] = set()
         search_terms: list[str] = []
-        for token in re.split(r"\s+", raw):
+        title_terms: list[tuple[str, bool]] = []
+        try:
+            tokens = shlex.split(raw)
+        except ValueError:
+            tokens = re.split(r"\s+", raw)
+        for token in tokens:
             if not token:
                 continue
             negative = token.startswith("-") and len(token) > 1
@@ -438,19 +444,21 @@ class PluginRuntime:
             if feature:
                 filters[feature] = not negative
                 continue
-            search_terms.append(token)
+            if not search_terms:
+                search_terms.append(token)
+            else:
+                title_terms.append((value, not negative))
         provider_query = " ".join(search_terms).strip()
         parsed = dict(payload)
         parsed["keyword"] = provider_query
         parsed["q"] = provider_query
-        return parsed, filters, sources
+        return parsed, filters, sources, title_terms
 
     @staticmethod
-    def _resource_matches_query_filters(item: dict[str, Any], filters: dict[str, bool]) -> bool:
+    def _resource_matches_query_filters(item: dict[str, Any], filters: dict[str, bool], title_terms: list[tuple[str, bool]] | None = None) -> bool:
         import re
 
-        if not filters:
-            return True
+        title_terms = title_terms or []
         features = item.get("features") if isinstance(item.get("features"), dict) else {}
         requirements = item.get("requirements") if isinstance(item.get("requirements"), dict) else {}
         text = " ".join([str(item.get("title") or ""), str(item.get("subtitle") or ""), " ".join(str(x) for x in item.get("tags") or [])])
@@ -461,7 +469,10 @@ class PluginRuntime:
             "leaked": bool(features.get("is_leaked") or re.search(r"流出|leaked", text, re.I)),
             "uncensored": bool(features.get("is_uncensored") or re.search(r"无码|無碼|uncensored", text, re.I)),
         }
-        return all(bool(actual.get(name)) is expected for name, expected in filters.items())
+        if not all(bool(actual.get(name)) is expected for name, expected in filters.items()):
+            return False
+        title = str(item.get("title") or "").casefold()
+        return all((term.casefold() in title) is expected for term, expected in title_terms)
 
     async def search_resources(
         self,
@@ -472,7 +483,7 @@ class PluginRuntime:
         requested_downloader_id: str = "",
     ) -> dict[str, Any]:
         payload = {"keyword": str(query).strip()} if isinstance(query, str) else dict(query or {})
-        payload, query_filters, query_sources = self._parse_resource_query_filters(payload)
+        payload, query_filters, query_sources, title_terms = self._parse_resource_query_filters(payload)
         provider_filter = {str(x).strip() for x in (provider_ids or []) if str(x).strip()}
         if query_sources:
             provider_filter = provider_filter & query_sources if provider_filter else query_sources
@@ -509,7 +520,7 @@ class PluginRuntime:
                 if not isinstance(raw_item, dict):
                     continue
                 item = self._normalize_resource_item(pid, manifest.get("name") or pid, raw_item)
-                if not self._resource_matches_query_filters(item, query_filters):
+                if not self._resource_matches_query_filters(item, query_filters, title_terms):
                     continue
                 item.update(self.resolve_downloaders_for_resource(pid, item, requested_downloader_id=requested_downloader_id))
                 normalized_items.append(item)
