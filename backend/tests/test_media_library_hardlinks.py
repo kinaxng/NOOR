@@ -10,9 +10,38 @@ from app.api.endpoints.media_library_hardlinks import (
     hardlink_groups_path_impl,
     legacy_hardlink_groups_path_impl,
     load_hardlink_groups_impl,
+    rename_hardlink_path_impl,
     save_hardlink_groups_impl,
     scan_single_group_impl,
 )
+
+
+def test_rename_hardlink_path_preserves_suffix_and_updates_cached_path(tmp_path: Path):
+    root = tmp_path / 'media'
+    root.mkdir()
+    source = root / 'ABC-123.mp4'
+    source.write_text('video')
+    groups = [{'code': 'ABC-123', 'entries': [{'source_path': str(source), 'hardlink_paths': []}]}]
+
+    new_path, updated = rename_hardlink_path_impl(
+        str(source), 'ABC-123-new', allowed_roots=[root], groups=groups,
+    )
+
+    assert new_path == str(root / 'ABC-123-new.mp4')
+    assert Path(new_path).read_text() == 'video'
+    assert updated[0]['entries'][0]['source_path'] == new_path
+
+
+@pytest.mark.parametrize('new_stem', ['../ABC-123', '', '..'])
+def test_rename_hardlink_path_rejects_unsafe_name(tmp_path: Path, new_stem: str):
+    root = tmp_path / 'media'
+    root.mkdir()
+    source = root / 'ABC-123.mp4'
+    source.write_text('video')
+
+    with pytest.raises(ValueError):
+        rename_hardlink_path_impl(str(source), new_stem, allowed_roots=[root], groups=[])
+    assert source.exists()
 
 
 def test_enrich_hardlink_groups_marks_orphan_and_unparsed_groups():

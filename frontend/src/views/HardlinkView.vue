@@ -1,6 +1,6 @@
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 import { useMediaLibraryStore } from '../stores/mediaLibrary'
@@ -36,6 +36,12 @@ const deletingGroupCodes = ref<Set<string>>(new Set())
 const reorganizingSourcePaths = ref<Set<string>>(new Set())
 const previewVideoPath = ref('')
 const mdcManualAvailable = ref(false)
+const editingPath = ref('')
+const editingStem = ref('')
+const editingSuffix = ref('')
+const renamingPath = ref('')
+const renameInput = ref<HTMLInputElement | null>(null)
+let previewClickTimer: ReturnType<typeof setTimeout> | null = null
 
 const pageTitle = computed(() => { void i18nVersion.value; return t('hardlinks.title') })
 const scanBtnLabel = computed(() => { void i18nVersion.value; return t('hardlinks.scan') })
@@ -57,7 +63,6 @@ const deleteGroupLabel = computed(() => { void i18nVersion.value; return t('hard
 const processingLabel = computed(() => { void i18nVersion.value; return t('hardlinks.processing') })
 const orphanSkippedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.orphanSkipped') })
 const reorganizeLabel = computed(() => { void i18nVersion.value; return t('hardlinks.reorganize') })
-const previewPathLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewPath') })
 const previewUnsupportedLabel = computed(() => { void i18nVersion.value; return t('hardlinks.previewUnsupported') })
 const previewDeleteNote = computed(() => { void i18nVersion.value; return t('hardlinks.previewDeleteNote') })
 const abnormalLabel = computed(() => { void i18nVersion.value; return t('hardlinks.status.issue') })
@@ -69,6 +74,58 @@ const previewVideoUrl = computed(() => {
   if (!previewVideoPath.value) return ''
   return `/api/media-library/hardlinks/preview-file?path=${encodeURIComponent(previewVideoPath.value)}`
 })
+
+function splitFilename(path: string) {
+  const filename = path.split('/').pop() || ''
+  const dot = filename.lastIndexOf('.')
+  return dot > 0
+    ? { stem: filename.slice(0, dot), suffix: filename.slice(dot) }
+    : { stem: filename, suffix: '' }
+}
+
+function scheduleVideoPreview(path: string) {
+  if (previewClickTimer) window.clearTimeout(previewClickTimer)
+  previewClickTimer = window.setTimeout(() => openVideoPreview(path), 220)
+}
+
+function startRename(path: string) {
+  if (previewClickTimer) window.clearTimeout(previewClickTimer)
+  const { stem, suffix } = splitFilename(path)
+  editingPath.value = path
+  editingStem.value = stem
+  editingSuffix.value = suffix
+  nextTick(() => {
+    renameInput.value?.focus()
+    renameInput.value?.select()
+  })
+}
+
+function cancelRename() {
+  editingPath.value = ''
+  editingStem.value = ''
+  editingSuffix.value = ''
+}
+
+async function saveRename() {
+  const path = editingPath.value
+  const stem = editingStem.value.trim()
+  if (!path || !stem || renamingPath.value) return
+  if (stem === splitFilename(path).stem) {
+    cancelRename()
+    return
+  }
+  renamingPath.value = path
+  try {
+    await api.post('/media-library/hardlinks/rename', { file_path: path, new_stem: stem })
+    cancelRename()
+    await mediaStore.loadHardlinkGroups()
+    toast.success('文件名已更新')
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || '重命名失败')
+  } finally {
+    renamingPath.value = ''
+  }
+}
 
 const filterTabs = computed(() => {
   void i18nVersion.value
@@ -753,11 +810,18 @@ onMounted(async () => {
               <div class="hl-col hl-col--source">
                 <div class="hl-col__label">{{ t('hardlinks.mainFile') }}</div>
                 <div class="hl-row hl-row--source" :class="{ 'hl-row--missing': entry.issues?.includes('orphan_source') }">
+                  <div v-if="entry.source_path && editingPath === entry.source_path" class="rename-editor" @click.stop @dblclick.stop>
+                    <input ref="renameInput" v-model="editingStem" class="rename-editor__input" :disabled="renamingPath === entry.source_path" @keydown.enter.prevent="saveRename" @keydown.esc.prevent="cancelRename" />
+                    <span class="rename-editor__suffix" title="文件格式已锁定">{{ editingSuffix }}</span>
+                    <button type="button" class="rename-editor__action" :disabled="renamingPath === entry.source_path" title="保存" @click="saveRename">✓</button>
+                    <button type="button" class="rename-editor__action" :disabled="renamingPath === entry.source_path" title="取消" @click="cancelRename">×</button>
+                  </div>
                   <span
-                    v-if="entry.source_path"
+                    v-else-if="entry.source_path"
                     class="hl-row__path"
-                    :title="previewPathLabel"
-                    @click="openVideoPreview(entry.source_path)"
+                    title="单击预览，双击编辑文件名"
+                    @click="scheduleVideoPreview(entry.source_path)"
+                    @dblclick.prevent="startRename(entry.source_path)"
                   >{{ entry.source_path }}</span>
                   <span v-if="entry.source_size != null" class="hl-row__size">{{ formatBytes(entry.source_size) }}</span>
                   <span v-else class="hl-row__empty">{{ t('hardlinks.missingSource') }}</span>
@@ -791,10 +855,18 @@ onMounted(async () => {
                   class="hl-row hl-row--hardlink"
                 >
                   <span class="hl-row__hl-arrow">→</span>
+                  <div v-if="editingPath === hl" class="rename-editor" @click.stop @dblclick.stop>
+                    <input ref="renameInput" v-model="editingStem" class="rename-editor__input" :disabled="renamingPath === hl" @keydown.enter.prevent="saveRename" @keydown.esc.prevent="cancelRename" />
+                    <span class="rename-editor__suffix" title="文件格式已锁定">{{ editingSuffix }}</span>
+                    <button type="button" class="rename-editor__action" :disabled="renamingPath === hl" title="保存" @click="saveRename">✓</button>
+                    <button type="button" class="rename-editor__action" :disabled="renamingPath === hl" title="取消" @click="cancelRename">×</button>
+                  </div>
                   <span
+                    v-else
                     class="hl-row__path"
-                    :title="previewPathLabel"
-                    @click="openVideoPreview(hl)"
+                    title="单击预览，双击编辑文件名"
+                    @click="scheduleVideoPreview(hl)"
+                    @dblclick.prevent="startRename(hl)"
                   >{{ hl }}</span>
                   <button
                     type="button"
@@ -1316,7 +1388,9 @@ onMounted(async () => {
 }
 
 .hl-row__path {
+  min-width: 0;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .hl-row__path,
@@ -1330,6 +1404,71 @@ onMounted(async () => {
 .hl-row__hl-arrow {
   font-size: 0.75rem;
   line-height: 1.5;
+}
+
+.hl-row__size {
+  flex: 0 0 auto;
+  margin-top: 0.05rem;
+  padding: 0.08rem 0.45rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary);
+  font-family: var(--font-display);
+  white-space: nowrap;
+}
+
+.rename-editor {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(0, 117, 255, 0.48);
+  border-radius: var(--radius-md);
+  background: rgba(0, 117, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.1);
+  overflow: hidden;
+}
+
+.rename-editor__input {
+  flex: 1 1 auto;
+  min-width: 4rem;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.rename-editor__suffix {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.5rem;
+  border-left: 1px solid var(--color-border-default);
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  user-select: none;
+}
+
+.rename-editor__action {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 1.8rem;
+  border: 0;
+  border-left: 1px solid var(--color-border-default);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.rename-editor__action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
 }
 
 .hl-row__path:hover {

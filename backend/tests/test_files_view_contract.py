@@ -16,7 +16,9 @@ def test_files_view_keeps_hardlink_and_actor_tabs() -> None:
     assert "import ActorManagementView from './ActorManagementView.vue'" in text
     assert "files.tab.hardlinks" in text
     assert "files.tab.actors" in text
-    assert "files-title" in text
+    assert "import VisionTabs" in text
+    assert "<VisionTabs" in text
+    assert "files-title" not in text
     assert "router.push(`/files/${tab}`)" in text
 
 

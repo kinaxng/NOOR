@@ -137,6 +137,40 @@ def save_hardlink_groups_impl(groups: list[dict], *, hardlink_groups_path_fn: Ca
     path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
+def rename_hardlink_path_impl(
+    file_path: str,
+    new_stem: str,
+    *,
+    allowed_roots: list[Path],
+    groups: list[dict],
+) -> tuple[str, list[dict]]:
+    source = Path(file_path).resolve()
+    if not allowed_roots or not any(source == root or root in source.parents for root in allowed_roots):
+        raise ValueError('文件不在允许的扫描路径内')
+    if not source.is_file():
+        raise FileNotFoundError('文件不存在')
+    stem = new_stem.strip()
+    if not stem or stem in {'.', '..'} or Path(stem).name != stem or '/' in stem or '\\' in stem or '\x00' in stem:
+        raise ValueError('文件名无效')
+    suffix = source.suffix
+    if not suffix or suffix.lower() not in VIDEO_EXTS:
+        raise ValueError('仅支持重命名视频文件')
+    target = source.with_name(f'{stem}{suffix}')
+    if target == source:
+        return str(source), groups
+    if target.exists():
+        raise FileExistsError('同名文件已存在')
+    source.rename(target)
+
+    old_value, new_value = str(source), str(target)
+    for group in groups:
+        for entry in group.get('entries', []):
+            if entry.get('source_path') == old_value:
+                entry['source_path'] = new_value
+            entry['hardlink_paths'] = [new_value if path == old_value else path for path in entry.get('hardlink_paths', [])]
+    return new_value, groups
+
+
 def load_hardlink_groups_impl(*, hardlink_groups_path_fn: Callable[[], Path]) -> list[dict]:
     path = hardlink_groups_path_fn()
     if not path.is_file():
