@@ -44,10 +44,11 @@ def test_facefusion_settings_and_settings_index_final_contract() -> None:
     assert "const previewMode = ref('default')" in facefusion
     assert "preview_resolution" in facefusion
 
-    assert "const LocalSubtitleLibrarySettings = defineAsyncComponent" in settings_index
-    assert "'local-library'" in settings_index
-    assert "t('settings.tab.local-library')" in settings_index
-    assert "import('./LocalSubtitleLibrarySettings.vue')" in settings_index
+    assert "const LocalSubtitleLibrarySettings = defineAsyncComponent" not in settings_index
+    assert "'local-library'" not in settings_index
+    assert "t('settings.tab.local-library')" not in settings_index
+    assert "import('./LocalSubtitleLibrarySettings.vue')" not in settings_index
+    assert "{ key: 'plugins' as const" in settings_index
 
 
 def test_plugin_host_final_contract() -> None:

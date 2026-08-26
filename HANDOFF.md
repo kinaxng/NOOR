@@ -848,3 +848,12 @@ Notes:
 - 新增 `POST /api/media-library/hardlinks/rename`：只允许扫描根目录内的视频文件，拒绝目录穿越、空名称和覆盖同名文件；重命名后同步更新硬链接缓存。
 - 后端已重启；目录外请求实测返回 400。临时文件测试覆盖后缀保留、缓存路径更新及非法名称，未对真实媒体执行重命名。
 - 验证：后端 `330 passed, 8 skipped, 1 warning`；前端类型检查与生产构建通过。
+
+### Latest Recovery Update (2026-08-26：本地字幕库插件完全独立)
+
+- `local-subtitle-library` 不再导入或读写旧 `app.api.local_library`：插件自身负责配置解析、字幕扫描/搜索、SQLite 索引、索引状态和重建操作。
+- 插件索引归属 `data/local-subtitle-library/subtitle_index.db`；首次使用会从旧 `runtime/subtitle_library` 索引复制迁移。配置完全由插件运行时持久化。
+- 搜索、测试、索引状态和重建中的文件系统操作均使用工作线程，避免媒体路径阻塞 FastAPI 事件循环。
+- 设置页删除重复“字幕库”Tab，唯一用户入口为“设置 → 插件 → 本地字幕库”；旧 `/api/local-library/*` 不再注册，实测返回 404。
+- 修正插件索引状态契约为前端实际使用的 `index_exists/indexed_count`。当前插件启用、0 个配置路径、索引未建立，与迁移前状态一致。
+- 验证：插件独立功能测试通过；后端 `332 passed, 8 skipped, 1 warning`；前端类型检查与生产构建通过。

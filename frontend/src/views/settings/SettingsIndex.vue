@@ -14,16 +14,15 @@ const StorageSettings = defineAsyncComponent(() => import('./StorageSettings.vue
 const LadaSettings = defineAsyncComponent(() => import('./LadaSettings.vue'))
 const FaceFusionSettings = defineAsyncComponent(() => import('./FaceFusionSettings.vue'))
 const WhisperSettings = defineAsyncComponent(() => import('./WhisperSettings.vue'))
-const LocalSubtitleLibrarySettings = defineAsyncComponent(() => import('./LocalSubtitleLibrarySettings.vue'))
 const PluginManager = defineAsyncComponent(() => import('../PluginManager.vue'))
 
-type SettingsTab = 'system' | 'storage' | 'lada' | 'facefusion' | 'whisper' | 'local-library' | 'plugins'
+type SettingsTab = 'system' | 'storage' | 'lada' | 'facefusion' | 'whisper' | 'plugins'
 const activeTab = useRouteTabs<SettingsTab>({
   route,
   router,
   basePath: '/settings',
   paramName: 'settingsTab',
-  tabs: ['system', 'storage', 'lada', 'facefusion', 'whisper', 'local-library', 'plugins'],
+  tabs: ['system', 'storage', 'lada', 'facefusion', 'whisper', 'plugins'],
   defaultTab: 'system',
 })
 
@@ -33,7 +32,6 @@ onMounted(() => {
     import('./LadaSettings.vue')
     import('./FaceFusionSettings.vue')
     import('./WhisperSettings.vue')
-    import('./LocalSubtitleLibrarySettings.vue')
     import('../PluginManager.vue')
   }, 500)
 })
@@ -46,7 +44,6 @@ const tabs = computed(() => {
     { key: 'lada' as const, label: t('settings.tab.lada'), component: LadaSettings },
     { key: 'facefusion' as const, label: t('settings.tab.facefusion'), component: FaceFusionSettings },
     { key: 'whisper' as const, label: t('settings.tab.whisper'), component: WhisperSettings },
-    { key: 'local-library' as const, label: t('settings.tab.local-library'), component: LocalSubtitleLibrarySettings },
     { key: 'plugins' as const, label: '插件', component: PluginManager },
   ]
 })
