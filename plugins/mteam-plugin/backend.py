@@ -722,7 +722,13 @@ def _normalize_resource(config: dict[str, Any], item: dict[str, Any]) -> dict[st
     torrent_id = str(item.get("id") or item.get("torrentId") or "").strip()
     if not title or not torrent_id:
         return None
-    code = _resource_code(item.get("smallDescr") or item.get("description") or title)
+    code = next((value for value in (
+        _resource_code(item.get("smallDescr")),
+        _resource_code(item.get("description")),
+        _resource_code(title),
+        _resource_code((item.get("dmmInfo") or {}).get("productNumber") if isinstance(item.get("dmmInfo"), dict) else ""),
+        _resource_code(item.get("dmmCode")),
+    ) if value), "")
     discount = str(item.get("discount") or item.get("discountType") or "")
     tags = ["PT", *([discount] if discount else []), *(["置顶"] if item.get("sticky") else [])]
     return {

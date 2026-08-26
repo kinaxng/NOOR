@@ -146,7 +146,8 @@ function mediaCover(item: MediaLibraryItem) {
 
 function catalogCode(item: CatalogSearchItem) {
   const payload = item.action?.payload || {}
-  return String(payload.query_key || payload.code || '').trim() || extractCode(`${item.title || ''} ${item.subtitle || ''} ${item.id || ''}`) || item.title
+  const declared = String(payload.query_key || payload.code || '').trim()
+  return extractCode(declared) || declared || extractCode(`${item.title || ''} ${item.subtitle || ''} ${item.id || ''}`) || item.title
 }
 
 function catalogRoute(item: CatalogSearchItem) {
@@ -185,7 +186,8 @@ function providerLabel(provider: string) {
 }
 
 function workKeyFromItem(item: ResourceItem) {
-  return item.query_key || extractCode(`${item.title || ''} ${item.subtitle || ''} ${item.id || ''}`) || `${item.provider}:${item.id || item.title}`
+  const declared = String(item.query_key || '').trim()
+  return extractCode(declared) || declared || extractCode(`${item.title || ''} ${item.subtitle || ''} ${item.id || ''}`) || `${item.provider}:${item.id || item.title}`
 }
 
 function cleanWorkTitle(item: ResourceItem, code: string) {

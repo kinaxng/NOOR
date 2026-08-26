@@ -880,3 +880,9 @@ Notes:
 - 运行配置已校正为 qB `category=AV`、`savepath=""`，订阅中心 `default_savepath=""`；qB 实时返回 AV 分类绑定 `/downloads/av`。新任务将由 qB 分类决定容器路径，已完成的历史任务不自动迁移。
 - 前端生产构建通过，真实配置与订阅概览接口复核通过。
 - qB 的 `qb-overview-row`（5 个指标卡 + 搜索卡）固定为六列单行，窄宽度使用整排横向滚动，不再响应式折成三行。
+
+### Latest Recovery Update (2026-08-26：资源搜索作品键归一化)
+
+- `MIDV-131` 被拆成两个作品的根因是 M-Team 4K 条目的 `smallDescr=4K` 抢先参与番号提取，失败后未继续从标题提取，最终把完整标题写进 `query_key`。
+- M-Team 现在依次尝试简介、描述、标题、DMM 产品号和链接；资源搜索前端也会先从插件声明的 `query_key` 中提取标准番号，再作为作品分组键。
+- 真实复搜返回 AVDB 2、M-Team 2、JavDB 6 共 10 条资源，唯一作品键为 `MIDV-131`。后端 `343 passed, 8 skipped`，前端生产构建通过。

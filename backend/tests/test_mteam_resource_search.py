@@ -39,3 +39,19 @@ def test_resource_search_uses_adult_torrent_mode(monkeypatch):
     }
     assert len(result["items"]) == 1
     assert result["items"][0]["id"] == "mteam:123"
+
+
+def test_resource_search_falls_back_to_title_when_small_description_has_no_code():
+    backend = _load_backend()
+
+    item = backend._normalize_resource({}, {
+        "id": "604631",
+        "name": "MIDV-131 10年分の片思い 小野六花",
+        "smallDescr": "4K",
+        "dmmInfo": {"productNumber": "9midv131"},
+        "size": "13549681013",
+    })
+
+    assert item is not None
+    assert item["query_key"] == "MIDV-131"
+    assert item["metadata"]["video_code"] == "MIDV-131"
