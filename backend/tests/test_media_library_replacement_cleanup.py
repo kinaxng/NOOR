@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from app.api.endpoints.media_library_deletion import protect_replacement_from_delete_plan
+from app.api.endpoints.media_library_deletion import protect_replacement_from_delete_plan, remove_file_and_sibling_nfo
 
 
 def test_replacement_cleanup_rejects_new_file_inode(tmp_path: Path):
@@ -26,3 +26,18 @@ def test_replacement_cleanup_keeps_distinct_old_file(tmp_path: Path):
 
     assert dirs == set()
     assert files == {old_file.resolve()}
+
+
+def test_cleanup_removes_exact_stem_sidecars_but_keeps_new_variant(tmp_path: Path):
+    old_file = tmp_path / "MIDA-727.mp4"
+    old_subtitle = tmp_path / "MIDA-727.zh-CN.srt"
+    new_file = tmp_path / "MIDA-727-U.mp4"
+    new_subtitle = tmp_path / "MIDA-727-U.zh-CN.srt"
+    for path in (old_file, old_subtitle, new_file, new_subtitle):
+        path.write_bytes(b"x")
+
+    deleted = remove_file_and_sibling_nfo(old_file)
+
+    assert set(deleted) == {str(old_file), str(old_subtitle)}
+    assert new_file.exists()
+    assert new_subtitle.exists()

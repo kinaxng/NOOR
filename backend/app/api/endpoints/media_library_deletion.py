@@ -42,10 +42,13 @@ def remove_file_and_sibling_nfo(path: Path, *, remove_nfo: bool = True) -> list[
         path.unlink()
         deleted.append(str(path))
     if remove_nfo:
-        sibling_nfo = path.with_suffix(".nfo")
-        if sibling_nfo.is_file():
-            sibling_nfo.unlink()
-            deleted.append(str(sibling_nfo))
+        # Remove sidecars belonging to this exact video stem (NFO, language
+        # subtitles, metadata), but never another video variant.
+        for sidecar in path.parent.glob(f"{path.stem}.*"):
+            if sidecar == path or not sidecar.is_file() or sidecar.suffix.lower() in VIDEO_EXTS:
+                continue
+            sidecar.unlink()
+            deleted.append(str(sidecar))
     return deleted
 
 
@@ -147,9 +150,9 @@ def preview_delete_targets(delete_dirs: set[Path], delete_files: set[Path]) -> d
     planned_files = []
     for file_path in sorted(delete_files):
         planned_files.append(str(file_path))
-        nfo_path = file_path.with_suffix(".nfo")
-        if nfo_path.exists():
-            planned_files.append(str(nfo_path))
+        for sidecar in file_path.parent.glob(f"{file_path.stem}.*"):
+            if sidecar != file_path and sidecar.is_file() and sidecar.suffix.lower() not in VIDEO_EXTS:
+                planned_files.append(str(sidecar))
     return {"planned_dirs": planned_dirs, "planned_files": planned_files}
 
 

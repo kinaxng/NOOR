@@ -656,6 +656,33 @@ async def _find_media(code: str, *aliases: Any) -> dict[str, Any] | None:
     return None
 
 
+async def _select_imported_variant(media: dict[str, Any], resource: dict[str, Any], old_path: str) -> dict[str, Any]:
+    """Resolve a deduplicated library representative to the actual imported variant."""
+    try:
+        from app.api.endpoints import media_library as media_api
+        config = media_api._load_config()
+        detail = await media_api._get_item(config, str(media.get("id") or ""))
+    except Exception:
+        return media
+    candidates: list[dict[str, Any]] = []
+    if detail:
+        candidates.append({**media, **detail, "path": detail.get("file_path") or detail.get("path") or media.get("path")})
+        for sibling in detail.get("siblings") or []:
+            candidates.append({
+                **media,
+                **sibling,
+                "path": sibling.get("file_path") or sibling.get("path") or "",
+                "tags": sibling.get("tags") or {},
+                "subtitle_count": sibling.get("subtitle_count") or 0,
+            })
+    matches = [candidate for candidate in candidates if _media_matches_resource_profile(candidate, resource)]
+    if not matches:
+        return media
+    distinct = [candidate for candidate in matches if str(candidate.get("path") or "") != str(old_path or "")]
+    pool = distinct or matches
+    return max(pool, key=lambda candidate: (_score_media_item(candidate), int(candidate.get("size_bytes") or 0), str(candidate.get("path") or "")))
+
+
 async def _search_resources(code: str, limit: int = 24) -> list[dict[str, Any]]:
     from app.plugins.runtime import runtime
 
@@ -1350,6 +1377,8 @@ async def _reconcile_submitted(data: dict[str, Any], *, config: dict[str, Any] |
         new_path = str(media.get("path") or "")
         submitted_best = sub.get("best_resource") if isinstance(sub.get("best_resource"), dict) else {}
         submitted_resource = submitted_best.get("resource") if isinstance(submitted_best.get("resource"), dict) else submitted_best
+        media = await _select_imported_variant(media, submitted_resource, old_path)
+        new_path = str(media.get("path") or "")
         profile_matches = _media_matches_resource_profile(media, submitted_resource)
         changed_in_place = bool(old_path and new_path and Path(old_path) == Path(new_path) and _same_path_was_replaced(sub, new_path))
         if not profile_matches or (old_type == "upgrade" and old_path == new_path and not changed_in_place):

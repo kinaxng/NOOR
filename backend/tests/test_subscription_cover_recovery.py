@@ -139,6 +139,30 @@ async def _run_confirmed_upgrade_auto_deletes_old_chain(monkeypatch):
     assert data["subscriptions"][0]["cleanup_suggestion"]["status"] == "completed"
 
 
+def test_subscription_selects_matching_sibling_variant(monkeypatch):
+    asyncio.run(_run_selects_matching_sibling_variant(monkeypatch))
+
+
+async def _run_selects_matching_sibling_variant(monkeypatch):
+    backend = _load_backend()
+    representative = {"id": "old", "path": "/media/MIDA-727.mp4", "tags": {"is_cracked": False}}
+    resource = {"features": {"is_cracked": True}}
+
+    async def get_item(_config, _item_id):
+        return {
+            "id": "old", "file_path": "/media/MIDA-727.mp4", "tags": {"is_cracked": False},
+            "siblings": [{"id": "new", "file_path": "/media/MIDA-727-破解.mp4", "tags": {"is_cracked": True}}],
+        }
+
+    from app.api.endpoints import media_library
+    monkeypatch.setattr(media_library, "_get_item", get_item)
+    monkeypatch.setattr(media_library, "_load_config", lambda: {})
+    selected = await backend._select_imported_variant(representative, resource, representative["path"])
+
+    assert selected["id"] == "new"
+    assert selected["path"] == "/media/MIDA-727-破解.mp4"
+
+
 def test_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path):
     asyncio.run(_run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path))
 
