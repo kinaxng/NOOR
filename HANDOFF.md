@@ -875,7 +875,7 @@ Notes:
 
 ### Latest Recovery Update (2026-08-26：qB 工具栏与 AV 分类路径校正)
 
-- qB 页面工具栏收敛为筛选 Tabs、连接状态、新建任务、分类设置和刷新；版本/认证信息移入连接状态 tooltip，去掉常驻范围与版本徽章造成的拥挤，窄屏改为两行横向滚动。
+- qB 页面工具栏收敛为筛选 Tabs、连接状态、新建任务、分类设置和刷新；版本/认证信息移入连接状态 tooltip，去掉常驻范围与版本徽章造成的拥挤；所有宽度均保持单行，Tabs 独立横向滚动。
 - `CJOD-528` 错误保存到 `/volume1/data/downloads/av` 的根因是订阅中心遗留 `default_savepath` 显式覆盖 qB 分类路径，且 qB 默认分类仍为“默认”。
 - 运行配置已校正为 qB `category=AV`、`savepath=""`，订阅中心 `default_savepath=""`；qB 实时返回 AV 分类绑定 `/downloads/av`。新任务将由 qB 分类决定容器路径，已完成的历史任务不自动迁移。
 - 前端生产构建通过，真实配置与订阅概览接口复核通过。
