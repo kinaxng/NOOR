@@ -600,7 +600,7 @@ function toggleLibrary(libId: string) {
   color: rgba(255, 255, 255, 0.62);
   padding: 0.55rem 0.75rem;
   border-radius: var(--radius-md);
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: var(--font-size-sm);
   line-height: 1.5;
 }

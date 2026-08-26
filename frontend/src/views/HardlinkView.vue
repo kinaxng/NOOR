@@ -696,7 +696,7 @@ onMounted(async () => {
         >
           <div class="hl-group__header">
             <div class="hl-group__summary">
-              <span class="hl-group__code font-mono">{{ group.code }}</span>
+              <span class="hl-group__code">{{ group.code }}</span>
               <span class="hl-group__meta">
                 {{ groupSourceCount(group) }} src · {{ groupHardlinkCount(group) }} hl
               </span>
@@ -1244,8 +1244,11 @@ onMounted(async () => {
 
 .hl-group__code {
   color: var(--color-text-primary);
+  font-family: var(--font-display);
   font-size: 0.9rem;
   font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.4;
 }
 
 .hl-group__meta {

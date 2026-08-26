@@ -40,7 +40,6 @@ function switchTab(tab: FileTab) {
 <template>
   <div class="files-page animate-fade-in">
     <header class="files-header" :aria-label="t('files.title')">
-      <h1 class="files-title">{{ t('files.title') }}</h1>
       <VisionTabs
         :model-value="activeTab"
         :tabs="tabs"
@@ -65,14 +64,6 @@ function switchTab(tab: FileTab) {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 1rem;
-}
-
-.files-title {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
 }
 
 @media (max-width: 720px) {
