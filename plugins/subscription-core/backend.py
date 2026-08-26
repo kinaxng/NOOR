@@ -308,6 +308,25 @@ def _media_matches_resource_profile(media: dict[str, Any], resource: dict[str, A
     return True
 
 
+def _file_fingerprint(path: Any) -> dict[str, Any]:
+    try:
+        stat = Path(str(path or "")).stat()
+        return {"dev": stat.st_dev, "inode": stat.st_ino, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    except (OSError, ValueError):
+        return {}
+
+
+def _same_path_was_replaced(sub: dict[str, Any], path: str) -> bool:
+    current = _file_fingerprint(path)
+    before = sub.get("pre_submit_file_fingerprint") if isinstance(sub.get("pre_submit_file_fingerprint"), dict) else {}
+    if current and before:
+        return current != before
+    submitted_at = _parse_dt(sub.get("last_submit_at"))
+    if not current or not submitted_at:
+        return False
+    return int(current.get("mtime_ns") or 0) > int(submitted_at.timestamp() * 1_000_000_000)
+
+
 def _auto_submit_blocked_today(sub: dict[str, Any], resource_key: str) -> bool:
     if not resource_key:
         return False
@@ -951,6 +970,7 @@ async def _submit_best_download(config: dict[str, Any], sub: dict[str, Any], res
     sub["last_submit_at"] = _now()
     sub["last_submit_local_date"] = _local_date()
     sub["last_submit_resource_key"] = resource_key
+    sub["pre_submit_file_fingerprint"] = _file_fingerprint(sub.get("current_file_path"))
     payload = {
         "url": url,
         "urls": url,
@@ -1176,7 +1196,7 @@ async def _scheduler_loop() -> None:
                 config = runtime.get_config(PLUGIN_ID)
                 if bool(config.get("auto_check_enabled")):
                     data = _ensure_store()
-                    reconcile = await _reconcile_submitted(data, limit=5)
+                    reconcile = await _reconcile_submitted(data, config=config, limit=5)
                     if reconcile.get("checked"):
                         _save(data)
                         _log_system("info", "入库确认完成", {"checked": reconcile.get("checked"), "confirmed": reconcile.get("confirmed")})
@@ -1301,11 +1321,11 @@ def _apply_media_profile_to_subscription(sub: dict[str, Any], media: dict[str, A
         sub["cover_url"] = str(media.get("poster_path") or "")
 
 
-async def _reconcile_submitted(data: dict[str, Any], *, sub_id: str = "", limit: int = 10) -> dict[str, Any]:
+async def _reconcile_submitted(data: dict[str, Any], *, config: dict[str, Any] | None = None, sub_id: str = "", limit: int = 10) -> dict[str, Any]:
     """Check submitted subscriptions against the media library.
 
-    This deliberately does not delete old files. For wash/upgrade tasks it only records a
-    cleanup suggestion after the new media item is visible in the library.
+    Upgrade tasks are confirmed only when the submitted profile is visible. Once confirmed,
+    the old hardlink/source chain is removed automatically with replacement-path protection.
     """
     targets = [
         s for s in data.get("subscriptions", [])
@@ -1330,8 +1350,16 @@ async def _reconcile_submitted(data: dict[str, Any], *, sub_id: str = "", limit:
         new_path = str(media.get("path") or "")
         submitted_best = sub.get("best_resource") if isinstance(sub.get("best_resource"), dict) else {}
         submitted_resource = submitted_best.get("resource") if isinstance(submitted_best.get("resource"), dict) else submitted_best
+        profile_matches = _media_matches_resource_profile(media, submitted_resource)
+        changed_in_place = bool(old_path and new_path and Path(old_path) == Path(new_path) and _same_path_was_replaced(sub, new_path))
+        if not profile_matches or (old_type == "upgrade" and old_path == new_path and not changed_in_place):
+            pending += 1
+            sub["last_completion_checked_at"] = _now()
+            sub["updated_at"] = sub["last_completion_checked_at"]
+            _event(data, sub.get("id", ""), "info", "已检查入库状态：当前媒体仍是旧版本")
+            continue
         _apply_media_profile_to_subscription(sub, media)
-        consumed_key = _remember_consumed_resource(sub, submitted_resource) if _media_matches_resource_profile(media, submitted_resource) else ""
+        consumed_key = _remember_consumed_resource(sub, submitted_resource)
         if not consumed_key:
             _forget_consumed_resource(sub, submitted_resource)
         _clear_submit_state(sub)
@@ -1340,14 +1368,29 @@ async def _reconcile_submitted(data: dict[str, Any], *, sub_id: str = "", limit:
         confirmed += 1
 
         if old_type == "upgrade" and old_path and new_path and old_path != new_path:
-            sub["cleanup_suggestion"] = {
+            cleanup = {
                 "old_path": old_path,
                 "new_path": new_path,
-                "status": "pending",
-                "reason": "洗版新版本已在媒体库中可见，旧版本可人工确认后处理。",
+                "status": "running",
+                "reason": "新版本已入库，正在自动清理旧版本。",
                 "created_at": _now(),
             }
-            _event(data, sub.get("id", ""), "warning", "洗版新版本已入库，已生成旧版本处理建议", {"old_path": old_path, "new_path": new_path})
+            sub["cleanup_suggestion"] = cleanup
+            try:
+                from app.api.endpoints import media_library
+                cleanup["result"] = await asyncio.to_thread(media_library.delete_replaced_media_chain, old_path, new_path, str(sub.get("code") or ""))
+                cleanup["status"] = "completed"
+                cleanup["completed_at"] = _now()
+                cleanup["reason"] = "新版本已入库，旧版本及其硬链接源链已自动清理。"
+                _event(data, sub.get("id", ""), "success", "洗版完成：新版本已入库并自动删除旧版本", {"old_path": old_path, "new_path": new_path})
+            except Exception as exc:
+                cleanup["status"] = "failed"
+                cleanup["failed_at"] = _now()
+                cleanup["reason"] = f"新版本已入库，但旧版本自动清理失败: {exc}"
+                _event(data, sub.get("id", ""), "error", cleanup["reason"], {"old_path": old_path, "new_path": new_path})
+        elif old_type == "upgrade" and changed_in_place:
+            sub["cleanup_suggestion"] = {"old_path": old_path, "new_path": new_path, "status": "not_required", "reason": "新版本已在原路径完成替换，无独立旧文件需清理。", "completed_at": _now()}
+            _event(data, sub.get("id", ""), "success", "洗版完成：新版本已在原路径替换", {"path": new_path})
         elif old_type == "subscribe":
             _event(data, sub.get("id", ""), "success", "订阅作品已入库，已自动转为洗版监控", {"path": new_path, "consumed_resource_key": consumed_key})
         else:
@@ -1393,11 +1436,11 @@ async def handle_action(action: str, payload: dict[str, Any], config: dict[str, 
         _save(data)
         return {"ok": True, "subscription": _public_subscription(sub)}
     if action == "confirm_submitted":
-        result = await _reconcile_submitted(data, sub_id=str(payload.get("id") or ""), limit=0)
+        result = await _reconcile_submitted(data, config=config, sub_id=str(payload.get("id") or ""), limit=0)
         _save(data)
         return result
     if action == "reconcile_submitted":
-        result = await _reconcile_submitted(data, limit=int(payload.get("limit") or 20))
+        result = await _reconcile_submitted(data, config=config, limit=int(payload.get("limit") or 20))
         _save(data)
         return result
     if action == "ack_cleanup":

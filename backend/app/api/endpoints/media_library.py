@@ -15,7 +15,7 @@ from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _AD
 from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
 from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl, hardlink_groups_path_impl, load_hardlink_groups_impl, rename_hardlink_path_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
 from app.api.endpoints.media_library_listing import _VARIANT_MARKER_RE, apply_filter_and_paginate as _apply_filter_and_paginate, deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, item_variant_penalty as _item_variant_penalty, merge_group_metadata as _merge_group_metadata, pick_group_representative as _pick_group_representative
-from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, delete_plan_from_hardlink_entry as _delete_plan_from_hardlink_entry, delete_plan_from_inode_chain as _delete_plan_from_inode_chain, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, find_inode_chain_for_path as _find_inode_chain_for_path, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, path_matches_hardlink_entry as _path_matches_hardlink_entry, preview_delete_targets as _preview_delete_targets, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
+from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, delete_plan_from_hardlink_entry as _delete_plan_from_hardlink_entry, delete_plan_from_inode_chain as _delete_plan_from_inode_chain, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, find_inode_chain_for_path as _find_inode_chain_for_path, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, path_matches_hardlink_entry as _path_matches_hardlink_entry, preview_delete_targets as _preview_delete_targets, protect_replacement_from_delete_plan as _protect_replacement_from_delete_plan, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
 from app.api.endpoints.media_library_streaming import parse_range_header as _parse_range_header, iter_file_range as _iter_file_range
 from app.api.system import SystemLogManager, _webhook_source, _webhook_summary
 
@@ -92,6 +92,43 @@ async def _media_item_delete_plan(item_id: str, config: dict) -> tuple[str, set[
         hardlink_roots=hardlink_roots,
     )
     return str(item.get("name") or target.name), delete_dirs, delete_files
+
+
+def delete_replaced_media_chain(old_path: str, new_path: str, code: str = "") -> dict:
+    """Delete an old hardlink/source chain while making the replacement untouchable."""
+    config = _load_config()
+    source_roots, hardlink_roots = _allowed_scan_roots(config)
+    roots = source_roots + hardlink_roots
+    old_target, new_target = Path(old_path).resolve(), Path(new_path).resolve()
+    _assert_safe_path(old_target, roots, "旧版本路径")
+    _assert_safe_path(new_target, roots, "新版本路径")
+    if old_target == new_target:
+        return {"ok": True, "skipped": True, "reason": "replaced_in_place"}
+
+    delete_dirs: set[Path] = set()
+    delete_files: set[Path] = set()
+    groups = _enrich_hardlink_groups(_load_hardlink_groups()).get("groups") or []
+    for group in groups:
+        entry = next((entry for entry in group.get("entries") or [] if _path_matches_hardlink_entry(old_target, entry)), None)
+        if entry:
+            delete_dirs, delete_files = _delete_plan_from_hardlink_entry(
+                entry,
+                code=code or group.get("code") or _extract_code_from_path(str(old_target)),
+                source_roots=source_roots,
+                hardlink_roots=hardlink_roots,
+            )
+            break
+    if not delete_dirs and not delete_files:
+        delete_dirs, delete_files = _delete_plan_from_inode_chain(
+            old_target,
+            code=code or _extract_code_from_path(str(old_target)),
+            source_roots=source_roots,
+            hardlink_roots=hardlink_roots,
+        )
+    delete_dirs, delete_files = _protect_replacement_from_delete_plan(delete_dirs, delete_files, new_target)
+    result = {"ok": True, **_execute_delete_targets(delete_dirs, delete_files)}
+    result["sync_state"] = _bump_sync_state()
+    return result
 
 class HardlinkDeleteRequest(BaseModel):
  file_path:str; remove_nfo:bool=True; dry_run:bool=False

@@ -90,6 +90,55 @@ def test_subscription_upgrade_prioritizes_cracked_candidate_over_threshold():
     assert reason == "破解版本优先"
 
 
+def test_subscription_submitted_upgrade_waits_while_library_still_has_old_version(monkeypatch):
+    asyncio.run(_run_submitted_upgrade_waits_while_library_still_has_old_version(monkeypatch))
+
+
+async def _run_submitted_upgrade_waits_while_library_still_has_old_version(monkeypatch):
+    backend = _load_backend()
+    old_path = "/media/MIDA-727/MIDA-727.mp4"
+    data = {"subscriptions": [{
+        "id": "sub-1", "code": "MIDA-727", "type": "upgrade", "status": "submitted",
+        "push_status": "submitted", "current_file_path": old_path,
+        "best_resource": {"resource": {"title": "MIDA-727-U.无码破解.torrent", "features": {"is_cracked": True}}},
+    }], "events": []}
+
+    async def find_media(*_codes):
+        return {"id": "old", "name": "MIDA-727", "path": old_path, "tags": {"is_cracked": False}}
+
+    monkeypatch.setattr(backend, "_find_media", find_media)
+    result = await backend._reconcile_submitted(data)
+
+    assert result == {"ok": True, "checked": 1, "confirmed": 0, "pending": 1}
+    assert data["subscriptions"][0]["status"] == "submitted"
+
+
+def test_subscription_confirmed_upgrade_auto_deletes_old_chain(monkeypatch):
+    asyncio.run(_run_confirmed_upgrade_auto_deletes_old_chain(monkeypatch))
+
+
+async def _run_confirmed_upgrade_auto_deletes_old_chain(monkeypatch):
+    backend = _load_backend()
+    data = {"subscriptions": [{
+        "id": "sub-1", "code": "MIDA-727", "type": "upgrade", "status": "submitted",
+        "push_status": "submitted", "current_file_path": "/media/MIDA-727/MIDA-727.mp4",
+        "best_resource": {"resource": {"title": "MIDA-727-U.无码破解.torrent", "features": {"is_cracked": True}}},
+    }], "events": []}
+
+    async def find_media(*_codes):
+        return {"id": "new", "name": "MIDA-727-U", "path": "/media/MIDA-727-U/MIDA-727-U.mp4", "tags": {"is_cracked": True}}
+
+    calls = []
+    monkeypatch.setattr(backend, "_find_media", find_media)
+    from app.api.endpoints import media_library
+    monkeypatch.setattr(media_library, "delete_replaced_media_chain", lambda old, new, code: calls.append((old, new, code)) or {"ok": True})
+    result = await backend._reconcile_submitted(data)
+
+    assert result["confirmed"] == 1
+    assert calls == [("/media/MIDA-727/MIDA-727.mp4", "/media/MIDA-727-U/MIDA-727-U.mp4", "MIDA-727")]
+    assert data["subscriptions"][0]["cleanup_suggestion"]["status"] == "completed"
+
+
 def test_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path):
     asyncio.run(_run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path))
 

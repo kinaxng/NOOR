@@ -252,3 +252,48 @@ def delete_plan_from_inode_chain(
         source_roots=source_roots,
         hardlink_roots=hardlink_roots,
     )
+
+
+def protect_replacement_from_delete_plan(
+    delete_dirs: set[Path],
+    delete_files: set[Path],
+    replacement: Path,
+) -> tuple[set[Path], set[Path]]:
+    """Reject a chain plan that could remove the newly imported replacement."""
+    replacement = replacement.resolve()
+    try:
+        replacement_inode = (replacement.stat().st_dev, replacement.stat().st_ino)
+    except OSError as exc:
+        raise HTTPException(status_code=409, detail=f"新版本文件不存在，拒绝清理旧版: {replacement}") from exc
+
+    safe_dirs: set[Path] = set()
+    for target_dir in delete_dirs:
+        target_dir = target_dir.resolve()
+        if target_dir == replacement or target_dir in replacement.parents:
+            raise HTTPException(status_code=409, detail=f"删除目录包含新版本，已拒绝: {target_dir}")
+        for dirpath, _dirnames, filenames in os.walk(target_dir):
+            for filename in filenames:
+                candidate = Path(dirpath) / filename
+                try:
+                    if (candidate.stat().st_dev, candidate.stat().st_ino) == replacement_inode:
+                        raise HTTPException(status_code=409, detail=f"删除目录包含新版本硬链接，已拒绝: {target_dir}")
+                except HTTPException:
+                    raise
+                except OSError:
+                    continue
+        safe_dirs.add(target_dir)
+
+    safe_files: set[Path] = set()
+    for target_file in delete_files:
+        target_file = target_file.resolve()
+        if target_file == replacement:
+            raise HTTPException(status_code=409, detail="删除计划包含新版本文件，已拒绝")
+        try:
+            if (target_file.stat().st_dev, target_file.stat().st_ino) == replacement_inode:
+                raise HTTPException(status_code=409, detail=f"旧新版本共用同一 inode，已拒绝自动清理: {target_file}")
+        except HTTPException:
+            raise
+        except OSError:
+            pass
+        safe_files.add(target_file)
+    return safe_dirs, safe_files
