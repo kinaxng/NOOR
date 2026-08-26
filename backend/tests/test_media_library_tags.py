@@ -30,6 +30,12 @@ def test_parse_tags_does_not_infer_uncensored_from_variant_filename():
     assert tags['release_type_key'] is None
 
 
+def test_parse_tags_treats_uc_as_cracked_and_chinese():
+    tags = parse_tags('SNIS-063-UC.mp4', [], '/media/SNIS-063/SNIS-063-UC.mp4')
+    assert tags['is_cracked'] is True
+    assert tags['has_chinese'] is True
+
+
 def test_parse_tags_detects_uncensored_release_from_path_or_studio():
     by_path = parse_tags('HEYZO-123.mp4', [], '/media/heyzo/HEYZO-123.mp4')
     by_studio = parse_tags('ABC-123.mp4', ['Tokyo-Hot'], '/media/ABC-123/ABC-123.mp4')

@@ -5,8 +5,11 @@ import VuiBadge from '../ui/Badge/VuiBadge.vue'
 import { useI18n } from '../../composables/useI18n'
 import type { FileTags, MediaItem, MediaItemDetail } from '../../api/types'
 import PanelHeader from './panels/PanelHeader.vue'
+import api from '../../api'
+import { useToast } from '../../composables/useToast'
 
 const { t, i18nVersion, currentLang } = useI18n()
+const toast = useToast()
 
 const directorLabel = computed(() => {
   void i18nVersion.value
@@ -111,6 +114,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  versionMarked: [result: { old_path: string; new_path: string; mark: string; tags: FileTags }]
 }>()
 
 const previewVideoPath = ref('')
@@ -291,6 +295,30 @@ const selectedVariant = computed(() => {
 })
 
 const selectedVariantName = computed(() => selectedVariant.value?.name || '')
+const markingVersion = ref(false)
+const selectedVersionMark = computed(() => {
+  const tags = selectedVariant.value?.tags
+  if (tags?.is_cracked && tags?.has_chinese) return 'UC'
+  if (tags?.is_cracked) return 'U'
+  if (tags?.has_chinese) return 'C'
+  return ''
+})
+
+async function setVersionMark(mark: string) {
+  const path = selectedVariant.value?.path
+  if (!path || markingVersion.value || mark === selectedVersionMark.value) return
+  markingVersion.value = true
+  try {
+    const { data } = await api.post('/media-library/hardlinks/version-mark', { file_path: path, mark })
+    selectedVariantPath.value = data.new_path
+    emit('versionMarked', data)
+    toast.success(`版本标记已更新为 ${mark || '未标记'}`)
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || error?.message || '版本标记更新失败')
+  } finally {
+    markingVersion.value = false
+  }
+}
 
 function selectVariant(path: string) {
   selectedVariantPath.value = path
@@ -515,6 +543,20 @@ function formatDate(dateStr: string | undefined): string {
                 </div>
 
                 <div v-if="variantRows.length">
+                  <div class="version-mark-control">
+                    <span class="version-mark-control__label">版本标记</span>
+                    <div class="version-mark-control__options">
+                      <button
+                        v-for="option in [{ value: '', label: '未标记' }, { value: 'U', label: 'U 破解' }, { value: 'C', label: 'C 中文' }, { value: 'UC', label: 'UC 破解中文' }]"
+                        :key="option.value || 'none'"
+                        type="button"
+                        class="version-mark-control__option"
+                        :class="{ 'version-mark-control__option--active': selectedVersionMark === option.value }"
+                        :disabled="markingVersion"
+                        @click="setVersionMark(option.value)"
+                      >{{ option.label }}</button>
+                    </div>
+                  </div>
                   <div class="space-y-2">
                     <div
                       v-for="variant in variantRows"
@@ -875,4 +917,12 @@ function formatDate(dateStr: string | undefined): string {
     max-height: 44vh;
   }
 }
+
+.version-mark-control { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.75rem; }
+.version-mark-control__label { color:var(--color-text-muted); font-size:.7rem; white-space:nowrap; }
+.version-mark-control__options { display:flex; gap:.25rem; overflow-x:auto; }
+.version-mark-control__option { border:1px solid var(--color-border-default); border-radius:999px; color:var(--color-text-secondary); font-size:.68rem; padding:.28rem .55rem; white-space:nowrap; }
+.version-mark-control__option:hover { border-color:var(--color-accent-cyan); color:var(--color-text-primary); }
+.version-mark-control__option--active { background:color-mix(in srgb, var(--color-accent-cyan) 14%, transparent); border-color:color-mix(in srgb, var(--color-accent-cyan) 48%, transparent); color:var(--color-accent-cyan); }
+.version-mark-control__option:disabled { cursor:wait; opacity:.6; }
 </style>

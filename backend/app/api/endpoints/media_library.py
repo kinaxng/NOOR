@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED, VIDEO_EXTS, config_path as _config_path, env_source_dir, get_config as _get_config, headers as _headers, load_config as _load_config, local_media_root, map_path as _map_path, parse_item as _parse_item, parse_tags as _parse_tags, save_config as _save_config, server_url as _server_url
 from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
-from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl, hardlink_groups_path_impl, load_hardlink_groups_impl, rename_hardlink_path_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl
+from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl, hardlink_groups_path_impl, load_hardlink_groups_impl, rename_hardlink_path_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl, version_marked_stem_impl
 from app.api.endpoints.media_library_listing import _VARIANT_MARKER_RE, apply_filter_and_paginate as _apply_filter_and_paginate, deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, item_variant_penalty as _item_variant_penalty, merge_group_metadata as _merge_group_metadata, pick_group_representative as _pick_group_representative
 from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, delete_plan_from_hardlink_entry as _delete_plan_from_hardlink_entry, delete_plan_from_inode_chain as _delete_plan_from_inode_chain, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, find_inode_chain_for_path as _find_inode_chain_for_path, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, path_matches_hardlink_entry as _path_matches_hardlink_entry, preview_delete_targets as _preview_delete_targets, protect_replacement_from_delete_plan as _protect_replacement_from_delete_plan, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
 from app.api.endpoints.media_library_streaming import parse_range_header as _parse_range_header, iter_file_range as _iter_file_range
@@ -134,6 +134,8 @@ class HardlinkDeleteRequest(BaseModel):
  file_path:str; remove_nfo:bool=True; dry_run:bool=False
 class HardlinkRenameRequest(BaseModel):
  file_path:str; new_stem:str
+class VersionMarkRequest(BaseModel):
+ file_path:str; mark:str=''
 class SourceChainDeleteRequest(BaseModel):
  source_path:str; hardlink_paths:list[str]=[]; code:str|None=None; dry_run:bool=False
 class ItemChainDeleteRequest(BaseModel):
@@ -357,6 +359,23 @@ async def rename_hardlink_file(req:HardlinkRenameRequest):
   _save_hardlink_groups(next_groups)
   return {'ok':True,'old_path':req.file_path,'new_path':new_path}
  return await asyncio.to_thread(rename)
+@router.post('/hardlinks/version-mark')
+async def mark_hardlink_version(req:VersionMarkRequest):
+ config=_load_config();sources,hardlinks=_allowed_scan_roots(config)
+ def rename():
+  path=Path(req.file_path).resolve();groups=_load_hardlink_groups();new_stem=version_marked_stem_impl(path.stem,req.mark)
+  try:new_path,next_groups=rename_hardlink_path_impl(str(path),new_stem,allowed_roots=sources+hardlinks,groups=groups)
+  except FileNotFoundError as exc:raise HTTPException(404,str(exc)) from exc
+  except FileExistsError as exc:raise HTTPException(409,str(exc)) from exc
+  except ValueError as exc:raise HTTPException(400,str(exc)) from exc
+  _save_hardlink_groups(next_groups);tags=_parse_tags(Path(new_path).name,[],new_path)
+  return {'ok':True,'old_path':str(path),'new_path':new_path,'mark':req.mark.upper(),'tags':tags,'sync_state':_bump_sync_state()}
+ result=await asyncio.to_thread(rename)
+ try:
+  if config.get('api_key'):
+   async with httpx.AsyncClient(timeout=5.0,trust_env=False) as client:await client.post(f'{_server_url(config)}/emby/Library/Refresh',headers=_headers(config.get('api_key','')))
+ except Exception:pass
+ return result
 @router.post('/hardlinks/delete-hardlink')
 async def delete_hardlink_file(req:HardlinkDeleteRequest):
  config=_load_config();sources,hardlinks=_allowed_scan_roots(config);path=Path(req.file_path).resolve();_assert_safe_path(path,sources+hardlinks,'硬链接文件')

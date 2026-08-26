@@ -7,6 +7,19 @@ from pathlib import Path
 from typing import Any, Callable
 
 VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.webm', '.mpg', '.mpeg'}
+VERSION_MARK_RE = re.compile(r'[-_](?:UC|CU|U|C)\d*$', re.IGNORECASE)
+
+
+def version_marked_stem_impl(stem: str, mark: str) -> str:
+    normalized = str(mark or '').strip().upper()
+    if normalized == 'CU':
+        normalized = 'UC'
+    if normalized not in {'', 'U', 'C', 'UC'}:
+        raise ValueError('版本标记仅支持 U、C 或 UC')
+    base = VERSION_MARK_RE.sub('', str(stem or '').strip()).rstrip('-_ ')
+    if not base:
+        raise ValueError('文件名不能为空')
+    return f'{base}-{normalized}' if normalized else base
 
 
 def hardlink_groups_path_impl(config_path_fn: Callable[[], Path]) -> Path:

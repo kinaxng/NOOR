@@ -13,7 +13,15 @@ from app.api.endpoints.media_library_hardlinks import (
     rename_hardlink_path_impl,
     save_hardlink_groups_impl,
     scan_single_group_impl,
+    version_marked_stem_impl,
 )
+
+
+def test_version_marked_stem_normalizes_terminal_markers():
+    assert version_marked_stem_impl('SNIS-063', 'U') == 'SNIS-063-U'
+    assert version_marked_stem_impl('SNIS-063-U', 'C') == 'SNIS-063-C'
+    assert version_marked_stem_impl('SNIS-063-C1', 'UC') == 'SNIS-063-UC'
+    assert version_marked_stem_impl('SNIS-063-UC', '') == 'SNIS-063'
 
 
 def test_rename_hardlink_path_preserves_suffix_and_updates_cached_path(tmp_path: Path):

@@ -174,14 +174,16 @@ def parse_tags(name: str, studios: list[str], file_path: str | None) -> dict[str
         fp_base = fp_name + " " + fp_dir
 
     has_chinese = bool(
-        re.search(r"[-_]c(\d*)[-_\.]", lower)
+        re.search(r"[-_]c(\d*)(?:[-_\.]|$)", lower)
+        or re.search(r"[-_](?:uc|cu)(\d*)(?:[-_\.]|$)", lower)
         or "中文字幕" in base
         or "chinese" in lower
         or "中文字幕" in fp_lower
         or (file_path and (fp_name.endswith("-c") or fp_name.endswith("-c1") or fp_name.endswith("-c2")))
     )
     is_cracked = bool(
-        re.search(r"[-_]u\d*[-_\.]", lower)
+        re.search(r"[-_]u\d*(?:[-_\.]|$)", lower)
+        or re.search(r"[-_](?:uc|cu)\d*(?:[-_\.]|$)", lower)
         or "破解" in base
         or "uncensored" in lower
         or "破解" in fp_lower

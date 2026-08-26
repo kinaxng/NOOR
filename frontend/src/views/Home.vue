@@ -173,6 +173,19 @@ async function loadItemDetail(item: MediaItem) {
   }
 }
 
+function handleVersionMarked(result: { old_path: string; new_path: string; tags: any }) {
+  if (videoDetail.value?.file_path === result.old_path) {
+    videoDetail.value = { ...videoDetail.value, file_path: result.new_path, tags: result.tags }
+  } else if (videoDetail.value?.siblings) {
+    videoDetail.value = {
+      ...videoDetail.value,
+      siblings: videoDetail.value.siblings.map((entry: any) => entry.file_path === result.old_path ? { ...entry, file_path: result.new_path, tags: result.tags } : entry),
+    }
+  }
+  mediaLibraryStore.invalidateCache()
+  void refreshCurrentPage(true)
+}
+
 async function openDetailFromRoute() {
   const itemId = String(route.query.detail || '')
   if (!itemId) return
@@ -576,6 +589,7 @@ function goPage(page: number) {
       :loading="loadingDetail"
       :error="detailError"
       @close="handleCloseDetail"
+      @version-marked="handleVersionMarked"
     />
 
     <AsyncLadaPanel
