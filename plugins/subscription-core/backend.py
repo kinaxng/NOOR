@@ -288,24 +288,24 @@ def _is_consumed_resource(sub: dict[str, Any], resource: dict[str, Any]) -> bool
     return bool(key and key in {str(x) for x in (sub.get("consumed_resource_keys") or [])})
 
 
-def _apply_submitted_resource_profile(sub: dict[str, Any], resource: dict[str, Any] | None) -> None:
-    if not isinstance(resource, dict):
+def _forget_consumed_resource(sub: dict[str, Any], resource: dict[str, Any] | None) -> None:
+    key = _resource_submit_key(resource or {})
+    if not key:
         return
-    features = resource.get("subscription_features") if isinstance(resource.get("subscription_features"), dict) else None
-    if features is None:
-        features = resource.get("features") if isinstance(resource.get("features"), dict) else {}
-    sub["current_is_cracked"] = bool(sub.get("current_is_cracked") or features.get("is_cracked"))
-    sub["current_has_subtitle"] = bool(sub.get("current_has_subtitle") or features.get("has_subtitle"))
-    sub["current_is_new_model_uncensored_crack"] = bool(sub.get("current_is_new_model_uncensored_crack") or features.get("is_new_model_uncensored_crack"))
-    try:
-        sub["current_size_bytes"] = max(int(sub.get("current_size_bytes") or 0), int(resource.get("size_bytes") or 0))
-    except Exception:
-        pass
-    try:
-        resource_score = int(resource.get("subscription_quality_score") or resource.get("subscription_score") or _score_resource_quality(resource))
-        sub["current_score"] = max(int(sub.get("current_score") or 0), resource_score)
-    except Exception:
-        pass
+    sub["consumed_resource_keys"] = [str(x) for x in (sub.get("consumed_resource_keys") or []) if str(x) != key]
+    if str(sub.get("last_consumed_resource_key") or "") == key:
+        sub["last_consumed_resource_key"] = ""
+
+
+def _media_matches_resource_profile(media: dict[str, Any], resource: dict[str, Any] | None) -> bool:
+    if not isinstance(resource, dict):
+        return False
+    media_profile = _media_quality_profile(media)
+    resource_profile = _resource_quality_profile(resource)
+    for feature in ("is_cracked", "has_subtitle", "is_new_model_uncensored_crack"):
+        if resource_profile.get(feature) and not media_profile.get(feature):
+            return False
+    return True
 
 
 def _auto_submit_blocked_today(sub: dict[str, Any], resource_key: str) -> bool:
@@ -489,9 +489,6 @@ def _upgrade_improvement(sub: dict[str, Any], resource: dict[str, Any], config: 
         return True, int(sub.get("current_score") or 0), candidate_score, 0, "订阅任务不需要洗版比较"
     current_score = int(sub.get("current_score") or 0)
     threshold = max(0, int(config.get("upgrade_score_threshold") or 20))
-    if candidate_score >= current_score + threshold:
-        return True, current_score, candidate_score, threshold, f"版本特征提升 +{candidate_score - current_score}"
-
     current_profile = {
         "is_cracked": bool(sub.get("current_is_cracked")),
         "has_subtitle": bool(sub.get("current_has_subtitle")),
@@ -500,6 +497,12 @@ def _upgrade_improvement(sub: dict[str, Any], resource: dict[str, Any], config: 
         "size_bytes": int(sub.get("current_size_bytes") or 0),
     }
     candidate_profile = _resource_quality_profile(resource)
+    if candidate_profile.get("is_cracked") and not current_profile.get("is_cracked"):
+        return True, current_score, candidate_score, threshold, "破解版本优先"
+    if candidate_profile.get("is_new_model_uncensored_crack") and not current_profile.get("is_new_model_uncensored_crack"):
+        return True, current_score, candidate_score, threshold, "新模型无码破解优先"
+    if candidate_score >= current_score + threshold:
+        return True, current_score, candidate_score, threshold, f"版本特征提升 +{candidate_score - current_score}"
     same_features = (
         current_profile["is_cracked"] == candidate_profile["is_cracked"]
         and current_profile["has_subtitle"] == candidate_profile["has_subtitle"]
@@ -1258,6 +1261,10 @@ async def _refresh_current_media(data: dict[str, Any], sub: dict[str, Any]) -> d
             sub["fanart_url"] = str(media.get("fanart_path") or "")
         if media.get("poster_path") and not sub.get("cover_url"):
             sub["cover_url"] = str(media.get("poster_path") or "")
+        best = sub.get("best_resource") if isinstance(sub.get("best_resource"), dict) else {}
+        resource = best.get("resource") if isinstance(best.get("resource"), dict) else best
+        if resource and not _media_matches_resource_profile(media, resource):
+            _forget_consumed_resource(sub, resource)
         message = "已刷新当前媒体库版本"
         payload = {"media_found": True, "current_score": sub.get("current_score"), "size_bytes": sub.get("current_size_bytes")}
     else:
@@ -1324,8 +1331,9 @@ async def _reconcile_submitted(data: dict[str, Any], *, sub_id: str = "", limit:
         submitted_best = sub.get("best_resource") if isinstance(sub.get("best_resource"), dict) else {}
         submitted_resource = submitted_best.get("resource") if isinstance(submitted_best.get("resource"), dict) else submitted_best
         _apply_media_profile_to_subscription(sub, media)
-        _apply_submitted_resource_profile(sub, submitted_resource)
-        consumed_key = _remember_consumed_resource(sub, submitted_resource)
+        consumed_key = _remember_consumed_resource(sub, submitted_resource) if _media_matches_resource_profile(media, submitted_resource) else ""
+        if not consumed_key:
+            _forget_consumed_resource(sub, submitted_resource)
         _clear_submit_state(sub)
         sub["last_completion_checked_at"] = _now()
         sub["updated_at"] = sub["last_completion_checked_at"]

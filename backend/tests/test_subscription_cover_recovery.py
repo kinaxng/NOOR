@@ -52,6 +52,44 @@ def test_subscription_xunlei_error_task_is_exposed():
     assert status["message"] == "磁盘空间不足"
 
 
+def test_subscription_does_not_consume_cracked_candidate_for_censored_media():
+    backend = _load_backend()
+    media = {
+        "name": "MIDA-727",
+        "path": "/media/MIDA-727/MIDA-727.mp4",
+        "tags": {"is_cracked": False, "has_chinese": False},
+        "subtitle_count": 1,
+    }
+    resource = {
+        "title": "MIDA-727-U.无码破解.torrent",
+        "features": {"is_cracked": True, "has_subtitle": False},
+    }
+
+    assert backend._media_matches_resource_profile(media, resource) is False
+
+
+def test_subscription_upgrade_prioritizes_cracked_candidate_over_threshold():
+    backend = _load_backend()
+    subscription = {
+        "type": "upgrade",
+        "current_score": 30,
+        "current_is_cracked": False,
+        "current_has_subtitle": True,
+    }
+    resource = {
+        "title": "MIDA-727-U.无码破解.torrent",
+        "features": {"is_cracked": True, "has_subtitle": False},
+    }
+
+    ok, current, candidate, threshold, reason = backend._upgrade_improvement(
+        subscription, resource, {"upgrade_score_threshold": 20},
+    )
+
+    assert ok is True
+    assert (current, candidate, threshold) == (30, 40, 20)
+    assert reason == "破解版本优先"
+
+
 def test_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path):
     asyncio.run(_run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path))
 
