@@ -41,3 +41,13 @@
 .qb-badge-btn:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:1180px){.qb-overview-row{grid-template-columns:1fr}.qb-task-tools{min-height:72px}}
 @media(max-width:760px){.noor-plugin-topbar.qb-toolbar{flex-direction:column;align-items:stretch}.noor-plugin-topbar__actions{order:-1;width:100%;justify-content:flex-start}.qb-actions{width:100%}.qb-overview-row{grid-template-columns:1fr}.qb-summary{grid-template-columns:1fr 1fr}.qb-pager{overflow-x:auto}.qb-task-form .qb-input,.qb-task-form .qb-select{min-width:0}}
+
+/* Compact NOOR toolbar: navigation stays left, connection and actions stay right. */
+.noor-plugin-topbar.qb-toolbar{min-height:44px;padding:0;border:0;background:transparent;flex-wrap:nowrap}
+.qb-toolbar>.noor-plugin-topbar__tabs{min-width:0;overflow-x:auto;scrollbar-width:none}
+.qb-toolbar>.noor-plugin-topbar__tabs::-webkit-scrollbar{display:none}
+.qb-toolbar .qb-actions{margin-left:auto;flex:0 0 auto;gap:6px;flex-wrap:nowrap}
+.qb-toolbar .qb-connection{height:32px;padding:0 11px;background:rgba(255,255,255,.025)}
+.qb-toolbar .qb-btn{height:32px;padding:0 11px;background:rgba(255,255,255,.025)}
+.qb-toolbar .qb-btn--primary{padding:0 14px;background:var(--color-brand);border-color:var(--color-brand)}
+@media(max-width:860px){.noor-plugin-topbar.qb-toolbar{align-items:stretch;flex-direction:column}.qb-toolbar .qb-actions{width:100%;margin-left:0;overflow-x:auto;padding-bottom:2px}.qb-toolbar>.noor-plugin-topbar__tabs{width:100%}}

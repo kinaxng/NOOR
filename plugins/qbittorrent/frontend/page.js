@@ -47,14 +47,14 @@ export async function mount(el, sdk = {}) {
       <div class="noor-plugin-topbar qb-toolbar">
         <div data-role="filterTabs" class="noor-plugin-topbar__tabs"></div>
         <div class="noor-plugin-topbar__actions qb-actions">
-          <span data-role="version" class="qb-badge" style="display:none"></span>
-          <span data-role="scope" class="qb-badge"></span>
           <span data-role="smallFilterHost"></span>
           <span data-role="connection" class="qb-connection"><i></i><span>未连接</span></span>
           <span data-role="newTaskHost"></span>
           <span data-role="settingsHost"></span>
           <span data-role="refreshHost"></span>
         </div>
+        <span data-role="version" hidden></span>
+        <span data-role="scope" hidden></span>
       </div>
       <div class="qb-overview-row">
         <div class="qb-summary" data-role="summary"></div>
@@ -166,13 +166,13 @@ export async function mount(el, sdk = {}) {
       if (title) btn.title = title
       return btn
     }
-    settings = mkBtn('设置', 'qb-icon-btn', 'default', '设置分类路径')
+    settings = mkBtn('分类设置', 'qb-btn', 'default', '管理 qBittorrent 分类与保存路径')
     settings.dataset.role = 'settings'
     settingsHost.replaceWith(settings)
     newTask = mkBtn('新建任务', 'qb-btn qb-btn--primary', 'primary')
     newTask.dataset.role = 'newTask'
     newTaskHost.replaceWith(newTask)
-    refresh = mkBtn('刷新', 'qb-btn qb-btn--primary', 'primary')
+    refresh = mkBtn('刷新', 'qb-btn', 'default')
     refresh.dataset.role = 'refresh'
     refreshHost.replaceWith(refresh)
     smallFilter = mkBtn('', 'qb-badge qb-badge-btn', 'default', '对 NOOR 推送到 qB 的任务跳过小于阈值的非字幕文件。点击可立即对当前任务执行一次过滤。')
@@ -301,9 +301,9 @@ export async function mount(el, sdk = {}) {
       btn.querySelector('span').textContent = active ? (state.sortDir === 'asc' ? '↑' : '↓') : '↕'
     }
     if (state.version) {
-      version.style.display='inline-flex'
       version.textContent = [state.version, state.apiMode, state.authMode].filter(Boolean).join(' · ')
-    } else version.style.display='none'
+      connection.title = version.textContent
+    } else connection.title = ''
     scope.textContent = state.showNoorOnly ? `范围：${state.noorTag}` : '范围：全部'
     if (Number(state.minFileSizeMb || 0) > 0) {
       smallFilter.style.display = 'inline-flex'
