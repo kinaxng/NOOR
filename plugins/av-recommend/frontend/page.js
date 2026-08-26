@@ -602,7 +602,8 @@ export async function mount(root, sdk) {
       }))
 
       let selectedProvider = ''
-      const renderResources = resources => {
+      const renderResources = (resources, resetSelection = false) => {
+        if (resetSelection) selectedProvider = ''
         resourceCount.textContent = String(resources.length)
         providerBar.innerHTML = ''
         resourceList.innerHTML = ''
@@ -695,7 +696,7 @@ export async function mount(root, sdk) {
           seen.add(key)
           return true
         })
-        renderResources(merged)
+        renderResources(merged, true)
       }).catch(() => {
         if (state.activePanel === panel && !fallbackResources.length) renderResources([])
       })

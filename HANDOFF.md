@@ -796,3 +796,9 @@ Notes:
 - 推荐资源确认改为初排与最终展示两阶段，避免多样化选卡后卡片漏掉资源信号。
 - `PRED-878` 实测恢复 `is_cracked=true`、10 条资源和“资源确认：破解”。
 - 验证：后端 `313 passed, 8 skipped, 1 warning`；前端生产构建通过。
+
+### Latest Recovery Update (2026-08-26：资源 UI 契约闭环)
+
+- 浏览器 smoke 发现异步聚合完成后仍保留 fallback JavDB 选中态；现两个详情入口都会在最终资源到达时重选优先来源 AVDB。
+- 推荐第二阶段资源确认覆盖全部 60 张默认展示卡，不再因动态排名越过固定窗口而漏掉破解信号。
+- 完整 smoke 新增 AVDB 首位且 active、`PRED-878` 破解及资源汇总断言；运行结果 `HTTP_ERRORS []`、`CONSOLE_ERRORS []`。

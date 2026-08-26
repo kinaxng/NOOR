@@ -1751,7 +1751,7 @@ async def _enrich_recommendation_resources(
     except Exception as exc:
         return [f"资源插件运行时不可用：{exc}"]
     configured_limit = int(config.get("resource_enrich_limit") or 32)
-    enrich_limit = max(0, min(configured_limit if limit is None else int(limit), 48))
+    enrich_limit = max(0, min(configured_limit if limit is None else int(limit), 100))
     if enrich_limit <= 0:
         return warnings
     targets = items[:enrich_limit]

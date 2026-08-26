@@ -1834,7 +1834,7 @@ export async function mount(root, sdk) {
         if (state.activePanel !== panel) return
         const brokerResources = Array.isArray(resourceRes?.data?.items) ? resourceRes.data.items : []
         resources = sortResources(mergeResources(brokerResources, fallbackResources))
-        renderResources(true)
+        renderResources(false)
       }).catch(error => {
         if (isPluginUnmountError(error)) return
         if (state.activePanel === panel && !resources.length) {
