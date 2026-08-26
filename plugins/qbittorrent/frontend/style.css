@@ -51,3 +51,10 @@
 .qb-toolbar .qb-btn{height:32px;padding:0 11px;background:rgba(255,255,255,.025)}
 .qb-toolbar .qb-btn--primary{padding:0 14px;background:var(--color-brand);border-color:var(--color-brand)}
 @media(max-width:860px){.noor-plugin-topbar.qb-toolbar{align-items:center;flex-direction:row;flex-wrap:nowrap;overflow:hidden}.qb-toolbar>.noor-plugin-topbar__tabs{order:0;width:auto;flex:1 1 auto}.qb-toolbar .qb-actions{order:0;width:auto;max-width:none;margin-left:auto;overflow:visible;padding-bottom:0}}
+
+/* Overview is one continuous toolbar: five metrics plus search. */
+.qb-overview-row{display:grid;grid-template-columns:repeat(6,minmax(140px,1fr));gap:10px;align-items:stretch;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+.qb-overview-row .qb-summary{display:contents}
+.qb-overview-row .qb-task-tools{display:contents}
+.qb-overview-row .qb-search-card{min-width:140px;min-height:68px}
+@media(max-width:1180px){.qb-overview-row{grid-template-columns:repeat(6,minmax(140px,1fr))}.qb-overview-row .qb-summary{display:contents}.qb-overview-row .qb-task-tools{display:contents}}

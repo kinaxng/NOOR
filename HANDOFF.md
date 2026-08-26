@@ -879,3 +879,4 @@ Notes:
 - `CJOD-528` 错误保存到 `/volume1/data/downloads/av` 的根因是订阅中心遗留 `default_savepath` 显式覆盖 qB 分类路径，且 qB 默认分类仍为“默认”。
 - 运行配置已校正为 qB `category=AV`、`savepath=""`，订阅中心 `default_savepath=""`；qB 实时返回 AV 分类绑定 `/downloads/av`。新任务将由 qB 分类决定容器路径，已完成的历史任务不自动迁移。
 - 前端生产构建通过，真实配置与订阅概览接口复核通过。
+- qB 的 `qb-overview-row`（5 个指标卡 + 搜索卡）固定为六列单行，窄宽度使用整排横向滚动，不再响应式折成三行。
