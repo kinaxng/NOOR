@@ -809,3 +809,10 @@ Notes:
 - 扫描响应统一从嵌套 `summary` 返回 toast 计数，避免扫描成功提示出现 `undefined`；后端分组补齐 `entry_count`，主文件数排序恢复有效。
 - 当前 `MEDIA_LIBRARY_SCAN_GROUPS=[]`，原会话、恢复仓和历史环境样例均没有真实 source/hardlink 配对证据，因此未猜测路径、未运行真实扫描或删除。
 - 验证：硬链接定向测试通过；后端全量 `314 passed, 8 skipped, 1 warning`；前端生产构建通过；空态浏览器契约通过。
+
+### Latest Recovery Update (2026-08-26：硬链接真实扫描)
+
+- 用户确认扫描组 `av`：主文件 `/home/kinax/Videos/downloads/av`，硬链接 `/home/kinax/Videos/media/av`；配置写入本机 `.env`，不进入 Git。
+- 只读 inode 扫描完成并写入运行缓存：776 个作品组、817 个主文件、797 个硬链接、30 个异常组；746 组正常。
+- 30 个异常全部为 `orphan_source`，没有未识别番号；当前另有 27 个多主文件组、14 个多硬链接组、5 个仅主文件组、27 个仅硬链接组。
+- 后端重载后全部 group 均返回 `entry_count`，最大单组 6 个主文件；真实页面摘要、排序、筛选和展开内容正常。本轮未调用删除、整理或移动接口。
