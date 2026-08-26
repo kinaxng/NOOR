@@ -42,8 +42,16 @@ export async function mount(el, sdk = {}) {
           <button data-role="refresh" class="xunlei-remote-btn xunlei-remote-btn--primary">刷新</button>
         </div>
       </div>
-      <div class="xunlei-remote-stats" data-role="stats"></div>
-      <div class="xunlei-remote-search"><span>搜索</span><input data-role="search" placeholder="任务名 / 路径 / 链接"></div>
+      <div class="xunlei-remote-stats" data-role="stats">
+        <div class="xunlei-remote-stat"><span>任务</span><strong data-role="statTotal">0</strong></div>
+        <div class="xunlei-remote-stat"><span>进行中</span><strong data-role="statActive">0</strong></div>
+        <div class="xunlei-remote-stat"><span>已完成</span><strong data-role="statDone">0</strong></div>
+        <div class="xunlei-remote-stat"><span>速度</span><strong data-role="statSpeed">0 B/s</strong></div>
+        <label class="xunlei-remote-stat xunlei-remote-stat--search">
+          <span>搜索任务</span>
+          <input data-role="search" placeholder="任务名 / 路径 / 链接" autocomplete="off">
+        </label>
+      </div>
       <div data-role="state" class="xunlei-remote-state" style="display:none"></div>
       <div class="xunlei-remote-table-card">
         <div class="xunlei-remote-table-wrap">
@@ -66,7 +74,10 @@ export async function mount(el, sdk = {}) {
   const newTask = $('newTask')
   const residual = $('residual')
   const accountProbe = $('accountProbe')
-  const stats = $('stats')
+  const statTotal = $('statTotal')
+  const statActive = $('statActive')
+  const statDone = $('statDone')
+  const statSpeed = $('statSpeed')
   const search = $('search')
   const stateBox = $('state')
   const tbody = $('tbody')
@@ -508,7 +519,7 @@ export async function mount(el, sdk = {}) {
     return state.tasks.filter(t => {
       if (q && !`${t.name} ${t.savepath} ${t.url}`.toLowerCase().includes(q)) return false
       if (state.filter === 'all') return true
-      if (state.filter === 'active') return ['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING', 'PHASE_TYPE_PAUSED', 'PHASE_TYPE_ERROR'].includes(t.phase)
+      if (state.filter === 'active') return ['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING'].includes(t.phase)
       if (state.filter === 'done') return t.phase === 'PHASE_TYPE_COMPLETE'
       if (state.filter === 'running') return ['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING'].includes(t.phase)
       if (state.filter === 'paused') return t.phase === 'PHASE_TYPE_PAUSED'
@@ -521,7 +532,6 @@ export async function mount(el, sdk = {}) {
     const tabs = [
       { key: 'active', label: '进行中' },
       { key: 'all', label: '全部' },
-      { key: 'running', label: '下载中' },
       { key: 'done', label: '已完成' },
       { key: 'paused', label: '暂停' },
       { key: 'error', label: '错误' },
@@ -552,19 +562,13 @@ export async function mount(el, sdk = {}) {
   }
 
   function renderStats() {
-    const active = state.tasks.filter(t => ['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING', 'PHASE_TYPE_PAUSED', 'PHASE_TYPE_ERROR'].includes(t.phase)).length
-    const running = state.tasks.filter(t => t.phase === 'PHASE_TYPE_RUNNING').length
+    const active = state.tasks.filter(t => ['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING'].includes(t.phase)).length
     const done = state.tasks.filter(t => t.phase === 'PHASE_TYPE_COMPLETE').length
     const speed = state.tasks.reduce((s, t) => s + Number(t.speed || 0), 0)
-    const quota = state.about?.quota
-    stats.innerHTML = `
-      <div class="xunlei-remote-stat"><span>任务</span><strong>${state.tasks.length}</strong></div>
-      <div class="xunlei-remote-stat"><span>进行中</span><strong>${active}</strong></div>
-      <div class="xunlei-remote-stat"><span>下载中</span><strong>${running}</strong></div>
-      <div class="xunlei-remote-stat"><span>已完成</span><strong>${done}</strong></div>
-      <div class="xunlei-remote-stat"><span>速度</span><strong>${fmtSpeed(speed)}</strong></div>
-      ${quota ? `<div class="xunlei-remote-stat"><span>云盘用量</span><strong>${fmtBytes(quota.usage)}</strong></div>` : ''}
-    `
+    statTotal.textContent = String(state.tasks.length)
+    statActive.textContent = String(active)
+    statDone.textContent = String(done)
+    statSpeed.textContent = fmtSpeed(speed)
   }
 
   function visibleItems() {

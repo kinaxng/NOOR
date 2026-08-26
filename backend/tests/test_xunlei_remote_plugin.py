@@ -159,3 +159,13 @@ def test_plugin_json_has_account_and_mobile_schema():
                 "mobile_peer_id", "mobile_target", "mobile_parent_folder_id"):
         assert key in defaults
         assert key in plugin["config_schema"]
+
+
+def test_toolbar_uses_one_active_filter_and_embeds_search_in_stats():
+    source = (ROOT / "plugins/xunlei-remote/frontend/page.js").read_text(encoding="utf-8")
+
+    assert "{ key: 'active', label: '进行中' }" in source
+    assert "{ key: 'running', label: '下载中' }" not in source
+    assert "云盘用量" not in source
+    assert 'class="xunlei-remote-stat xunlei-remote-stat--search"' in source
+    assert "['PHASE_TYPE_PENDING', 'PHASE_TYPE_RUNNING'].includes(t.phase)" in source
