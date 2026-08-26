@@ -1,6 +1,7 @@
 """Local subtitle-library index API reconstructed from bytecode."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -225,8 +226,11 @@ async def save_config(body: ConfigRequest):
 @router.post("/index/rebuild")
 async def rebuild_index():
     config = _load_config()
-    with _index_lock:
-        count, elapsed = _build_index(config, force=True)
+    def build() -> tuple[int, float]:
+        with _index_lock:
+            return _build_index(config, force=True)
+
+    count, elapsed = await asyncio.to_thread(build)
     return {"indexed_files": count, "elapsed_seconds": round(elapsed, 2)}
 
 

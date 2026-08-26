@@ -600,6 +600,9 @@ function toggleLibrary(libId: string) {
   color: rgba(255, 255, 255, 0.62);
   padding: 0.55rem 0.75rem;
   border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
 }
 
 .webhook-guide {
@@ -611,7 +614,8 @@ function toggleLibrary(libId: string) {
   background: rgba(0, 117, 255, 0.05);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   color: rgba(255, 255, 255, 0.42);
-  font-size: 0.7rem;
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs);
   line-height: 1.55;
 }
 

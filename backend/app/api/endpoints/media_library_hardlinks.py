@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 from pathlib import Path
@@ -116,7 +117,10 @@ async def build_hardlink_groups_impl(config: dict, *, scan_single_group_fn: Call
         source_dir, hardlink_dir = group.get('source_dir', ''), group.get('hardlink_dir', '')
         if not source_dir or not hardlink_dir:
             continue
-        for pair in scan_single_group_fn(source_dir, hardlink_dir):
+        # Directory traversal may touch slow/NFS-backed media paths. Keep it
+        # away from FastAPI's event loop so health and UI requests stay live.
+        pairs = await asyncio.to_thread(scan_single_group_fn, source_dir, hardlink_dir)
+        for pair in pairs:
             code_path = (pair['hardlink_paths'] or [pair['source_path']])[0]
             code = extract_code_from_path_fn(code_path) if code_path else 'N/A'
             groups_by_code.setdefault(code, []).append(pair)

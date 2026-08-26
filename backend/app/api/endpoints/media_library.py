@@ -3,7 +3,7 @@
 Reconstructed from preserved Python 3.13 bytecode and split recovery helpers.
 """
 from __future__ import annotations
-import mimetypes, os, secrets, shutil, time
+import asyncio, mimetypes, os, secrets, shutil, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -255,7 +255,9 @@ async def get_item(item_id:str):
  except HTTPException:raise
  except Exception as e:raise HTTPException(502,f'获取详情失败: {e}')
 @router.get('/hardlinks/groups')
-async def get_hardlink_groups():return {**_enrich_hardlink_groups(_load_hardlink_groups()),'last_scanned_at':_hardlink_groups_last_scanned_at()}
+async def get_hardlink_groups():
+ def load_and_enrich():return {**_enrich_hardlink_groups(_load_hardlink_groups()),'last_scanned_at':_hardlink_groups_last_scanned_at()}
+ return await asyncio.to_thread(load_and_enrich)
 @router.get('/stream/{item_id}')
 async def stream_emby_item(request:Request,item_id:str,media_source_id:str|None=Query(default=None),container:str|None=Query(default=None)):
  config=_load_config();server_url=_server_url(config);api_key=config.get('api_key','')
@@ -292,7 +294,10 @@ async def stream_emby_item(request:Request,item_id:str,media_source_id:str|None=
 async def scan_hardlinks():
  config=_load_config()
  if not config.get('scan_groups'):raise HTTPException(400,'未配置扫描组')
- groups=await _build_hardlink_groups();_save_hardlink_groups(groups);return {**_enrich_hardlink_groups(groups),'last_scanned_at':_hardlink_groups_last_scanned_at()}
+ groups=await _build_hardlink_groups()
+ def save_and_enrich():
+  _save_hardlink_groups(groups);return {**_enrich_hardlink_groups(groups),'last_scanned_at':_hardlink_groups_last_scanned_at()}
+ return await asyncio.to_thread(save_and_enrich)
 @router.get('/hardlinks/preview-file')
 async def preview_hardlink_file(request:Request,path:str=Query(...)):
  config=_load_config();source_roots,hardlink_roots=_allowed_scan_roots(config);target=Path(_map_path(path,config)).resolve();_assert_safe_path(target,source_roots+hardlink_roots,'预览文件')

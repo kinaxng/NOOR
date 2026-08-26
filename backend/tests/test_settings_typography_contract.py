@@ -22,7 +22,25 @@ def test_hardlink_dense_metadata_has_twelve_pixel_floor() -> None:
     for selector in (".hl-group__meta", ".hl-entry__count", ".row-action-btn", ".group-action-btn"):
         match = re.search(re.escape(selector) + r"[^\{]*\{([^}]*)\}", source)
         assert match is not None
-        assert "font-size: 0.75rem" in match.group(1)
+        expected = "0.8125rem" if selector in (".hl-group__meta", ".hl-entry__count") else "0.75rem"
+        assert f"font-size: {expected}" in match.group(1)
+
+
+def test_files_page_uses_the_shared_noor_tabs() -> None:
+    source = (ROOT / "frontend" / "src" / "views" / "FilesView.vue").read_text(encoding="utf-8")
+
+    assert "import VisionTabs" in source
+    assert "<VisionTabs" in source
+    assert 'class="files-tab"' not in source
+
+
+def test_emby_webhook_uses_readable_explicit_typography() -> None:
+    source = (ROOT / "frontend" / "src" / "views" / "settings" / "SystemSettings.vue").read_text(encoding="utf-8")
+
+    webhook_url = re.search(r"\.webhook-url-row code\s*\{([^}]*)\}", source, re.S)
+    guide = re.search(r"\.webhook-guide\s*\{([^}]*)\}", source, re.S)
+    assert webhook_url is not None and "font-size: var(--font-size-sm)" in webhook_url.group(1)
+    assert guide is not None and "font-size: var(--font-size-xs)" in guide.group(1)
 
 
 def test_global_typography_tokens_have_complete_readable_fallbacks() -> None:

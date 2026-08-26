@@ -562,7 +562,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="w-full space-y-6 animate-fade-in">
+  <div class="hardlinks-page w-full space-y-6 animate-fade-in">
     <div class="page-header">
       <div class="page-header__left">
         <div>
@@ -755,12 +755,12 @@ onMounted(async () => {
                 <div class="hl-row hl-row--source" :class="{ 'hl-row--missing': entry.issues?.includes('orphan_source') }">
                   <span
                     v-if="entry.source_path"
-                    class="hl-row__path font-mono text-xs"
+                    class="hl-row__path"
                     :title="previewPathLabel"
                     @click="openVideoPreview(entry.source_path)"
                   >{{ entry.source_path }}</span>
                   <span v-if="entry.source_size != null" class="hl-row__size">{{ formatBytes(entry.source_size) }}</span>
-                  <span v-else class="hl-row__empty font-mono text-xs">{{ t('hardlinks.missingSource') }}</span>
+                  <span v-else class="hl-row__empty">{{ t('hardlinks.missingSource') }}</span>
                   <button
                     v-if="entry.source_path && mdcManualAvailable"
                     type="button"
@@ -792,7 +792,7 @@ onMounted(async () => {
                 >
                   <span class="hl-row__hl-arrow">→</span>
                   <span
-                    class="hl-row__path font-mono text-xs"
+                    class="hl-row__path"
                     :title="previewPathLabel"
                     @click="openVideoPreview(hl)"
                   >{{ hl }}</span>
@@ -849,6 +849,12 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.hardlinks-page {
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -1244,7 +1250,8 @@ onMounted(async () => {
 
 .hl-group__meta {
   color: var(--color-text-secondary);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .hl-group__entries {
@@ -1271,7 +1278,8 @@ onMounted(async () => {
 .hl-entry__count,
 .hl-col__label {
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .hl-entry__cols {
@@ -1303,6 +1311,19 @@ onMounted(async () => {
 
 .hl-row__path {
   cursor: pointer;
+}
+
+.hl-row__path,
+.hl-row__empty {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.hl-row__size,
+.hl-row__hl-arrow {
+  font-size: 0.75rem;
+  line-height: 1.5;
 }
 
 .hl-row__path:hover {
