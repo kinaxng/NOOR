@@ -298,8 +298,8 @@ const selectedVariantName = computed(() => selectedVariant.value?.name || '')
 const markingVersion = ref(false)
 const selectedVersionMark = computed(() => {
   const tags = selectedVariant.value?.tags
-  if (tags?.is_cracked && tags?.has_chinese) return 'UC'
-  if (tags?.is_cracked) return 'U'
+  if (tags?.is_cracked && tags?.has_chinese) return '破解-C'
+  if (tags?.is_cracked) return '破解'
   if (tags?.has_chinese) return 'C'
   return ''
 })
@@ -547,7 +547,7 @@ function formatDate(dateStr: string | undefined): string {
                     <span class="version-mark-control__label">版本标记</span>
                     <div class="version-mark-control__options">
                       <button
-                        v-for="option in [{ value: '', label: '未标记' }, { value: 'U', label: 'U 破解' }, { value: 'C', label: 'C 中文' }, { value: 'UC', label: 'UC 破解中文' }]"
+                        v-for="option in [{ value: '', label: '未标记' }, { value: '破解', label: '破解' }, { value: 'C', label: 'C 中文' }, { value: '破解-C', label: '破解-C 破解中文' }]"
                         :key="option.value || 'none'"
                         type="button"
                         class="version-mark-control__option"

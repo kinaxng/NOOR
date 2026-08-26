@@ -7,15 +7,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.webm', '.mpg', '.mpeg'}
-VERSION_MARK_RE = re.compile(r'[-_](?:UC|CU|U|C)\d*$', re.IGNORECASE)
+VERSION_MARK_RE = re.compile(r'(?:[-_](?:破解|UC|CU|U|C)\d*)+$', re.IGNORECASE)
 
 
 def version_marked_stem_impl(stem: str, mark: str) -> str:
-    normalized = str(mark or '').strip().upper()
-    if normalized == 'CU':
-        normalized = 'UC'
-    if normalized not in {'', 'U', 'C', 'UC'}:
-        raise ValueError('版本标记仅支持 U、C 或 UC')
+    raw = str(mark or '').strip()
+    normalized = {'U': '破解', 'CRACKED': '破解', '破解': '破解', 'C': 'C', '破解-C': '破解-C'}.get(raw.upper(), raw)
+    if normalized not in {'', '破解', 'C', '破解-C'}:
+        raise ValueError('版本标记仅支持破解、C 或破解-C')
     base = VERSION_MARK_RE.sub('', str(stem or '').strip()).rstrip('-_ ')
     if not base:
         raise ValueError('文件名不能为空')
@@ -173,7 +172,27 @@ def rename_hardlink_path_impl(
         return str(source), groups
     if target.exists():
         raise FileExistsError('同名文件已存在')
-    source.rename(target)
+    sidecar_moves: list[tuple[Path, Path]] = []
+    for sidecar in source.parent.glob(f'{source.stem}.*'):
+        if sidecar == source or not sidecar.is_file() or sidecar.suffix.lower() in VIDEO_EXTS:
+            continue
+        sidecar_target = source.parent / f'{target.stem}{sidecar.name[len(source.stem):]}'
+        if sidecar_target.exists():
+            raise FileExistsError(f'目标配套文件已存在: {sidecar_target.name}')
+        sidecar_moves.append((sidecar, sidecar_target))
+    moved_sidecars: list[tuple[Path, Path]] = []
+    try:
+        source.rename(target)
+        for sidecar, sidecar_target in sidecar_moves:
+            sidecar.rename(sidecar_target)
+            moved_sidecars.append((sidecar, sidecar_target))
+    except Exception:
+        for sidecar, sidecar_target in reversed(moved_sidecars):
+            if sidecar_target.exists():
+                sidecar_target.rename(sidecar)
+        if target.exists() and not source.exists():
+            target.rename(source)
+        raise
 
     old_value, new_value = str(source), str(target)
     for group in groups:

@@ -18,10 +18,22 @@ from app.api.endpoints.media_library_hardlinks import (
 
 
 def test_version_marked_stem_normalizes_terminal_markers():
-    assert version_marked_stem_impl('SNIS-063', 'U') == 'SNIS-063-U'
+    assert version_marked_stem_impl('SNIS-063', '破解') == 'SNIS-063-破解'
     assert version_marked_stem_impl('SNIS-063-U', 'C') == 'SNIS-063-C'
-    assert version_marked_stem_impl('SNIS-063-C1', 'UC') == 'SNIS-063-UC'
-    assert version_marked_stem_impl('SNIS-063-UC', '') == 'SNIS-063'
+    assert version_marked_stem_impl('SNIS-063-C1', '破解-C') == 'SNIS-063-破解-C'
+    assert version_marked_stem_impl('MXGS-146-破解-U', '') == 'MXGS-146'
+
+
+def test_rename_hardlink_path_moves_matching_sidecars(tmp_path: Path):
+    root = tmp_path / 'media'; root.mkdir()
+    video = root / 'SNIS-063-C.mp4'; nfo = root / 'SNIS-063-C.nfo'; subtitle = root / 'SNIS-063-C.chs.srt'
+    video.write_bytes(b'video'); nfo.write_text('full nfo'); subtitle.write_text('subtitle')
+
+    new_path, _ = rename_hardlink_path_impl(str(video), 'SNIS-063-破解-C', allowed_roots=[root], groups=[])
+
+    assert new_path == str(root / 'SNIS-063-破解-C.mp4')
+    assert (root / 'SNIS-063-破解-C.nfo').read_text() == 'full nfo'
+    assert (root / 'SNIS-063-破解-C.chs.srt').read_text() == 'subtitle'
 
 
 def test_rename_hardlink_path_preserves_suffix_and_updates_cached_path(tmp_path: Path):
