@@ -1318,7 +1318,7 @@ onMounted(async () => {
 
 .hl-row__path,
 .hl-row__empty {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 0.8125rem;
   line-height: 1.5;
 }

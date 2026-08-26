@@ -66,6 +66,9 @@ def test_hardlink_work_code_uses_noor_display_typography() -> None:
     assert 'class="hl-group__code"' in source
     assert code is not None and "font-family: var(--font-display)" in code.group(1)
 
+    paths = re.search(r"\.hl-row__path,\s*\n\.hl-row__empty\s*\{([^}]*)\}", source, re.S)
+    assert paths is not None and "font-family: var(--font-display)" in paths.group(1)
+
 
 def test_global_typography_tokens_have_complete_readable_fallbacks() -> None:
     source = (ROOT / "frontend" / "src" / "style.css").read_text(encoding="utf-8")

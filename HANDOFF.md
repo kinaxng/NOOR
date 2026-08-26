@@ -838,3 +838,4 @@ Notes:
 - 演员管理补齐与硬链接管理完全一致的 20px display 标题及 12px 元信息布局。
 - 硬链接作品番号（如 `FC2-4720819`）移除 `font-mono`，改用 NOOR display 字体；Emby Webhook URL 同样从 mono 改为 14px display 字体。
 - 字体契约测试 `8 passed`；前端类型检查与生产构建通过。
+- 后续按用户复核将主文件与硬链接列中的完整路径也由 mono 改为 13px NOOR display 字体，整张分组卡片的内容值风格保持一致。
