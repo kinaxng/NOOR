@@ -81,6 +81,11 @@ export async function mount(el, sdk = {}) {
   const fmtSpeed = n => Number(n || 0) ? `${fmtBytes(n)}/s` : '0 B/s'
   const fmtTime = s => { if (!s) return '-'; const d = new Date(s); return Number.isNaN(d.getTime()) ? s : `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
   const pct = n => `${Math.round(Number(n || 0) * 1000) / 10}%`
+  const dayKey = value => {
+    const date = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
   const phaseText = p => ({ PHASE_TYPE_PENDING: '等待中', PHASE_TYPE_RUNNING: '下载中', PHASE_TYPE_PAUSED: '暂停', PHASE_TYPE_COMPLETE: '完成', PHASE_TYPE_ERROR: '错误' }[p] || p || '-')
   const phaseTone = p => p === 'PHASE_TYPE_COMPLETE' ? 'success' : p === 'PHASE_TYPE_ERROR' ? 'error' : p === 'PHASE_TYPE_PAUSED' ? 'muted' : p === 'PHASE_TYPE_RUNNING' ? 'info' : 'warning'
   function modalApi(options) {
@@ -590,10 +595,12 @@ export async function mount(el, sdk = {}) {
     renderTabs()
     renderStats()
     const limitMatch = String(state.dailyLimit?.title || '').match(/今日(\d+)个/)
-    const limitText = state.dailyLimit?.limited ? `${limitMatch?.[1] || '—'}/${limitMatch?.[1] || '—'}` : '可用'
+    const limitTotal = Number(limitMatch?.[1] || 3)
+    const today = dayKey(new Date())
+    const limitUsed = state.tasks.filter(task => dayKey(task.created_time) === today).length
     const speedUsed = Number(state.trySpeed?.usage_used || 0)
     const speedTotal = Number(state.trySpeed?.usage_total || 0)
-    usageBadge.textContent = `任务额度 ${limitText} · 加速 ${speedUsed}/${speedTotal || '—'}`
+    usageBadge.textContent = `任务额度 ${limitUsed}/${limitTotal} · 加速 ${speedUsed}/${speedTotal || '—'}`
     usageBadge.title = state.dailyLimit?.title || `试用加速剩余 ${Number(state.trySpeed?.usage_remaining || 0)} 次`
     const connected = !!state.device?.user?.name
     device.textContent = connected ? `已连接 · ${state.device.user.name}` : '未连接'

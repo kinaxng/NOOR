@@ -149,7 +149,8 @@ def test_toolbar_uses_one_active_filter_and_embeds_search_in_stats():
     assert "{ key: 'active', label: '进行中' }" in source
     assert "{ key: 'running', label: '下载中' }" not in source
     assert "云盘用量" not in source
-    assert "任务额度 ${limitText} · 加速 ${speedUsed}/${speedTotal || '—'}" in source
+    assert "任务额度 ${limitUsed}/${limitTotal} · 加速 ${speedUsed}/${speedTotal || '—'}" in source
+    assert "dayKey(task.created_time) === today" in source
     assert "账号探针" not in source
     assert "移动端" not in source
     assert 'class="xunlei-remote-stat xunlei-remote-stat--search"' in source
