@@ -977,10 +977,11 @@ Notes:
 
 ### Latest Recovery Update (2026-08-27：AAAAAA Whisper/LADA/FaceFusion 真链路验证)
 
-- 从 `AAAAAA测试专用.mp4` 创建隔离短片，实际走任务队列、GPU Guard、模型推理和产物校验，不以依赖检查或历史产物代替运行验证；测试文件位于忽略的 `data/runtime/chain-tests/AAAAAA-20260827/`。
+- 从 `AAAAAA测试专用.mp4` 创建隔离短片，实际走任务队列、GPU Guard、模型推理和产物校验，不以依赖检查或历史产物代替运行验证；测试文件位于 `/volume1/models/noor-runtime/chain-tests/AAAAAA-20260827/`。
 - Whisper 首跑发现默认 energy VAD 对低响度对白只保留尾部并产出 0 字节 SRT；切换 Whisper-VAD ONNX 后，60 秒片段识别 3 个语音块、8 条中文字幕，28 秒完成，SRT 533 字节。推荐/本机默认已切换 ONNX（缺模型仍自动回退 energy）。
 - 修复 Whisper 清名正则把普通 `chain` 从 `ch` 开始截断的问题；现只移除文件名末尾的破解/U/C/UC/中文/语言标记，并由 Whisper 与字幕下载共用。
 - LADA 真任务 `c1bc5fdb-0577-4476-815d-8578f876505d` 使用 RTX 5060 Ti、v4-fast、BasicVSR++ v1.2 和 HEVC NVENC；30 秒输入约 40 秒完成，输出 1920×1080 HEVC/AAC、时长 30.002 秒，输入输出 SSIM 0.994264，确认不是原样复制。
 - FaceFusion 首跑暴露旧设置将 CLI 0..1 权重保存为 0..100，以及自定义输出目录未创建；增加旧值迁移、正确默认值和目录创建。随后发现 ONNX 子进程缺 pip CUDA 动态库路径而回退 CPU，现自动把 nvidia 包的 lib 目录注入 `LD_LIBRARY_PATH`。
 - FaceFusion GPU 复测任务 `1ed57c3f-9047-4b7e-9ca1-425a869db0f0` 使用 CUDA + inswapper_128，30 帧全部处理，日志无 `libcudart` 错误或 CPU fallback，输出 1920×1080 H.264/AAC。非零 CLI 状态现会直接作为任务失败原因，而非误报“没有输出文件”。
 - 验证：后端 `372 passed, 8 skipped, 1 warning`；前端类型检查与生产构建通过。
+- 路径复核：最初测试参数误把隔离输入及 LADA/FaceFusion 指定输出放在项目 `data/runtime`；现已迁移到统一 runtime root，并同步修正 7 条测试任务的 input/output/settings/detail/error 与任务日志路径。迁移前数据库备份保存在 `/volume1/models/noor-runtime/chain-tests/migration-backup/noor-before-AAAAAA-path-fix-20260827.db`。
