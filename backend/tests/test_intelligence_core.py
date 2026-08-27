@@ -94,11 +94,18 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     assert await intelligence.record_preference_event(
         "PRED-878", "subscription", source="av-recommend", actors=["测试演员"], categories=["剧情"],
     ) is True
+    assert await intelligence.record_preference_event(
+        "PRED-878", "library_imported", source="subscription-core", data={"evidence_id": "sub-1:media-1"},
+    ) is True
+    assert await intelligence.record_preference_event(
+        "PRED-878", "library_imported", source="subscription-core", data={"evidence_id": "sub-1:media-1"},
+    ) is False
     behavior = await intelligence.preference_behavior_summary()
-    assert behavior["event_count"] == 2
-    assert behavior["codes"]["PRED-878"] > 1.9
-    assert behavior["actors"]["测试演员"] > 1.9
-    assert behavior["revision"].startswith("2:")
+    assert behavior["event_count"] == 3
+    assert behavior["codes"]["PRED-878"] > 5.9
+    assert behavior["actors"]["测试演员"] > 5.9
+    assert behavior["revision"].startswith("3:")
     assert await intelligence.clear_preference_events(source="av-recommend") == 2
-    assert (await intelligence.preference_behavior_summary())["event_count"] == 0
+    assert (await intelligence.preference_behavior_summary())["event_count"] == 1
+    assert await intelligence.clear_preference_events(source="subscription-core") == 1
     await engine.dispose()

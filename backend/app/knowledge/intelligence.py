@@ -33,8 +33,24 @@ SEMANTIC_STOPWORDS = {
 SEMANTIC_LATIN_STOPWORDS = {
     "fanza", "dmm", "javdb", "avdb", "video", "movie", "sample", "preview", "sex",
 }
-PREFERENCE_EVENT_WEIGHTS = {"detail_view": 0.18, "subscription": 1.8, "download_intent": 1.25}
-PREFERENCE_EVENT_HALF_LIFE_DAYS = {"detail_view": 14, "subscription": 90, "download_intent": 45}
+PREFERENCE_EVENT_WEIGHTS = {
+    "detail_view": 0.18,
+    "subscription": 1.8,
+    "download_intent": 1.25,
+    "download_submitted": 0.8,
+    "library_imported": 4.0,
+    "upgrade_completed": 4.5,
+    "upgrade_cleanup_failed": 0.0,
+}
+PREFERENCE_EVENT_HALF_LIFE_DAYS = {
+    "detail_view": 14,
+    "subscription": 90,
+    "download_intent": 45,
+    "download_submitted": 45,
+    "library_imported": 365,
+    "upgrade_completed": 365,
+    "upgrade_cleanup_failed": 30,
+}
 
 
 def canonical_work_code(value: Any) -> str:
@@ -110,6 +126,10 @@ async def record_preference_event(
     now = utcnow()
     cooldown = timedelta(hours=6 if kind == "detail_view" else 24)
     async with async_session_maker() as db:
+        evidence_id = str((data or {}).get("evidence_id") or "").strip()
+        event_id = stable_id("preference-event", source, kind, evidence_id) if evidence_id else stable_id("preference-event", canonical, kind, source, now.isoformat())
+        if evidence_id and await db.get(PreferenceEvent, event_id):
+            return False
         latest = (await db.execute(
             select(PreferenceEvent)
             .where(PreferenceEvent.work_code == canonical, PreferenceEvent.event_type == kind, PreferenceEvent.source == source)
@@ -118,10 +138,25 @@ async def record_preference_event(
         )).scalar_one_or_none()
         if latest and latest.created_at >= now - cooldown:
             return False
-        actor_names = list(dict.fromkeys(canonical_actor_name(value) for value in (actors or []) if str(value or "").strip()))[:12]
-        category_names = list(dict.fromkeys(str(value).strip() for value in (categories or []) if str(value or "").strip()))[:20]
+        profile = await db.get(WorkProfile, canonical)
+        if profile:
+            for facts in (profile.facts or {}).values():
+                if not isinstance(facts, dict):
+                    continue
+                if not actors:
+                    actors = list(facts.get("actors") or facts.get("actresses") or [])
+                if not categories:
+                    categories = list(facts.get("categories") or facts.get("genres") or facts.get("tags") or [])
+                if actors and categories:
+                    break
+        def evidence_name(value: Any) -> str:
+            if isinstance(value, dict):
+                return str(value.get("name") or value.get("label") or "").strip()
+            return str(value or "").strip()
+        actor_names = list(dict.fromkeys(canonical_actor_name(evidence_name(value)) for value in (actors or []) if evidence_name(value)))[:12]
+        category_names = list(dict.fromkeys(evidence_name(value) for value in (categories or []) if evidence_name(value)))[:20]
         event = PreferenceEvent(
-            id=stable_id("preference-event", canonical, kind, source, now.isoformat()),
+            id=event_id,
             work_code=canonical,
             event_type=kind,
             source=source,
