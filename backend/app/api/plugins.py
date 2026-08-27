@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from typing import Any
 
@@ -114,6 +115,7 @@ class ResourceSearchPayload(BaseModel):
     providers: list[str] = Field(default_factory=list)
     limit_per_plugin: int = Field(24, ge=1, le=100)
     requested_downloader_id: str = ''
+    track_intent: bool = True
 
 
 class ResourceResolvePayload(BaseModel):
@@ -328,6 +330,12 @@ async def search_resources(payload: ResourceSearchPayload):
             row.setdefault('provider', provider)
             row.setdefault('provider_label', provider_name)
             items.append(row)
+    page = int(payload.query.get('page') or 1)
+    if payload.track_intent and page <= 1 and items:
+        with contextlib.suppress(Exception):
+            from app.knowledge.intelligence import record_search_intent
+            raw_query = payload.query.get('keyword') or payload.query.get('q') or payload.query.get('code') or payload.query.get('number')
+            await record_search_intent(raw_query)
     return {
         'groups': groups,
         'items': items,

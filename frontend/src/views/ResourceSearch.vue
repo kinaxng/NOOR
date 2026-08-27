@@ -497,6 +497,7 @@ async function loadMoreProvider(group: ResourceGroup) {
       query: payload,
       providers: [group.provider],
       limit_per_plugin: displayLimitPerProvider,
+      track_intent: false,
     })
     const nextGroup = (resp.data?.groups || [])[0]
     const incoming = Array.isArray(nextGroup?.items) ? nextGroup.items : []

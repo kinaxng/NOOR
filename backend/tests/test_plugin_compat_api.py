@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import plugins
+from app.knowledge import intelligence
 
 
 def _app() -> FastAPI:
@@ -162,6 +163,26 @@ def test_resource_search_returns_groups_and_flat_items(monkeypatch):
             "provider_label": "M-Team",
         },
     ]
+
+
+def test_resource_search_records_only_first_page_user_intent(monkeypatch):
+    recorded: list[str] = []
+
+    async def fake_search_resources(query, **_kwargs):
+        return {"groups": [{"provider": "avdb", "items": [{"id": "one", "title": "result"}]}], "downloaders": []}
+
+    async def fake_record(query, **_kwargs):
+        recorded.append(str(query))
+        return {"recorded": True}
+
+    monkeypatch.setattr(plugins.runtime, "search_resources", fake_search_resources)
+    monkeypatch.setattr(intelligence, "record_search_intent", fake_record)
+    client = TestClient(_app())
+
+    assert client.post("/api/plugins/resources/search", json={"query": {"keyword": "吉泽明步 破解", "page": 1}}).status_code == 200
+    assert client.post("/api/plugins/resources/search", json={"query": {"keyword": "吉泽明步 破解", "page": 2}}).status_code == 200
+    assert client.post("/api/plugins/resources/search", json={"query": {"keyword": "吉泽明步 破解"}, "track_intent": False}).status_code == 200
+    assert recorded == ["吉泽明步 破解"]
 
 
 def test_resource_resolve_download_route_forwards_to_runtime(monkeypatch):

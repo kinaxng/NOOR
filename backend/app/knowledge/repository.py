@@ -384,8 +384,9 @@ class KnowledgeRepository:
         fresh_checked_works = {row.work_code for row in resource_rows if row.expires_at and row.expires_at > now}
         fresh_available_works = {row.work_code for row in resource_rows if row.available and row.expires_at and row.expires_at > now}
         provider_checks = sum(1 for row in resource_rows if str(row.status or "") in {"available", "empty", "error", "timeout"})
-        from app.knowledge.intelligence import actor_alias_stats, fused_work_profile, preference_learning_metrics, work_similarity_status
+        from app.knowledge.intelligence import actor_alias_stats, fused_work_profile, preference_learning_metrics, search_intent_summary, work_similarity_status
         learning = await preference_learning_metrics()
+        search_intent = search_intent_summary()
         profile_quality_counts = {'title': 0, 'cover': 0, 'actors': 0, 'categories': 0, 'complete': 0}
         for profile in work_profiles:
             portrait = fused_work_profile(profile)
@@ -425,6 +426,22 @@ class KnowledgeRepository:
             'preference_event_count': sum(preference_events.values()),
             'verified_outcomes': sum(preference_events.get(key, 0) for key in ('library_imported', 'upgrade_completed')),
             'preference_learning': learning,
+            'search_intent': {
+                'event_count': search_intent['event_count'],
+                'actors': [
+                    {'name': search_intent['actor_labels'].get(identity, identity), 'weight': round(weight, 3)}
+                    for identity, weight in sorted(search_intent['actors'].items(), key=lambda row: row[1], reverse=True)[:5]
+                ],
+                'categories': [
+                    {'name': name, 'weight': round(weight, 3)}
+                    for name, weight in sorted(search_intent['categories'].items(), key=lambda row: row[1], reverse=True)[:5]
+                ],
+                'terms': [
+                    {'name': name, 'weight': round(weight, 3)}
+                    for name, weight in sorted(search_intent['terms'].items(), key=lambda row: row[1], reverse=True)[:5]
+                ],
+                'latest_at': search_intent['latest_at'],
+            },
             'work_similarity': work_similarity_status(),
             'last_learned_at': last_learned_at.isoformat() if last_learned_at else None,
         }

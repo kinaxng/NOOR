@@ -540,6 +540,7 @@ const intelligenceFreshness = computed(() => Number(intelligenceStats.value.reso
 const intelligenceAvailability = computed(() => Number(intelligenceStats.value.resource_coverage?.quality?.availability_rate || 0))
 const intelligenceActorIdentities = computed(() => Number(intelligenceStats.value.actor_mappings?.identity_count || 0))
 const intelligenceLearnedActorAliases = computed(() => Number(intelligenceStats.value.actor_mappings?.learned_alias_count || 0))
+const intelligenceSearchIntentCount = computed(() => Number(intelligenceStats.value.search_intent?.event_count || 0))
 const intelligenceLinkedWorks = computed(() => Number(intelligenceStats.value.work_similarity?.linked_work_count || 0))
 const intelligenceProfileCompleteness = computed(() => Number(intelligenceStats.value.work_profile_quality?.complete?.percent || 0))
 const intelligenceMappedActorRate = computed(() => {
@@ -905,6 +906,7 @@ const statsRingItems = computed(() => {
                 <div class="intelligence-card__signals">
                   <span>{{ formatCount(intelligenceActorIdentities) }} 演员身份</span>
                   <span v-if="intelligenceLearnedActorAliases">{{ formatCount(intelligenceLearnedActorAliases) }} 个学习别名</span>
+                  <span v-if="intelligenceSearchIntentCount">{{ formatCount(intelligenceSearchIntentCount) }} 个即时搜索信号</span>
                   <span>{{ intelligenceProviderCount }} 个资源源</span>
                   <span>{{ intelligenceFreshness.toFixed(0) }}% 情报新鲜</span>
                   <span>{{ formatCount(intelligenceLinkedWorks) }} 作品邻域</span>

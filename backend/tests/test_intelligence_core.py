@@ -94,6 +94,39 @@ def test_profile_evidence_backfills_historical_events_without_male_cast_or_opera
     assert "中文字幕" not in evidence["categories"]
 
 
+def test_search_intent_uses_core_identities_filters_operations_and_decays(tmp_path, monkeypatch) -> None:
+    asyncio.run(_search_intent_uses_core_identities_filters_operations_and_decays(tmp_path, monkeypatch))
+
+
+async def _search_intent_uses_core_identities_filters_operations_and_decays(tmp_path, monkeypatch) -> None:
+    now = dt.datetime(2026, 8, 28, 4, 0, tzinfo=dt.timezone.utc)
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    monkeypatch.setattr(intelligence, "_search_actor_alias_terms", lambda: ["吉泽明步", "吉沢明歩"])
+    monkeypatch.setattr(intelligence, "actor_identity_key", lambda value: "mdc-ng:吉沢明歩" if value else "")
+    monkeypatch.setattr(intelligence, "canonical_actor_name", lambda value: "吉沢明歩" if value else "")
+
+    async def behavior():
+        return {"categories": {"人妻": 3.0}}
+
+    monkeypatch.setattr(intelligence, "preference_behavior_summary", behavior)
+    recorded = await intelligence.record_search_intent("吉泽明步 人妻 破解", now=now)
+    duplicate = await intelligence.record_search_intent("吉泽明步 人妻 破解", now=now + dt.timedelta(minutes=2))
+    code = await intelligence.record_search_intent("PRED-878 破解", now=now)
+
+    assert recorded["recorded"] is True
+    assert recorded["actors"] == [{"identity": "mdc-ng:吉沢明歩", "label": "吉沢明歩"}]
+    assert recorded["categories"] == ["人妻"]
+    assert "破解" not in recorded["terms"]
+    assert duplicate == {"recorded": False, "reason": "duplicate"}
+    assert code == {"recorded": False, "reason": "empty-or-code"}
+    stored = json.loads((tmp_path / "intelligence_search_intents.json").read_text(encoding="utf-8"))
+    assert "吉泽明步" not in json.dumps(stored, ensure_ascii=False)
+    fresh = intelligence.search_intent_summary(now=now)
+    aged = intelligence.search_intent_summary(now=now + dt.timedelta(hours=3))
+    assert fresh["actors"]["mdc-ng:吉沢明歩"] == 1.0
+    assert aged["actors"]["mdc-ng:吉沢明歩"] == 0.5
+
+
 def test_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch) -> None:
     asyncio.run(_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch))
 

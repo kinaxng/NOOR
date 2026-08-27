@@ -36,6 +36,8 @@ _work_search_cache: dict[str, Any] = {"expires_at": 0.0, "documents": []}
 _work_search_lock = asyncio.Lock()
 _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "value": None}
 _preference_summary_lock = asyncio.Lock()
+_search_intent_lock = asyncio.Lock()
+_search_actor_terms_cache: tuple[str, list[str]] | None = None
 WORK_SIMILARITY_VERSION = 6
 WORK_PROFILE_FUSION_VERSION = 1
 SIMILARITY_CATEGORY_STOPWORDS = {
@@ -88,6 +90,13 @@ PREFERENCE_EVENT_STAGE_VALUES = {
     "download_submitted": 0.85,
     "library_imported": 1.0,
     "upgrade_completed": 1.0,
+}
+SEARCH_INTENT_HALF_LIFE_SECONDS = 3 * 60 * 60
+SEARCH_INTENT_MAX_AGE_SECONDS = 12 * 60 * 60
+SEARCH_INTENT_OPERATIONAL_TERMS = {
+    "破解", "中文", "中字", "字幕", "流出", "无码", "無碼", "有码", "有碼", "pt",
+    "avdb", "javdb", "mteam", "m-team", "source", "来源", "資源", "资源", "下载", "下載",
+    "4k", "8k", "fhd", "uhd", "1080p", "2160p", "hdr",
 }
 
 
@@ -822,6 +831,158 @@ async def clear_preference_events(*, source: str | None = None) -> int:
         await db.commit()
     _preference_summary_cache["expires_at"] = 0.0
     return int(result.rowcount or 0)
+
+
+def _search_intent_file():
+    return data_path("intelligence_search_intents.json")
+
+
+def _load_search_intents() -> dict[str, Any]:
+    path = _search_intent_file()
+    if not path.exists():
+        return {"version": 1, "events": []}
+    with contextlib.suppress(OSError, json.JSONDecodeError):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("events"), list):
+            return data
+    return {"version": 1, "events": []}
+
+
+def _save_search_intents(data: dict[str, Any]) -> None:
+    path = _search_intent_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(f"{path.suffix}.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _search_actor_alias_terms() -> list[str]:
+    global _search_actor_terms_cache
+    revision = actor_alias_revision()
+    if _search_actor_terms_cache and _search_actor_terms_cache[0] == revision:
+        return _search_actor_terms_cache[1]
+    terms = sorted((name for name in actor_alias_names() if len(_normalize_actor_name(name)) >= 2), key=lambda name: len(_normalize_actor_name(name)), reverse=True)
+    _search_actor_terms_cache = (revision, terms)
+    return terms
+
+
+def search_intent_summary(*, now: datetime | None = None) -> dict[str, Any]:
+    current = now or utcnow()
+    actors: dict[str, float] = defaultdict(float)
+    actor_labels: dict[str, str] = {}
+    categories: dict[str, float] = defaultdict(float)
+    terms: dict[str, float] = defaultdict(float)
+    retained: list[dict[str, Any]] = []
+    for event in _load_search_intents().get("events") or []:
+        if not isinstance(event, dict):
+            continue
+        with contextlib.suppress(ValueError, TypeError):
+            created_at = datetime.fromisoformat(str(event.get("created_at") or ""))
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            age = max(0.0, (current - created_at).total_seconds())
+            if age > SEARCH_INTENT_MAX_AGE_SECONDS:
+                continue
+            retained.append(event)
+            effective = math.pow(0.5, age / SEARCH_INTENT_HALF_LIFE_SECONDS)
+            for actor in event.get("actors") or []:
+                if not isinstance(actor, dict) or not actor.get("identity"):
+                    continue
+                identity = str(actor["identity"])
+                actors[identity] += effective
+                actor_labels[identity] = str(actor.get("label") or identity)
+            for category in event.get("categories") or []:
+                if category:
+                    categories[str(category)] += effective
+            for term in event.get("terms") or []:
+                if term:
+                    terms[str(term)] += effective
+    latest = max((str(event.get("created_at") or "") for event in retained), default="")
+    return {
+        "event_count": len(retained),
+        "actors": dict(actors),
+        "actor_labels": actor_labels,
+        "categories": dict(categories),
+        "terms": dict(terms),
+        "latest_at": latest or None,
+        "revision": hashlib.sha256(f"{len(retained)}:{latest}".encode("utf-8")).hexdigest()[:16],
+    }
+
+
+async def record_search_intent(query: Any, *, source: str = "resource-search", now: datetime | None = None) -> dict[str, Any]:
+    raw = unicodedata.normalize("NFKC", str(query or "")).strip()
+    current = now or utcnow()
+    if len(raw) < 2 or extract_video_code_candidates(raw):
+        return {"recorded": False, "reason": "empty-or-code"}
+    cleaned = re.sub(r"(?:来源|source)[:：]\S+", " ", raw, flags=re.I)
+    tokens = [token.lstrip("-") for token in re.split(r"\s+", cleaned) if token]
+    meaningful = [token for token in tokens if token.casefold() not in SEARCH_INTENT_OPERATIONAL_TERMS]
+    if not meaningful:
+        return {"recorded": False, "reason": "operational-only"}
+    meaningful_text = " ".join(meaningful)
+    normalized_query = _normalize_actor_name(meaningful_text)
+    actors: list[dict[str, str]] = []
+    actor_ids: set[str] = set()
+    matched_actor_terms: set[str] = set()
+    for alias in _search_actor_alias_terms():
+        normalized_alias = _normalize_actor_name(alias)
+        if normalized_alias not in normalized_query:
+            continue
+        identity = actor_identity_key(alias)
+        if not identity or identity in actor_ids:
+            continue
+        actors.append({"identity": identity, "label": canonical_actor_name(alias)})
+        actor_ids.add(identity)
+        matched_actor_terms.add(normalized_alias)
+        if len(actors) >= 4:
+            break
+    behavior = await preference_behavior_summary()
+    category_names = set(PREFERENCE_CATEGORY_ALIASES) | set(PREFERENCE_CATEGORY_ALIASES.values()) | set((behavior.get("categories") or {}).keys())
+    categories = list(dict.fromkeys(
+        canonical_preference_category(name)
+        for name in sorted(category_names, key=len, reverse=True)
+        if len(name) >= 2 and unicodedata.normalize("NFKC", name).casefold() in meaningful_text.casefold()
+        and canonical_preference_category(name).casefold() not in {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}
+    ))[:8]
+    weighted_terms = semantic_tokens(meaningful_text).get("weighted") or {}
+    excluded = matched_actor_terms | {_normalize_actor_name(actor["label"]) for actor in actors} | {_normalize_actor_name(category) for category in categories}
+    terms = [
+        term for term in weighted_terms
+        if term.casefold() not in SEARCH_INTENT_OPERATIONAL_TERMS
+        and _normalize_actor_name(term) not in excluded
+    ][:8]
+    if not actors and not categories and not terms:
+        return {"recorded": False, "reason": "no-preference-signal"}
+    fingerprint = hashlib.sha256(f"{source}:{normalized_query}".encode("utf-8")).hexdigest()[:20]
+    async with _search_intent_lock:
+        data = _load_search_intents()
+        events: list[dict[str, Any]] = []
+        duplicate = False
+        for event in data.get("events") or []:
+            if not isinstance(event, dict):
+                continue
+            with contextlib.suppress(ValueError, TypeError):
+                created_at = datetime.fromisoformat(str(event.get("created_at") or ""))
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                age = max(0.0, (current - created_at).total_seconds())
+                if age <= SEARCH_INTENT_MAX_AGE_SECONDS:
+                    events.append(event)
+                    if event.get("fingerprint") == fingerprint and age < 5 * 60:
+                        duplicate = True
+        if duplicate:
+            return {"recorded": False, "reason": "duplicate"}
+        events.append({
+            "fingerprint": fingerprint,
+            "source": source[:64],
+            "created_at": current.isoformat(),
+            "actors": actors,
+            "categories": categories,
+            "terms": terms,
+        })
+        data = {"version": 1, "events": events[-300:]}
+        _save_search_intents(data)
+    return {"recorded": True, "actors": actors, "categories": categories, "terms": terms}
 
 
 def semantic_tokens(*values: Any) -> dict[str, Any]:
