@@ -85,4 +85,20 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     enriched = await intelligence.work_intelligence("PRED-878")
     assert enriched["profile"]["facts"]["javdb"]["actors"] == ["测试演员"]
     assert "隣人" in enriched["profile"]["tokens"]["cjk"]
+    assert await intelligence.record_preference_event(
+        "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"],
+    ) is True
+    assert await intelligence.record_preference_event(
+        "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"],
+    ) is False
+    assert await intelligence.record_preference_event(
+        "PRED-878", "subscription", source="av-recommend", actors=["测试演员"], categories=["剧情"],
+    ) is True
+    behavior = await intelligence.preference_behavior_summary()
+    assert behavior["event_count"] == 2
+    assert behavior["codes"]["PRED-878"] > 1.9
+    assert behavior["actors"]["测试演员"] > 1.9
+    assert behavior["revision"].startswith("2:")
+    assert await intelligence.clear_preference_events(source="av-recommend") == 2
+    assert (await intelligence.preference_behavior_summary())["event_count"] == 0
     await engine.dispose()

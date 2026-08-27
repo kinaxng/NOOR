@@ -7,16 +7,18 @@ import itertools
 import json
 import re
 import unicodedata
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.database import async_session_maker
 from app.core.models import utcnow
 from app.core.runtime_paths import data_path
 from app.knowledge.codes import extract_video_code
-from app.knowledge.models import ResourceObservation, ResourceRefreshState, WorkProfile, stable_id
+from app.knowledge.models import PreferenceEvent, ResourceObservation, ResourceRefreshState, WorkProfile, stable_id
 
 _refresh_queue: asyncio.PriorityQueue[tuple[int, int, str]] = asyncio.PriorityQueue()
 _refresh_counter = itertools.count()
@@ -31,6 +33,8 @@ SEMANTIC_STOPWORDS = {
 SEMANTIC_LATIN_STOPWORDS = {
     "fanza", "dmm", "javdb", "avdb", "video", "movie", "sample", "preview", "sex",
 }
+PREFERENCE_EVENT_WEIGHTS = {"detail_view": 0.18, "subscription": 1.8, "download_intent": 1.25}
+PREFERENCE_EVENT_HALF_LIFE_DAYS = {"detail_view": 14, "subscription": 90, "download_intent": 45}
 
 
 def canonical_work_code(value: Any) -> str:
@@ -88,6 +92,91 @@ def canonical_actor_name(value: Any) -> str:
     """Resolve any MDC-NG alias to one stable display name."""
     name = str(value or "").strip()
     return _actor_alias_data()[1].get(_normalize_actor_name(name), name)
+
+
+async def record_preference_event(
+    code: str,
+    event_type: str,
+    *,
+    source: str = "unknown",
+    actors: list[Any] | None = None,
+    categories: list[Any] | None = None,
+    data: dict[str, Any] | None = None,
+) -> bool:
+    canonical = canonical_work_code(code)
+    kind = str(event_type or "").strip()
+    if not canonical or kind not in PREFERENCE_EVENT_WEIGHTS:
+        return False
+    now = utcnow()
+    cooldown = timedelta(hours=6 if kind == "detail_view" else 24)
+    async with async_session_maker() as db:
+        latest = (await db.execute(
+            select(PreferenceEvent)
+            .where(PreferenceEvent.work_code == canonical, PreferenceEvent.event_type == kind, PreferenceEvent.source == source)
+            .order_by(PreferenceEvent.created_at.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+        if latest and latest.created_at >= now - cooldown:
+            return False
+        actor_names = list(dict.fromkeys(canonical_actor_name(value) for value in (actors or []) if str(value or "").strip()))[:12]
+        category_names = list(dict.fromkeys(str(value).strip() for value in (categories or []) if str(value or "").strip()))[:20]
+        event = PreferenceEvent(
+            id=stable_id("preference-event", canonical, kind, source, now.isoformat()),
+            work_code=canonical,
+            event_type=kind,
+            source=source,
+            weight=PREFERENCE_EVENT_WEIGHTS[kind],
+            actors=actor_names,
+            categories=category_names,
+            data=data or {},
+            created_at=now,
+        )
+        db.add(event)
+        await db.commit()
+    return True
+
+
+async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, Any]:
+    now = utcnow()
+    cutoff = now - timedelta(days=max_age_days)
+    try:
+        async with async_session_maker() as db:
+            events = list((await db.execute(select(PreferenceEvent).where(PreferenceEvent.created_at >= cutoff))).scalars())
+    except SQLAlchemyError:
+        return {"codes": {}, "actors": {}, "categories": {}, "event_count": 0, "revision": "0:none"}
+    codes: dict[str, float] = {}
+    actors: dict[str, float] = {}
+    categories: dict[str, float] = {}
+    for event in events:
+        age_days = max(0.0, (now - event.created_at).total_seconds() / 86400)
+        half_life = PREFERENCE_EVENT_HALF_LIFE_DAYS.get(event.event_type, 30)
+        effective = float(event.weight or 0) * math.pow(0.5, age_days / half_life)
+        codes[event.work_code] = codes.get(event.work_code, 0.0) + effective
+        for actor in event.actors or []:
+            name = canonical_actor_name(actor)
+            actors[name] = actors.get(name, 0.0) + effective
+        for category in event.categories or []:
+            name = str(category).strip()
+            if name:
+                categories[name] = categories.get(name, 0.0) + effective
+    latest = max((event.created_at for event in events), default=None)
+    return {
+        "codes": codes,
+        "actors": actors,
+        "categories": categories,
+        "event_count": len(events),
+        "revision": f"{len(events)}:{latest.isoformat() if latest else 'none'}",
+    }
+
+
+async def clear_preference_events(*, source: str | None = None) -> int:
+    statement = delete(PreferenceEvent)
+    if source:
+        statement = statement.where(PreferenceEvent.source == source)
+    async with async_session_maker() as db:
+        result = await db.execute(statement)
+        await db.commit()
+    return int(result.rowcount or 0)
 
 
 def semantic_tokens(*values: Any) -> dict[str, Any]:

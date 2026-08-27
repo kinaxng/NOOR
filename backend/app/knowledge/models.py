@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -141,6 +141,22 @@ class WorkProfile(Base):
     confidence: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class PreferenceEvent(Base):
+    """Append-only user behavior evidence used by recommendation models."""
+
+    __tablename__ = "knowledge_preference_events"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    work_code: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(128), index=True, default="unknown")
+    weight: Mapped[float] = mapped_column(Float, default=0.0)
+    actors: Mapped[list] = mapped_column(JSON, default=list)
+    categories: Mapped[list] = mapped_column(JSON, default=list)
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class ResourceObservation(Base):
