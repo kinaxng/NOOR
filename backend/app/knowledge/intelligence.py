@@ -914,51 +914,86 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
 async def work_similarity_candidates(seed_weights: dict[str, float], *, negative_seed_weights: dict[str, float] | None = None, limit: int = 160) -> dict[str, Any]:
     index = await build_work_similarity_index()
     seeds = {canonical_work_code(code): float(weight) for code, weight in seed_weights.items() if canonical_work_code(code)}
-    scores: dict[str, float] = defaultdict(float)
-    evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for seed_code, seed_weight in sorted(seeds.items(), key=lambda row: row[1], reverse=True)[:80]:
-        for neighbor in (index.get("neighbors") or {}).get(seed_code, []):
-            code = neighbor["code"]
-            if code in seeds:
-                continue
-            contribution = float(neighbor.get("score") or 0) / 100 * max(0.1, seed_weight)
-            scores[code] += contribution
-            evidence[code].append({
-                "seed_code": seed_code,
-                "contribution": round(contribution, 3),
-                "relation_confidence": float(neighbor.get("relation_confidence") or 0),
-                "relation_types": neighbor.get("relation_types") or [],
-                "reasons": neighbor.get("reasons") or [],
-            })
-    negative_scores: dict[str, float] = defaultdict(float)
-    negative_evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
     negative_seeds = {canonical_work_code(code): max(0.0, float(weight)) for code, weight in (negative_seed_weights or {}).items() if canonical_work_code(code)}
-    for seed_code, seed_weight in sorted(negative_seeds.items(), key=lambda row: row[1], reverse=True)[:80]:
-        for neighbor in (index.get("neighbors") or {}).get(seed_code, []):
-            code = neighbor["code"]
-            if code in seeds or code in negative_seeds:
-                continue
-            contribution = float(neighbor.get("score") or 0) / 100 * max(0.1, seed_weight)
-            negative_scores[code] += contribution
-            negative_evidence[code].append({
-                "seed_code": seed_code,
-                "contribution": round(contribution, 3),
-                "relation_confidence": float(neighbor.get("relation_confidence") or 0),
-                "relation_types": neighbor.get("relation_types") or [],
-                "reasons": neighbor.get("reasons") or [],
-            })
+    neighbors_by_code = index.get("neighbors") or {}
+
+    def propagate(source_weights: dict[str, float], *, continuation: float) -> tuple[dict[str, float], dict[str, list[dict[str, Any]]]]:
+        """Two-hop personalized walk with a strong restart and hub penalty."""
+        propagated_scores: dict[str, float] = defaultdict(float)
+        propagated_evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        blocked = set(seeds) | set(negative_seeds)
+        for seed_code, seed_weight in sorted(source_weights.items(), key=lambda row: row[1], reverse=True)[:80]:
+            first_neighbors = neighbors_by_code.get(seed_code, [])
+            for first in first_neighbors:
+                intermediate = first["code"]
+                if (source_weights is seeds and intermediate in negative_seeds) or (source_weights is negative_seeds and intermediate in seeds):
+                    continue
+                direct_strength = float(first.get("score") or 0) / 100
+                if intermediate not in blocked:
+                    contribution = direct_strength * max(0.1, seed_weight)
+                    propagated_scores[intermediate] += contribution
+                    propagated_evidence[intermediate].append({
+                        "seed_code": seed_code,
+                        "path": [seed_code, intermediate],
+                        "hop_count": 1,
+                        "contribution": round(contribution, 3),
+                        "relation_confidence": float(first.get("relation_confidence") or 0),
+                        "relation_types": first.get("relation_types") or [],
+                        "reasons": first.get("reasons") or [],
+                    })
+                second_neighbors = neighbors_by_code.get(intermediate, [])
+                hub_penalty = math.sqrt(max(1, len(second_neighbors)))
+                for second in second_neighbors:
+                    code = second["code"]
+                    if code in blocked or code in {seed_code, intermediate}:
+                        continue
+                    path_strength = direct_strength * (float(second.get("score") or 0) / 100)
+                    contribution = path_strength * max(0.1, seed_weight) * continuation / hub_penalty
+                    if contribution < 0.002:
+                        continue
+                    propagated_scores[code] += contribution
+                    propagated_evidence[code].append({
+                        "seed_code": seed_code,
+                        "via_code": intermediate,
+                        "path": [seed_code, intermediate, code],
+                        "hop_count": 2,
+                        "contribution": round(contribution, 3),
+                        "relation_confidence": round(min(float(first.get("relation_confidence") or 0), float(second.get("relation_confidence") or 0)) * continuation, 3),
+                        "relation_types": list(dict.fromkeys([*(first.get("relation_types") or []), *(second.get("relation_types") or [])])),
+                        "reasons": [
+                            {"hop": 1, "code": intermediate, "relations": first.get("reasons") or []},
+                            {"hop": 2, "code": code, "relations": second.get("reasons") or []},
+                        ],
+                    })
+        return propagated_scores, propagated_evidence
+
+    scores, evidence = propagate(seeds, continuation=0.35)
+    negative_scores, negative_evidence = propagate(negative_seeds, continuation=0.20)
     ranked = sorted(scores, key=lambda code: scores[code], reverse=True)[:max(1, min(limit, 500))]
     items = []
     for code in ranked:
         candidate = dict((index.get("candidates") or {}).get(code) or {"code": code, "title": code})
         candidate["neighbor_score"] = round(scores[code], 3)
         candidate["neighbor_evidence"] = sorted(evidence[code], key=lambda row: row["contribution"], reverse=True)[:5]
+        candidate["neighbor_hop_count"] = min((int(row.get("hop_count") or 1) for row in evidence[code]), default=1)
         total_contribution = sum(float(row.get("contribution") or 0) for row in evidence[code]) or 1.0
         candidate["neighbor_confidence"] = round(sum(float(row.get("contribution") or 0) * float(row.get("relation_confidence") or 0) for row in evidence[code]) / total_contribution, 3)
         candidate["neighbor_negative_score"] = round(negative_scores.get(code, 0.0), 3)
         candidate["neighbor_negative_evidence"] = sorted(negative_evidence.get(code, []), key=lambda row: row["contribution"], reverse=True)[:3]
         items.append(candidate)
-    return {"revision": index.get("revision"), "items": items, "seed_count": len(seeds), "negative_seed_count": len(negative_seeds), "linked_work_count": index.get("linked_work_count", 0)}
+    return {
+        "revision": index.get("revision"),
+        "items": items,
+        "seed_count": len(seeds),
+        "negative_seed_count": len(negative_seeds),
+        "linked_work_count": index.get("linked_work_count", 0),
+        "propagation": {
+            "max_hops": 2,
+            "positive_restart_probability": 0.65,
+            "negative_restart_probability": 0.80,
+            "multi_hop_candidates": sum(1 for code in ranked if any(int(row.get("hop_count") or 1) > 1 for row in evidence[code])),
+        },
+    }
 
 
 def work_similarity_status() -> dict[str, Any]:

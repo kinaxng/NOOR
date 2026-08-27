@@ -81,6 +81,37 @@ def test_semantic_only_relation_has_lower_confidence_than_mapped_actor() -> None
     assert actor > 0.9
 
 
+def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths(monkeypatch) -> None:
+    async def fake_index(**_kwargs):
+        def edge(code: str, score: float, label: str):
+            return {"code": code, "score": score, "relation_confidence": 0.9, "relation_types": ["actor"], "reasons": [{"type": "actor", "label": label, "weight": 1.0}]}
+        return {
+            "revision": "test", "linked_work_count": 4,
+            "neighbors": {
+                "AAA-001": [edge("BBB-001", 80, "演员甲")],
+                "BBB-001": [edge("AAA-001", 80, "演员甲"), edge("CCC-001", 70, "系列乙")],
+                "CCC-001": [edge("BBB-001", 70, "系列乙")],
+                "DDD-001": [edge("CCC-001", 90, "负向演员")],
+            },
+            "candidates": {code: {"code": code, "title": code} for code in ("AAA-001", "BBB-001", "CCC-001", "DDD-001")},
+        }
+
+    monkeypatch.setattr(intelligence, "build_work_similarity_index", fake_index)
+    result = asyncio.run(intelligence.work_similarity_candidates({"AAA-001": 1.0}, negative_seed_weights={"DDD-001": 1.0}))
+    by_code = {item["code"]: item for item in result["items"]}
+
+    assert by_code["BBB-001"]["neighbor_hop_count"] == 1
+    assert by_code["CCC-001"]["neighbor_hop_count"] == 2
+    assert by_code["CCC-001"]["neighbor_evidence"][0]["path"] == ["AAA-001", "BBB-001", "CCC-001"]
+    assert by_code["CCC-001"]["neighbor_negative_score"] > 0
+    assert result["propagation"] == {
+        "max_hops": 2,
+        "positive_restart_probability": 0.65,
+        "negative_restart_probability": 0.8,
+        "multi_hop_candidates": 1,
+    }
+
+
 def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
     monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
