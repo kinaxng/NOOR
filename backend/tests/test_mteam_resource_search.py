@@ -21,18 +21,18 @@ def test_resource_search_uses_adult_torrent_mode(monkeypatch):
     async def fake_post(config, path, *, params=None, json_body=None):
         captured.update({"config": config, "path": path, "params": params, "json_body": json_body})
         return {
-            "data": [{"id": "123", "name": "SSIS-001 test", "createdDate": "2026-08-26"}],
+            "data": [{"id": "123", "name": "TEST-021 test", "createdDate": "2026-08-26"}],
             "total": "1",
         }
 
     monkeypatch.setattr(backend, "_mteam_post", fake_post)
-    result = asyncio.run(backend.search_resources({"code": "SSIS-001", "limit": 6}, {"api_key": "secret"}))
+    result = asyncio.run(backend.search_resources({"code": "TEST-021", "limit": 6}, {"api_key": "secret"}))
 
     assert captured["path"] == "/api/torrent/search"
     assert captured["json_body"] == {
         "pageNumber": 1,
         "pageSize": 6,
-        "keyword": "SSIS-001",
+        "keyword": "TEST-021",
         "mode": "adult",
         "status": "NORMAL",
         "withCache": True,
@@ -46,12 +46,12 @@ def test_resource_search_falls_back_to_title_when_small_description_has_no_code(
 
     item = backend._normalize_resource({}, {
         "id": "604631",
-        "name": "MIDV-131 10年分の片思い 小野六花",
+        "name": "TEST-022 10年分の片思い 测试演员",
         "smallDescr": "4K",
         "dmmInfo": {"productNumber": "9midv131"},
         "size": "13549681013",
     })
 
     assert item is not None
-    assert item["query_key"] == "MIDV-131"
-    assert item["metadata"]["video_code"] == "MIDV-131"
+    assert item["query_key"] == "TEST-022"
+    assert item["metadata"]["video_code"] == "TEST-022"

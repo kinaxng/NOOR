@@ -114,7 +114,7 @@ async function rebuildIndex() {
               v-model="libraryPaths"
               class="settings-textarea"
               rows="6"
-              placeholder="/volume1/subtitles"
+              placeholder="/mnt/media/subtitles"
             />
           </FieldRow>
 

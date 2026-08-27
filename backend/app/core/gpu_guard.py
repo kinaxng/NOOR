@@ -100,9 +100,8 @@ def _is_noor_process(process: GpuProcess) -> bool:
         return False
     command = f"{process.name} {process.command}"
     markers = (
-        "/home/kinax/noor/",
-        "/home/kinax/noor-restored/",
-        "/home/kinax/.venvs/noor-backend/",
+        "/noor/backend/",
+        "noor-backend",
         "backend/app/pipeline/lada",
         "backend/app/pipeline/facefusion",
         "app.pipeline.whisper",

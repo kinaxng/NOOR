@@ -10,9 +10,9 @@ def _process(pid: int, command: str) -> gpu_guard.GpuProcess:
 
 
 def test_noor_process_protection_marks_restored_tree_without_current_worker():
-    current = _process(gpu_guard.os.getpid(), "/home/kinax/noor-restored/backend/app/tasks/manager.py")
-    restored = _process(1234, "/home/kinax/noor-restored/backend/app/pipeline/lada/worker.py")
-    original = _process(1235, "/home/kinax/noor/backend/app/pipeline/facefusion/runner.py")
+    current = _process(gpu_guard.os.getpid(), "/opt/noor/backend/app/tasks/manager.py")
+    restored = _process(1234, "/srv/noor/backend/app/pipeline/lada/worker.py")
+    original = _process(1235, "/opt/noor/backend/app/pipeline/facefusion/runner.py")
     unrelated = _process(1236, "/usr/bin/python script.py")
 
     assert not gpu_guard._is_noor_process(current)
@@ -22,7 +22,7 @@ def test_noor_process_protection_marks_restored_tree_without_current_worker():
 
 
 def test_ensure_gpu_memory_only_terminates_noor_and_model_service_processes(monkeypatch):
-    noor_proc = _process(1001, "/home/kinax/noor-restored/backend/app/pipeline/lada/worker.py")
+    noor_proc = _process(1001, "/opt/noor/backend/app/pipeline/lada/worker.py")
     service_proc = _process(1002, "/usr/bin/llama-server")
     unrelated_proc = _process(1003, "/usr/bin/vlc")
     initial = gpu_guard.GpuSnapshot(

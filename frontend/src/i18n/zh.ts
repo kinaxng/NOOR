@@ -883,7 +883,7 @@ export const zh: Record<string, string> = {
   'settings.system.indexToggleDesc': '首次扫描后建立索引，后续搜索极快。字幕库很大时开启',
   'settings.system.indexToggleValue': '启用索引',
   'settings.system.fuzzyMatchLabel': '模糊匹配',
-  'settings.system.fuzzyMatchDesc': '关闭时严格匹配作品编号（如 IPX-916）；开启时也匹配相近文件名',
+  'settings.system.fuzzyMatchDesc': '关闭时严格匹配作品编号（如 TEST-030）；开启时也匹配相近文件名',
   'settings.system.fuzzyMatchValue': '模糊匹配',
   'settings.ui.blurDesc': '封面模糊全局总开关；关闭后所有浏览器都不会启用封面模糊',
   'settings.network.proxyDesc': 'HTTP 代理地址；镜像不可用时作为 fallback，再失败则直连',

@@ -8,7 +8,7 @@ import os
 from typing import Any
 
 
-COMMON_ALLOWED_PREFIXES = ("/volume1/", "/mnt/", "/media/")
+COMMON_ALLOWED_PREFIXES = ("/mnt/", "/media/", "/srv/")
 
 
 def is_allowed_directory_path(path: str, settings: Any) -> bool:

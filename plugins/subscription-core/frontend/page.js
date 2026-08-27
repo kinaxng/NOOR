@@ -240,7 +240,7 @@ export async function mount(root, sdk = {}) {
     panel.innerHTML = `
       <div class="sub-panel__head"><strong>${esc(heading)}</strong><span>${esc(hint)}</span></div>
       <div class="sub-form-grid">
-        <label><span>番号</span><input data-field="code" placeholder="DASS-927" value="${esc(state.form.code)}" ${state.editingId ? 'disabled' : ''}></label>
+        <label><span>番号</span><input data-field="code" placeholder="TEST-001" value="${esc(state.form.code)}" ${state.editingId ? 'disabled' : ''}></label>
         <label><span>标题</span><input data-field="title" placeholder="可选" value="${esc(state.form.title)}"></label>
         <label><span>模式</span><select data-field="mode"><option value="loose">宽松订阅</option><option value="strict">严格订阅</option></select></label>
         <div class="sub-checks">

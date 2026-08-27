@@ -883,7 +883,7 @@ export const en: Record<string, string> = {
   'settings.system.indexToggleDesc': 'Build an index after the first scan for much faster searches later. Recommended for large subtitle libraries',
   'settings.system.indexToggleValue': 'Enable indexing',
   'settings.system.fuzzyMatchLabel': 'Fuzzy Match',
-  'settings.system.fuzzyMatchDesc': 'When disabled, codes are matched strictly (for example IPX-916); when enabled, similar filenames are also matched',
+  'settings.system.fuzzyMatchDesc': 'When disabled, codes are matched strictly (for example TEST-030); when enabled, similar filenames are also matched',
   'settings.system.fuzzyMatchValue': 'Fuzzy match',
   'settings.ui.blurDesc': 'Global master switch for cover blur. When disabled, cover blur is off in every browser',
   'settings.network.proxyDesc': 'HTTP proxy address; used as fallback after mirror, then direct connection',

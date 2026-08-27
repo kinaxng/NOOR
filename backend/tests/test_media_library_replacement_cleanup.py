@@ -29,10 +29,10 @@ def test_replacement_cleanup_keeps_distinct_old_file(tmp_path: Path):
 
 
 def test_cleanup_removes_exact_stem_sidecars_but_keeps_new_variant(tmp_path: Path):
-    old_file = tmp_path / "MIDA-727.mp4"
-    old_subtitle = tmp_path / "MIDA-727.zh-CN.srt"
-    new_file = tmp_path / "MIDA-727-U.mp4"
-    new_subtitle = tmp_path / "MIDA-727-U.zh-CN.srt"
+    old_file = tmp_path / "TEST-002.mp4"
+    old_subtitle = tmp_path / "TEST-002.zh-CN.srt"
+    new_file = tmp_path / "TEST-002-U.mp4"
+    new_subtitle = tmp_path / "TEST-002-U.zh-CN.srt"
     for path in (old_file, old_subtitle, new_file, new_subtitle):
         path.write_bytes(b"x")
 

@@ -26,7 +26,7 @@ def test_subscription_qb_completed_task_waits_for_library_import():
     backend = _load_backend()
 
     status = backend._download_stage("qbittorrent", {
-        "name": "MIDA-727",
+        "name": "TEST-002",
         "state": "stoppedUP",
         "progress": 1,
         "save_path": "/downloads/av",
@@ -55,13 +55,13 @@ def test_subscription_xunlei_error_task_is_exposed():
 def test_subscription_does_not_consume_cracked_candidate_for_censored_media():
     backend = _load_backend()
     media = {
-        "name": "MIDA-727",
-        "path": "/media/MIDA-727/MIDA-727.mp4",
+        "name": "TEST-002",
+        "path": "/media/TEST-002/TEST-002.mp4",
         "tags": {"is_cracked": False, "has_chinese": False},
         "subtitle_count": 1,
     }
     resource = {
-        "title": "MIDA-727-U.无码破解.torrent",
+        "title": "TEST-002-U.无码破解.torrent",
         "features": {"is_cracked": True, "has_subtitle": False},
     }
 
@@ -77,7 +77,7 @@ def test_subscription_upgrade_prioritizes_cracked_candidate_over_threshold():
         "current_has_subtitle": True,
     }
     resource = {
-        "title": "MIDA-727-U.无码破解.torrent",
+        "title": "TEST-002-U.无码破解.torrent",
         "features": {"is_cracked": True, "has_subtitle": False},
     }
 
@@ -96,15 +96,15 @@ def test_subscription_submitted_upgrade_waits_while_library_still_has_old_versio
 
 async def _run_submitted_upgrade_waits_while_library_still_has_old_version(monkeypatch):
     backend = _load_backend()
-    old_path = "/media/MIDA-727/MIDA-727.mp4"
+    old_path = "/media/TEST-002/TEST-002.mp4"
     data = {"subscriptions": [{
-        "id": "sub-1", "code": "MIDA-727", "type": "upgrade", "status": "submitted",
+        "id": "sub-1", "code": "TEST-002", "type": "upgrade", "status": "submitted",
         "push_status": "submitted", "current_file_path": old_path,
-        "best_resource": {"resource": {"title": "MIDA-727-U.无码破解.torrent", "features": {"is_cracked": True}}},
+        "best_resource": {"resource": {"title": "TEST-002-U.无码破解.torrent", "features": {"is_cracked": True}}},
     }], "events": []}
 
     async def find_media(*_codes):
-        return {"id": "old", "name": "MIDA-727", "path": old_path, "tags": {"is_cracked": False}}
+        return {"id": "old", "name": "TEST-002", "path": old_path, "tags": {"is_cracked": False}}
 
     monkeypatch.setattr(backend, "_find_media", find_media)
     result = await backend._reconcile_submitted(data)
@@ -120,13 +120,13 @@ def test_subscription_confirmed_upgrade_auto_deletes_old_chain(monkeypatch):
 async def _run_confirmed_upgrade_auto_deletes_old_chain(monkeypatch):
     backend = _load_backend()
     data = {"subscriptions": [{
-        "id": "sub-1", "code": "MIDA-727", "type": "upgrade", "status": "submitted",
-        "push_status": "submitted", "current_file_path": "/media/MIDA-727/MIDA-727.mp4",
-        "best_resource": {"resource": {"title": "MIDA-727-U.无码破解.torrent", "features": {"is_cracked": True}}},
+        "id": "sub-1", "code": "TEST-002", "type": "upgrade", "status": "submitted",
+        "push_status": "submitted", "current_file_path": "/media/TEST-002/TEST-002.mp4",
+        "best_resource": {"resource": {"title": "TEST-002-U.无码破解.torrent", "features": {"is_cracked": True}}},
     }], "events": []}
 
     async def find_media(*_codes):
-        return {"id": "new", "name": "MIDA-727-U", "path": "/media/MIDA-727-U/MIDA-727-U.mp4", "tags": {"is_cracked": True}}
+        return {"id": "new", "name": "TEST-002-U", "path": "/media/TEST-002-U/TEST-002-U.mp4", "tags": {"is_cracked": True}}
 
     calls = []
     monkeypatch.setattr(backend, "_find_media", find_media)
@@ -135,7 +135,7 @@ async def _run_confirmed_upgrade_auto_deletes_old_chain(monkeypatch):
     result = await backend._reconcile_submitted(data)
 
     assert result["confirmed"] == 1
-    assert calls == [("/media/MIDA-727/MIDA-727.mp4", "/media/MIDA-727-U/MIDA-727-U.mp4", "MIDA-727")]
+    assert calls == [("/media/TEST-002/TEST-002.mp4", "/media/TEST-002-U/TEST-002-U.mp4", "TEST-002")]
     assert data["subscriptions"][0]["cleanup_suggestion"]["status"] == "completed"
 
 
@@ -145,13 +145,13 @@ def test_subscription_selects_matching_sibling_variant(monkeypatch):
 
 async def _run_selects_matching_sibling_variant(monkeypatch):
     backend = _load_backend()
-    representative = {"id": "old", "path": "/media/MIDA-727.mp4", "tags": {"is_cracked": False}}
+    representative = {"id": "old", "path": "/media/TEST-002.mp4", "tags": {"is_cracked": False}}
     resource = {"features": {"is_cracked": True}}
 
     async def get_item(_config, _item_id):
         return {
-            "id": "old", "file_path": "/media/MIDA-727.mp4", "tags": {"is_cracked": False},
-            "siblings": [{"id": "new", "file_path": "/media/MIDA-727-破解.mp4", "tags": {"is_cracked": True}}],
+            "id": "old", "file_path": "/media/TEST-002.mp4", "tags": {"is_cracked": False},
+            "siblings": [{"id": "new", "file_path": "/media/TEST-002-破解.mp4", "tags": {"is_cracked": True}}],
         }
 
     from app.api.endpoints import media_library
@@ -160,7 +160,7 @@ async def _run_selects_matching_sibling_variant(monkeypatch):
     selected = await backend._select_imported_variant(representative, resource, representative["path"])
 
     assert selected["id"] == "new"
-    assert selected["path"] == "/media/MIDA-727-破解.mp4"
+    assert selected["path"] == "/media/TEST-002-破解.mp4"
 
 
 def test_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_path):
@@ -172,7 +172,7 @@ async def _run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_p
     data_file = tmp_path / "subscriptions.json"
     data_file.write_text(json.dumps({
         "version": 1,
-        "subscriptions": [{"id": "sub-1", "code": "MIDA-669", "status": "active", "title": "测试"}],
+        "subscriptions": [{"id": "sub-1", "code": "TEST-001", "status": "active", "title": "测试"}],
         "events": [],
     }), encoding="utf-8")
     monkeypatch.setattr(backend, "_data_file", lambda: data_file)
@@ -183,11 +183,11 @@ async def _run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_p
 
         async def handle_action(self, plugin_id, action, payload):
             assert (plugin_id, action) == ("javdb", "video")
-            assert payload == {"code": "MIDA-669", "refresh": True}
+            assert payload == {"code": "TEST-001", "refresh": True}
             return {"data": {
-                "cover_url": "https://cdn.test/MIDA-669.jpg",
-                "thumb_url": "https://cdn.test/MIDA-669-thumb.jpg",
-                "preview_images": ["https://cdn.test/MIDA-669-preview.jpg"],
+                "cover_url": "https://cdn.test/TEST-001.jpg",
+                "thumb_url": "https://cdn.test/TEST-001-thumb.jpg",
+                "preview_images": ["https://cdn.test/TEST-001-preview.jpg"],
             }}
 
     import app.plugins.runtime as runtime_module
@@ -196,9 +196,9 @@ async def _run_subscription_refresh_cover_persists_candidates(monkeypatch, tmp_p
     result = await backend.handle_action("refresh_cover", {"id": "sub-1"}, {})
 
     assert result["image_candidates"] == [
-        "https://cdn.test/MIDA-669.jpg",
-        "https://cdn.test/MIDA-669-thumb.jpg",
-        "https://cdn.test/MIDA-669-preview.jpg",
+        "https://cdn.test/TEST-001.jpg",
+        "https://cdn.test/TEST-001-thumb.jpg",
+        "https://cdn.test/TEST-001-preview.jpg",
     ]
     saved = json.loads(data_file.read_text(encoding="utf-8"))["subscriptions"][0]
     assert saved["title"] == "测试"

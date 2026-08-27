@@ -24,3 +24,7 @@ data/runtime/
 data/plugins_market_repos.json
 forensics/raw-*.ext4.img
 forensics/raw-mnt/
+AGENTS.md
+HANDOFF.md
+RECOVERY.md
+DOCKER.md

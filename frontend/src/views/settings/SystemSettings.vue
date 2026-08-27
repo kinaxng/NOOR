@@ -296,7 +296,7 @@ function toggleLibrary(libId: string) {
           </FieldRow>
 
           <FieldRow :label="t('settings.emby.mdcNgActorMappingPath')" :description="t('settings.emby.mdcNgActorMappingPathDesc')">
-            <input v-model="mdcNgActorMappingPath" type="text" placeholder="/home/kinax/dsm/docker/mdc-ng" class="settings-input" />
+            <input v-model="mdcNgActorMappingPath" type="text" placeholder="/mnt/apps/mdc-ng" class="settings-input" />
           </FieldRow>
 
           <!-- Test Connection -->

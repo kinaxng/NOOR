@@ -614,7 +614,7 @@ onUnmounted(() => {
       </div>
       <form class="resource-search-box" @submit.prevent="submit">
         <BaseIcon name="search" class="resource-search-box__icon" />
-        <input v-model="query" placeholder="输入番号或标题，例如 DASS-927" />
+        <input v-model="query" placeholder="输入番号或标题，例如 TEST-001" />
         <button type="submit">搜索</button>
       </form>
     </header>

@@ -30,7 +30,6 @@ def test_is_ollama_url_detects_local_and_ollama_endpoints():
     assert _is_ollama_url("http://localhost:11434/v1")
     assert _is_ollama_url("http://ollama:11434/v1/chat")
     assert _is_ollama_url("http://127.0.0.1:11434/v1")
-    assert _is_ollama_url("http://192.168.31.10:11434/v1")
     assert _is_ollama_url("http://10.0.0.8:11434/v1")
     assert not _is_ollama_url("https://api.openai.com/v1")
     assert not _is_ollama_url("https://api.example.com/v1")
@@ -88,13 +87,13 @@ def test_translate_batch_posts_to_resolved_chat_endpoint(monkeypatch):
 
     translator = OpenAILikeTranslator(
         model="test-model",
-        base_url="http://192.168.31.3:11434/v1/chat/completions",
+        base_url="http://10.0.0.8:11434/v1/chat/completions",
         api_key="test-key",
         translate_style="standard",
     )
     result = translator.translate_batch(["こんにちは", "今日はいい天気ですね"], "zh")
 
-    assert captured["url"] == "http://192.168.31.3:11434/v1/chat/completions"
+    assert captured["url"] == "http://10.0.0.8:11434/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer test-key"
     assert captured["json"]["model"] == "test-model"
     assert captured["json"]["thinking"] is False

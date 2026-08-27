@@ -27,7 +27,7 @@ def test_local_subtitle_plugin_owns_index_search_and_status(tmp_path: Path, monk
     handler = _handler()
     library = tmp_path / "library"
     library.mkdir()
-    (library / "PRED-878.zh.srt").write_text("subtitle", encoding="utf-8")
+    (library / "TEST-004.zh.srt").write_text("subtitle", encoding="utf-8")
     plugin_data = tmp_path / "plugin-data"
     legacy_data = tmp_path / "legacy-data"
     monkeypatch.setattr(handler, "plugin_data_path", lambda _plugin_id, *parts: plugin_data.joinpath(*parts))
@@ -36,7 +36,7 @@ def test_local_subtitle_plugin_owns_index_search_and_status(tmp_path: Path, monk
 
     rebuilt = asyncio.run(handler.handle_action("rebuild_index", config, {}))
     status = asyncio.run(handler.handle_action("index_status", config, {}))
-    results = asyncio.run(handler.search_subtitles(config, "PRED-878"))
+    results = asyncio.run(handler.search_subtitles(config, "TEST-004"))
 
     assert rebuilt["indexed_files"] == 1
     assert status["index_exists"] is True

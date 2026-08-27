@@ -16,8 +16,8 @@ def _load_backend():
 def test_javdb_crack_tags_ignore_title_only_keywords():
     backend = _load_backend()
 
-    assert backend._is_cracked_movie({"title": "MIDA-669 無碼破解"}) is False
-    assert backend._detail_is_cracked({"title": "MIDA-669 無碼破解"}) is False
+    assert backend._is_cracked_movie({"title": "TEST-001 無碼破解"}) is False
+    assert backend._detail_is_cracked({"title": "TEST-001 無碼破解"}) is False
 
 
 def test_javdb_crack_tags_accept_explicit_and_resource_signals():
@@ -25,4 +25,4 @@ def test_javdb_crack_tags_accept_explicit_and_resource_signals():
 
     assert backend._is_cracked_movie({"tags": ["破解版"]}) is True
     assert backend._detail_is_cracked({"is_cracked": True}) is True
-    assert backend._detail_is_cracked({"magnets": [{"name": "MIDA-669 破解版"}]}) is True
+    assert backend._detail_is_cracked({"magnets": [{"name": "TEST-001 破解版"}]}) is True

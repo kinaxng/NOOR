@@ -69,13 +69,13 @@ def test_media_library_item_codes_include_provider_and_nfo_values():
 
     codes = backend._media_library_item_codes({
         "name": "无码破解标题不应作为唯一依据",
-        "provider_ids": {"Javdb": "DLDSS-498"},
-        "nfo": {"num": "mida669"},
+        "provider_ids": {"Javdb": "TEST-027"},
+        "nfo": {"num": "test001"},
         "siblings": [{"label": "ABCD-123-facefusion.mp4"}],
     })
 
-    assert "DLDSS-498" in codes
-    assert "MIDA-669" in codes
+    assert "TEST-027" in codes
+    assert "TEST-001" in codes
     assert "ABCD-123" in codes
 
 
@@ -90,9 +90,9 @@ def test_live_library_codes_warns_without_recovery_fallback(monkeypatch):
 def test_recommend_crack_signal_ignores_title_only_keywords():
     backend = _load_backend()
 
-    assert backend._detail_has_cracked_signal({"title": "MIDA-669 無碼破解"}) is False
-    assert backend._detail_has_cracked_signal({"magnets": [{"name": "MIDA-669 破解版"}]}) is True
-    assert backend._detail_has_cracked_signal({"is_cracked": True, "title": "MIDA-669"}) is True
+    assert backend._detail_has_cracked_signal({"title": "TEST-001 無碼破解"}) is False
+    assert backend._detail_has_cracked_signal({"magnets": [{"name": "TEST-001 破解版"}]}) is True
+    assert backend._detail_has_cracked_signal({"is_cracked": True, "title": "TEST-001"}) is True
 
 
 def test_recommendation_controls_filter_confidence_and_explore():
@@ -119,8 +119,8 @@ def test_candidate_score_sanitizes_dict_string_relations_and_uses_recommendation
     backend = _load_backend()
 
     item = {
-        "code": "DVAJ-752",
-        "title": "DVAJ-752",
+        "code": "TEST-028",
+        "title": "TEST-028",
         "maker": "{'external_id': 'J2x', 'name': 'アリスJAPAN'}",
         "series": "[{'external_id': 'S1', 'name': 'アリス'}]",
         "director": "{'name': '矢澤レシーブ'}",
@@ -214,14 +214,14 @@ def test_candidate_pool_requests_respects_source_toggles():
 def test_resource_features_separate_uncensored_from_cracked():
     backend = _load_backend()
 
-    uncensored = backend._resource_features({"title": "MIDA-669 無碼"})
+    uncensored = backend._resource_features({"title": "TEST-001 無碼"})
     assert uncensored["is_uncensored"] is True
     assert uncensored["is_cracked"] is False
 
-    cracked = backend._resource_features({"title": "MIDA-669 無碼破解"})
+    cracked = backend._resource_features({"title": "TEST-001 無碼破解"})
     assert cracked["is_cracked"] is True
 
-    leaked = backend._resource_features({"title": "MIDA-669 uncensored leak"})
+    leaked = backend._resource_features({"title": "TEST-001 uncensored leak"})
     assert leaked["is_cracked"] is True
 
 
@@ -262,11 +262,11 @@ async def _run_recommendations_exclude_library_and_subscription_codes(monkeypatc
 
     async def fake_live_library_codes(config, *, force=False):
         assert force is True
-        return {"MIDA-669"}, ""
+        return {"TEST-001"}, ""
 
     async def fake_javdb_candidates(config):
         return [
-            {"code": "MIDA-669", "title": "MIDA-669 邻居", "actors": ["测试演员"], "categories": ["邻居"], "magnets_count": 3},
+            {"code": "TEST-001", "title": "TEST-001 邻居", "actors": ["测试演员"], "categories": ["邻居"], "magnets_count": 3},
             {"code": "ABCD-123", "title": "ABCD-123 邻居", "actors": ["测试演员"], "categories": ["邻居"], "magnets_count": 3},
             {"code": "EFGH-456", "title": "EFGH-456 邻居", "actors": ["测试演员"], "categories": ["邻居"], "magnets_count": 3},
         ], []
@@ -305,7 +305,7 @@ async def _run_live_library_codes_prefers_original_media_library_adapter(monkeyp
     async def fake_list_items(config, library_id, limit=50, offset=0, filter=None, q=None, force_refresh=False):
         assert library_id == "3"
         assert force_refresh is True
-        return [{"provider_ids": {"Javdb": "MIDA-669"}}], 1
+        return [{"provider_ids": {"Javdb": "TEST-001"}}], 1
 
     monkeypatch.setattr(media_library, "_list_libraries", fake_list_libraries)
     monkeypatch.setattr(media_library, "_list_items", fake_list_items)
@@ -316,7 +316,7 @@ async def _run_live_library_codes_prefers_original_media_library_adapter(monkeyp
 
     codes, warning = await backend._live_library_codes({"library_exclusion_scan_limit": 100}, force=True)
 
-    assert codes == {"MIDA-669"}
+    assert codes == {"TEST-001"}
     assert warning == ""
 
 
@@ -365,7 +365,7 @@ async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
             return {
                 "items": [
                     {"code": "ABCD-123", "title": "测试标题"},
-                    {"number": "MIDA669", "display_title": "MIDA-669 测试标题"},
+                    {"number": "TEST001", "display_title": "TEST-001 测试标题"},
                 ]
             }
 
@@ -377,7 +377,7 @@ async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
 
     assert result["ok"] is True
     pool = backend._pool()
-    assert set(pool["items"]) == {"ABCD-123", "MIDA-669"}
+    assert set(pool["items"]) == {"ABCD-123", "TEST-001"}
 
 
 async def _run_recommendation_cache_key_includes_requested_limit(monkeypatch, tmp_path):
@@ -524,7 +524,7 @@ async def _run_candidate_pool_scan_enriches_detail_metadata(monkeypatch, tmp_pat
 async def _run_refresh_candidate_cover_persists_candidates(monkeypatch, tmp_path):
     backend = _load_backend()
     pool_path = tmp_path / "candidate_pool.json"
-    pool_path.write_text('{"items":{"MIDA-669":{"code":"MIDA-669","title":"测试"}}}', encoding="utf-8")
+    pool_path.write_text('{"items":{"TEST-001":{"code":"TEST-001","title":"测试"}}}', encoding="utf-8")
     monkeypatch.setattr(backend, "_pool_path", lambda: pool_path)
 
     class FakeRuntime:
@@ -533,26 +533,26 @@ async def _run_refresh_candidate_cover_persists_candidates(monkeypatch, tmp_path
 
         async def handle_action(self, plugin_id, action, payload):
             assert (plugin_id, action) == ("javdb", "video")
-            assert payload == {"code": "MIDA-669", "refresh": True}
+            assert payload == {"code": "TEST-001", "refresh": True}
             return {
                 "data": {
-                    "cover_url": "https://cdn.test/MIDA-669.jpg",
-                    "thumb_url": "https://cdn.test/MIDA-669-thumb.jpg",
-                    "preview_images": ["https://cdn.test/MIDA-669-preview.jpg"],
+                    "cover_url": "https://cdn.test/TEST-001.jpg",
+                    "thumb_url": "https://cdn.test/TEST-001-thumb.jpg",
+                    "preview_images": ["https://cdn.test/TEST-001-preview.jpg"],
                 }
             }
 
     import app.plugins.runtime as runtime_module
 
     monkeypatch.setattr(runtime_module, "runtime", FakeRuntime())
-    result = await backend._refresh_candidate_cover("mida669")
+    result = await backend._refresh_candidate_cover("test001")
 
     assert result["image_candidates"] == [
-        "https://cdn.test/MIDA-669.jpg",
-        "https://cdn.test/MIDA-669-thumb.jpg",
-        "https://cdn.test/MIDA-669-preview.jpg",
+        "https://cdn.test/TEST-001.jpg",
+        "https://cdn.test/TEST-001-thumb.jpg",
+        "https://cdn.test/TEST-001-preview.jpg",
     ]
-    saved = backend._pool()["items"]["MIDA-669"]
+    saved = backend._pool()["items"]["TEST-001"]
     assert saved["image_candidates"] == result["image_candidates"]
     assert saved["title"] == "测试"
     assert saved["cover_refreshed_at"]
@@ -562,37 +562,37 @@ def test_dedupe_recommendations_drops_same_normalized_code() -> None:
     backend = _load_backend()
 
     items = [
-        {"code": "MIDA-727", "title": "MIDA-727", "score": 98},
-        {"code": "MIDA-727", "id": "DRX262", "title": "MIDA-727", "score": 91},
-        {"code": "MIDA-728", "title": "MIDA-728", "score": 81},
-        {"code": "FC2-PPV-1844862", "title": "FC2", "score": 80},
-        {"code": "FC2-1844862", "title": "FC2", "score": 79},
+        {"code": "TEST-002", "title": "TEST-002", "score": 98},
+        {"code": "TEST-002", "id": "DRX262", "title": "TEST-002", "score": 91},
+        {"code": "TEST-003", "title": "TEST-003", "score": 81},
+        {"code": "FC2-PPV-1000000", "title": "FC2", "score": 80},
+        {"code": "FC2-1000000", "title": "FC2", "score": 79},
     ]
 
     deduped = backend._dedupe_recommendations(items)
 
-    assert [item["code"] for item in deduped] == ["MIDA-727", "MIDA-728", "FC2-PPV-1844862"]
+    assert [item["code"] for item in deduped] == ["TEST-002", "TEST-003", "FC2-PPV-1000000"]
 
 
 def test_media_item_codes_extract_emby_cache_codes() -> None:
     backend = _load_backend()
 
     codes = backend._media_item_codes({
-        "name": "DVAJ-727-C.mp4",
-        "path": "/media/DVAJ-727/DVAJ-727-C.mp4",
-        "nfo": {"num": "mida669", "originaltitle": "MIDA-669"},
+        "name": "TEST-013-C.mp4",
+        "path": "/media/TEST-013/TEST-013-C.mp4",
+        "nfo": {"num": "test001", "originaltitle": "TEST-001"},
     })
 
-    assert codes == {"DVAJ-727", "MIDA-669"}
+    assert codes == {"TEST-013", "TEST-001"}
 
 
 def test_filtered_summary_groups_reasons_and_examples() -> None:
     backend = _load_backend()
 
     diagnostics: list[dict[str, str]] = []
-    backend._record_filter(diagnostics, {"code": "MIDA-669", "title": "MIDA-669"}, "MIDA-669", "missing_code", "候选缺少可识别番号")
-    backend._record_filter(diagnostics, {"code": "MIDA-669", "title": "MIDA-669"}, "MIDA-669", "ignored", "用户已忽略")
-    backend._record_filter(diagnostics, {"code": "MIDA-669", "title": "MIDA-669"}, "MIDA-669", "ignored", "用户已忽略")
+    backend._record_filter(diagnostics, {"code": "TEST-001", "title": "TEST-001"}, "TEST-001", "missing_code", "候选缺少可识别番号")
+    backend._record_filter(diagnostics, {"code": "TEST-001", "title": "TEST-001"}, "TEST-001", "ignored", "用户已忽略")
+    backend._record_filter(diagnostics, {"code": "TEST-001", "title": "TEST-001"}, "TEST-001", "ignored", "用户已忽略")
 
     summary = backend._filtered_summary(diagnostics)
 

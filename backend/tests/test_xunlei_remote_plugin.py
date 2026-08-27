@@ -93,10 +93,10 @@ def test_delete_residual_rejects_outside_root(tmp_path):
 
 
 def test_explicit_savepath_fails_closed_when_unknown():
-    config = {"savepath": "/volume1/data/downloads/av/"}
+    config = {"savepath": "/mnt/data/downloads/av/"}
     client = FakeClient(paths=[])
     with pytest.raises(ValueError, match="迅雷保存路径无法解析"):
-        asyncio.run(xunlei_backend._require_parent_folder_id_for_explicit_savepath(config, client, "pan-auth", "/volume1/data/downloads/av/"))
+        asyncio.run(xunlei_backend._require_parent_folder_id_for_explicit_savepath(config, client, "pan-auth", "/mnt/data/downloads/av/"))
 
 
 def test_plugin_json_only_exposes_nas_and_auto_speed_schema():

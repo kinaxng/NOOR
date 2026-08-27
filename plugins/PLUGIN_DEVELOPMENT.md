@@ -192,7 +192,7 @@ async def search_subtitles(config: dict, video_code: str) -> list[dict]:
 ```json
 {
   "id": "stable-result-id",
-  "filename": "GARA-016.zh.srt",
+  "filename": "TEST-031.zh.srt",
   "ext": ".srt",
   "language": "中文",
   "source": "M-Team",
@@ -332,7 +332,7 @@ NOOR 官方内置插件 `subscription-core` 负责订阅与洗版能力。内容
 ```js
 await sdk.api.post('/plugins/subscription-core/actions/create', {
   payload: {
-    code: 'DLDSS-498',
+    code: 'TEST-027',
     title: '作品标题',
     cover_url: 'https://...',
     type: 'auto',              // auto: 媒体库已有则洗版，否则订阅

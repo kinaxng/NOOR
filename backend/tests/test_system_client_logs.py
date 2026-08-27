@@ -49,17 +49,17 @@ def test_legacy_emby_webhook_invalidates_media_library_cache():
     response = client.post(
         "/api/webhooks/emby",
         json={"Event": "Library.New", "Item": {"Name": "Webhook Test"}},
-        headers={"X-Forwarded-For": "192.168.31.10"},
+        headers={"X-Forwarded-For": "192.0.2.10"},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
-    assert payload["source"] == "192.168.31.10"
+    assert payload["source"] == "192.0.2.10"
     assert payload["summary"] == "Library.New: Webhook Test"
     assert payload["sync_state"]["version"] == before + 1
     assert payload["sync_state"]["last_webhook_at"]
 
     logs = client.get("/api/system/logs", params={"tail": 1}).json()["logs"]
-    assert logs[-1]["source"] == "Emby · 192.168.31.10"
+    assert logs[-1]["source"] == "Emby · 192.0.2.10"
     assert "Webhook Test" in logs[-1]["message"]

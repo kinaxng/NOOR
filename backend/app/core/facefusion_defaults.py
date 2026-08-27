@@ -14,9 +14,9 @@ from app.core.runtime_paths import data_path
 FACEFUSION_DEFAULTS: dict[str, Any] = {
     "facefusion_dir": "",
     "facefusion_python_path": "",
-    "facefusion_model_dir": "/volume1/models/noor/facefusion",
-    "facefusion_cache_dir": "/volume1/models/noor-runtime/facefusion/cache",
-    "facefusion_temp_dir": "/volume1/models/noor-runtime/facefusion/temp",
+    "facefusion_model_dir": "",
+    "facefusion_cache_dir": "",
+    "facefusion_temp_dir": "",
     "facefusion_execution_provider": "cuda",
     "facefusion_device_ids": "0",
     "facefusion_processors": "face_swapper",

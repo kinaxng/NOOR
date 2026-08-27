@@ -9,7 +9,7 @@ from app.core.config import PROJECT_ROOT
 from app.core.runtime_paths import ensure_directory
 
 
-LEGACY_EXTERNAL_FACEFUSION_DIR = "/volume1/facefusion/facefusion"
+LEGACY_EXTERNAL_FACEFUSION_DIR = "__legacy_external_facefusion__"
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,11 @@ def normalize_configured_facefusion_dir(value: str | None) -> str:
     # into NOOR.  Once the embedded source exists, treat that legacy value as
     # "use the built-in source" so old settings do not keep routing jobs to the
     # host project by accident.
-    if configured == LEGACY_EXTERNAL_FACEFUSION_DIR and resolve_embedded_facefusion_source() is not None:
+    is_legacy_external = (
+        configured == LEGACY_EXTERNAL_FACEFUSION_DIR
+        or configured.endswith("/facefusion/facefusion")
+    )
+    if is_legacy_external and resolve_embedded_facefusion_source() is not None:
         return ""
     return configured
 

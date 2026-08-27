@@ -18,22 +18,22 @@ from app.api.endpoints.media_library_hardlinks import (
 
 
 def test_version_marked_stem_normalizes_terminal_markers():
-    assert version_marked_stem_impl('SNIS-063', '破解') == 'SNIS-063-破解'
-    assert version_marked_stem_impl('SNIS-063-U', 'C') == 'SNIS-063-C'
-    assert version_marked_stem_impl('SNIS-063-C1', '破解-C') == 'SNIS-063-破解-C'
-    assert version_marked_stem_impl('MXGS-146-破解-U', '') == 'MXGS-146'
+    assert version_marked_stem_impl('TEST-005', '破解') == 'TEST-005-破解'
+    assert version_marked_stem_impl('TEST-005-U', 'C') == 'TEST-005-C'
+    assert version_marked_stem_impl('TEST-005-C1', '破解-C') == 'TEST-005-破解-C'
+    assert version_marked_stem_impl('TEST-006-破解-U', '') == 'TEST-006'
 
 
 def test_rename_hardlink_path_moves_matching_sidecars(tmp_path: Path):
     root = tmp_path / 'media'; root.mkdir()
-    video = root / 'SNIS-063-C.mp4'; nfo = root / 'SNIS-063-C.nfo'; subtitle = root / 'SNIS-063-C.chs.srt'
+    video = root / 'TEST-005-C.mp4'; nfo = root / 'TEST-005-C.nfo'; subtitle = root / 'TEST-005-C.chs.srt'
     video.write_bytes(b'video'); nfo.write_text('full nfo'); subtitle.write_text('subtitle')
 
-    new_path, _ = rename_hardlink_path_impl(str(video), 'SNIS-063-破解-C', allowed_roots=[root], groups=[])
+    new_path, _ = rename_hardlink_path_impl(str(video), 'TEST-005-破解-C', allowed_roots=[root], groups=[])
 
-    assert new_path == str(root / 'SNIS-063-破解-C.mp4')
-    assert (root / 'SNIS-063-破解-C.nfo').read_text() == 'full nfo'
-    assert (root / 'SNIS-063-破解-C.chs.srt').read_text() == 'subtitle'
+    assert new_path == str(root / 'TEST-005-破解-C.mp4')
+    assert (root / 'TEST-005-破解-C.nfo').read_text() == 'full nfo'
+    assert (root / 'TEST-005-破解-C.chs.srt').read_text() == 'subtitle'
 
 
 def test_rename_hardlink_path_preserves_suffix_and_updates_cached_path(tmp_path: Path):
@@ -169,7 +169,7 @@ def test_scan_single_group_includes_source_only_entries(tmp_path: Path):
     source_root.mkdir()
     hardlink_root.mkdir()
 
-    source_only = source_root / 'SSNI-217.mp4'
+    source_only = source_root / 'TEST-024.mp4'
     source_only.write_text('video')
 
     pairs = scan_single_group_impl(
@@ -188,14 +188,14 @@ async def test_build_hardlink_groups_uses_source_path_for_source_only_entries():
     payload = await build_hardlink_groups_impl(
         {'scan_groups': [{'source_dir': '/source', 'hardlink_dir': '/hardlinks'}]},
         scan_single_group_fn=lambda _source, _hardlink: [
-            {'source_path': '/source/SSNI-217/SSNI-217.mp4', 'hardlink_paths': []},
+            {'source_path': '/source/TEST-024/TEST-024.mp4', 'hardlink_paths': []},
         ],
-        extract_code_from_path_fn=lambda path: 'SSNI-217' if path and 'SSNI-217' in path else 'N/A',
+        extract_code_from_path_fn=lambda path: 'TEST-024' if path and 'TEST-024' in path else 'N/A',
     )
 
     assert payload == [
         {
-            'code': 'SSNI-217',
-            'entries': [{'source_path': '/source/SSNI-217/SSNI-217.mp4', 'hardlink_paths': []}],
+            'code': 'TEST-024',
+            'entries': [{'source_path': '/source/TEST-024/TEST-024.mp4', 'hardlink_paths': []}],
         }
     ]

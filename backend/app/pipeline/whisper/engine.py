@@ -157,7 +157,7 @@ class AnimeWhisperProcessor:
         import os
         from app.core.config import get_settings
         settings = get_settings()
-        whisper_model_dir = settings.whisper_model_dir or "/volume1/models"
+        whisper_model_dir = settings.whisper_model_dir or str(Path.home() / ".cache" / "huggingface")
         os.environ["HF_HOME"] = whisper_model_dir
         os.environ["TRANSFORMERS_CACHE"] = whisper_model_dir
         settings.apply_network_env()

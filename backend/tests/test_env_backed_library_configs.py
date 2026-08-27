@@ -110,7 +110,7 @@ def test_subtitle_index_migrates_strongest_legacy_database(monkeypatch: pytest.M
     conn = sqlite3.connect(legacy)
     try:
         conn.execute("create table subtitle_index (id integer primary key, base_name text, full_path text, ext text, updated_at real)")
-        conn.execute("insert into subtitle_index (base_name, full_path, ext, updated_at) values ('DASS-927', '/legacy/DASS-927.srt', 'srt', 1)")
+        conn.execute("insert into subtitle_index (base_name, full_path, ext, updated_at) values ('TEST-009', '/legacy/TEST-009.srt', 'srt', 1)")
         conn.commit()
     finally:
         conn.close()

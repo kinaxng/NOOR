@@ -24,12 +24,12 @@
     "base_url": {
       "type": "string",
       "label": "JavDB 地址",
-      "placeholder": "http://192.168.31.10:9090"
+      "placeholder": "http://localhost:9090"
     },
     "api_key": {
       "type": "password",
       "label": "API Key / 密码",
-      "placeholder": "X-API-Key，例如 7272526"
+      "placeholder": "X-API-Key，例如 your-api-key"
     },
     "downloader_binding": {
       "type": "select",
@@ -84,7 +84,7 @@
     }
   },
   "default_config": {
-    "base_url": "http://192.168.31.10:9090",
+    "base_url": "http://localhost:9090",
     "api_key": "",
     "downloader_binding": [],
     "default_downloader": "none",

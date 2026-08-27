@@ -19,7 +19,7 @@
     "base_url": {
       "type": "string",
       "label": "MDC-NG 地址",
-      "placeholder": "http://192.168.31.10:9208"
+      "placeholder": "http://localhost:9208"
     },
     "cookie": {
       "type": "textarea",
@@ -37,21 +37,21 @@
     "local_source_prefix": {
       "type": "string",
       "label": "NOOR 本机源路径前缀",
-      "placeholder": "/home/kinax/Videos/downloads/av"
+      "placeholder": "/mnt/media/downloads"
     },
     "mdc_source_prefix": {
       "type": "string",
       "label": "MDC-NG 可见源路径前缀",
-      "placeholder": "/data/downloads/av"
+      "placeholder": "/data/downloads"
     },
     "source_path_mappings": {
       "type": "textarea",
       "label": "高级路径映射",
-      "placeholder": "/home/kinax/Videos/downloads/av => /data/downloads/av\n/mnt/downloads => /data/downloads"
+      "placeholder": "/mnt/media/downloads => /data/downloads"
     }
   },
   "default_config": {
-    "base_url": "http://192.168.31.10:9208",
+    "base_url": "http://localhost:9208",
     "cookie": "",
     "timeout": 20,
     "local_source_prefix": "",

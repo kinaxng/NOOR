@@ -30,7 +30,7 @@ def test_legacy_api_key_remains_supported() -> None:
 def test_resource_features_are_detected_from_title_when_tags_are_empty() -> None:
     item = _backend()._normalize({
         "id": 1,
-        "title": "PRED-878 [无码破解] 中文字幕",
+        "title": "TEST-004 [无码破解] 中文字幕",
         "download_url": "https://avdb.test/torrent/1",
         "tags": [],
     }, 0)

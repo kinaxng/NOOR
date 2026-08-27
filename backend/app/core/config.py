@@ -26,7 +26,7 @@ DEFAULT_NOOR_DATA_DIR = str(PROJECT_ROOT / "data")
 WHISPER_MODEL_DIR = Path(
     os.environ.get("WHISPER_MODEL_DIR", str(Path.home() / ".cache" / "huggingface"))
 )
-DEFAULT_LADA_MODEL_WEIGHTS_DIR = "/volume1/models/lada_model_weights"
+DEFAULT_LADA_MODEL_WEIGHTS_DIR = str(PROJECT_ROOT / "data" / "models" / "lada")
 DEFAULT_FACEFUSION_DIR = ""
 
 def _normalize_github_mirror_instead_of_prefix(mirror: str) -> str:

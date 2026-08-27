@@ -36,7 +36,7 @@ def test_facefusion_legacy_percentage_weights_are_normalized(monkeypatch, tmp_pa
 def test_facefusion_legacy_saved_dir_is_normalized(monkeypatch, tmp_path):
     settings_path = tmp_path / "facefusion_settings.json"
     settings_path.write_text(
-        '{"facefusion_dir": "/volume1/facefusion/facefusion"}',
+        '{"facefusion_dir": "/mnt/facefusion/facefusion"}',
         encoding="utf-8",
     )
     monkeypatch.setattr(facefusion_defaults, "_settings_path", lambda: settings_path)
