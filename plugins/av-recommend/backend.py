@@ -38,13 +38,73 @@ def _title_profile_file() -> Path:
     return plugin_data_path("av-recommend", "title_profile.json")
 
 
+def _recommendation_cache_file() -> Path:
+    return plugin_data_path("av-recommend", "recommendations_cache.json")
+
+
 TITLE_PROFILE_VERSION = 2
-CACHE_TTL = 300
-_CACHE: dict[str, Any] = {"ts": 0, "key": "", "value": None}
+DEFAULT_CACHE_TTL = 1800
+_CACHE: dict[str, Any] = {"entries": {}}
 _LIVE_LIBRARY_CODES_CACHE: dict[str, Any] = {"ts": 0.0, "key": "", "codes": set(), "warning": ""}
 _pool_lock = asyncio.Lock()
 _scheduler_task: asyncio.Task[None] | None = None
 _scheduler_stop: asyncio.Event | None = None
+
+
+def _recommendation_cache_id(cache_key: str) -> str:
+    return hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
+
+
+def _load_recommendation_cache() -> dict[str, Any]:
+    path = _recommendation_cache_file()
+    if not path.exists():
+        return {"version": 1, "entries": {}}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("entries"), dict):
+            return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {"version": 1, "entries": {}}
+
+
+def _recommendation_cache_get(cache_key: str, ttl_seconds: int = DEFAULT_CACHE_TTL) -> dict[str, Any] | None:
+    cache_id = _recommendation_cache_id(cache_key)
+    entries = _CACHE.setdefault("entries", {})
+    entry = entries.get(cache_id)
+    if not isinstance(entry, dict):
+        entry = _load_recommendation_cache().get("entries", {}).get(cache_id)
+        if isinstance(entry, dict):
+            entries[cache_id] = entry
+    if not isinstance(entry, dict):
+        return None
+    if time.time() - float(entry.get("ts") or 0) >= ttl_seconds:
+        entries.pop(cache_id, None)
+        return None
+    value = entry.get("value")
+    return value if isinstance(value, dict) else None
+
+
+def _recommendation_cache_put(cache_key: str, value: dict[str, Any]) -> None:
+    cache_id = _recommendation_cache_id(cache_key)
+    data = _load_recommendation_cache()
+    entries = data.setdefault("entries", {})
+    entries[cache_id] = {"ts": time.time(), "value": value}
+    data["entries"] = dict(
+        sorted(entries.items(), key=lambda item: float((item[1] or {}).get("ts") or 0), reverse=True)[:8]
+    )
+    path = _recommendation_cache_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(f"{path.suffix}.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+    _CACHE["entries"] = dict(data["entries"])
+
+
+def _invalidate_recommendation_cache() -> None:
+    _CACHE["entries"] = {}
+    with contextlib.suppress(OSError):
+        _recommendation_cache_file().unlink()
 
 CODE_RE = re.compile(r"\b(FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,8}[-_ ]?\d{2,7}|\d{6}[-_]\d{2,5})\b", re.I)
 GENERIC_CATEGORY_KEYWORDS = (
@@ -1258,7 +1318,7 @@ async def _scan_candidate_pool(config: dict[str, Any], *, force: bool = False) -
             pool["last_full_scan"] = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), "pages": pages, "scanned": scanned, "added": added, "updated": updated, "detail_updated": detail_updated, "warnings": warnings[:8]}
             pool["background"] = {**(pool.get("background") or {}), "running": False, "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(), "last_error": "", "last_added": added, "last_scanned": scanned, "last_detail_updated": detail_updated}
             _save_pool(pool)
-            _CACHE["value"] = None
+            _invalidate_recommendation_cache()
             return {"ok": True, "scanned": scanned, "added": added, "updated": updated, "detail_updated": detail_updated, "warnings": warnings, "pool": _candidate_pool_stats(pool)}
     except asyncio.CancelledError:
         raise
@@ -1305,7 +1365,7 @@ async def _refresh_candidate_cover(code_value: Any) -> dict[str, Any]:
         pool_items[code] = item
         pool["items"] = pool_items
         _save_pool(pool)
-    _CACHE["value"] = None
+    _invalidate_recommendation_cache()
     return {
         "ok": True,
         "code": code,
@@ -1983,8 +2043,11 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         "source_mode": source_mode,
         "requested_limit": requested_limit,
     }, sort_keys=True, ensure_ascii=False)
-    if not payload.get("refresh") and _CACHE.get("value") is not None and _CACHE.get("key") == cache_key and time.time() - float(_CACHE.get("ts") or 0) < CACHE_TTL:
-        return _CACHE["value"]
+    cache_ttl = int(_config_number(config, "recommendation_cache_minutes", 30, 5, 1440) * 60)
+    if not payload.get("refresh"):
+        cached = _recommendation_cache_get(cache_key, cache_ttl)
+        if cached is not None:
+            return cached
 
     pool = _pool()
     if source_mode == "full" and _backfill_candidate_pool_title_profiles(pool):
@@ -2071,7 +2134,7 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
         "filtered": _filtered_summary(filtered_diagnostics),
         "warnings": warnings,
     }
-    _CACHE.update({"ts": time.time(), "key": cache_key, "value": result})
+    _recommendation_cache_put(cache_key, result)
     return result
 
 
@@ -2129,7 +2192,7 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
         data[key] = [x for x in data.get(key, []) if _norm_code(x.get("code") if isinstance(x, dict) else x) != code]
         data[key].insert(0, row)
         _save_store(data)
-        _CACHE["value"] = None
+        _invalidate_recommendation_cache()
         return {"ok": True, "code": code, "kind": kind}
     if action == "reset_feedback":
         data = _ensure_store()
@@ -2137,7 +2200,7 @@ async def handle_action(action: str, config: dict[str, Any], payload: dict[str, 
         data["liked"] = []
         data["disliked"] = []
         _save_store(data)
-        _CACHE["value"] = None
+        _invalidate_recommendation_cache()
         return {"ok": True}
     raise ValueError(f"unsupported action: {action}")
 

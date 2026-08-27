@@ -20,8 +20,25 @@ def test_recommendations_exclude_library_and_subscription_codes(monkeypatch, tmp
     asyncio.run(_run_recommendations_exclude_library_and_subscription_codes(monkeypatch, tmp_path))
 
 
-def test_recommendation_cache_key_includes_requested_limit(monkeypatch):
-    asyncio.run(_run_recommendation_cache_key_includes_requested_limit(monkeypatch))
+def test_recommendation_cache_key_includes_requested_limit(monkeypatch, tmp_path):
+    asyncio.run(_run_recommendation_cache_key_includes_requested_limit(monkeypatch, tmp_path))
+
+
+def test_recommendation_cache_persists_multiple_keys(monkeypatch, tmp_path):
+    backend = _load_backend()
+    cache_file = tmp_path / "recommendations_cache.json"
+    monkeypatch.setattr(backend, "_recommendation_cache_file", lambda: cache_file)
+    backend._CACHE["entries"] = {}
+
+    backend._recommendation_cache_put("latest", {"items": ["A"]})
+    backend._recommendation_cache_put("full", {"items": ["B"]})
+    backend._CACHE["entries"] = {}
+
+    assert backend._recommendation_cache_get("latest") == {"items": ["A"]}
+    assert backend._recommendation_cache_get("full") == {"items": ["B"]}
+    backend._invalidate_recommendation_cache()
+    assert not cache_file.exists()
+    assert backend._recommendation_cache_get("latest") is None
 
 
 def test_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
@@ -214,6 +231,7 @@ async def _run_recommendations_exclude_library_and_subscription_codes(monkeypatc
     monkeypatch.setattr(backend, "_data_file", lambda: tmp_path / "feedback.json")
     monkeypatch.setattr(backend, "_title_profile_file", lambda: tmp_path / "title_profile.json")
     monkeypatch.setattr(backend, "_pool_path", lambda: tmp_path / "candidate_pool.json")
+    monkeypatch.setattr(backend, "_recommendation_cache_file", lambda: tmp_path / "recommendations_cache.json")
     subscription_file = tmp_path / "subscriptions.json"
     subscription_file.write_text(json.dumps({
         "subscriptions": [
@@ -221,7 +239,7 @@ async def _run_recommendations_exclude_library_and_subscription_codes(monkeypatc
         ],
     }), encoding="utf-8")
     monkeypatch.setattr(backend, "_subscription_path", lambda: subscription_file)
-    backend._CACHE.update({"ts": 0, "key": "", "value": None})
+    backend._CACHE["entries"] = {}
     backend._LIVE_LIBRARY_CODES_CACHE.update({"ts": 0, "key": "", "codes": set(), "warning": ""})
 
     async def fake_library_profile():
@@ -362,9 +380,10 @@ async def _run_candidate_pool_scan_uses_candidate_code(monkeypatch, tmp_path):
     assert set(pool["items"]) == {"ABCD-123", "MIDA-669"}
 
 
-async def _run_recommendation_cache_key_includes_requested_limit(monkeypatch):
+async def _run_recommendation_cache_key_includes_requested_limit(monkeypatch, tmp_path):
     backend = _load_backend()
-    backend._CACHE.update({"ts": 0, "key": "", "value": None})
+    monkeypatch.setattr(backend, "_recommendation_cache_file", lambda: tmp_path / "recommendations_cache.json")
+    backend._CACHE["entries"] = {}
     applied_limits: list[int] = []
     monkeypatch.setattr(backend, "_subscription_codes", lambda: set())
     monkeypatch.setattr(backend, "_pool", lambda: {"items": {}})
