@@ -47,11 +47,9 @@ npm --prefix frontend run build
 ## 项目结构
 
 ```text
-backend/   FastAPI API、任务系统和处理管线
+backend/   FastAPI API、任务系统、插件运行时和处理管线
 frontend/  Vue 3 前端
-plugins/   内置插件
-scripts/   开发与检查脚本
-docs/      补充文档
+docs/      项目主页与补充文档
 ```
 
 ## 第三方组件

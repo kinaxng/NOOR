@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="NOOR — 本地优先、插件化的 AI 媒体工作流。">
+  <meta name="theme-color" content="#080a0e">
+  <title>NOOR · Local-first AI media workflow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./site.css">
+</head>
+<body>
+  <div class="aurora aurora-one"></div>
+  <div class="aurora aurora-two"></div>
+  <header class="nav shell">
+    <a class="brand" href="#top" aria-label="NOOR 首页"><span class="brand-mark">N</span><span>NOOR</span></a>
+    <nav aria-label="主导航">
+      <a href="#features">能力</a>
+      <a href="#architecture">架构</a>
+      <a href="https://github.com/kinaxng/NOOR/wiki">Wiki</a>
+      <a href="https://github.com/kinaxng/NOOR-Plugins">插件</a>
+    </nav>
+    <a class="nav-cta" href="https://github.com/kinaxng/NOOR">GitHub <span>↗</span></a>
+  </header>
+
+  <main id="top">
+    <section class="hero shell">
+      <div class="hero-copy">
+        <div class="eyebrow"><span></span> Local-first · Open source</div>
+        <h1>No OR.<br><em>It’s AND.</em></h1>
+        <p>将媒体库、资源发现、下载器、元数据、字幕生成与 AI 视频处理，组合成一个由你掌控的本地工作流。</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/kinaxng/NOOR/wiki/Getting-Started">开始使用</a>
+          <a class="button secondary" href="https://github.com/kinaxng/NOOR">查看源码 <span>↗</span></a>
+        </div>
+        <div class="hero-meta"><span>AGPL-3.0</span><span>Vue 3</span><span>FastAPI</span><span>Plugin SDK</span></div>
+      </div>
+      <div class="console-card" aria-label="NOOR 工作流示意">
+        <div class="console-head"><span class="dot red"></span><span class="dot amber"></span><span class="dot green"></span><small>NOOR / WORKFLOW</small></div>
+        <div class="pipeline">
+          <div class="pipeline-row active"><i>01</i><div><strong>Discover</strong><span>资源与元数据</span></div><b>READY</b></div>
+          <div class="flow-line"></div>
+          <div class="pipeline-row"><i>02</i><div><strong>Acquire</strong><span>插件化下载器</span></div><b>QUEUED</b></div>
+          <div class="flow-line"></div>
+          <div class="pipeline-row"><i>03</i><div><strong>Understand</strong><span>Whisper 字幕与翻译</span></div><b>LOCAL</b></div>
+          <div class="flow-line"></div>
+          <div class="pipeline-row"><i>04</i><div><strong>Process</strong><span>LADA · FaceFusion</span></div><b>GPU</b></div>
+          <div class="flow-line"></div>
+          <div class="pipeline-row"><i>05</i><div><strong>Organize</strong><span>媒体库与硬链接</span></div><b>SYNC</b></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="statement shell">
+      <p>工具不必彼此替代。</p>
+      <h2>NOOR 让它们在同一条链路中协作。</h2>
+    </section>
+
+    <section id="features" class="features shell">
+      <article class="feature large"><span class="number">01</span><div class="icon">◫</div><h3>统一媒体工作台</h3><p>浏览 Emby/Jellyfin 媒体库，管理文件、硬链接、演员和处理任务，不再在多个页面间拼接流程。</p></article>
+      <article class="feature"><span class="number">02</span><div class="icon">⌁</div><h3>可组合 AI 管线</h3><p>Whisper、翻译、LADA 与 FaceFusion 按需组合，进度与日志实时可见。</p></article>
+      <article class="feature"><span class="number">03</span><div class="icon">◇</div><h3>独立插件生态</h3><p>官方插件、市场索引、SDK 和 CLI 独立演进，安装与运行数据拥有清晰生命周期。</p></article>
+      <article class="feature wide"><span class="number">04</span><div><div class="icon">◎</div><h3>数据留在你的环境</h3><p>本地数据库、本地模型、本地媒体。服务地址、凭据与路径由部署者自行掌控。</p></div><div class="privacy-orbit"><span>MEDIA</span><span>MODELS</span><span>DATA</span><i>LOCAL</i></div></article>
+    </section>
+
+    <section id="architecture" class="architecture shell">
+      <div><div class="eyebrow"><span></span> Architecture</div><h2>核心保持通用，<br>能力交给插件。</h2><p>NOOR 本体提供任务系统、配置、UI SDK、市场和媒体工作流。官方插件在独立仓库发布，也允许接入兼容的第三方仓库。</p></div>
+      <div class="arch-stack">
+        <a href="https://github.com/kinaxng/NOOR"><small>CORE</small><strong>kinaxng/NOOR</strong><span>Runtime · UI · Workflow →</span></a>
+        <a href="https://github.com/kinaxng/NOOR-Plugins"><small>ECOSYSTEM</small><strong>NOOR-Plugins</strong><span>Marketplace · SDK · CLI →</span></a>
+        <a href="https://github.com/kinaxng/NOOR/wiki"><small>KNOWLEDGE</small><strong>NOOR Wiki</strong><span>Setup · Config · Development →</span></a>
+      </div>
+    </section>
+
+    <section class="cta shell">
+      <div><small>BUILD YOUR WORKFLOW</small><h2>从本地开始，按需要组合。</h2></div>
+      <a class="button light" href="https://github.com/kinaxng/NOOR/wiki/Getting-Started">阅读安装指南 <span>→</span></a>
+    </section>
+  </main>
+
+  <footer class="shell"><a class="brand" href="#top"><span class="brand-mark">N</span><span>NOOR</span></a><p>Local-first AI media workflow.</p><div><a href="https://github.com/kinaxng/NOOR">Core</a><a href="https://github.com/kinaxng/NOOR-Plugins">Plugins</a><a href="https://github.com/kinaxng/NOOR/wiki">Wiki</a></div></footer>
+</body>
+</html>
