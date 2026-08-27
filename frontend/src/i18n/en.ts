@@ -40,6 +40,7 @@ export const en: Record<string, string> = {
   'files.title': 'Files',
   'files.tab.hardlinks': 'Hardlinks',
   'files.tab.actors': 'Actor Management',
+  'files.tab.browser': 'File Browser',
   'files.actors.title': 'Actor Management',
   'files.actors.empty': 'No actor data',
   'files.actors.loadFailed': 'Failed to load actors',

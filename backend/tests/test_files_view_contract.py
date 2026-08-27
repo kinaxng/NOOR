@@ -9,13 +9,15 @@ ROUTER = ROOT / "frontend" / "src" / "router" / "index.ts"
 SIDEBAR = ROOT / "frontend" / "src" / "components" / "noor" / "AppSidebar.vue"
 
 
-def test_files_view_keeps_hardlink_and_actor_tabs() -> None:
+def test_files_view_keeps_hardlink_actor_and_browser_tabs() -> None:
     text = FILES_VIEW.read_text(encoding="utf-8")
 
     assert "import HardlinkView from './HardlinkView.vue'" in text
     assert "import ActorManagementView from './ActorManagementView.vue'" in text
+    assert "import FileBrowserView from './FileBrowserView.vue'" in text
     assert "files.tab.hardlinks" in text
     assert "files.tab.actors" in text
+    assert "files.tab.browser" in text
     assert "import VisionTabs" in text
     assert "<VisionTabs" in text
     assert "files-title" not in text

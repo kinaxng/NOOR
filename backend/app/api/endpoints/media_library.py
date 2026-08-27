@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Optional
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from app.api.endpoints.media_library_helpers import ADAPTER_NOT_ACTIVATED as _ADAPTER_NOT_ACTIVATED, VIDEO_EXTS, config_path as _config_path, env_source_dir, get_config as _get_config, headers as _headers, load_config as _load_config, local_media_root, map_path as _map_path, parse_item as _parse_item, parse_tags as _parse_tags, save_config as _save_config, server_url as _server_url
 from app.api.endpoints.media_library_item_detail import get_item_impl, get_main_nfo_impl, get_siblings_impl, resolve_playback_stream_url_impl
 from app.api.endpoints.media_library_hardlinks import build_hardlink_groups_impl, enrich_hardlink_groups_impl, extract_code_from_path_impl as _extract_code_from_path, fetch_emby_item_info_impl, hardlink_groups_path_impl, load_hardlink_groups_impl, rename_hardlink_path_impl, save_hardlink_groups_impl, scan_inodes_impl, scan_single_group_impl, version_marked_stem_impl
+from app.api.endpoints.media_library_file_browser import assert_operable as _assert_browser_operable, browser_roots as _browser_roots, browse_directory as _browse_directory, create_directory as _create_browser_directory, delete_entries as _delete_browser_entries, rename_entry as _rename_browser_entry, resolve_browser_path as _resolve_browser_path, transfer_entries as _transfer_browser_entries
 from app.api.endpoints.media_library_listing import _VARIANT_MARKER_RE, apply_filter_and_paginate as _apply_filter_and_paginate, deduplicate_items as _deduplicate_items, item_matches_query as _item_matches_query, item_variant_penalty as _item_variant_penalty, merge_group_metadata as _merge_group_metadata, pick_group_representative as _pick_group_representative
 from app.api.endpoints.media_library_deletion import allowed_scan_roots as _allowed_scan_roots, assert_safe_path as _assert_safe_path, collect_chain_delete_targets as _collect_chain_delete_targets, delete_plan_from_hardlink_entry as _delete_plan_from_hardlink_entry, delete_plan_from_inode_chain as _delete_plan_from_inode_chain, directory_matches_target_videos as _directory_matches_target_videos, execute_delete_targets as _execute_delete_targets, find_inode_chain_for_path as _find_inode_chain_for_path, is_under_roots as _is_under_roots, normalize_code_token as _normalize_code_token, parent_is_code_bucket as _parent_is_code_bucket, path_matches_hardlink_entry as _path_matches_hardlink_entry, preview_delete_targets as _preview_delete_targets, protect_replacement_from_delete_plan as _protect_replacement_from_delete_plan, remove_file_and_sibling_nfo as _remove_file_and_sibling_nfo
 from app.api.endpoints.media_library_streaming import parse_range_header as _parse_range_header, iter_file_range as _iter_file_range
@@ -136,6 +137,8 @@ class HardlinkRenameRequest(BaseModel):
  file_path:str; new_stem:str
 class VersionMarkRequest(BaseModel):
  file_path:str; mark:str=''
+class FileBrowserOperationRequest(BaseModel):
+ action:str; paths:list[str]=[]; target_dir:str|None=None; new_name:str|None=None; dry_run:bool=False
 class SourceChainDeleteRequest(BaseModel):
  source_path:str; hardlink_paths:list[str]=[]; code:str|None=None; dry_run:bool=False
 class ItemChainDeleteRequest(BaseModel):
@@ -299,6 +302,40 @@ async def get_item(item_id:str):
 async def get_hardlink_groups():
  def load_and_enrich():return {**_enrich_hardlink_groups(_load_hardlink_groups()),'last_scanned_at':_hardlink_groups_last_scanned_at()}
  return await asyncio.to_thread(load_and_enrich)
+@router.get('/files/browser')
+async def browse_media_files(path:str='',side:str='source'):
+ config=_load_config();sources,hardlinks=_browser_roots(config);roots=sources+hardlinks
+ defaults=hardlinks if side=='hardlink' else sources
+ if not defaults:defaults=roots
+ target=_resolve_browser_path(path,roots,defaults[0] if defaults else Path('/'))
+ payload=await asyncio.to_thread(_browse_directory,target,roots)
+ payload['roots']={'source':[str(item) for item in sources],'hardlink':[str(item) for item in hardlinks]}
+ payload['default_side']='hardlink' if side=='hardlink' else 'source'
+ return payload
+@router.get('/files/browser/download')
+async def download_media_file(path:str=Query(...)):
+ config=_load_config();sources,hardlinks=_browser_roots(config);target=Path(path).expanduser().resolve();_assert_safe_path(target,sources+hardlinks,'下载文件')
+ if not target.is_file():raise HTTPException(404,'文件不存在')
+ return FileResponse(target,filename=target.name)
+@router.post('/files/browser/operation')
+async def operate_media_files(req:FileBrowserOperationRequest):
+ config=_load_config();sources,hardlinks=_browser_roots(config);roots=sources+hardlinks;paths=[Path(item) for item in req.paths]
+ def operate():
+  if req.action in {'copy','move'}:
+   if not paths or not req.target_dir:raise HTTPException(400,'请选择文件和目标目录')
+   return {'ok':True,'paths':_transfer_browser_entries(req.action,paths,Path(req.target_dir),roots)}
+  if req.action=='rename':
+   if len(paths)!=1 or not req.new_name:raise HTTPException(400,'重命名需要一个文件和新名称')
+   return {'ok':True,'paths':[_rename_browser_entry(paths[0],req.new_name,roots)]}
+  if req.action=='mkdir':
+   if not req.target_dir or not req.new_name:raise HTTPException(400,'新建文件夹需要目标目录和名称')
+   return {'ok':True,'paths':[_create_browser_directory(Path(req.target_dir),req.new_name,roots)]}
+  if req.action=='delete':
+   if not paths:raise HTTPException(400,'请选择要删除的文件')
+   if req.dry_run:return {'ok':True,'dry_run':True,'paths':[str(_assert_browser_operable(path,roots)) for path in paths]}
+   return {'ok':True,'paths':_delete_browser_entries(paths,roots)}
+  raise HTTPException(400,'不支持的文件操作')
+ return await asyncio.to_thread(operate)
 @router.get('/stream/{item_id}')
 async def stream_emby_item(request:Request,item_id:str,media_source_id:str|None=Query(default=None),container:str|None=Query(default=None)):
  config=_load_config();server_url=_server_url(config);api_key=config.get('api_key','')

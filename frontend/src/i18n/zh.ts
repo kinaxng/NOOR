@@ -40,6 +40,7 @@ export const zh: Record<string, string> = {
   'files.title': '文件',
   'files.tab.hardlinks': '硬链接',
   'files.tab.actors': '演员管理',
+  'files.tab.browser': '文件浏览',
   'files.actors.title': '演员管理',
   'files.actors.empty': '暂无演员数据',
   'files.actors.loadFailed': '加载演员失败',

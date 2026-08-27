@@ -4,9 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import VisionTabs from '../components/ui/Tabs.vue'
 import ActorManagementView from './ActorManagementView.vue'
 import HardlinkView from './HardlinkView.vue'
+import FileBrowserView from './FileBrowserView.vue'
 import { useI18n } from '../composables/useI18n'
 
-type FileTab = 'hardlinks' | 'actors'
+type FileTab = 'hardlinks' | 'actors' | 'browser'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,7 +15,7 @@ const { t, i18nVersion } = useI18n()
 
 const activeTab = computed<FileTab>(() => {
   const tab = String(route.params.fileTab || 'hardlinks')
-  return tab === 'actors' ? 'actors' : 'hardlinks'
+  return tab === 'actors' || tab === 'browser' ? tab : 'hardlinks'
 })
 
 const tabs = computed(() => {
@@ -22,6 +23,7 @@ const tabs = computed(() => {
   return [
     { key: 'hardlinks' as FileTab, label: t('files.tab.hardlinks') },
     { key: 'actors' as FileTab, label: t('files.tab.actors') },
+    { key: 'browser' as FileTab, label: t('files.tab.browser') },
   ]
 })
 
@@ -49,7 +51,9 @@ function switchTab(tab: FileTab) {
 
     <HardlinkView v-if="activeTab === 'hardlinks'" />
 
-    <ActorManagementView v-else />
+    <ActorManagementView v-else-if="activeTab === 'actors'" />
+
+    <FileBrowserView v-else />
   </div>
 </template>
 
