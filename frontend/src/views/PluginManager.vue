@@ -48,6 +48,10 @@ type MarketPluginItem = {
   installed?: boolean
 }
 
+type MarketRepoItem = {
+  url: string
+}
+
 type PluginConfigField = {
   type?: string
   label?: string
@@ -89,6 +93,8 @@ type PluginCardItem = {
   enabled: boolean
   source: 'local' | 'market'
   status: 'enabled' | 'inactive' | 'uninstalled'
+  marketVersion: string
+  updateAvailable: boolean
 }
 
 const toast = useToast()
@@ -98,6 +104,12 @@ const loading = ref(false)
 const error = ref('')
 const installedPlugins = ref<PluginListItem[]>([])
 const marketPlugins = ref<MarketPluginItem[]>([])
+const marketRepos = ref<MarketRepoItem[]>([])
+const activeSection = ref<'installed' | 'market' | 'repos'>('installed')
+const repoDraft = ref('')
+const repoSaving = ref(false)
+const repoRemoving = ref('')
+const marketActionId = ref('')
 
 const configModalOpen = ref(false)
 const infoModalOpen = ref(false)
@@ -161,6 +173,8 @@ const pluginCards = computed<PluginCardItem[]>(() => {
       enabled: !!item.enabled,
       source: 'local',
       status: item.enabled ? 'enabled' : 'inactive',
+      marketVersion: '',
+      updateAvailable: false,
     })
   }
 
@@ -169,7 +183,8 @@ const pluginCards = computed<PluginCardItem[]>(() => {
     const existing = byId.get(item.id)
     if (existing) {
       existing.repoUrl = item.repo_url || existing.repoUrl
-      existing.version = existing.version || item.version || ''
+      existing.marketVersion = item.version || ''
+      existing.updateAvailable = isVersionNewer(item.version || '', existing.version)
       existing.description = existing.description || item.description || '暂无说明'
       existing.tags = existing.tags.length ? existing.tags : (item.tags || [])
       existing.capabilities = existing.capabilities.length ? existing.capabilities : (item.capabilities || [])
@@ -192,6 +207,8 @@ const pluginCards = computed<PluginCardItem[]>(() => {
       enabled: false,
       source: 'market',
       status: 'uninstalled',
+      marketVersion: item.version || '',
+      updateAvailable: false,
     })
   }
 
@@ -201,12 +218,44 @@ const pluginCards = computed<PluginCardItem[]>(() => {
   })
 })
 
-const stats = computed(() => {
-  const enabled = pluginCards.value.filter(item => item.status === 'enabled').length
-  const inactive = pluginCards.value.filter(item => item.status === 'inactive').length
-  const uninstalled = pluginCards.value.filter(item => item.status === 'uninstalled').length
-  return `仓库共 ${pluginCards.value.length} 个插件 · 已启用 ${enabled} 个 · 未激活 ${inactive} 个 · 未安装 ${uninstalled} 个`
+const displayedPluginCards = computed(() => {
+  if (activeSection.value === 'installed') return pluginCards.value.filter(item => item.installed)
+  if (activeSection.value === 'market') return pluginCards.value
+  return []
 })
+
+const sectionSummary = computed(() => {
+  if (activeSection.value === 'repos') return `已配置 ${marketRepos.value.length} 个插件仓库`
+  if (activeSection.value === 'market') {
+    const available = pluginCards.value.filter(item => !item.installed).length
+    const updates = pluginCards.value.filter(item => item.updateAvailable).length
+    return `可安装 ${available} 个 · 可更新 ${updates} 个`
+  }
+  const enabled = pluginCards.value.filter(item => item.installed && item.enabled).length
+  const inactive = pluginCards.value.filter(item => item.installed && !item.enabled).length
+  return `已安装 ${enabled + inactive} 个插件 · 已启用 ${enabled} 个 · 未激活 ${inactive} 个`
+})
+
+function versionParts(value: string) {
+  return String(value || '')
+    .replace(/^v/i, '')
+    .split(/[.-]/)
+    .map(part => Number.parseInt(part, 10))
+    .map(part => Number.isFinite(part) ? part : 0)
+}
+
+function isVersionNewer(candidate: string, current: string) {
+  if (!candidate || !current || candidate === current) return false
+  const next = versionParts(candidate)
+  const previous = versionParts(current)
+  const length = Math.max(next.length, previous.length)
+  for (let index = 0; index < length; index += 1) {
+    const left = next[index] || 0
+    const right = previous[index] || 0
+    if (left !== right) return left > right
+  }
+  return false
+}
 
 function routeOf(plugin: PluginCardItem) {
   const route = plugin.contributions?.sidebar?.route
@@ -234,18 +283,64 @@ async function loadData(force = false) {
   loading.value = true
   error.value = ''
   try {
-    const [pluginsRes, marketRes] = await Promise.all([
+    const [pluginsRes, marketRes, reposRes] = await Promise.all([
       api.get('/plugins'),
       api.get('/plugins/market/items').catch(() => ({ data: [] })),
+      api.get('/plugins/market/repos').catch(() => ({ data: [] })),
     ])
     installedPlugins.value = Array.isArray(pluginsRes.data) ? pluginsRes.data : []
     marketPlugins.value = Array.isArray(marketRes.data)
       ? marketRes.data.filter((item: any) => item && item.id && !item.error)
       : []
+    marketRepos.value = Array.isArray(reposRes.data)
+      ? reposRes.data.filter((item: any) => item && item.url)
+      : []
   } catch (e: any) {
     error.value = e?.response?.data?.detail || e?.message || '插件加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshData() {
+  if (loading.value) return
+  try {
+    await api.post('/plugins/reload')
+  } catch (e: any) {
+    toast.error(e?.response?.data?.detail || e?.message || '刷新插件运行时失败')
+  }
+  await Promise.all([loadData(true), refreshSidebarPlugins(true)])
+}
+
+async function addMarketRepo() {
+  const url = repoDraft.value.trim()
+  if (!url || repoSaving.value) return
+  repoSaving.value = true
+  try {
+    const { data } = await api.post('/plugins/market/repos', { url })
+    marketRepos.value = Array.isArray(data) ? data : marketRepos.value
+    repoDraft.value = ''
+    toast.success('插件仓库已添加')
+    await loadData(true)
+  } catch (e: any) {
+    toast.error(e?.response?.data?.detail || e?.message || '添加仓库失败')
+  } finally {
+    repoSaving.value = false
+  }
+}
+
+async function removeMarketRepo(url: string) {
+  if (!url || repoRemoving.value) return
+  repoRemoving.value = url
+  try {
+    const { data } = await api.delete('/plugins/market/repos', { data: { url } })
+    marketRepos.value = Array.isArray(data) ? data : marketRepos.value.filter(item => item.url !== url)
+    toast.success('插件仓库已移除')
+    await loadData(true)
+  } catch (e: any) {
+    toast.error(e?.response?.data?.detail || e?.message || '移除仓库失败')
+  } finally {
+    repoRemoving.value = ''
   }
 }
 
@@ -264,15 +359,19 @@ async function installPlugin(plugin: PluginCardItem) {
     toast.error('缺少插件仓库来源，无法安装')
     return
   }
+  if (marketActionId.value) return
+  marketActionId.value = plugin.id
   try {
     await api.post('/plugins/market/install', {
       repo_url: plugin.repoUrl,
       plugin_id: plugin.id,
     })
-    toast.success('插件已安装')
+    toast.success(plugin.installed ? '插件已更新' : '插件已安装')
     await Promise.all([loadData(true), refreshSidebarPlugins(true)])
   } catch (e: any) {
-    toast.error(e?.response?.data?.detail || e?.message || '安装失败')
+    toast.error(e?.response?.data?.detail || e?.message || (plugin.installed ? '更新失败' : '安装失败'))
+  } finally {
+    marketActionId.value = ''
   }
 }
 
@@ -533,20 +632,27 @@ onMounted(() => {
     <header class="plugin-page__header">
       <div class="plugin-page__title-wrap">
         <h2>插件管理</h2>
-        <p>{{ stats }}</p>
+        <p>{{ sectionSummary }}</p>
       </div>
-      <button class="plugin-action plugin-action--primary" type="button" @click="loadData(true)">
-        <BaseIcon name="refresh" class="w-4 h-4" />
-        <span>刷新</span>
-      </button>
+      <div class="plugin-page__header-actions">
+        <div class="plugin-section-tabs" role="tablist" aria-label="插件管理分类">
+          <button type="button" :class="{ active: activeSection === 'installed' }" @click="activeSection = 'installed'">已安装</button>
+          <button type="button" :class="{ active: activeSection === 'market' }" @click="activeSection = 'market'">插件商店</button>
+          <button type="button" :class="{ active: activeSection === 'repos' }" @click="activeSection = 'repos'">仓库</button>
+        </div>
+        <button class="plugin-action plugin-action--primary" type="button" @click="refreshData">
+          <BaseIcon name="refresh" class="w-4 h-4" />
+          <span>刷新</span>
+        </button>
+      </div>
     </header>
 
     <div v-if="loading" class="plugin-state">插件加载中</div>
     <div v-else-if="error" class="plugin-state plugin-state--error">{{ error }}</div>
 
-    <div v-else class="plugin-grid">
+    <div v-else-if="activeSection !== 'repos'" class="plugin-grid">
       <article
-        v-for="plugin in pluginCards"
+        v-for="plugin in displayedPluginCards"
         :key="plugin.id"
         class="plugin-card"
         :class="`plugin-card--${plugin.status}`"
@@ -574,16 +680,16 @@ onMounted(() => {
         <p class="plugin-card__desc">{{ plugin.description }}</p>
 
         <div class="plugin-card__meta">
-          <span class="plugin-card__meta-item plugin-card__meta-item--status" :class="`plugin-card__meta-item--${plugin.status}`">
+          <span v-if="activeSection === 'installed'" class="plugin-card__meta-item plugin-card__meta-item--status" :class="`plugin-card__meta-item--${plugin.status}`">
             {{ statusLabel(plugin.status) }}
           </span>
-          <span class="plugin-card__meta-item">{{ plugin.source === 'market' ? '仓库插件' : '本地插件' }}</span>
+          <span class="plugin-card__meta-item">{{ activeSection === 'market' ? '商店插件' : plugin.source === 'market' ? '仓库插件' : '本地插件' }}</span>
           <span v-if="plugin.tags.length" class="plugin-card__meta-item">{{ plugin.tags.slice(0, 2).join(' · ') }}</span>
           <span v-else class="plugin-card__meta-item">{{ plugin.type || 'plugin' }}</span>
         </div>
 
         <div class="plugin-card__actions">
-          <div class="plugin-card__actions-main">
+          <div v-if="activeSection === 'installed'" class="plugin-card__actions-main">
             <button
               v-if="plugin.status !== 'uninstalled'"
               class="plugin-action plugin-action--ghost"
@@ -602,7 +708,7 @@ onMounted(() => {
             </RouterLink>
           </div>
 
-          <div class="plugin-card__actions-main">
+          <div v-if="activeSection === 'installed'" class="plugin-card__actions-main">
             <button
               v-if="plugin.status === 'enabled'"
               class="plugin-action plugin-action--danger"
@@ -638,10 +744,61 @@ onMounted(() => {
               卸载
             </button>
           </div>
+          <div v-else class="plugin-card__market-action">
+            <div v-if="plugin.updateAvailable" class="plugin-card__update-copy">
+              <span>v{{ plugin.version || '—' }}</span>
+              <strong>→</strong>
+              <span>v{{ plugin.marketVersion }}</span>
+            </div>
+            <button
+              v-if="!plugin.installed || plugin.updateAvailable"
+              class="plugin-action plugin-action--primary"
+              type="button"
+              :disabled="!!marketActionId"
+              @click="installPlugin(plugin)"
+            >
+              {{ marketActionId === plugin.id ? (plugin.installed ? '更新中' : '安装中') : (plugin.installed ? '更新' : '安装') }}
+            </button>
+            <span v-else class="plugin-card__installed-copy">已安装</span>
+          </div>
         </div>
       </article>
 
-      <div v-if="pluginCards.length === 0" class="plugin-empty">当前没有可展示的插件</div>
+      <div v-if="displayedPluginCards.length === 0" class="plugin-empty">
+        {{ activeSection === 'market'
+          ? (marketRepos.length ? '所有已安装插件均为最新版，当前没有新的可安装插件。' : '插件商店暂无内容，请先配置仓库地址。')
+          : '当前没有已安装插件。' }}
+      </div>
+    </div>
+
+    <div v-else class="plugin-repository-panel">
+      <div class="plugin-repository-intro">
+        <div>
+          <strong>插件仓库</strong>
+          <p>仓库根目录需要提供 plugins.json 或 index.json。添加后，其插件会出现在“插件商店”。</p>
+        </div>
+        <a href="https://github.com/kinaxng/NOOR-Plugins" target="_blank" rel="noreferrer">官方插件仓库 ↗</a>
+      </div>
+
+      <form class="plugin-repository-add" @submit.prevent="addMarketRepo">
+        <input v-model="repoDraft" type="url" placeholder="https://github.com/owner/noor-plugins" autocomplete="off" />
+        <button class="plugin-action plugin-action--primary" type="submit" :disabled="!repoDraft.trim() || repoSaving">
+          {{ repoSaving ? '添加中' : '添加仓库' }}
+        </button>
+      </form>
+
+      <div class="plugin-repository-list">
+        <article v-for="repo in marketRepos" :key="repo.url" class="plugin-repository-item">
+          <div>
+            <span class="plugin-status-dot plugin-status-dot--enabled"></span>
+            <code>{{ repo.url }}</code>
+          </div>
+          <button class="plugin-action plugin-action--danger" type="button" :disabled="repoRemoving === repo.url" @click="removeMarketRepo(repo.url)">
+            {{ repoRemoving === repo.url ? '移除中' : '移除' }}
+          </button>
+        </article>
+        <div v-if="!marketRepos.length" class="plugin-empty">尚未配置插件仓库。</div>
+      </div>
     </div>
 
     <BaseModal
@@ -921,6 +1078,137 @@ onMounted(() => {
   background: rgba(24, 29, 50, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: var(--shadow-card);
+}
+
+.plugin-page__header-actions,
+.plugin-section-tabs,
+.plugin-repository-intro,
+.plugin-repository-add,
+.plugin-repository-item,
+.plugin-repository-item > div {
+  display: flex;
+  align-items: center;
+}
+
+.plugin-page__header-actions {
+  gap: 0.65rem;
+}
+
+.plugin-section-tabs {
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.68rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.plugin-section-tabs button {
+  min-height: 1.8rem;
+  padding: 0 0.72rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.plugin-section-tabs button:hover,
+.plugin-section-tabs button.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.plugin-section-tabs button.active {
+  box-shadow: inset 0 0 0 1px rgba(0, 153, 255, 0.24);
+}
+
+.plugin-repository-panel {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  background: rgba(18, 22, 40, 0.92);
+  box-shadow: var(--shadow-card);
+}
+
+.plugin-repository-intro {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.plugin-repository-intro strong {
+  color: #fff;
+  font-size: 0.86rem;
+}
+
+.plugin-repository-intro p {
+  margin-top: 0.2rem;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 0.72rem;
+}
+
+.plugin-repository-intro a {
+  flex: none;
+  color: rgba(126, 224, 255, 0.88);
+  font-size: 0.72rem;
+}
+
+.plugin-repository-add {
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.plugin-repository-add input {
+  min-width: 0;
+  min-height: 2.35rem;
+  flex: 1;
+  padding: 0 0.78rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.65rem;
+  outline: none;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+}
+
+.plugin-repository-add input:focus {
+  border-color: rgba(0, 153, 255, 0.38);
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.1);
+}
+
+.plugin-repository-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.plugin-repository-item {
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.plugin-repository-item > div {
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.plugin-repository-item code {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.78);
+  font-family: var(--font-display);
+  font-size: 0.73rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plugin-page__title-wrap h2 {
@@ -1222,6 +1510,37 @@ onMounted(() => {
 .plugin-card__actions-main {
   flex-wrap: wrap;
   gap: 0.42rem;
+}
+
+.plugin-card__market-action,
+.plugin-card__update-copy {
+  display: flex;
+  align-items: center;
+}
+
+.plugin-card__market-action {
+  width: 100%;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.plugin-card__update-copy {
+  margin-right: auto;
+  gap: 0.38rem;
+  color: rgba(255, 255, 255, 0.46);
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+}
+
+.plugin-card__update-copy strong {
+  color: rgba(126, 224, 255, 0.76);
+  font-weight: 700;
+}
+
+.plugin-card__installed-copy {
+  color: rgba(255, 255, 255, 0.48);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
 }
 
 .plugin-action:disabled {
@@ -1618,6 +1937,31 @@ onMounted(() => {
 
   .plugin-page__header {
     padding: 0.9rem;
+  }
+
+  .plugin-page__header-actions,
+  .plugin-section-tabs {
+    width: 100%;
+  }
+
+  .plugin-page__header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plugin-section-tabs button {
+    flex: 1;
+  }
+
+  .plugin-repository-intro,
+  .plugin-repository-add,
+  .plugin-repository-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plugin-repository-intro a {
+    align-self: flex-start;
   }
 
   .plugin-grid {
