@@ -77,6 +77,35 @@ def test_semantic_only_relation_has_lower_confidence_than_mapped_actor() -> None
     assert actor > 0.9
 
 
+def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
+    profile = WorkProfile(
+        code="TEST-100",
+        title="TEST-100",
+        original_title="原始标题",
+        translated_title="中文标题",
+        aliases=["别名"],
+        facts={
+            "weak-source": {"actors": ["演员甲"], "categories": ["剧情"], "cover_url": "http://example.test/raw.jpg", "maker": "弱片商"},
+            "javdb": {"actors": ["演员甲", "演员乙"], "categories": ["人妻"], "cover_url": "/api/image?url=https%3A%2F%2Fcdn.test%2Fcover.jpg", "maker": "可信片商"},
+        },
+        source_evidence=[{"source": "weak-source", "confidence": 40}, {"source": "javdb", "confidence": 85}],
+        confidence=85,
+    )
+
+    fused = intelligence.fused_work_profile(profile)
+
+    assert fused["title"] == "中文标题"
+    assert fused["actors"] == ["演员甲", "演员乙"]
+    assert fused["categories"] == ["人妻", "剧情"]
+    assert fused["maker"] == "可信片商"
+    assert fused["cover_url"].startswith("/api/image?")
+    assert len(fused["image_candidates"]) == 2
+    assert fused["field_sources"]["cover_url"] == "javdb"
+    assert all(fused["completeness"].values())
+
+
 def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     tokens = intelligence.semantic_tokens("隣人の秘密", "邻居的秘密", "uncensored leak")
     assert "uncensored" in tokens["latin"]

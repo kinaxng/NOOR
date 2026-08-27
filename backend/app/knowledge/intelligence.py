@@ -30,7 +30,8 @@ _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[float, frozenset[str], dict[str, str], dict[str, str]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
-WORK_SIMILARITY_VERSION = 5
+WORK_SIMILARITY_VERSION = 6
+WORK_PROFILE_FUSION_VERSION = 1
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
     "身体", "本番", "作品", "影片", "电影", "独家", "推荐", "热门", "has_chinese",
@@ -446,26 +447,111 @@ def _work_similarity_features(profile: WorkProfile) -> tuple[dict[str, float], d
     return features, labels
 
 
-def _work_profile_candidate(profile: WorkProfile) -> dict[str, Any]:
-    merged: dict[str, Any] = {}
-    for facts in (profile.facts or {}).values():
-        if isinstance(facts, dict):
-            for key, value in facts.items():
-                if value not in (None, "", [], {}) and key not in merged:
-                    merged[key] = value
+def _profile_source_scores(profile: WorkProfile) -> dict[str, float]:
+    scores = {"media-library": 0.95, "javdb": 0.9, "mdc-ng": 0.9}
+    for evidence in profile.source_evidence or []:
+        if not isinstance(evidence, dict):
+            continue
+        source = str(evidence.get("source") or "").strip()
+        if source:
+            scores[source] = max(scores.get(source, 0.0), max(0.0, min(1.0, float(evidence.get("confidence") or 0) / 100)))
+    return scores
+
+
+def _image_stability_score(value: str) -> float:
+    url = str(value or "").strip()
+    if not url:
+        return 0.0
+    score = 0.15
+    if "/api/image?" in url:
+        score += 0.25
+    if url.startswith("https://"):
+        score += 0.18
+    elif url.startswith("/"):
+        score += 0.16
+    if re.search(r"\.(?:jpe?g|png|webp)(?:\?|$)", url, re.I):
+        score += 0.08
+    return score
+
+
+def fused_work_profile(profile: WorkProfile) -> dict[str, Any]:
+    """Resolve source facts deterministically while preserving provenance and alternatives."""
+    source_scores = _profile_source_scores(profile)
+    facts_by_source = [(str(source), facts) for source, facts in (profile.facts or {}).items() if isinstance(facts, dict)]
+    facts_by_source.sort(key=lambda row: (-source_scores.get(row[0], 0.5), row[0]))
+    field_sources: dict[str, str] = {}
+
+    def union_names(*keys: str, actors: bool = False) -> list[str]:
+        values: list[str] = []
+        identities: set[str] = set()
+        for source, facts in facts_by_source:
+            for name in _fact_names(facts, *keys):
+                display = canonical_actor_name(name) if actors else name
+                identity = actor_identity_key(display) if actors else unicodedata.normalize("NFKC", display).casefold().strip()
+                if identity and identity not in identities:
+                    identities.add(identity)
+                    values.append(display)
+                    field_sources.setdefault("actors" if actors else "categories", source)
+        return values
+
+    def best_name(field: str, *keys: str) -> str:
+        for source, facts in facts_by_source:
+            names = _fact_names(facts, *keys)
+            if names:
+                field_sources[field] = source
+                return names[0]
+        return ""
+
+    image_rows: list[tuple[float, str, str]] = []
+    for source, facts in facts_by_source:
+        for key in ("cover_url", "poster_url", "thumb_url", "image"):
+            url = str(facts.get(key) or "").strip()
+            if url and not any(existing[1] == url for existing in image_rows):
+                image_rows.append((source_scores.get(source, 0.5) + _image_stability_score(url), url, source))
+    image_rows.sort(key=lambda row: (-row[0], row[2], row[1]))
+    cover_url = image_rows[0][1] if image_rows else ""
+    if image_rows:
+        field_sources["cover_url"] = image_rows[0][2]
+
+    title_candidates = [
+        (3, str(profile.translated_title or "").strip(), "translated_title"),
+        (2, str(profile.original_title or "").strip(), "original_title"),
+        (1, str(profile.title or "").strip(), "title"),
+        *[(0, str(alias or "").strip(), "alias") for alias in profile.aliases or []],
+    ]
+    valid_titles = [row for row in title_candidates if row[1] and row[1].upper() != str(profile.code or "").upper()]
+    _priority, title, title_source = max(valid_titles, key=lambda row: (row[0], len(row[1]))) if valid_titles else (0, profile.code, "code")
+    field_sources["title"] = title_source
+    release_date = best_name("release_date", "release_date", "date")
+    actors = union_names("actors", "actresses", actors=True)
+    categories = union_names("categories", "genres", "tags")
     return {
         "code": profile.code,
-        "title": profile.title or profile.translated_title or profile.original_title or profile.code,
+        "title": title,
         "original_title": profile.original_title,
-        "actors": _fact_names(merged, "actors", "actresses"),
-        "categories": _fact_names(merged, "categories", "genres", "tags"),
-        "maker": (_fact_names(merged, "maker", "publisher", "studio", "label") or [""])[0],
-        "series": (_fact_names(merged, "series") or [""])[0],
-        "director": (_fact_names(merged, "director", "directors") or [""])[0],
-        "cover_url": str(merged.get("cover_url") or merged.get("poster_url") or merged.get("image") or ""),
-        "release_date": str(merged.get("release_date") or merged.get("date") or ""),
+        "translated_title": profile.translated_title,
+        "actors": actors,
+        "categories": categories,
+        "maker": best_name("maker", "maker", "publisher", "studio", "label"),
+        "series": best_name("series", "series"),
+        "director": best_name("director", "director", "directors"),
+        "cover_url": cover_url,
+        "image_candidates": [url for _score, url, _source in image_rows[:8]],
+        "release_date": release_date,
         "confidence": int(profile.confidence or 0),
+        "field_sources": field_sources,
+        "source_count": len(facts_by_source),
+        "completeness": {
+            "title": title_source != "code",
+            "cover": bool(cover_url),
+            "actors": bool(actors),
+            "categories": bool(categories),
+        },
     }
+
+
+def _work_profile_candidate(profile: WorkProfile) -> dict[str, Any]:
+    return fused_work_profile(profile)
 
 
 def _relation_reliability(feature: str) -> float:
@@ -586,6 +672,7 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         neighbors[code] = sorted(neighbors[code], key=lambda row: row["score"], reverse=True)[:neighbor_limit]
     result = {
         "version": WORK_SIMILARITY_VERSION,
+        "profile_fusion_version": WORK_PROFILE_FUSION_VERSION,
         "revision": revision,
         "generated_at": utcnow().isoformat(),
         "work_count": len(raw_features),
@@ -643,6 +730,7 @@ def work_similarity_status() -> dict[str, Any]:
     payload = payload or {}
     return {
         "version": payload.get("version"),
+        "profile_fusion_version": payload.get("profile_fusion_version") or WORK_PROFILE_FUSION_VERSION,
         "revision": payload.get("revision"),
         "generated_at": payload.get("generated_at"),
         "work_count": int(payload.get("work_count") or 0),
@@ -1079,6 +1167,6 @@ async def work_intelligence(code: str, *, include_stale: bool = True) -> dict[st
     features = [_features(item) for item in resources]
     return {
         "code": canonical,
-        "profile": None if profile is None else {"title": profile.title, "original_title": profile.original_title, "translated_title": profile.translated_title, "aliases": profile.aliases or [], "tokens": profile.tokens or {}, "facts": profile.facts or {}, "source_evidence": profile.source_evidence or [], "confidence": profile.confidence, "updated_at": profile.updated_at.isoformat()},
+        "profile": None if profile is None else {"title": profile.title, "original_title": profile.original_title, "translated_title": profile.translated_title, "aliases": profile.aliases or [], "tokens": profile.tokens or {}, "facts": profile.facts or {}, "source_evidence": profile.source_evidence or [], "confidence": profile.confidence, "updated_at": profile.updated_at.isoformat(), "fused": fused_work_profile(profile)},
         "resources": {"groups": groups, "total": len(resources), "has_cracked": any(item.get("is_cracked") for item in features), "has_subtitle": any(item.get("has_subtitle") for item in features), "has_uncensored": any(item.get("is_uncensored") for item in features), "provider_checks": [{"provider": row.provider_id, "provider_label": row.provider_label, "status": row.status, "count": int((row.payload or {}).get("count") or 0), "error": str((row.payload or {}).get("error") or ""), "checked_at": row.last_seen_at.isoformat(), "expires_at": row.expires_at.isoformat()} for row in checks]},
     }
