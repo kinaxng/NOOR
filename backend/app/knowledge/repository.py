@@ -338,6 +338,7 @@ class KnowledgeRepository:
         score_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeScore))).scalar_one())
         anomaly_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeAnomaly))).scalar_one())
         work_profile_count = int((await self.db.execute(select(func.count()).select_from(WorkProfile))).scalar_one())
+        work_profiles = list((await self.db.execute(select(WorkProfile.code, WorkProfile.title, WorkProfile.original_title, WorkProfile.translated_title, WorkProfile.facts))).all())
         resource_observation_count = int((await self.db.execute(select(func.count()).select_from(ResourceObservation))).scalar_one())
         resource_rows = list((await self.db.execute(select(ResourceObservation.work_code, ResourceObservation.available, ResourceObservation.status, ResourceObservation.expires_at))).all())
         resource_work_count = int((await self.db.execute(select(func.count(func.distinct(ResourceObservation.work_code))).where(ResourceObservation.available.is_(True)))).scalar_one())
@@ -361,12 +362,29 @@ class KnowledgeRepository:
         provider_checks = sum(1 for row in resource_rows if str(row.status or "") in {"available", "empty", "error", "timeout"})
         from app.knowledge.intelligence import actor_alias_stats, preference_learning_metrics, work_similarity_status
         learning = await preference_learning_metrics()
+        profile_quality_counts = {'title': 0, 'cover': 0, 'actors': 0, 'categories': 0, 'complete': 0}
+        for profile in work_profiles:
+            facts = [value for value in (profile.facts or {}).values() if isinstance(value, dict)]
+            title = str(profile.title or profile.translated_title or profile.original_title or '').strip()
+            has_title = bool(title and title.upper() != str(profile.code or '').upper())
+            has_cover = any(str(fact.get('cover_url') or fact.get('poster_url') or fact.get('thumb_url') or fact.get('image') or '').strip() for fact in facts)
+            has_actors = any(fact.get('actors') or fact.get('actresses') for fact in facts)
+            has_categories = any(fact.get('categories') or fact.get('genres') or fact.get('tags') for fact in facts)
+            flags = {'title': has_title, 'cover': has_cover, 'actors': has_actors, 'categories': has_categories}
+            for key, present in flags.items():
+                profile_quality_counts[key] += int(present)
+            profile_quality_counts['complete'] += int(all(flags.values()))
+        profile_quality = {
+            key: {'count': count, 'percent': round(count / max(work_profile_count, 1) * 100, 1)}
+            for key, count in profile_quality_counts.items()
+        }
         return {
             'entities': {key: int(value) for key, value in entity_rows.all()},
             'edges': {key: int(value) for key, value in edge_rows.all()},
             'scores': score_count,
             'anomalies': anomaly_count,
             'work_profiles': work_profile_count,
+            'work_profile_quality': profile_quality,
             'resource_observations': resource_observation_count,
             'resource_coverage': {
                 'works': resource_work_count,

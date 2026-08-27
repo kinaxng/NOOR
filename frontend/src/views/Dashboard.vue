@@ -540,6 +540,7 @@ const intelligenceFreshness = computed(() => Number(intelligenceStats.value.reso
 const intelligenceAvailability = computed(() => Number(intelligenceStats.value.resource_coverage?.quality?.availability_rate || 0))
 const intelligenceActorIdentities = computed(() => Number(intelligenceStats.value.actor_mappings?.identity_count || 0))
 const intelligenceLinkedWorks = computed(() => Number(intelligenceStats.value.work_similarity?.linked_work_count || 0))
+const intelligenceProfileCompleteness = computed(() => Number(intelligenceStats.value.work_profile_quality?.complete?.percent || 0))
 const intelligenceMappedActorRate = computed(() => {
   const mapped = Number(intelligenceStats.value.work_similarity?.mapped_actor_feature_count || 0)
   const fallback = Number(intelligenceStats.value.work_similarity?.fallback_actor_feature_count || 0)
@@ -906,6 +907,7 @@ const statsRingItems = computed(() => {
                   <span>{{ intelligenceFreshness.toFixed(0) }}% 情报新鲜</span>
                   <span>{{ formatCount(intelligenceLinkedWorks) }} 作品邻域</span>
                   <span>{{ intelligenceMappedActorRate }}% 演员关系已映射</span>
+                  <span>{{ intelligenceProfileCompleteness.toFixed(0) }}% 画像完整</span>
                 </div>
               </div>
             </div>

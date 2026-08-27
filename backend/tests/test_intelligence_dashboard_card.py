@@ -19,6 +19,8 @@ def test_dashboard_exposes_intelligence_core_overview_card() -> None:
     assert "作品邻域" in text
     assert "intelligenceMappedActorRate" in text
     assert "演员关系已映射" in text
+    assert "intelligenceProfileCompleteness" in text
+    assert "画像完整" in text
     assert "情报新鲜" in text
     assert "近期偏好" in text
     assert "intelligenceLastLearned" in text
