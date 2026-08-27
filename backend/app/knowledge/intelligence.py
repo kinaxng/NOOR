@@ -8,6 +8,7 @@ import json
 import re
 import unicodedata
 import math
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -30,6 +31,8 @@ _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[float, frozenset[str], dict[str, str], dict[str, str]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
+_work_search_cache: dict[str, Any] = {"expires_at": 0.0, "documents": []}
+_work_search_lock = asyncio.Lock()
 WORK_SIMILARITY_VERSION = 6
 WORK_PROFILE_FUSION_VERSION = 1
 SIMILARITY_CATEGORY_STOPWORDS = {
@@ -939,6 +942,7 @@ async def record_resource_search(query: dict[str, Any], groups: list[dict[str, A
                     for key, value in values.items():
                         setattr(check, key, value)
         await db.commit()
+    _work_search_cache["expires_at"] = 0.0
     return written
 
 
@@ -977,6 +981,7 @@ async def record_work_metadata(code: str, data: dict[str, Any], *, source: str, 
             profile.source_evidence = evidence_rows[-60:]
             profile.confidence = max(int(profile.confidence or 0), confidence)
         await db.commit()
+    _work_search_cache["expires_at"] = 0.0
     return canonical
 
 
@@ -1251,4 +1256,135 @@ async def work_intelligence(code: str, *, include_stale: bool = True) -> dict[st
         "code": canonical,
         "profile": None if profile is None else {"title": profile.title, "original_title": profile.original_title, "translated_title": profile.translated_title, "aliases": profile.aliases or [], "tokens": profile.tokens or {}, "facts": profile.facts or {}, "source_evidence": profile.source_evidence or [], "confidence": profile.confidence, "updated_at": profile.updated_at.isoformat(), "fused": fused_work_profile(profile)},
         "resources": {"groups": groups, "total": len(resources), "has_cracked": any(item.get("is_cracked") for item in features), "has_subtitle": any(item.get("has_subtitle") for item in features), "has_uncensored": any(item.get("is_uncensored") for item in features), "provider_checks": [{"provider": row.provider_id, "provider_label": row.provider_label, "status": row.status, "count": int((row.payload or {}).get("count") or 0), "error": str((row.payload or {}).get("error") or ""), "checked_at": row.last_seen_at.isoformat(), "expires_at": row.expires_at.isoformat()} for row in checks]},
+    }
+
+
+def _search_terms(value: Any) -> list[str]:
+    text = unicodedata.normalize("NFKC", str(value or "")).strip()
+    if not text:
+        return []
+    parts = [part for part in re.split(r"[\s,，、/|]+", text) if part]
+    return list(dict.fromkeys(parts))[:12]
+
+
+def _prepare_work_search_documents(profiles: list[WorkProfile], observations: list[ResourceObservation]) -> list[dict[str, Any]]:
+    resources_by_code: dict[str, list[ResourceObservation]] = defaultdict(list)
+    for observation in observations:
+        resources_by_code[canonical_work_code(observation.work_code)].append(observation)
+    documents_by_code: dict[str, dict[str, Any]] = {}
+    for profile in profiles:
+        code = canonical_work_code(profile.code)
+        if not code:
+            continue
+        fused = fused_work_profile(profile)
+        actors = list(fused.get("actors") or [])
+        searchable_values = [
+            code, fused.get("title"), profile.original_title, profile.translated_title,
+            *(profile.aliases or []), *actors, *(fused.get("categories") or []),
+            fused.get("maker"), fused.get("series"), fused.get("director"),
+        ]
+        resource_rows = resources_by_code.get(code, [])
+        resource_features = [_features(row.payload or row.features or {}) for row in resource_rows]
+        document = {
+            "code": code,
+            "fused": fused,
+            "identity_labels": {actor_identity_key(actor): actor for actor in actors if actor_identity_key(actor)},
+            "normalized_document": _normalize_actor_name(" ".join(str(value or "") for value in searchable_values)),
+            "semantic": (profile.tokens.get("weighted") or {}) if isinstance(profile.tokens, dict) else {},
+            "resource_features": resource_features,
+            "resource_summary": {
+                "total": len(resource_rows),
+                "providers": sorted({row.provider_id for row in resource_rows}),
+                "has_cracked": any(item.get("is_cracked") for item in resource_features),
+                "has_subtitle": any(item.get("has_subtitle") for item in resource_features),
+            },
+        }
+        completeness = fused.get("completeness") or {}
+        rank = (sum(bool(completeness.get(key)) for key in ("title", "cover", "actors", "categories")), int(profile.confidence or 0))
+        previous = documents_by_code.get(code)
+        if previous is None or rank > previous["profile_rank"]:
+            document["profile_rank"] = rank
+            documents_by_code[code] = document
+    return list(documents_by_code.values())
+
+
+async def search_work_intelligence(query: str, *, limit: int = 30) -> dict[str, Any]:
+    """Search canonical work portraits across identity, semantics and resource facts."""
+    started = time.perf_counter()
+    terms = _search_terms(query)
+    canonical_query = canonical_work_code(query)
+    if not terms and not canonical_query:
+        return {"query": str(query or ""), "items": [], "total": 0, "took_ms": 0}
+    now_monotonic = time.monotonic()
+    if now_monotonic >= float(_work_search_cache.get("expires_at") or 0):
+        async with _work_search_lock:
+            if now_monotonic >= float(_work_search_cache.get("expires_at") or 0):
+                async with async_session_maker() as db:
+                    profiles = list((await db.execute(select(WorkProfile))).scalars())
+                    observations = list((await db.execute(
+                        select(ResourceObservation).where(ResourceObservation.available.is_(True), ResourceObservation.resource_key != "__provider_check__")
+                    )).scalars())
+                _work_search_cache.update({"expires_at": time.monotonic() + 120, "documents": _prepare_work_search_documents(profiles, observations)})
+    documents = list(_work_search_cache.get("documents") or [])
+
+    rows_by_code: dict[str, dict[str, Any]] = {}
+    for document in documents:
+        fused = document["fused"]
+        code = document["code"]
+        identity_labels = document["identity_labels"]
+        resource_features = document["resource_features"]
+        normalized_document = document["normalized_document"]
+        semantic = document["semantic"] if isinstance(document["semantic"], dict) else {}
+        matched_terms: list[dict[str, Any]] = []
+        score = 0.0
+        if canonical_query and code == canonical_query:
+            score += 120
+            matched_terms.append({"term": canonical_query, "kind": "code", "label": code, "weight": 120})
+        for term in terms:
+            if canonical_query and canonical_work_code(term) == code:
+                continue
+            normalized = _normalize_actor_name(term)
+            term_identity = actor_identity_key(term)
+            evidence: dict[str, Any] | None = None
+            if term_identity in identity_labels:
+                evidence = {"term": term, "kind": "actor", "label": identity_labels[term_identity], "identity": term_identity, "weight": 42}
+            elif normalized in {"破解", "cracked", "uncensored", "流出"} and any(item.get("is_cracked") or item.get("is_uncensored") for item in resource_features):
+                evidence = {"term": term, "kind": "resource", "label": "破解资源", "weight": 24}
+            elif normalized in {"中文", "中字", "字幕", "chinese", "sub"} and any(item.get("has_subtitle") for item in resource_features):
+                evidence = {"term": term, "kind": "resource", "label": "中文字幕", "weight": 22}
+            elif normalized and normalized in normalized_document:
+                evidence = {"term": term, "kind": "metadata", "label": term, "weight": 18}
+            else:
+                semantic_hits = [name for name in semantic if normalized and normalized in _normalize_actor_name(name)]
+                if semantic_hits:
+                    evidence = {"term": term, "kind": "semantic", "label": semantic_hits[0], "weight": min(16, 7 + float(semantic.get(semantic_hits[0]) or 0) * 3)}
+            if evidence:
+                matched_terms.append(evidence)
+                score += float(evidence["weight"])
+            else:
+                score = -1
+                break
+        if score <= 0:
+            continue
+        completeness = fused.get("completeness") or {}
+        portrait_quality = sum(bool(completeness.get(key)) for key in ("title", "cover", "actors", "categories")) / 4
+        score += portrait_quality * 5 + min(5, int(document["resource_summary"]["total"]) * 0.5) + int(fused.get("confidence") or 0) / 25
+        result_row = {
+            **fused,
+            "code": code,
+            "match_score": round(score, 2),
+            "match_evidence": matched_terms,
+            "resource_summary": document["resource_summary"],
+        }
+        previous = rows_by_code.get(code)
+        if previous is None or (float(result_row["match_score"]), int(result_row.get("confidence") or 0)) > (float(previous["match_score"]), int(previous.get("confidence") or 0)):
+            rows_by_code[code] = result_row
+    rows = list(rows_by_code.values())
+    rows.sort(key=lambda row: (-float(row.get("match_score") or 0), -int(row.get("confidence") or 0), str(row.get("code") or "")))
+    return {
+        "query": str(query or ""),
+        "items": rows[:max(1, min(int(limit), 100))],
+        "total": len(rows),
+        "took_ms": round((time.perf_counter() - started) * 1000, 2),
+        "match_mode": "all_terms",
     }

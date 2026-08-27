@@ -31,7 +31,11 @@ def test_global_search_get_returns_frontend_scopes(monkeypatch):
             }],
         }]
 
+    async def fake_intelligence(query: str, *, limit: int):
+        return {"query": query, "items": [], "total": 0}
+
     monkeypatch.setattr(search.runtime, "search_resources", fake_search_resources)
+    monkeypatch.setattr(search, "search_work_intelligence", fake_intelligence)
     response = TestClient(_app()).get("/api/search", params={"q": "TEST-001", "limit": 5})
 
     assert response.status_code == 200
@@ -50,9 +54,34 @@ def test_global_search_post_preserves_resource_contract(monkeypatch):
     async def fake_search_resources(query: dict, *, limit_per_plugin: int):
         return [{"provider": "x", "provider_name": "X", "items": [{"id": "1"}]}]
 
+    async def fake_intelligence(query: str, *, limit: int):
+        return {"query": query, "items": [], "total": 0}
+
     monkeypatch.setattr(search.runtime, "search_resources", fake_search_resources)
+    monkeypatch.setattr(search, "search_work_intelligence", fake_intelligence)
     response = TestClient(_app()).post("/api/search", json={"query": "abc", "limit": 7})
 
     assert response.status_code == 200
     assert response.json()["groups"][0]["provider"] == "x"
     assert "scopes" not in response.json()
+
+
+def test_global_search_prioritizes_intelligence_portraits(monkeypatch):
+    async def fake_search_resources(query: dict, *, limit_per_plugin: int):
+        return []
+
+    async def fake_intelligence(query: str, *, limit: int):
+        return {"query": query, "total": 1, "items": [{
+            "code": "TEST-002", "title": "统一画像", "actors": ["演员甲"], "cover_url": "cover.jpg",
+            "match_evidence": [{"kind": "actor", "label": "演员甲"}],
+            "resource_summary": {"has_cracked": True, "has_subtitle": True},
+        }]}
+
+    monkeypatch.setattr(search.runtime, "search_resources", fake_search_resources)
+    monkeypatch.setattr(search, "search_work_intelligence", fake_intelligence)
+    payload = TestClient(_app()).get("/api/search", params={"q": "演员甲 破解"}).json()
+
+    item = payload["scopes"][0]["items"][0]
+    assert item["source"] == "intelligence-core"
+    assert item["action"]["route"] == "/search/resources?q=TEST-002"
+    assert {badge["label"] for badge in item["badges"]} >= {"Intelligence Core", "演员甲", "破解", "中字"}

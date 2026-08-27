@@ -214,6 +214,11 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     enriched = await intelligence.work_intelligence("PRED-878")
     assert enriched["profile"]["facts"]["javdb"]["actors"] == ["测试演员"]
     assert "隣人" in enriched["profile"]["tokens"]["cjk"]
+    searched = await intelligence.search_work_intelligence("测试演员 破解", limit=5)
+    assert searched["match_mode"] == "all_terms"
+    assert searched["items"][0]["code"] == "PRED-878"
+    assert {item["kind"] for item in searched["items"][0]["match_evidence"]} == {"actor", "resource"}
+    assert searched["items"][0]["resource_summary"]["has_cracked"] is True
     assert await intelligence.record_preference_event(
         "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"], enqueue_refresh=False,
     ) is True

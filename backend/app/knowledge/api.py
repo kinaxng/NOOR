@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import database
 from app.core.database import get_db
 from app.knowledge.indexer import rebuild_knowledge_index
-from app.knowledge.intelligence import enqueue_resource_refresh, resource_refresh_status, work_intelligence
+from app.knowledge.intelligence import enqueue_resource_refresh, resource_refresh_status, search_work_intelligence, work_intelligence
 from app.knowledge.models import KnowledgeAnomaly, KnowledgeScore
 from app.knowledge.repository import KnowledgeRepository
 
@@ -129,6 +129,11 @@ async def action_states(status: str = Query('done,hidden'), limit: int = Query(2
 @router.get('/stats')
 async def stats(db: AsyncSession = Depends(get_db)):
     return await KnowledgeRepository(db).stats()
+
+
+@router.get('/works/search')
+async def search_works(q: str = '', limit: int = Query(30, ge=1, le=100)):
+    return await search_work_intelligence(q, limit=limit)
 
 
 @router.get('/works/{code}')
