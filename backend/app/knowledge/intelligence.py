@@ -104,6 +104,15 @@ def actor_alias_revision() -> str:
         return "missing"
 
 
+def actor_alias_stats() -> dict[str, int | str]:
+    names, identities = _actor_alias_data()
+    return {
+        "identity_count": len(set(identities.values())),
+        "alias_count": len(names),
+        "revision": actor_alias_revision(),
+    }
+
+
 def canonical_actor_name(value: Any) -> str:
     """Resolve any MDC-NG alias to one stable display name."""
     name = str(value or "").strip()

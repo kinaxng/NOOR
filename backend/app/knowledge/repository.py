@@ -14,6 +14,7 @@ from app.knowledge.models import (
     KnowledgeEdge,
     KnowledgeEntity,
     KnowledgeIndexRun,
+    PreferenceEvent,
     ResourceObservation,
     ResourceRefreshState,
     WorkProfile,
@@ -338,7 +339,20 @@ class KnowledgeRepository:
         anomaly_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeAnomaly))).scalar_one())
         work_profile_count = int((await self.db.execute(select(func.count()).select_from(WorkProfile))).scalar_one())
         resource_observation_count = int((await self.db.execute(select(func.count()).select_from(ResourceObservation))).scalar_one())
+        resource_work_count = int((await self.db.execute(select(func.count(func.distinct(ResourceObservation.work_code))).where(ResourceObservation.available.is_(True)))).scalar_one())
+        resource_provider_rows = await self.db.execute(select(ResourceObservation.provider_id, func.count(ResourceObservation.id)).where(ResourceObservation.available.is_(True)).group_by(ResourceObservation.provider_id))
         resource_refresh_count = int((await self.db.execute(select(func.count()).select_from(ResourceRefreshState).where(ResourceRefreshState.status.in_(['queued', 'running'])))).scalar_one())
+        preference_rows = await self.db.execute(select(PreferenceEvent.event_type, func.count(PreferenceEvent.id)).group_by(PreferenceEvent.event_type))
+        preference_source_rows = await self.db.execute(select(PreferenceEvent.source, func.count(PreferenceEvent.id)).group_by(PreferenceEvent.source))
+        preference_events = {key: int(value) for key, value in preference_rows.all()}
+        preference_sources = {key: int(value) for key, value in preference_source_rows.all()}
+        latest_values = [
+            (await self.db.execute(select(func.max(WorkProfile.updated_at)))).scalar_one_or_none(),
+            (await self.db.execute(select(func.max(ResourceObservation.last_seen_at)))).scalar_one_or_none(),
+            (await self.db.execute(select(func.max(PreferenceEvent.created_at)))).scalar_one_or_none(),
+        ]
+        last_learned_at = max((value for value in latest_values if value), default=None)
+        from app.knowledge.intelligence import actor_alias_stats
         return {
             'entities': {key: int(value) for key, value in entity_rows.all()},
             'edges': {key: int(value) for key, value in edge_rows.all()},
@@ -346,5 +360,16 @@ class KnowledgeRepository:
             'anomalies': anomaly_count,
             'work_profiles': work_profile_count,
             'resource_observations': resource_observation_count,
+            'resource_coverage': {
+                'works': resource_work_count,
+                'percent': round(resource_work_count / max(work_profile_count, 1) * 100, 1),
+                'providers': {key: int(value) for key, value in resource_provider_rows.all()},
+            },
             'resource_refresh_pending': resource_refresh_count,
+            'actor_mappings': actor_alias_stats(),
+            'preference_events': preference_events,
+            'preference_sources': preference_sources,
+            'preference_event_count': sum(preference_events.values()),
+            'verified_outcomes': sum(preference_events.get(key, 0) for key in ('library_imported', 'upgrade_completed')),
+            'last_learned_at': last_learned_at.isoformat() if last_learned_at else None,
         }

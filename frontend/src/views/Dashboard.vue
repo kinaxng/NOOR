@@ -513,6 +513,7 @@ const visibleDashboardItems = computed(() => {
 })
 
 async function fetchIntelligenceOverview() {
+  if (intelligenceLoading.value) return
   intelligenceLoading.value = true
   try {
     const [stats, refresh] = await Promise.all([
@@ -524,7 +525,7 @@ async function fetchIntelligenceOverview() {
       refresh: refresh.data,
     }
   } catch {
-    intelligenceOverview.value = null
+    if (!intelligenceOverview.value) intelligenceOverview.value = null
   } finally {
     intelligenceLoading.value = false
   }
@@ -533,7 +534,10 @@ async function fetchIntelligenceOverview() {
 const intelligenceStats = computed(() => intelligenceOverview.value || {})
 const intelligenceRefreshCounts = computed(() => intelligenceStats.value.refresh?.counts || {})
 const intelligenceActiveTasks = computed(() => Number(intelligenceRefreshCounts.value.queued || 0) + Number(intelligenceRefreshCounts.value.running || 0))
-const intelligenceEntityTotal = computed<number>(() => (Object.values(intelligenceStats.value.entities || {}) as unknown[]).reduce<number>((sum, value) => sum + Number(value || 0), 0))
+const intelligenceProviderCount = computed(() => Object.keys(intelligenceStats.value.resource_coverage?.providers || {}).length)
+const intelligenceCoverage = computed(() => Number(intelligenceStats.value.resource_coverage?.percent || 0))
+const intelligenceActorIdentities = computed(() => Number(intelligenceStats.value.actor_mappings?.identity_count || 0))
+const intelligenceLastLearned = computed(() => intelligenceStats.value.last_learned_at ? formatDashboardRelativeTime.value(intelligenceStats.value.last_learned_at) : '等待首次学习')
 
 const systemMetricsPayload = computed(() => {
   return systemMetricsWidget.value?.payload?.data || systemMetricsWidget.value?.payload || {}
@@ -881,7 +885,11 @@ const statsRingItems = computed(() => {
               <div>
                 <span class="intelligence-card__eyebrow">NOOR PERSONAL INTELLIGENCE</span>
                 <h3>正在持续理解你的媒体世界</h3>
-                <p>统一汇集媒体库、作品详情与各资源源站的长期情报。</p>
+                <p>统一汇集媒体库、作品详情、资源源站与行为结果的长期情报。</p>
+                <div class="intelligence-card__signals">
+                  <span>{{ formatCount(intelligenceActorIdentities) }} 演员身份</span>
+                  <span>{{ intelligenceProviderCount }} 个资源源</span>
+                </div>
               </div>
             </div>
             <div class="intelligence-card__metrics">
@@ -890,19 +898,23 @@ const statsRingItems = computed(() => {
                 <span>作品画像</span>
               </div>
               <div>
-                <strong>{{ formatCount(intelligenceStats.resource_observations || 0) }}</strong>
-                <span>资源观测</span>
+                <strong>{{ intelligenceCoverage.toFixed(1) }}%</strong>
+                <span>资源覆盖</span>
               </div>
               <div>
-                <strong>{{ formatCount(intelligenceEntityTotal) }}</strong>
-                <span>知识实体</span>
+                <strong>{{ formatCount(intelligenceStats.preference_event_count || 0) }}</strong>
+                <span>学习事件</span>
+              </div>
+              <div>
+                <strong>{{ formatCount(intelligenceStats.verified_outcomes || 0) }}</strong>
+                <span>验证结果</span>
               </div>
             </div>
             <div class="intelligence-card__state">
               <span class="intelligence-card__pulse" :class="{ 'is-active': intelligenceActiveTasks > 0 }" />
               <div>
                 <strong>{{ intelligenceActiveTasks > 0 ? `后台确认 ${intelligenceActiveTasks} 项` : '情报已同步' }}</strong>
-                <span>{{ intelligenceActiveTasks > 0 ? '慢速源站不会阻塞页面' : '新发现会自动进入统一画像' }}</span>
+                <span>{{ intelligenceActiveTasks > 0 ? '慢速源站不会阻塞页面' : `最近学习 ${intelligenceLastLearned}` }}</span>
               </div>
               <button type="button" :disabled="intelligenceLoading" @click="fetchIntelligenceOverview">
                 <BaseIcon name="refresh" />
@@ -1400,7 +1412,7 @@ const statsRingItems = computed(() => {
     rgba(11, 17, 29, 0.86);
 }
 
-.intelligence-card.is-loading { opacity: 0.68; }
+.intelligence-card.is-loading .intelligence-card__state button { opacity: .58; }
 
 .intelligence-card__identity,
 .intelligence-card__metrics,
@@ -1427,8 +1439,10 @@ const statsRingItems = computed(() => {
 .intelligence-card__eyebrow { color: rgba(126, 205, 255, 0.66); font: 650 0.61rem/1 var(--font-display); letter-spacing: 0.14em; }
 .intelligence-card h3 { margin: 0.38rem 0 0; color: rgba(255,255,255,.94); font: 600 clamp(.98rem, 1.35vw, 1.18rem)/1.2 var(--font-display); letter-spacing: -.02em; }
 .intelligence-card p { margin: 0.42rem 0 0; color: rgba(255,255,255,.43); font: 400 .72rem/1.45 var(--font-display); }
+.intelligence-card__signals { display: flex; flex-wrap: wrap; gap: .38rem; margin-top: .62rem; }
+.intelligence-card__signals span { padding: .3rem .48rem; border: 1px solid rgba(126,205,255,.11); border-radius: 999px; color: rgba(178,220,255,.62); background: rgba(75,145,230,.07); font: 500 .61rem/1 var(--font-display); }
 
-.intelligence-card__metrics { justify-content: center; gap: clamp(.8rem, 1.7vw, 1.5rem); }
+.intelligence-card__metrics { display: grid; grid-template-columns: repeat(2, minmax(5.4rem, 1fr)); justify-content: center; gap: .9rem clamp(.8rem, 1.7vw, 1.5rem); }
 .intelligence-card__metrics div { min-width: 5.4rem; }
 .intelligence-card__metrics strong { display: block; color: rgba(255,255,255,.94); font: 650 1.35rem/1 var(--font-display); letter-spacing: -.035em; }
 .intelligence-card__metrics span { display: block; margin-top: .42rem; color: rgba(255,255,255,.42); font: 500 .66rem/1 var(--font-display); }
@@ -1441,7 +1455,7 @@ const statsRingItems = computed(() => {
 .intelligence-card__state strong,
 .intelligence-card__state span { display: block; white-space: nowrap; }
 .intelligence-card__state strong { color: rgba(255,255,255,.82); font: 550 .75rem/1.15 var(--font-display); }
-.intelligence-card__state span { margin-top: .32rem; color: rgba(255,255,255,.38); font: 400 .63rem/1.15 var(--font-display); }
+.intelligence-card__state span { margin-top: .32rem; overflow: hidden; color: rgba(255,255,255,.38); font: 400 .63rem/1.15 var(--font-display); text-overflow: ellipsis; }
 .intelligence-card__state button { display: inline-flex; align-items: center; gap: .35rem; padding: .48rem .62rem; border: 1px solid rgba(255,255,255,.09); border-radius: .65rem; color: rgba(255,255,255,.58); background: rgba(255,255,255,.035); font: 500 .66rem/1 var(--font-display); }
 .intelligence-card__state button :deep(svg) { width: .78rem; height: .78rem; }
 
