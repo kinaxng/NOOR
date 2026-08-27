@@ -22,7 +22,7 @@ _refresh_queue: asyncio.PriorityQueue[tuple[int, int, str]] = asyncio.PriorityQu
 _refresh_counter = itertools.count()
 _refresh_queued: set[str] = set()
 _refresh_workers: list[asyncio.Task[None]] = []
-_actor_alias_cache: tuple[float, frozenset[str]] | None = None
+_actor_alias_cache: tuple[float, frozenset[str], dict[str, str]] | None = None
 SEMANTIC_PROFILE_VERSION = 8
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
@@ -37,26 +37,47 @@ def canonical_work_code(value: Any) -> str:
     return str(extract_video_code(str(value or "")) or "").upper()
 
 
-def actor_alias_names() -> frozenset[str]:
-    """Return all known actor names from the synchronized MDC-NG mapping."""
+def _normalize_actor_name(value: Any) -> str:
+    return re.sub(r"[\s\u3000・·._\-]", "", unicodedata.normalize("NFKC", str(value or ""))).casefold()
+
+
+def _actor_alias_data() -> tuple[frozenset[str], dict[str, str]]:
+    """Load MDC-NG actor aliases and their preferred NOOR display names."""
     global _actor_alias_cache
     path = data_path("media_actor_mappings.json")
     try:
         mtime = path.stat().st_mtime
         if _actor_alias_cache and _actor_alias_cache[0] == mtime:
-            return _actor_alias_cache[1]
+            return _actor_alias_cache[1], _actor_alias_cache[2]
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return frozenset()
+        return frozenset(), {}
     names: set[str] = set()
+    identities: dict[str, str] = {}
     for record in payload.get("records") or []:
         if not isinstance(record, dict):
             continue
         values = [record.get("jp"), record.get("zh_cn"), record.get("zh_tw"), *(record.get("names") or []), *(record.get("aliases") or [])]
-        names.update(str(value).strip() for value in values if str(value or "").strip())
+        values = [str(value).strip() for value in values if str(value or "").strip()]
+        preferred = str(record.get("zh_cn") or record.get("jp") or record.get("zh_tw") or (values[0] if values else "")).strip()
+        names.update(values)
+        if preferred:
+            for value in values:
+                identities.setdefault(_normalize_actor_name(value), preferred)
     result = frozenset(names)
-    _actor_alias_cache = (mtime, result)
-    return result
+    _actor_alias_cache = (mtime, result, identities)
+    return result, identities
+
+
+def actor_alias_names() -> frozenset[str]:
+    """Return all known actor names from the synchronized MDC-NG mapping."""
+    return _actor_alias_data()[0]
+
+
+def canonical_actor_name(value: Any) -> str:
+    """Resolve any MDC-NG alias to one stable display name."""
+    name = str(value or "").strip()
+    return _actor_alias_data()[1].get(_normalize_actor_name(name), name)
 
 
 def semantic_tokens(*values: Any) -> dict[str, Any]:

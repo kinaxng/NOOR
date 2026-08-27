@@ -31,6 +31,9 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
 
     assert intelligence.actor_alias_names() == frozenset({"三宮つばき", "三宫椿", "三宮椿", "旧名"})
+    assert intelligence.canonical_actor_name("三宮つばき") == "三宫椿"
+    assert intelligence.canonical_actor_name("三宮 椿") == "三宫椿"
+    assert intelligence.canonical_actor_name("未收录演员") == "未收录演员"
 
 
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:
