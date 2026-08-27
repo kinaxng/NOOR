@@ -19,6 +19,8 @@ const { getActivityDetailLine, getRunningBadgeLabel, getJobDisplayName, getDashb
 const mediaLibraryStore = useMediaLibraryStore()
 const jobsStore = useJobsStore()
 const dashboardWidgets = ref<any[]>([])
+const intelligenceOverview = ref<any>(null)
+const intelligenceLoading = ref(false)
 const javdbWidgetPage = ref(0)
 const javdbWidgetPageSize = ref(1)
 
@@ -51,14 +53,16 @@ const defaultDashboardLayout: DashboardLayoutItem[] = [
   { id: 'welcome', x: 0, y: 0, w: 6, h: 4, minW: 3, minH: 3 },
   { id: 'stats', x: 6, y: 0, w: 6, h: 4, minW: 4, minH: 3 },
   { id: 'javdb-recommend', x: 0, y: 4, w: 12, h: 4, minW: 4, minH: 3 },
-  { id: 'system-cpu', x: 0, y: 8, w: 4, h: 4, minW: 3, minH: 3 },
-  { id: 'system-gpu', x: 4, y: 8, w: 4, h: 4, minW: 3, minH: 3 },
-  { id: 'recent-jobs', x: 8, y: 8, w: 4, h: 4, minW: 3, minH: 3 },
+  { id: 'intelligence-core', x: 0, y: 8, w: 12, h: 3, minW: 4, minH: 3 },
+  { id: 'system-cpu', x: 0, y: 11, w: 4, h: 4, minW: 3, minH: 3 },
+  { id: 'system-gpu', x: 4, y: 11, w: 4, h: 4, minW: 3, minH: 3 },
+  { id: 'recent-jobs', x: 8, y: 11, w: 4, h: 4, minW: 3, minH: 3 },
 ]
 const dashboardCardOptions = [
   { id: 'welcome', label: '欢迎' },
   { id: 'stats', label: '媒体统计' },
   { id: 'javdb-recommend', label: 'JAVDB 推荐' },
+  { id: 'intelligence-core', label: 'Intelligence Core' },
   { id: 'system-cpu', label: 'CPU / 内存' },
   { id: 'system-gpu', label: 'GPU / 显存' },
   { id: 'recent-jobs', label: '任务动态' },
@@ -440,6 +444,10 @@ async function ensureDashboardDataForCard(id: string) {
     }
     return
   }
+  if (id === 'intelligence-core') {
+    await fetchIntelligenceOverview()
+    return
+  }
   if (dashboardWidgetPluginByCard[id]) {
     await fetchDashboardWidgets()
   }
@@ -452,6 +460,7 @@ async function ensureDashboardDataForVisibleCards() {
   }
   const tasks: Promise<unknown>[] = []
   if (visible.has('recent-jobs')) tasks.push(jobsStore.fetchJobs())
+  if (visible.has('intelligence-core')) tasks.push(fetchIntelligenceOverview())
   if (dashboardCardIds.some(id => visible.has(id) && dashboardWidgetPluginByCard[id])) tasks.push(fetchDashboardWidgets())
   await Promise.allSettled(tasks)
   if (visible.has('stats')) {
@@ -496,11 +505,35 @@ const visibleDashboardItems = computed(() => {
     'welcome',
     'stats',
     javdbRecommendItems.value.length ? 'javdb-recommend' : null,
+    'intelligence-core',
     systemMetricsWidget.value ? 'system-cpu' : null,
     systemMetricsWidget.value ? 'system-gpu' : null,
     'recent-jobs',
   ].filter((id): id is string => Boolean(id) && !isDashboardCardHidden(id as string))
 })
+
+async function fetchIntelligenceOverview() {
+  intelligenceLoading.value = true
+  try {
+    const [stats, refresh] = await Promise.all([
+      api.get('/knowledge/stats'),
+      api.get('/knowledge/resources/refresh/status'),
+    ])
+    intelligenceOverview.value = {
+      ...stats.data,
+      refresh: refresh.data,
+    }
+  } catch {
+    intelligenceOverview.value = null
+  } finally {
+    intelligenceLoading.value = false
+  }
+}
+
+const intelligenceStats = computed(() => intelligenceOverview.value || {})
+const intelligenceRefreshCounts = computed(() => intelligenceStats.value.refresh?.counts || {})
+const intelligenceActiveTasks = computed(() => Number(intelligenceRefreshCounts.value.queued || 0) + Number(intelligenceRefreshCounts.value.running || 0))
+const intelligenceEntityTotal = computed<number>(() => (Object.values(intelligenceStats.value.entities || {}) as unknown[]).reduce<number>((sum, value) => sum + Number(value || 0), 0))
 
 const systemMetricsPayload = computed(() => {
   return systemMetricsWidget.value?.payload?.data || systemMetricsWidget.value?.payload || {}
@@ -830,6 +863,55 @@ const statsRingItems = computed(() => {
           </section>
         </div>
         <button v-if="isDashboardEditMode" type="button" class="dashboard-grid-card__resize" @pointerdown.stop="startDashboardInteraction($event, 'javdb-recommend', 'resize')" aria-label="调整尺寸" />
+      </section>
+
+      <section
+        v-if="visibleDashboardItems.includes('intelligence-core')"
+        class="dashboard-grid-card dashboard-grid-card--intelligence"
+        :style="dashboardItemStyle('intelligence-core')"
+      >
+        <div class="dashboard-grid-card__chrome" @pointerdown.stop="startDashboardInteraction($event, 'intelligence-core', 'drag')">
+          <span class="dashboard-grid-card__grip"><BaseIcon name="grid" class="w-3.5 h-3.5" /></span>
+          <span class="dashboard-grid-card__label">Intelligence Core</span>
+        </div>
+        <div class="dashboard-grid-card__body">
+          <div class="intelligence-card" :class="{ 'is-loading': intelligenceLoading }">
+            <div class="intelligence-card__identity">
+              <span class="intelligence-card__mark"><BaseIcon name="sparkles" /></span>
+              <div>
+                <span class="intelligence-card__eyebrow">NOOR PERSONAL INTELLIGENCE</span>
+                <h3>正在持续理解你的媒体世界</h3>
+                <p>统一汇集媒体库、作品详情与各资源源站的长期情报。</p>
+              </div>
+            </div>
+            <div class="intelligence-card__metrics">
+              <div>
+                <strong>{{ formatCount(intelligenceStats.work_profiles || 0) }}</strong>
+                <span>作品画像</span>
+              </div>
+              <div>
+                <strong>{{ formatCount(intelligenceStats.resource_observations || 0) }}</strong>
+                <span>资源观测</span>
+              </div>
+              <div>
+                <strong>{{ formatCount(intelligenceEntityTotal) }}</strong>
+                <span>知识实体</span>
+              </div>
+            </div>
+            <div class="intelligence-card__state">
+              <span class="intelligence-card__pulse" :class="{ 'is-active': intelligenceActiveTasks > 0 }" />
+              <div>
+                <strong>{{ intelligenceActiveTasks > 0 ? `后台确认 ${intelligenceActiveTasks} 项` : '情报已同步' }}</strong>
+                <span>{{ intelligenceActiveTasks > 0 ? '慢速源站不会阻塞页面' : '新发现会自动进入统一画像' }}</span>
+              </div>
+              <button type="button" :disabled="intelligenceLoading" @click="fetchIntelligenceOverview">
+                <BaseIcon name="refresh" />
+                刷新
+              </button>
+            </div>
+          </div>
+        </div>
+        <button v-if="isDashboardEditMode" type="button" class="dashboard-grid-card__resize" @pointerdown.stop="startDashboardInteraction($event, 'intelligence-core', 'resize')" aria-label="调整尺寸" />
       </section>
 
       <section
@@ -1298,6 +1380,80 @@ const statsRingItems = computed(() => {
   font-size: 11px;
   font-weight: 800;
   color: var(--dashboard-system-color);
+}
+
+.intelligence-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(280px, 1.35fr) minmax(320px, 1fr) minmax(220px, 0.7fr);
+  align-items: center;
+  gap: clamp(1rem, 2vw, 2rem);
+  width: 100%;
+  height: 100%;
+  padding: clamp(1rem, 2vw, 1.55rem);
+  overflow: hidden;
+  border: 1px solid rgba(95, 178, 255, 0.18);
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 12% 22%, rgba(0, 117, 255, 0.16), transparent 35%),
+    radial-gradient(circle at 78% 80%, rgba(113, 84, 255, 0.12), transparent 42%),
+    rgba(11, 17, 29, 0.86);
+}
+
+.intelligence-card.is-loading { opacity: 0.68; }
+
+.intelligence-card__identity,
+.intelligence-card__metrics,
+.intelligence-card__state {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+}
+
+.intelligence-card__identity { gap: 1rem; min-width: 0; }
+.intelligence-card__mark {
+  display: grid;
+  flex: 0 0 auto;
+  width: 3.35rem;
+  height: 3.35rem;
+  place-items: center;
+  border-radius: 1rem;
+  color: #8fceff;
+  background: linear-gradient(145deg, rgba(0, 117, 255, 0.2), rgba(115, 87, 255, 0.15));
+  box-shadow: inset 0 0 0 1px rgba(126, 205, 255, 0.2), 0 14px 36px rgba(0, 80, 210, 0.14);
+}
+.intelligence-card__mark :deep(svg) { width: 1.6rem; height: 1.6rem; }
+.intelligence-card__eyebrow { color: rgba(126, 205, 255, 0.66); font: 650 0.61rem/1 var(--font-display); letter-spacing: 0.14em; }
+.intelligence-card h3 { margin: 0.38rem 0 0; color: rgba(255,255,255,.94); font: 600 clamp(.98rem, 1.35vw, 1.18rem)/1.2 var(--font-display); letter-spacing: -.02em; }
+.intelligence-card p { margin: 0.42rem 0 0; color: rgba(255,255,255,.43); font: 400 .72rem/1.45 var(--font-display); }
+
+.intelligence-card__metrics { justify-content: center; gap: clamp(.8rem, 1.7vw, 1.5rem); }
+.intelligence-card__metrics div { min-width: 5.4rem; }
+.intelligence-card__metrics strong { display: block; color: rgba(255,255,255,.94); font: 650 1.35rem/1 var(--font-display); letter-spacing: -.035em; }
+.intelligence-card__metrics span { display: block; margin-top: .42rem; color: rgba(255,255,255,.42); font: 500 .66rem/1 var(--font-display); }
+
+.intelligence-card__state { justify-content: flex-end; gap: .65rem; }
+.intelligence-card__pulse { width: .48rem; height: .48rem; flex: 0 0 auto; border-radius: 999px; background: #55d69b; box-shadow: 0 0 0 5px rgba(85,214,155,.08), 0 0 16px rgba(85,214,155,.36); }
+.intelligence-card__pulse.is-active { background: #64b5ff; box-shadow: 0 0 0 5px rgba(100,181,255,.08), 0 0 16px rgba(100,181,255,.36); animation: intelligence-pulse 1.4s ease-in-out infinite; }
+@keyframes intelligence-pulse { 50% { opacity: .48; transform: scale(.82); } }
+.intelligence-card__state div { min-width: 0; margin-right: auto; }
+.intelligence-card__state strong,
+.intelligence-card__state span { display: block; white-space: nowrap; }
+.intelligence-card__state strong { color: rgba(255,255,255,.82); font: 550 .75rem/1.15 var(--font-display); }
+.intelligence-card__state span { margin-top: .32rem; color: rgba(255,255,255,.38); font: 400 .63rem/1.15 var(--font-display); }
+.intelligence-card__state button { display: inline-flex; align-items: center; gap: .35rem; padding: .48rem .62rem; border: 1px solid rgba(255,255,255,.09); border-radius: .65rem; color: rgba(255,255,255,.58); background: rgba(255,255,255,.035); font: 500 .66rem/1 var(--font-display); }
+.intelligence-card__state button :deep(svg) { width: .78rem; height: .78rem; }
+
+@media (max-width: 980px) {
+  .intelligence-card { grid-template-columns: 1fr 1fr; }
+  .intelligence-card__state { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+@media (max-width: 640px) {
+  .intelligence-card { grid-template-columns: 1fr; }
+  .intelligence-card__metrics { justify-content: flex-start; }
+  .intelligence-card__state { grid-column: auto; }
 }
 
 .dashboard-system-card--cpu {
