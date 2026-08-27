@@ -1756,6 +1756,7 @@ async def _enrich_recommendation_resources(
         return warnings
     targets = items[:enrich_limit]
     concurrency = int(_config_number(config, "resource_enrich_concurrency", 4, 1, 12))
+    budget_seconds = _config_number(config, "resource_enrich_budget_seconds", 6, 1, 20)
     semaphore = asyncio.Semaphore(concurrency)
 
     async def enrich_one(item: dict[str, Any]) -> None:
@@ -1854,7 +1855,13 @@ async def _enrich_recommendation_resources(
         item["score"] = max(0, min(cap, int(round(float(item.get("score") or 0) + score_boost))))
         item["reasons"] = list(dict.fromkeys(item.get("reasons") or []))[:6]
 
-    await asyncio.gather(*(enrich_one(item) for item in targets))
+    tasks = [asyncio.create_task(enrich_one(item)) for item in targets]
+    _done, pending = await asyncio.wait(tasks, timeout=budget_seconds)
+    if pending:
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        warnings.append(f"资源确认已达 {budget_seconds:g} 秒页面预算，剩余 {len(pending)} 项已跳过，不影响推荐展示")
     return warnings[:8]
 
 
@@ -2020,7 +2027,7 @@ async def _recommendations(config: dict[str, Any], payload: dict[str, Any]) -> d
     scored.sort(key=lambda x: (x["score"], x.get("magnets_count") or 0, x.get("release_date") or ""), reverse=True)
     # A small first pass lets resource actionability influence ranking without
     # making the initial recommendation request excessively expensive.
-    initial_resource_config = {**config, "resource_enrich_limit": 16}
+    initial_resource_config = {**config, "resource_enrich_limit": 16, "resource_enrich_budget_seconds": 4}
     resource_warnings = await _enrich_recommendation_resources(initial_resource_config, scored)
     if resource_warnings:
         warnings.extend(resource_warnings)

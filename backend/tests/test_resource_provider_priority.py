@@ -59,6 +59,17 @@ def test_resource_search_enriches_missing_cover_from_javdb_detail() -> None:
     assert items[0]["metadata"]["cover_borrowed_from"] == "javdb_detail"
 
 
+def test_single_code_cover_borrow_does_not_call_detail_enrichment() -> None:
+    runtime = PluginRuntime()
+    items = [{"provider": "avdb", "query_key": "SNIS-201", "title": "SNIS-201", "cover_url": "", "metadata": {}}]
+    runtime._handlers["javdb"] = _CoverHandler()
+    runtime._manifests["javdb"] = {"id": "javdb", "name": "JavDB", "capabilities": ["resource_search"]}
+
+    asyncio.run(runtime._borrow_resource_covers_from_javdb(items, [], enrich_missing_details=False))
+
+    assert items[0]["cover_url"] == ""
+
+
 def test_resource_search_parses_feature_keyword_as_and_filter() -> None:
     runtime = PluginRuntime()
     handler = _FilteredHandler()

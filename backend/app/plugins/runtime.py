@@ -565,7 +565,10 @@ class PluginRuntime:
         provider_priority = {"avdb": 0, "mteam-plugin": 1, "javdb": 2}
         groups.sort(key=lambda group: (provider_priority.get(str(group.get("provider") or ""), 99), str(group.get("provider") or "")))
         items.sort(key=lambda item: (provider_priority.get(str(item.get("provider") or ""), 99), str(item.get("provider") or "")))
-        await self._borrow_resource_covers_from_javdb(items, groups)
+        import re
+        search_text = str(payload.get("code") or payload.get("number") or payload.get("keyword") or payload.get("q") or "")
+        is_single_code_query = bool(re.search(r"\b(?:FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,8}[-_ ]?\d{2,7}|\d{6}[-_]\d{2,5})\b", search_text, re.I))
+        await self._borrow_resource_covers_from_javdb(items, groups, enrich_missing_details=not is_single_code_query)
         return {
             "ok": True,
             "query": payload,
@@ -574,7 +577,13 @@ class PluginRuntime:
             "downloaders": self.list_enabled_downloaders(),
         }
 
-    async def _borrow_resource_covers_from_javdb(self, items: list[dict[str, Any]], groups: list[dict[str, Any]]) -> None:
+    async def _borrow_resource_covers_from_javdb(
+        self,
+        items: list[dict[str, Any]],
+        groups: list[dict[str, Any]],
+        *,
+        enrich_missing_details: bool = True,
+    ) -> None:
         if not items or not self.is_enabled("javdb"):
             return
 
@@ -613,12 +622,15 @@ class PluginRuntime:
             return
 
         unresolved_codes: list[str] = []
-        for item in missing:
-            code = norm_code(item.get("query_key") or item.get("title"))
-            if code and code not in cover_by_code and code not in unresolved_codes:
-                unresolved_codes.append(code)
-            if len(unresolved_codes) >= 48:
-                break
+        if not enrich_missing_details:
+            unresolved_codes = []
+        else:
+            for item in missing:
+                code = norm_code(item.get("query_key") or item.get("title"))
+                if code and code not in cover_by_code and code not in unresolved_codes:
+                    unresolved_codes.append(code)
+                if len(unresolved_codes) >= 48:
+                    break
 
         semaphore = asyncio.Semaphore(12)
 
