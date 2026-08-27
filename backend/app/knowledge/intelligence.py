@@ -65,6 +65,14 @@ PREFERENCE_EVENT_HALF_LIFE_DAYS = {
 }
 OUTCOME_ATTEMPT_EVENTS = {"subscription", "download_intent", "download_submitted"}
 OUTCOME_VERIFIED_EVENTS = {"library_imported", "upgrade_completed"}
+PREFERENCE_EVENT_STAGE_VALUES = {
+    "detail_view": 0.15,
+    "subscription": 0.60,
+    "download_intent": 0.75,
+    "download_submitted": 0.85,
+    "library_imported": 1.0,
+    "upgrade_completed": 1.0,
+}
 
 
 def canonical_work_code(value: Any) -> str:
@@ -230,11 +238,12 @@ async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, A
         async with async_session_maker() as db:
             events = list((await db.execute(select(PreferenceEvent).where(PreferenceEvent.created_at >= cutoff))).scalars())
     except SQLAlchemyError:
-        return {"codes": {}, "actors": {}, "actor_identities": {}, "categories": {}, "event_count": 0, "revision": "0:none"}
+        return {"codes": {}, "actors": {}, "actor_identities": {}, "categories": {}, "code_stages": {}, "event_count": 0, "revision": "0:none"}
     codes: dict[str, float] = {}
     actors: dict[str, float] = {}
     actor_identities: dict[str, float] = {}
     categories: dict[str, float] = {}
+    code_stages: dict[str, dict[str, Any]] = {}
     for event in events:
         age_days = max(0.0, (now - event.created_at).total_seconds() / 86400)
         half_life = PREFERENCE_EVENT_HALF_LIFE_DAYS.get(event.event_type, 30)
@@ -250,14 +259,30 @@ async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, A
             name = str(category).strip()
             if name:
                 categories[name] = categories.get(name, 0.0) + effective
+        stage_value = float(PREFERENCE_EVENT_STAGE_VALUES.get(event.event_type, 0.0))
+        previous = code_stages.get(event.work_code)
+        if stage_value > 0 and (
+            not previous
+            or stage_value > float(previous.get("value") or 0)
+            or (stage_value == float(previous.get("value") or 0) and event.created_at.isoformat() > str(previous.get("at") or ""))
+        ):
+            code_stages[event.work_code] = {
+                "stage": event.event_type,
+                "value": stage_value,
+                "verified": event.event_type in OUTCOME_VERIFIED_EVENTS,
+                "at": event.created_at.isoformat(),
+                "source": event.source,
+            }
     latest = max((event.created_at for event in events), default=None)
     return {
         "codes": codes,
         "actors": actors,
         "actor_identities": actor_identities,
         "categories": categories,
+        "code_stages": code_stages,
         "event_count": len(events),
         "outcomes": _preference_outcome_model(events),
+        "trends": _preference_drift_model(events),
         "revision": f"{len(events)}:{latest.isoformat() if latest else 'none'}",
     }
 
@@ -305,43 +330,81 @@ def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
     }
 
 
+def _preference_drift_model(events: list[PreferenceEvent], *, window_days: int = 30) -> dict[str, Any]:
+    """Contrast recent and prior tastes using stable MDC-NG actor identities."""
+    now = utcnow()
+    boundary = now - timedelta(days=window_days)
+    cutoff = boundary - timedelta(days=window_days)
+    buckets: dict[str, dict[str, dict[str, float]]] = {
+        "recent": {"actors": {}, "categories": {}},
+        "prior": {"actors": {}, "categories": {}},
+    }
+    actor_labels: dict[str, str] = {}
+    for event in events:
+        if event.created_at < cutoff:
+            continue
+        bucket = buckets["recent" if event.created_at >= boundary else "prior"]
+        for actor in event.actors or []:
+            identity = actor_identity_key(actor)
+            if identity:
+                bucket["actors"][identity] = bucket["actors"].get(identity, 0.0) + float(event.weight or 0)
+                actor_labels.setdefault(identity, canonical_actor_name(actor))
+        for category in event.categories or []:
+            name = str(category or "").strip()
+            if name:
+                bucket["categories"][name] = bucket["categories"].get(name, 0.0) + float(event.weight or 0)
+
+    def dimension(name: str) -> dict[str, Any]:
+        recent = buckets["recent"][name]
+        prior = buckets["prior"][name]
+        recent_total = sum(recent.values()) or 1.0
+        prior_total = sum(prior.values()) or 1.0
+        deltas: dict[str, float] = {}
+        rows: list[dict[str, Any]] = []
+        for key in set(recent) | set(prior):
+            current_share = recent.get(key, 0.0) / recent_total
+            previous_share = prior.get(key, 0.0) / prior_total
+            delta = current_share - previous_share
+            deltas[key] = round(delta, 6)
+            rows.append({
+                "name": actor_labels.get(key, key),
+                "identity": key if name == "actors" else "",
+                "share": round(current_share, 4),
+                "previous_share": round(previous_share, 4),
+                "delta": round(delta, 4),
+            })
+        return {
+            "deltas": deltas,
+            "rising": sorted((row for row in rows if row["delta"] > 0 and row["share"] > 0), key=lambda row: (row["delta"], row["share"]), reverse=True)[:8],
+            "fading": sorted((row for row in rows if row["delta"] < 0 and row["previous_share"] > 0), key=lambda row: row["delta"])[:8],
+        }
+
+    return {
+        "window_days": window_days,
+        "recent_events": sum(1 for event in events if event.created_at >= boundary),
+        "prior_events": sum(1 for event in events if cutoff <= event.created_at < boundary),
+        "actors": dimension("actors"),
+        "categories": dimension("categories"),
+    }
+
+
 async def preference_learning_metrics(*, window_days: int = 30) -> dict[str, Any]:
     """Summarize outcome calibration and recent-vs-prior preference drift."""
     now = utcnow()
     cutoff = now - timedelta(days=window_days * 2)
     async with async_session_maker() as db:
         events = list((await db.execute(select(PreferenceEvent).where(PreferenceEvent.created_at >= cutoff))).scalars())
-    recent: dict[str, dict[str, float]] = {"actors": {}, "categories": {}}
-    prior: dict[str, dict[str, float]] = {"actors": {}, "categories": {}}
-    for event in events:
-        bucket = recent if event.created_at >= now - timedelta(days=window_days) else prior
-        values = {
-            "actors": [canonical_actor_name(actor) for actor in (event.actors or [])],
-            "categories": [str(category).strip() for category in (event.categories or [])],
-        }
-        for dimension, names in values.items():
-            for name in names:
-                if name:
-                    bucket[dimension][name] = bucket[dimension].get(name, 0.0) + float(event.weight or 0)
-
-    def rising(dimension: str) -> list[dict[str, Any]]:
-        recent_total = sum(recent[dimension].values()) or 1.0
-        prior_total = sum(prior[dimension].values()) or 1.0
-        rows = []
-        for name in set(recent[dimension]) | set(prior[dimension]):
-            current_share = recent[dimension].get(name, 0.0) / recent_total
-            previous_share = prior[dimension].get(name, 0.0) / prior_total
-            delta = current_share - previous_share
-            if current_share > 0 and delta > 0:
-                rows.append({"name": name, "share": round(current_share, 4), "delta": round(delta, 4)})
-        return sorted(rows, key=lambda row: (row["delta"], row["share"]), reverse=True)[:5]
+    trends = _preference_drift_model(events, window_days=window_days)
 
     return {
         "window_days": window_days,
-        "recent_events": sum(1 for event in events if event.created_at >= now - timedelta(days=window_days)),
-        "prior_events": sum(1 for event in events if event.created_at < now - timedelta(days=window_days)),
-        "rising_actors": rising("actors"),
-        "rising_categories": rising("categories"),
+        "recent_events": trends["recent_events"],
+        "prior_events": trends["prior_events"],
+        "rising_actors": trends["actors"]["rising"][:5],
+        "rising_categories": trends["categories"]["rising"][:5],
+        "fading_actors": trends["actors"]["fading"][:5],
+        "fading_categories": trends["categories"]["fading"][:5],
+        "trends": trends,
         "outcomes": _preference_outcome_model(events),
     }
 

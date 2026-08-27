@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 from types import SimpleNamespace
 
@@ -143,6 +144,28 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     assert intelligence.actor_alias_stats()["alias_count"] == 4
 
 
+def test_preference_drift_unifies_mdc_ng_aliases(monkeypatch, tmp_path) -> None:
+    mapping = tmp_path / "media_actor_mappings.json"
+    mapping.write_text(json.dumps({"records": [{
+        "id": "actor-1", "jp": "三宮つばき", "zh_cn": "三宫椿", "names": ["三宮つばき", "三宫椿"],
+    }]}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(intelligence, "data_path", lambda *_parts: mapping)
+    monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
+    now = intelligence.utcnow()
+    events = [
+        SimpleNamespace(created_at=now - dt.timedelta(days=40), weight=1.0, actors=["三宫椿"], categories=["剧情"]),
+        SimpleNamespace(created_at=now - dt.timedelta(days=39), weight=1.0, actors=["其他演员"], categories=["剧情"]),
+        SimpleNamespace(created_at=now - dt.timedelta(days=3), weight=1.0, actors=["三宮つばき"], categories=["人妻"]),
+        SimpleNamespace(created_at=now - dt.timedelta(days=2), weight=1.0, actors=["三宫椿"], categories=["人妻"]),
+    ]
+
+    trends = intelligence._preference_drift_model(events, window_days=30)
+
+    assert "mdc-ng:actor-1" in trends["actors"]["deltas"]
+    assert trends["actors"]["rising"][0]["name"] == "三宫椿"
+    assert trends["categories"]["rising"][0]["name"] == "人妻"
+
+
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:
     asyncio.run(_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch))
 
@@ -210,6 +233,10 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     assert behavior["event_count"] == 3
     assert behavior["codes"]["PRED-878"] > 5.9
     assert behavior["actors"]["测试演员"] > 5.9
+    assert behavior["code_stages"]["PRED-878"]["stage"] == "library_imported"
+    assert behavior["code_stages"]["PRED-878"]["value"] == 1.0
+    assert behavior["code_stages"]["PRED-878"]["verified"] is True
+    assert "trends" in behavior
     assert behavior["revision"].startswith("3:")
     assert await intelligence.clear_preference_events(source="av-recommend") == 2
     assert (await intelligence.preference_behavior_summary())["event_count"] == 1
