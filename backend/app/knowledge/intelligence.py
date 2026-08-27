@@ -11,20 +11,23 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.database import async_session_maker
 from app.core.models import utcnow
 from app.core.runtime_paths import data_path
-from app.knowledge.codes import extract_video_code
+from app.knowledge.codes import extract_video_code_candidates
 from app.knowledge.models import PreferenceEvent, ResourceObservation, ResourceRefreshState, WorkProfile, stable_id
 
 _refresh_queue: asyncio.PriorityQueue[tuple[int, int, str]] = asyncio.PriorityQueue()
 _refresh_counter = itertools.count()
 _refresh_queued: set[str] = set()
 _refresh_workers: list[asyncio.Task[None]] = []
-_actor_alias_cache: tuple[float, frozenset[str], dict[str, str]] | None = None
+_refresh_planner_task: asyncio.Task[None] | None = None
+_refresh_planner_stop: asyncio.Event | None = None
+_refresh_planner_last: dict[str, Any] = {}
+_actor_alias_cache: tuple[float, frozenset[str], dict[str, str], dict[str, str]] | None = None
 SEMANTIC_PROFILE_VERSION = 8
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
@@ -54,39 +57,56 @@ PREFERENCE_EVENT_HALF_LIFE_DAYS = {
 
 
 def canonical_work_code(value: Any) -> str:
-    return str(extract_video_code(str(value or "")) or "").upper()
+    candidates = extract_video_code_candidates(str(value or ""))
+    if not candidates:
+        return ""
+    first = candidates[0].upper()
+    # The general extractor intentionally preserves a one-letter suffix as a
+    # candidate because some callers need the exact filename spelling.  Core
+    # identities represent the work, not its local version: -C/-U and similar
+    # filename marks therefore collapse to the immediately following base code.
+    if re.search(r"-[A-Z]$", first) and len(candidates) > 1:
+        base = first.rsplit("-", 1)[0]
+        if candidates[1].upper() == base:
+            return base
+    return first
 
 
 def _normalize_actor_name(value: Any) -> str:
     return re.sub(r"[\s\u3000・·._\-]", "", unicodedata.normalize("NFKC", str(value or ""))).casefold()
 
 
-def _actor_alias_data() -> tuple[frozenset[str], dict[str, str]]:
+def _actor_alias_data() -> tuple[frozenset[str], dict[str, str], dict[str, str]]:
     """Load MDC-NG actor aliases and their preferred NOOR display names."""
     global _actor_alias_cache
     path = data_path("media_actor_mappings.json")
     try:
         mtime = path.stat().st_mtime
         if _actor_alias_cache and _actor_alias_cache[0] == mtime:
-            return _actor_alias_cache[1], _actor_alias_cache[2]
+            return _actor_alias_cache[1], _actor_alias_cache[2], _actor_alias_cache[3]
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return frozenset(), {}
     names: set[str] = set()
     identities: dict[str, str] = {}
+    identity_keys: dict[str, str] = {}
     for record in payload.get("records") or []:
         if not isinstance(record, dict):
             continue
         values = [record.get("jp"), record.get("zh_cn"), record.get("zh_tw"), *(record.get("names") or []), *(record.get("aliases") or [])]
         values = [str(value).strip() for value in values if str(value or "").strip()]
         preferred = str(record.get("zh_cn") or record.get("jp") or record.get("zh_tw") or (values[0] if values else "")).strip()
+        record_id = str(record.get("id") or "").strip()
+        identity_key = f"mdc-ng:{record_id}" if record_id else f"name:{_normalize_actor_name(preferred)}"
         names.update(values)
         if preferred:
             for value in values:
-                identities.setdefault(_normalize_actor_name(value), preferred)
+                normalized = _normalize_actor_name(value)
+                identities.setdefault(normalized, preferred)
+                identity_keys.setdefault(normalized, identity_key)
     result = frozenset(names)
-    _actor_alias_cache = (mtime, result, identities)
-    return result, identities
+    _actor_alias_cache = (mtime, result, identities, identity_keys)
+    return result, identities, identity_keys
 
 
 def actor_alias_names() -> frozenset[str]:
@@ -105,9 +125,9 @@ def actor_alias_revision() -> str:
 
 
 def actor_alias_stats() -> dict[str, int | str]:
-    names, identities = _actor_alias_data()
+    names, _labels, identity_keys = _actor_alias_data()
     return {
-        "identity_count": len(set(identities.values())),
+        "identity_count": len(set(identity_keys.values())),
         "alias_count": len(names),
         "revision": actor_alias_revision(),
     }
@@ -119,6 +139,14 @@ def canonical_actor_name(value: Any) -> str:
     return _actor_alias_data()[1].get(_normalize_actor_name(name), name)
 
 
+def actor_identity_key(value: Any) -> str:
+    """Return the stable MDC-NG actor id, with a deterministic fallback."""
+    normalized = _normalize_actor_name(value)
+    if not normalized:
+        return ""
+    return _actor_alias_data()[2].get(normalized, f"name:{normalized}")
+
+
 async def record_preference_event(
     code: str,
     event_type: str,
@@ -127,6 +155,7 @@ async def record_preference_event(
     actors: list[Any] | None = None,
     categories: list[Any] | None = None,
     data: dict[str, Any] | None = None,
+    enqueue_refresh: bool = True,
 ) -> bool:
     canonical = canonical_work_code(code)
     kind = str(event_type or "").strip()
@@ -177,6 +206,9 @@ async def record_preference_event(
         )
         db.add(event)
         await db.commit()
+    refresh_priority = {"subscription": 5, "download_intent": 8, "detail_view": 24}.get(kind)
+    if enqueue_refresh and refresh_priority is not None:
+        await enqueue_resource_refresh([canonical], priority=refresh_priority)
     return True
 
 
@@ -187,9 +219,10 @@ async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, A
         async with async_session_maker() as db:
             events = list((await db.execute(select(PreferenceEvent).where(PreferenceEvent.created_at >= cutoff))).scalars())
     except SQLAlchemyError:
-        return {"codes": {}, "actors": {}, "categories": {}, "event_count": 0, "revision": "0:none"}
+        return {"codes": {}, "actors": {}, "actor_identities": {}, "categories": {}, "event_count": 0, "revision": "0:none"}
     codes: dict[str, float] = {}
     actors: dict[str, float] = {}
+    actor_identities: dict[str, float] = {}
     categories: dict[str, float] = {}
     for event in events:
         age_days = max(0.0, (now - event.created_at).total_seconds() / 86400)
@@ -199,6 +232,9 @@ async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, A
         for actor in event.actors or []:
             name = canonical_actor_name(actor)
             actors[name] = actors.get(name, 0.0) + effective
+            identity = actor_identity_key(actor)
+            if identity:
+                actor_identities[identity] = actor_identities.get(identity, 0.0) + effective
         for category in event.categories or []:
             name = str(category).strip()
             if name:
@@ -207,6 +243,7 @@ async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, A
     return {
         "codes": codes,
         "actors": actors,
+        "actor_identities": actor_identities,
         "categories": categories,
         "event_count": len(events),
         "revision": f"{len(events)}:{latest.isoformat() if latest else 'none'}",
@@ -459,13 +496,21 @@ async def cached_resource_summary_map(codes: list[str]) -> dict[str, dict[str, A
 
 async def enqueue_resource_refresh(codes: list[str], *, priority: int = 50) -> int:
     accepted = 0
+    priority = max(0, min(int(priority), 100))
     now = utcnow()
     async with async_session_maker() as db:
         for raw in codes:
             code = canonical_work_code(raw)
-            if not code or code in _refresh_queued:
+            if not code:
                 continue
             state = await db.get(ResourceRefreshState, code)
+            if code in _refresh_queued:
+                if state and priority < int(state.priority or 100):
+                    state.priority = priority
+                    state.requested_at = now
+                    await _refresh_queue.put((priority, next(_refresh_counter), code))
+                    accepted += 1
+                continue
             if state is None:
                 state = ResourceRefreshState(work_code=code, status="queued", priority=priority, requested_at=now)
                 db.add(state)
@@ -483,15 +528,17 @@ async def enqueue_resource_refresh(codes: list[str], *, priority: int = 50) -> i
 
 async def _resource_refresh_worker() -> None:
     while True:
-        _priority, _sequence, code = await _refresh_queue.get()
+        queued_priority, _sequence, code = await _refresh_queue.get()
+        processed = False
         try:
             async with async_session_maker() as db:
                 state = await db.get(ResourceRefreshState, code)
-                if state:
-                    state.status = "running"
-                    state.started_at = utcnow()
-                    state.attempts = int(state.attempts or 0) + 1
-                    await db.commit()
+                if not state or state.status != "queued" or int(state.priority or 100) != queued_priority:
+                    continue
+                state.status = "running"
+                state.started_at = utcnow()
+                await db.commit()
+                processed = True
             from app.plugins.runtime import runtime
             await runtime.search_resources({"keyword": code, "provider_timeout_seconds": 12}, limit_per_plugin=24)
             async with async_session_maker() as db:
@@ -499,6 +546,7 @@ async def _resource_refresh_worker() -> None:
                 if state:
                     state.status = "completed"
                     state.completed_at = utcnow()
+                    state.attempts = 0
                     state.error = ""
                     await db.commit()
         except asyncio.CancelledError:
@@ -508,15 +556,105 @@ async def _resource_refresh_worker() -> None:
                 state = await db.get(ResourceRefreshState, code)
                 if state:
                     state.status = "failed"
+                    state.attempts = int(state.attempts or 0) + 1
                     state.error = str(exc)[:1000]
                     state.completed_at = utcnow()
                     await db.commit()
         finally:
-            _refresh_queued.discard(code)
+            if processed:
+                _refresh_queued.discard(code)
             _refresh_queue.task_done()
 
 
+def _profile_needs_version_intelligence(profile: WorkProfile) -> bool:
+    for facts in (profile.facts or {}).values():
+        if not isinstance(facts, dict) or not facts.get("in_library"):
+            continue
+        tags = " ".join(str(value) for value in [*(facts.get("tags") or []), *(facts.get("categories") or []), *(facts.get("genres") or [])])
+        has_cracked = bool(facts.get("is_cracked") or "破解" in tags)
+        has_subtitle = bool(facts.get("has_subtitle") or re.search(r"中字|字幕|中文", tags, re.I))
+        return not (has_cracked and has_subtitle)
+    return False
+
+
+async def plan_resource_refreshes(*, limit: int = 12) -> dict[str, Any]:
+    """Schedule a bounded high-value batch without repeating fresh provider checks."""
+    global _refresh_planner_last
+    now = utcnow()
+    limit = max(1, min(int(limit), 50))
+    behavior = await preference_behavior_summary()
+    behavior_codes = behavior.get("codes") or {}
+    async with async_session_maker() as db:
+        profiles = list((await db.execute(select(WorkProfile))).scalars())
+        observations = list((await db.execute(select(ResourceObservation.work_code, func.max(ResourceObservation.expires_at)).group_by(ResourceObservation.work_code))).all())
+        states = {state.work_code: state for state in (await db.execute(select(ResourceRefreshState))).scalars()}
+    fresh_until: dict[str, datetime] = {}
+    for raw_code, expires_at in observations:
+        code = canonical_work_code(raw_code)
+        if code and expires_at and (code not in fresh_until or expires_at > fresh_until[code]):
+            fresh_until[code] = expires_at
+    canonical_states: dict[str, ResourceRefreshState] = {}
+    for raw_code, state in states.items():
+        code = canonical_work_code(raw_code)
+        current = canonical_states.get(code)
+        state_time = state.completed_at or state.started_at or state.queued_at
+        current_time = (current.completed_at or current.started_at or current.queued_at) if current else None
+        if code and (current is None or (state_time and (current_time is None or state_time > current_time))):
+            canonical_states[code] = state
+    ranked_by_code: dict[str, tuple[int, float, str, str]] = {}
+    for profile in profiles:
+        code = canonical_work_code(profile.code)
+        if not code:
+            continue
+        if fresh_until.get(code) and fresh_until[code] > now:
+            continue
+        state = canonical_states.get(code)
+        if state and state.status in {"queued", "running"}:
+            continue
+        if state and state.status == "failed" and state.completed_at:
+            retry_minutes = min(360, 15 * (2 ** min(int(state.attempts or 1) - 1, 5)))
+            if state.completed_at + timedelta(minutes=retry_minutes) > now:
+                continue
+        behavior_strength = float(behavior_codes.get(code) or 0)
+        if behavior_strength > 0:
+            priority, reason = max(4, 14 - int(min(10, behavior_strength * 2))), "behavior"
+        elif _profile_needs_version_intelligence(profile):
+            priority, reason = 28, "library_version_gap"
+        elif profile.updated_at and profile.updated_at >= now - timedelta(days=14):
+            priority, reason = 42, "recent_profile"
+        else:
+            priority, reason = 65, "coverage"
+        recency = profile.updated_at.timestamp() if profile.updated_at else 0.0
+        candidate = (priority, -recency, code, reason)
+        current = ranked_by_code.get(code)
+        if current is None or candidate < current:
+            ranked_by_code[code] = candidate
+    ranked = list(ranked_by_code.values())
+    ranked.sort()
+    selected = ranked[:limit]
+    accepted = 0
+    reason_counts: dict[str, int] = {}
+    for priority, _recency, code, reason in selected:
+        accepted += await enqueue_resource_refresh([code], priority=priority)
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    result = {"planned_at": now.isoformat(), "considered": len(ranked), "selected": len(selected), "accepted": accepted, "reasons": reason_counts}
+    _refresh_planner_last = result
+    return result
+
+
+async def _resource_refresh_planner() -> None:
+    assert _refresh_planner_stop is not None
+    while not _refresh_planner_stop.is_set():
+        with contextlib.suppress(Exception):
+            await plan_resource_refreshes(limit=12)
+        try:
+            await asyncio.wait_for(_refresh_planner_stop.wait(), timeout=3600)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def start_resource_refresh_workers(count: int = 3) -> None:
+    global _refresh_planner_task, _refresh_planner_stop
     if any(not task.done() for task in _refresh_workers):
         return
     _refresh_workers.clear()
@@ -527,9 +665,21 @@ async def start_resource_refresh_workers(count: int = 3) -> None:
             _refresh_queued.add(state.work_code)
             await _refresh_queue.put((int(state.priority or 50), next(_refresh_counter), state.work_code))
     _refresh_workers.extend(asyncio.create_task(_resource_refresh_worker()) for _ in range(max(1, min(count, 8))))
+    if not _refresh_planner_task or _refresh_planner_task.done():
+        _refresh_planner_stop = asyncio.Event()
+        _refresh_planner_task = asyncio.create_task(_resource_refresh_planner())
 
 
 async def stop_resource_refresh_workers() -> None:
+    global _refresh_planner_task, _refresh_planner_stop
+    if _refresh_planner_stop:
+        _refresh_planner_stop.set()
+    if _refresh_planner_task:
+        _refresh_planner_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _refresh_planner_task
+    _refresh_planner_task = None
+    _refresh_planner_stop = None
     workers = list(_refresh_workers)
     _refresh_workers.clear()
     for task in workers:
@@ -545,7 +695,7 @@ async def resource_refresh_status() -> dict[str, Any]:
     counts: dict[str, int] = {}
     for row in rows:
         counts[row.status] = counts.get(row.status, 0) + 1
-    return {"counts": counts, "queue_size": _refresh_queue.qsize(), "items": [{"code": row.work_code, "status": row.status, "priority": row.priority, "attempts": row.attempts, "error": row.error, "updated_at": row.updated_at.isoformat()} for row in rows]}
+    return {"counts": counts, "queue_size": _refresh_queue.qsize(), "planner": dict(_refresh_planner_last), "items": [{"code": row.work_code, "status": row.status, "priority": row.priority, "attempts": row.attempts, "error": row.error, "updated_at": row.updated_at.isoformat()} for row in rows]}
 
 
 async def work_intelligence(code: str, *, include_stale: bool = True) -> dict[str, Any] | None:

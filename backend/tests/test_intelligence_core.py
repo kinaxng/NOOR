@@ -9,6 +9,13 @@ from app.core.database import Base
 from app.knowledge import intelligence
 
 
+def test_canonical_work_code_collapses_local_version_marks() -> None:
+    assert intelligence.canonical_work_code("WAAA-615-C.mp4") == "WAAA-615"
+    assert intelligence.canonical_work_code("WAAA-615-U") == "WAAA-615"
+    assert intelligence.canonical_work_code("FC2-PPV-4720819-C") == "FC2-PPV-4720819"
+    assert intelligence.canonical_work_code("050126_001-1PON") == "1PON-050126-001"
+
+
 def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     tokens = intelligence.semantic_tokens("隣人の秘密", "邻居的秘密", "uncensored leak")
     assert "uncensored" in tokens["latin"]
@@ -24,6 +31,7 @@ def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
 def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     mapping = tmp_path / "media_actor_mappings.json"
     mapping.write_text(json.dumps({"records": [{
+        "id": "name:三宫椿",
         "jp": "三宮つばき", "zh_cn": "三宫椿", "zh_tw": "三宮椿",
         "names": ["三宮つばき", "三宫椿"], "aliases": ["旧名"],
     }]}, ensure_ascii=False), encoding="utf-8")
@@ -33,6 +41,9 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     assert intelligence.actor_alias_names() == frozenset({"三宮つばき", "三宫椿", "三宮椿", "旧名"})
     assert intelligence.canonical_actor_name("三宮つばき") == "三宫椿"
     assert intelligence.canonical_actor_name("三宮 椿") == "三宫椿"
+    assert intelligence.actor_identity_key("三宮つばき") == "mdc-ng:name:三宫椿"
+    assert intelligence.actor_identity_key("三宮 椿") == "mdc-ng:name:三宫椿"
+    assert intelligence.actor_identity_key("未收录演员") == "name:未收录演员"
     assert intelligence.canonical_actor_name("未收录演员") == "未收录演员"
     assert intelligence.actor_alias_revision() != "missing"
     assert intelligence.actor_alias_stats()["identity_count"] == 1
@@ -88,13 +99,13 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     assert enriched["profile"]["facts"]["javdb"]["actors"] == ["测试演员"]
     assert "隣人" in enriched["profile"]["tokens"]["cjk"]
     assert await intelligence.record_preference_event(
-        "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"],
+        "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"], enqueue_refresh=False,
     ) is True
     assert await intelligence.record_preference_event(
-        "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"],
+        "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"], enqueue_refresh=False,
     ) is False
     assert await intelligence.record_preference_event(
-        "PRED-878", "subscription", source="av-recommend", actors=["测试演员"], categories=["剧情"],
+        "PRED-878", "subscription", source="av-recommend", actors=["测试演员"], categories=["剧情"], enqueue_refresh=False,
     ) is True
     assert await intelligence.record_preference_event(
         "PRED-878", "library_imported", source="subscription-core", data={"evidence_id": "sub-1:media-1"},
