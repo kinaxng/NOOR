@@ -58,6 +58,10 @@ docs/      补充文档
 
 仓库包含具有独立许可证的第三方源代码，尤其是 LADA 与 FaceFusion。请阅读 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) 以及对应源码目录中的许可证；第三方许可证在其适用范围内优先。
 
+## 插件生态
+
+官方插件、Plugin SDK 和开发工具位于 [NOOR-Plugins](https://github.com/kinaxng/NOOR-Plugins)。新安装会默认加入该商店源；用户也可以在插件管理中删除或添加其他兼容仓库。
+
 ## 安全与隐私
 
 公开 Issue 中请勿附带真实媒体文件名、内网地址、Cookie、令牌或日志。漏洞报告方式见 [SECURITY.md](./SECURITY.md)。

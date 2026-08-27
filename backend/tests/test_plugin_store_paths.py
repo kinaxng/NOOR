@@ -3,6 +3,19 @@ from __future__ import annotations
 from app.plugins import store
 
 
+def test_plugin_store_seeds_official_market_for_new_install(monkeypatch, tmp_path):
+    monkeypatch.setattr(store, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+
+    assert store.load_market_repos() == [{"url": "https://github.com/kinaxng/NOOR-Plugins"}]
+
+
+def test_plugin_store_respects_explicitly_empty_market_list(monkeypatch, tmp_path):
+    monkeypatch.setattr(store, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    store.save_market_repos([])
+
+    assert store.load_market_repos() == []
+
+
 def test_plugin_store_uses_runtime_data_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(store, "data_path", lambda *parts: tmp_path.joinpath(*parts))
 

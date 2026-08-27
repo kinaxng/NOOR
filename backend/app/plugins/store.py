@@ -6,6 +6,7 @@ from typing import Any
 
 from app.core.runtime_paths import data_path
 
+OFFICIAL_MARKET_REPO = "https://github.com/kinaxng/NOOR-Plugins"
 
 def _state_file() -> Path:
     return data_path("plugins_state.json")
@@ -72,7 +73,10 @@ def save_config(cfg: dict[str, Any]) -> None:
 
 
 def load_market_repos() -> list[dict[str, str]]:
-    raw = _read_json(_market_repos_file())
+    path = _market_repos_file()
+    if not path.exists():
+        return [{"url": OFFICIAL_MARKET_REPO}]
+    raw = _read_json(path)
     repos = raw.get("repos")
     if not isinstance(repos, list):
         return []
