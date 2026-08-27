@@ -295,14 +295,9 @@ class WhisperPipeline:
 
     @staticmethod
     def _clean_video_name(name: str) -> str:
-        name = re.sub(
-            r"[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)",
-            "",
-            name,
-            flags=re.IGNORECASE,
-        )
-        name = re.sub(r"\.(mp4|mkv|avi|mov|wmv|flv|m4v)$", "", name, flags=re.IGNORECASE)
-        return name.strip()
+        from app.pipeline.whisper.filenames import clean_media_stem
+
+        return clean_media_stem(name)
 
 
 _tasks: dict[str, WhisperTask] = {}

@@ -25,6 +25,7 @@ def test_apply_whisper_strategy_defaults_to_chickenrice_direct_model():
     assert payload["whisper_task"] == "translate"
     assert payload["pipeline_mode"] == "faster"
     assert payload["chunker"] == "smart_vad_chunk"
+    assert payload["vad_backend"] == "whisper_vad_onnx"
     assert payload["runtime_tier"] == "gpu_standard"
     assert payload["device"] == "cuda"
     assert payload["compute_type"] == "float16"

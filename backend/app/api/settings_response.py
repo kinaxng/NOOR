@@ -88,7 +88,7 @@ def build_settings_payload(
         "model_backend": default_model_backend,
         "runtime_tier": env_data.get("WHISPER_RUNTIME_TIER", "gpu_standard"),
         "whisper_task": env_data.get("WHISPER_TASK", "translate"),
-        "vad_backend": env_data.get("WHISPER_VAD_BACKEND", "energy"),
+        "vad_backend": env_data.get("WHISPER_VAD_BACKEND", "whisper_vad_onnx"),
         "chunker": env_data.get("WHISPER_CHUNKER", "smart_vad_chunk"),
         "target_chunk_duration_s": float(env_data.get("WHISPER_TARGET_CHUNK_DURATION_S", "30") or 30),
         "max_chunk_duration_s": float(env_data.get("WHISPER_MAX_CHUNK_DURATION_S", "30") or 30),

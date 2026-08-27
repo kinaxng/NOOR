@@ -21,6 +21,18 @@ def test_facefusion_default_dir_uses_embedded_source():
     assert payload["facefusion_dir"] == ""
 
 
+def test_facefusion_legacy_percentage_weights_are_normalized(monkeypatch, tmp_path):
+    settings_path = tmp_path / "facefusion_settings.json"
+    settings_path.write_text(
+        '{"facefusion_face_swapper_weight": 100, "facefusion_face_enhancer_weight": 75}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(facefusion_defaults, "_settings_path", lambda: settings_path)
+    payload = facefusion_defaults.facefusion_settings_payload(SimpleNamespace())
+    assert payload["facefusion_face_swapper_weight"] == 1.0
+    assert payload["facefusion_face_enhancer_weight"] == 0.75
+
+
 def test_facefusion_legacy_saved_dir_is_normalized(monkeypatch, tmp_path):
     settings_path = tmp_path / "facefusion_settings.json"
     settings_path.write_text(
@@ -76,15 +88,19 @@ def test_configured_model_dir_overrides_nonempty_native_assets(tmp_path):
     assert not native_model_dir.is_symlink()
 
 
-def test_facefusion_python_env_exposes_configured_model_dir(tmp_path):
+def test_facefusion_python_env_exposes_configured_model_dir(monkeypatch, tmp_path):
     source_dir = tmp_path / "source"
     model_dir = tmp_path / "models"
 
+    nvidia_lib = tmp_path / "nvidia" / "cuda_runtime" / "lib"
+    nvidia_lib.mkdir(parents=True)
+    monkeypatch.setattr(facefusion_paths, "_nvidia_library_dirs", lambda: [nvidia_lib])
     env = facefusion_paths.build_facefusion_python_env(
         source_dir,
-        {"PYTHONPATH": "/existing"},
+        {"PYTHONPATH": "/existing", "LD_LIBRARY_PATH": "/system/cuda"},
         model_dir=str(model_dir),
     )
 
     assert env["FACEFUSION_MODEL_DIR"] == str(model_dir)
     assert env["PYTHONPATH"].split(":") == [str(source_dir), "/existing"]
+    assert env["LD_LIBRARY_PATH"].split(":") == [str(nvidia_lib), "/system/cuda"]

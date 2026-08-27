@@ -218,7 +218,8 @@ async def download_online_subtitle(url: str, video_path: str, source: str | None
     local_video_path = map_emby_path_to_local(video_path)
     video_dir = os.path.dirname(local_video_path)
     video_name = os.path.splitext(os.path.basename(local_video_path))[0]
-    clean_video_name = re.sub(r"[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)", "", video_name, flags=re.IGNORECASE)
+    from app.pipeline.whisper.filenames import clean_media_stem
+    clean_video_name = clean_media_stem(video_name)
     if is_local_subtitle_source(url, source=source, source_type=source_type, source_key=source_key):
         local_sub_path = url if os.path.exists(url) else None
         if not local_sub_path:

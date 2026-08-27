@@ -23,7 +23,7 @@ def normalize_whisper_config_payload(config: Any) -> dict[str, Any]:
     payload["model_backend"] = payload.get("model_backend") or payload.get("model") or "chickenrice-zh"
     payload["runtime_tier"] = payload.get("runtime_tier") or "gpu_standard"
     payload["whisper_task"] = payload.get("whisper_task") or ("translate" if payload["model_backend"] == "chickenrice-zh" else "transcribe")
-    payload["vad_backend"] = payload.get("vad_backend", "energy")
+    payload["vad_backend"] = payload.get("vad_backend", "whisper_vad_onnx")
     payload["chunker"] = payload.get("chunker", "smart_vad_chunk")
     payload["target_chunk_duration_s"] = payload.get("target_chunk_duration_s", 30.0)
     payload["max_chunk_duration_s"] = payload.get("max_chunk_duration_s", 30.0)

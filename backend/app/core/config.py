@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     whisper_model_backend: str = "chickenrice-zh"
     whisper_runtime_tier: str = "gpu_standard"
     whisper_task: str = "translate"
-    whisper_vad_backend: str = "energy"
+    whisper_vad_backend: str = "whisper_vad_onnx"
     whisper_chunker: str = "smart_vad_chunk"
     whisper_target_chunk_duration_s: float = 30.0
     whisper_max_chunk_duration_s: float = 30.0

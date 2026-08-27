@@ -85,9 +85,30 @@ def build_facefusion_python_env(
     if existing:
         entries.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(entries)
+    nvidia_library_dirs = _nvidia_library_dirs()
+    existing_libraries = env.get("LD_LIBRARY_PATH", "")
+    library_entries = [str(path) for path in nvidia_library_dirs]
+    if existing_libraries:
+        library_entries.append(existing_libraries)
+    if library_entries:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(library_entries)
     if model_dir:
         env["FACEFUSION_MODEL_DIR"] = str(Path(model_dir).expanduser())
     return env
+
+
+def _nvidia_library_dirs() -> list[Path]:
+    """Expose pip-installed CUDA runtime libraries to ONNX Runtime children."""
+    directories: list[Path] = []
+    for entry in sys.path:
+        root = Path(entry) / "nvidia"
+        if not root.is_dir():
+            continue
+        for package_dir in root.iterdir():
+            library_dir = package_dir / "lib"
+            if library_dir.is_dir() and library_dir not in directories:
+                directories.append(library_dir)
+    return directories
 
 
 def resolve_facefusion_model_dir(source_dir: Path | str, configured_model_dir: str | None) -> tuple[str, str]:

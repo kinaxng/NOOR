@@ -15,7 +15,7 @@ CHICKENRICE_WHISPER_STRATEGY = {
     "compute_type": "float16",
     "model": "chickenrice-zh",
     "whisper_task": "translate",
-    "vad_backend": "energy",
+    "vad_backend": "whisper_vad_onnx",
     "chunker": "smart_vad_chunk",
     "target_chunk_duration_s": 30.0,
     "max_chunk_duration_s": 30.0,

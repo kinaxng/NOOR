@@ -16,7 +16,7 @@ BEST_WHISPER_PRESET = {
     "whisper_task": "translate",
     "language": "ja",
     "sensitivity": "balanced",
-    "vad_backend": "energy",
+    "vad_backend": "whisper_vad_onnx",
 }
 
 

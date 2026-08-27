@@ -1029,6 +1029,7 @@ class JobManager:
         await self._ensure_gpu_memory_for_job(job_id, "facefusion", "FaceFusion", settings)
         configured_output_dir = str(settings.get("output_dir") or "").strip()
         output_dir = Path(configured_output_dir) if configured_output_dir else source.parent
+        output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"{source.stem}.facefusion{source.suffix}"
         progress_queue: asyncio.Queue = asyncio.Queue()
         reader_task = asyncio.create_task(self._read_facefusion_progress(job_id, progress_queue))
@@ -1042,11 +1043,13 @@ class JobManager:
                 cancel_event,
             )
         )
-        await runner
+        success = await runner
         await self._drain_progress_queue(reader_task, progress_queue)
         if cancel_event.is_set():
             await self._finish_cancelled_job(job_id, event_queue=self.get_event_queue(job_id), log_message="FaceFusion 任务已取消")
             return
+        if not success:
+            raise RuntimeError("FaceFusion 处理进程返回非零状态，请查看任务日志")
         if not output_path.is_file():
             raise RuntimeError(f"FaceFusion 未产生输出文件: {output_path}")
         await self._finalize_parent_job_chain(

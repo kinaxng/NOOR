@@ -42,6 +42,7 @@ def test_settings_payload_defaults_match_frontend_chickenrice_profile():
     assert payload["runtime_tier"] == "gpu_standard"
     assert payload["device"] == "cuda"
     assert payload["compute_type"] == "float16"
+    assert payload["vad_backend"] == "whisper_vad_onnx"
 
 
 def test_settings_save_persists_all_editable_runtime_fields():

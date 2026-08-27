@@ -88,7 +88,7 @@ class WhisperConfig(BaseModel):
     model_backend: str = "chickenrice-zh"
     runtime_tier: str = "gpu_standard"
     whisper_task: str = "translate"
-    vad_backend: str = "energy"
+    vad_backend: str = "whisper_vad_onnx"
     chunker: str = "smart_vad_chunk"
     target_chunk_duration_s: float = 30.0
     max_chunk_duration_s: float = 30.0

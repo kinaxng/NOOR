@@ -26,10 +26,10 @@ FACEFUSION_DEFAULTS: dict[str, Any] = {
     "facefusion_download_providers": "github huggingface",
     "facefusion_face_swapper_model": "inswapper_128",
     "facefusion_face_swapper_pixel_boost": "128x128",
-    "facefusion_face_swapper_weight": 100,
+    "facefusion_face_swapper_weight": 1.0,
     "facefusion_face_enhancer_model": "gfpgan_1.4",
     "facefusion_face_enhancer_blend": 80,
-    "facefusion_face_enhancer_weight": 100,
+    "facefusion_face_enhancer_weight": 1.0,
     "facefusion_frame_enhancer_model": "real_esrgan_x2plus",
     "facefusion_frame_enhancer_blend": 80,
     "facefusion_face_detector_model": "many",
@@ -88,6 +88,11 @@ def load_facefusion_overrides() -> dict[str, Any]:
     values = {key: value for key, value in payload.items() if key in FACEFUSION_DEFAULTS}
     if "facefusion_dir" in values:
         values["facefusion_dir"] = normalize_configured_facefusion_dir(str(values.get("facefusion_dir") or ""))
+    # Older NOOR builds stored these CLI-native 0..1 weights as percentages.
+    for key in ("facefusion_face_swapper_weight", "facefusion_face_enhancer_weight"):
+        value = values.get(key)
+        if isinstance(value, (int, float)) and value > 1:
+            values[key] = min(float(value) / 100, 1.0)
     return values
 
 

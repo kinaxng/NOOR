@@ -136,7 +136,7 @@ export function buildWhisperProfileWithTranslation(
   return {
     ...profile,
     runtime_tier: normalizeWhisperRuntimeTier(overrides.runtime_tier || (profile as any).runtime_tier),
-    vad_backend: overrides.vad_backend || (profile as any).vad_backend || 'energy',
+    vad_backend: overrides.vad_backend || (profile as any).vad_backend || 'whisper_vad_onnx',
     timing_refiner: overrides.timing_refiner || (profile as any).timing_refiner || 'none',
     translate_to: directTranslate || overrides.translate_enabled == false ? '' : (overrides.translate_to || ''),
     translate_base_url: overrides.translate_base_url,
@@ -151,7 +151,7 @@ export function resolveWhisperEditableDefaults(payload?: Record<string, any> | n
   return {
     model_backend: normalizeWhisperModelBackend(whisper.model_backend || whisper.model || whisper.strategy),
     runtime_tier: normalizeWhisperRuntimeTier(whisper.runtime_tier),
-    vad_backend: whisper.vad_backend || 'energy',
+    vad_backend: whisper.vad_backend || 'whisper_vad_onnx',
     timing_refiner: whisper.timing_refiner || 'none',
     translate_enabled: !!whisper.translate_to,
     translate_to: whisper.translate_to || 'zh',

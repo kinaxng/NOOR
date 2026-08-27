@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -11,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from app.api.system import SystemLogManager
 from app.core.config import get_settings
 from app.pipeline.whisper.strategy import apply_whisper_strategy, normalize_whisper_strategy
+from app.pipeline.whisper.filenames import clean_media_stem
 from app.tasks.manager import job_manager
 
 
@@ -27,7 +27,7 @@ class WhisperRequest(BaseModel):
     model_backend: Optional[str] = "chickenrice-zh"
     runtime_tier: Optional[str] = "gpu_standard"
     whisper_task: Optional[str] = "translate"
-    vad_backend: Optional[str] = "energy"
+    vad_backend: Optional[str] = "whisper_vad_onnx"
     chunker: Optional[str] = "smart_vad_chunk"
     target_chunk_duration_s: Optional[float] = 30.0
     max_chunk_duration_s: Optional[float] = 30.0
@@ -73,9 +73,7 @@ def map_emby_path_to_local(emby_path: str) -> str:
 
 
 def clean_video_name(name: str) -> str:
-    name = re.sub(r"[-_]?(破解|流出|中文|字幕|ch|chs|cht|cn|tw|z[ah]?[-_]?.*)", "", name, flags=re.IGNORECASE)
-    name = re.sub(r"\.(mp4|mkv|avi|mov|wmv|flv|m4v)$", "", name, flags=re.IGNORECASE)
-    return name.strip()
+    return clean_media_stem(name)
 
 
 def build_expected_ja_srt_path(local_video_path: str) -> str:
