@@ -33,6 +33,8 @@ _actor_alias_cache: tuple[str, frozenset[str], dict[str, str], dict[str, str]] |
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
 _work_search_cache: dict[str, Any] = {"expires_at": 0.0, "documents": []}
 _work_search_lock = asyncio.Lock()
+_preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "value": None}
+_preference_summary_lock = asyncio.Lock()
 WORK_SIMILARITY_VERSION = 6
 WORK_PROFILE_FUSION_VERSION = 1
 SIMILARITY_CATEGORY_STOPWORDS = {
@@ -380,6 +382,7 @@ async def record_preference_event(
         )
         db.add(event)
         await db.commit()
+    _preference_summary_cache["expires_at"] = 0.0
     refresh_priority = {"subscription": 5, "download_intent": 8, "detail_view": 24}.get(kind)
     if enqueue_refresh and refresh_priority is not None:
         await enqueue_resource_refresh([canonical], priority=refresh_priority)
@@ -387,6 +390,22 @@ async def record_preference_event(
 
 
 async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, Any]:
+    cache_key = f"{id(async_session_maker)}:{max_age_days}:{actor_alias_revision()}"
+    if time.monotonic() < float(_preference_summary_cache.get("expires_at") or 0) and _preference_summary_cache.get("key") == cache_key:
+        cached = _preference_summary_cache.get("value")
+        if isinstance(cached, dict):
+            return cached
+    async with _preference_summary_lock:
+        if time.monotonic() < float(_preference_summary_cache.get("expires_at") or 0) and _preference_summary_cache.get("key") == cache_key:
+            cached = _preference_summary_cache.get("value")
+            if isinstance(cached, dict):
+                return cached
+        result = await _preference_behavior_summary_uncached(max_age_days=max_age_days)
+        _preference_summary_cache.update({"expires_at": time.monotonic() + 15, "key": cache_key, "value": result})
+        return result
+
+
+async def _preference_behavior_summary_uncached(*, max_age_days: int = 365) -> dict[str, Any]:
     now = utcnow()
     cutoff = now - timedelta(days=max_age_days)
     try:
@@ -571,6 +590,7 @@ async def clear_preference_events(*, source: str | None = None) -> int:
     async with async_session_maker() as db:
         result = await db.execute(statement)
         await db.commit()
+    _preference_summary_cache["expires_at"] = 0.0
     return int(result.rowcount or 0)
 
 

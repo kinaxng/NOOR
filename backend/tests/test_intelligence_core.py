@@ -231,6 +231,28 @@ def test_actor_alias_inference_requires_repeated_unambiguous_title_evidence(monk
     assert intelligence.actor_identity_key("吉泽明步") == "mdc-ng:actor-1"
 
 
+def test_preference_summary_uses_short_lived_memory_snapshot(monkeypatch) -> None:
+    asyncio.run(_preference_summary_uses_short_lived_memory_snapshot(monkeypatch))
+
+
+async def _preference_summary_uses_short_lived_memory_snapshot(monkeypatch) -> None:
+    calls = 0
+
+    async def fake_uncached(*, max_age_days: int):
+        nonlocal calls
+        calls += 1
+        return {"event_count": calls, "max_age_days": max_age_days}
+
+    monkeypatch.setattr(intelligence, "_preference_behavior_summary_uncached", fake_uncached)
+    monkeypatch.setattr(intelligence, "_preference_summary_cache", {"expires_at": 0.0, "key": "", "value": None})
+
+    first = await intelligence.preference_behavior_summary(max_age_days=30)
+    second = await intelligence.preference_behavior_summary(max_age_days=30)
+
+    assert first == second == {"event_count": 1, "max_age_days": 30}
+    assert calls == 1
+
+
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:
     asyncio.run(_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch))
 
