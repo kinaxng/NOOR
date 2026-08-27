@@ -1,0 +1,72 @@
+<script setup lang="ts">
+import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from '../../composables/useI18n'
+
+const { t, i18nVersion } = useI18n()
+
+const props = defineProps<{
+  logs: { time: string; line: string }[]
+  autoScroll?: boolean
+}>()
+
+const container = ref<HTMLElement | null>(null)
+const copied = ref(false)
+
+const emptyHint = computed(() => {
+  void i18nVersion.value
+  return t('jobs.clickForLogs')
+})
+const copyAllLabel = computed(() => {
+  void i18nVersion.value
+  return copied.value ? t('jobs.logsCopied') : t('jobs.copyAllLogs')
+})
+
+const plainText = computed(() =>
+  props.logs.map(l => l.time ? `[${l.time}] ${l.line}` : l.line).join('\n')
+)
+
+async function copyAll() {
+  try {
+    await navigator.clipboard.writeText(plainText.value)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1500)
+  } catch {
+    // fallback: select text
+    const sel = window.getSelection()
+    const range = document.createRange()
+    if (container.value) {
+      range.selectNodeContents(container.value)
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+    }
+  }
+}
+
+watch(() => props.logs.length, async () => {
+  if (props.autoScroll !== false) {
+    await nextTick()
+    if (container.value) {
+      container.value.scrollTop = container.value.scrollHeight
+    }
+  }
+})
+</script>
+
+<template>
+  <div class="relative flex flex-col min-h-0" style="height: 70vh; max-height: 800px;">
+    <!-- Copy button -->
+    <button
+      v-if="logs.length > 0"
+      class="flex-shrink-0 absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs font-mono bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors"
+      @click="copyAll"
+    >
+      {{ copyAllLabel }}
+    </button>
+
+    <pre
+      ref="container"
+      class="log-viewer-bg rounded-lg p-4 w-full overflow-x-auto overflow-y-auto font-mono text-sm scanlines min-w-0 flex-1"
+      style="font-family: var(--font-mono, 'JetBrains Mono', monospace);"
+    ><code class="whitespace-pre-wrap break-words">{{ logs.length === 0 ? '// ' + emptyHint : logs.map(l => (l.time ? '[' + l.time + '] ' : '') + l.line).join('\n') }}</code></pre>
+  </div>
+</template>
