@@ -11,6 +11,7 @@ import math
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -41,6 +42,8 @@ SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
     "身体", "本番", "作品", "影片", "电影", "独家", "推荐", "热门", "has_chinese",
     "release_type", "release_type_key", "is_leaked", "is_cracked", "torrent",
+    "DMM独家", "ハイビジョン", "高清晰", "高解析度",
+    "破解", "中文字幕", "中字", "中文", "4K", "8K", "独占配信", "独家配信", "配信限定",
 }
 SEMANTIC_PROFILE_VERSION = 8
 SEMANTIC_STOPWORDS = {
@@ -49,6 +52,14 @@ SEMANTIC_STOPWORDS = {
 }
 SEMANTIC_LATIN_STOPWORDS = {
     "fanza", "dmm", "javdb", "avdb", "video", "movie", "sample", "preview", "sex",
+}
+PREFERENCE_CATEGORY_ALIASES = {
+    "中出し": "中出", "中出": "中出",
+    "已婚妇女": "人妻", "人妻": "人妻",
+    "ドラマ": "剧情", "戏剧": "剧情", "劇情": "剧情", "剧情": "剧情",
+    "強姦": "强制", "强奸": "强制", "強制": "强制",
+    "调教": "调教", "調教": "调教",
+    "単体作品": "单体作品", "單體作品": "单体作品",
 }
 PREFERENCE_EVENT_WEIGHTS = {
     "detail_view": 0.18,
@@ -108,6 +119,11 @@ def canonical_work_code(value: Any) -> str:
 
 def _normalize_actor_name(value: Any) -> str:
     return re.sub(r"[\s\u3000・·._\-]", "", unicodedata.normalize("NFKC", str(value or ""))).casefold()
+
+
+def canonical_preference_category(value: Any) -> str:
+    name = unicodedata.normalize("NFKC", str(value or "")).strip()
+    return PREFERENCE_CATEGORY_ALIASES.get(name, name)
 
 
 def _actor_alias_data() -> tuple[frozenset[str], dict[str, str], dict[str, str]]:
@@ -387,7 +403,7 @@ async def record_preference_event(
                 return str(value.get("name") or value.get("label") or "").strip()
             return str(value or "").strip()
         actor_names = list(dict.fromkeys(canonical_actor_name(evidence_name(value)) for value in (actors or []) if evidence_name(value)))[:12]
-        category_names = list(dict.fromkeys(evidence_name(value) for value in (categories or []) if evidence_name(value)))[:20]
+        category_names = list(dict.fromkeys(canonical_preference_category(evidence_name(value)) for value in (categories or []) if evidence_name(value)))[:20]
         event = PreferenceEvent(
             id=event_id,
             work_code=canonical,
@@ -433,8 +449,27 @@ async def _preference_behavior_summary_uncached(*, max_age_days: int = 365) -> d
     try:
         async with async_session_maker() as db:
             events = list((await db.execute(select(PreferenceEvent).where(PreferenceEvent.created_at >= cutoff))).scalars())
+            profiles = list((await db.execute(select(WorkProfile))).scalars())
     except SQLAlchemyError:
         return {"codes": {}, "actors": {}, "actor_identities": {}, "categories": {}, "code_stages": {}, "event_count": 0, "revision": "0:none"}
+    profile_evidence = {canonical_work_code(profile.code): _profile_preference_evidence(profile) for profile in profiles}
+    enriched_events: list[PreferenceEvent] = []
+    for event in events:
+        evidence = profile_evidence.get(canonical_work_code(event.work_code)) or {}
+        if (event.actors or []) and (event.categories or []):
+            enriched_events.append(event)
+            continue
+        enriched = SimpleNamespace(
+            work_code=event.work_code,
+            event_type=event.event_type,
+            source=event.source,
+            weight=event.weight,
+            actors=list(event.actors or evidence.get("actors") or []),
+            categories=list(event.categories or evidence.get("categories") or []),
+            created_at=event.created_at,
+        )
+        enriched_events.append(enriched)
+    events = enriched_events
     codes: dict[str, float] = {}
     actors: dict[str, float] = {}
     actor_identities: dict[str, float] = {}
@@ -452,7 +487,7 @@ async def _preference_behavior_summary_uncached(*, max_age_days: int = 365) -> d
             if identity:
                 actor_identities[identity] = actor_identities.get(identity, 0.0) + effective
         for category in event.categories or []:
-            name = str(category).strip()
+            name = canonical_preference_category(category)
             if name:
                 categories[name] = categories.get(name, 0.0) + effective
         stage_value = float(PREFERENCE_EVENT_STAGE_VALUES.get(event.event_type, 0.0))
@@ -479,12 +514,185 @@ async def _preference_behavior_summary_uncached(*, max_age_days: int = 365) -> d
         "event_count": len(events),
         "outcomes": _preference_outcome_model(events),
         "trends": _preference_drift_model(events),
+        "interest_topics": _preference_interest_topics(events, profiles=profiles),
         "revision": f"{len(events)}:{latest.isoformat() if latest else 'none'}",
     }
 
 
+def _profile_preference_evidence(profile: WorkProfile) -> dict[str, list[str]]:
+    """Backfill old behavior events from the best currently known portrait."""
+    facts = profile.facts if isinstance(profile.facts, dict) else {}
+
+    def names(values: Any, *, reject_male: bool = False) -> list[str]:
+        out: list[str] = []
+        for value in values if isinstance(values, list) else []:
+            if isinstance(value, dict):
+                if reject_male and str(value.get("gender") or "").strip().casefold() in {"♂", "male", "m", "男"}:
+                    continue
+                text = str(value.get("name") or value.get("label") or "").strip()
+            else:
+                text = str(value or "").strip()
+            if text and text not in out:
+                out.append(text)
+        return out
+
+    library = facts.get("media-library") if isinstance(facts.get("media-library"), dict) else {}
+    actors = names(library.get("actors") or library.get("actresses") or [])
+    if not actors:
+        for source in facts.values():
+            if isinstance(source, dict):
+                actors.extend(name for name in names(source.get("actors") or source.get("actresses") or [], reject_male=True) if name not in actors)
+    categories: list[str] = []
+    # Structured provider categories are less polluted by maker names and
+    # operational tags than a media-library genre list.
+    provider_sources = [source for key, source in facts.items() if key != "media-library" and isinstance(source, dict)]
+    category_sources = provider_sources if any(names(source.get("categories") or source.get("genres") or []) for source in provider_sources) else [library]
+    category_stopwords = {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}
+    for source in category_sources:
+        if not isinstance(source, dict):
+            continue
+        for name in names(source.get("categories") or source.get("genres") or []):
+            canonical = canonical_preference_category(name)
+            if canonical.casefold() not in category_stopwords and canonical not in categories:
+                categories.append(canonical)
+    return {"actors": actors[:12], "categories": categories[:24]}
+
+
 def _bayesian_rate(successes: int, trials: int) -> float:
     return (max(0, successes) + 2) / (max(0, trials) + 4)
+
+
+def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list[WorkProfile] | None = None, max_topics: int = 8) -> dict[str, Any]:
+    """Build explainable actor/category topic mixtures from staged behavior."""
+    now = utcnow()
+    by_code: dict[str, dict[str, Any]] = {}
+    actor_labels: dict[str, str] = {}
+    category_stopwords = {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}
+    library_codes: set[str] = set()
+    for profile in profiles or []:
+        facts = profile.facts if isinstance(profile.facts, dict) else {}
+        library = facts.get("media-library") if isinstance(facts.get("media-library"), dict) else None
+        if not library or not bool(library.get("in_library", True)):
+            continue
+        code = canonical_work_code(profile.code)
+        evidence = _profile_preference_evidence(profile)
+        if not code or not evidence.get("categories"):
+            continue
+        library_codes.add(code)
+        row = by_code.setdefault(code, {"weight": 0.0, "recent_weight": 0.0, "actors": set(), "categories": set()})
+        # Library presence is durable positive evidence, but one explicit
+        # verified outcome remains stronger than the passive baseline.
+        row["weight"] = max(float(row["weight"]), 0.75 * max(0.5, min(1.0, float(profile.confidence or 80) / 100)))
+        for actor in evidence.get("actors") or []:
+            identity = actor_identity_key(actor)
+            if identity:
+                row["actors"].add(identity)
+                actor_labels.setdefault(identity, canonical_actor_name(actor))
+        row["categories"].update(canonical_preference_category(category) for category in evidence.get("categories") or [] if canonical_preference_category(category).casefold() not in category_stopwords)
+    for event in events:
+        code = canonical_work_code(event.work_code)
+        if not code:
+            continue
+        age_days = max(0.0, (now - event.created_at).total_seconds() / 86400)
+        half_life = PREFERENCE_EVENT_HALF_LIFE_DAYS.get(event.event_type, 30)
+        effective = float(event.weight or 0) * math.pow(0.5, age_days / half_life)
+        row = by_code.setdefault(code, {"weight": 0.0, "recent_weight": 0.0, "actors": set(), "categories": set()})
+        # One work is one preference observation. A later funnel stage may
+        # strengthen it, but detail -> download -> import must not count as
+        # three independent examples of the same taste.
+        row["weight"] = max(float(row["weight"]), effective)
+        if age_days <= 30:
+            row["recent_weight"] = max(float(row["recent_weight"]), effective)
+        for actor in event.actors or []:
+            identity = actor_identity_key(actor)
+            if identity:
+                row["actors"].add(identity)
+                actor_labels.setdefault(identity, canonical_actor_name(actor))
+        row["categories"].update(
+            canonical_preference_category(category) for category in (event.categories or [])
+            if canonical_preference_category(category) and canonical_preference_category(category).casefold() not in category_stopwords
+        )
+    category_weights: dict[str, float] = defaultdict(float)
+    category_recent: dict[str, float] = defaultdict(float)
+    category_recent_codes: dict[str, set[str]] = defaultdict(set)
+    category_codes: dict[str, set[str]] = defaultdict(set)
+    actor_category: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    category_pairs: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for code, row in by_code.items():
+        weight = float(row["weight"])
+        recent_weight = float(row["recent_weight"])
+        categories = sorted(row["categories"])
+        actors = sorted(row["actors"])
+        for category in categories:
+            category_weights[category] += weight
+            category_recent[category] += recent_weight
+            if recent_weight > 0:
+                category_recent_codes[category].add(code)
+            category_codes[category].add(code)
+            for actor in actors:
+                actor_category[category][actor] += weight
+            for related in categories:
+                if related != category:
+                    category_pairs[category][related] += weight
+    total_weight = sum(category_weights.values()) or 1.0
+    recent_total = sum(category_recent.values()) or 1.0
+    candidates: list[dict[str, Any]] = []
+    for anchor, weight in category_weights.items():
+        support = len(category_codes[anchor])
+        if support < 1 or weight <= 0:
+            continue
+        related = sorted(category_pairs[anchor].items(), key=lambda row: row[1], reverse=True)[:4]
+        actors = sorted(actor_category[anchor].items(), key=lambda row: row[1], reverse=True)[:4]
+        share = weight / total_weight
+        raw_recent_share = category_recent.get(anchor, 0.0) / recent_total
+        recent_support = len(category_recent_codes[anchor])
+        recent_reliability = recent_support / (recent_support + 4)
+        recent_share = share + (raw_recent_share - share) * recent_reliability
+        actor_coverage = (float(actors[0][1]) / weight) if actors and weight > 0 else 0.0
+        category_coverage = (float(related[0][1]) / weight) if related and weight > 0 else 0.0
+        actor_rows = [{"identity": identity, "name": actor_labels.get(identity, identity), "weight": round(score, 3)} for identity, score in actors]
+        if actor_rows and actor_coverage >= 0.25:
+            topic_label = f"{actor_rows[0]['name']} · {anchor}"
+        elif related and category_coverage >= 0.25:
+            topic_label = f"{anchor} · {related[0][0]}"
+        else:
+            topic_label = anchor
+        candidates.append({
+            "id": stable_id("preference-topic", anchor)[:16],
+            "label": topic_label,
+            "anchor": anchor,
+            "categories": [anchor, *[name for name, _score in related]],
+            "actors": actor_rows,
+            "support": support,
+            "strength": round(share, 4),
+            "recent_strength": round(recent_share, 4),
+            "momentum": round(recent_share - share, 4),
+            "recent_support": recent_support,
+            "recent_reliability": round(recent_reliability, 3),
+            "actor_coverage": round(actor_coverage, 3),
+            "category_coverage": round(category_coverage, 3),
+            "confidence": round(min(0.95, support / (support + 4)), 3),
+            "evidence_codes": sorted(category_codes[anchor])[:8],
+        })
+    candidates.sort(key=lambda row: (float(row["strength"]) + max(0.0, float(row["momentum"])) * 0.7) * float(row["confidence"]), reverse=True)
+    selected: list[dict[str, Any]] = []
+    for topic in candidates:
+        category_set = set(topic["categories"][:3])
+        evidence_set = set(topic["evidence_codes"])
+        if any(
+            len(category_set & set(existing["categories"][:3])) / max(1, len(category_set | set(existing["categories"][:3]))) >= 0.8
+            or (
+                len(evidence_set & set(existing["evidence_codes"])) / max(1, len(evidence_set | set(existing["evidence_codes"]))) >= 0.8
+                and len(category_set & set(existing["categories"][:3])) >= 2
+            )
+            for existing in selected
+        ):
+            continue
+        selected.append(topic)
+        if len(selected) >= max_topics:
+            break
+    revision_payload = json.dumps({"version": 2, "topics": selected, "library_work_count": len(library_codes)}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {"version": 2, "revision": hashlib.sha256(revision_payload.encode("utf-8")).hexdigest()[:20], "topics": selected, "work_count": len(by_code), "library_work_count": len(library_codes), "behavior_work_count": len({canonical_work_code(event.work_code) for event in events if canonical_work_code(event.work_code)}), "generated_at": now.isoformat()}
 
 
 def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
@@ -495,7 +703,7 @@ def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
         row["attempt"] = bool(row["attempt"] or event.event_type in OUTCOME_ATTEMPT_EVENTS)
         row["verified"] = bool(row["verified"] or event.event_type in OUTCOME_VERIFIED_EVENTS)
         row["actors"].update(actor_identity_key(actor) for actor in (event.actors or []) if actor_identity_key(actor))
-        row["categories"].update(str(category).strip() for category in (event.categories or []) if str(category or "").strip())
+        row["categories"].update(canonical_preference_category(category) for category in (event.categories or []) if canonical_preference_category(category))
     trials = {code for code, row in by_code.items() if row["attempt"] or row["verified"]}
     verified = {code for code in trials if by_code[code]["verified"]}
 
@@ -546,7 +754,7 @@ def _preference_drift_model(events: list[PreferenceEvent], *, window_days: int =
                 bucket["actors"][identity] = bucket["actors"].get(identity, 0.0) + float(event.weight or 0)
                 actor_labels.setdefault(identity, canonical_actor_name(actor))
         for category in event.categories or []:
-            name = str(category or "").strip()
+            name = canonical_preference_category(category)
             if name:
                 bucket["categories"][name] = bucket["categories"].get(name, 0.0) + float(event.weight or 0)
 

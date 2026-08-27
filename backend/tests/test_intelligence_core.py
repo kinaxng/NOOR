@@ -36,6 +36,64 @@ def test_preference_outcome_model_uses_verified_funnel_with_smoothing() -> None:
     assert model["categories"]["NTR"]["rate"] == 0.4
 
 
+def test_interest_topics_deduplicate_funnel_stages_and_capture_recent_combinations() -> None:
+    now = intelligence.utcnow()
+    events = [
+        SimpleNamespace(work_code="AAA-001", event_type="detail_view", weight=0.18, actors=["演员甲"], categories=["人妻", "邻居"], created_at=now - dt.timedelta(days=2)),
+        SimpleNamespace(work_code="AAA-001", event_type="library_imported", weight=4.0, actors=["演员甲"], categories=["人妻", "邻居"], created_at=now - dt.timedelta(days=1)),
+        SimpleNamespace(work_code="AAA-002", event_type="subscription", weight=1.8, actors=["演员甲"], categories=["人妻", "职场"], created_at=now - dt.timedelta(days=4)),
+        SimpleNamespace(work_code="BBB-001", event_type="library_imported", weight=4.0, actors=["演员乙"], categories=["运动"], created_at=now - dt.timedelta(days=80)),
+    ]
+
+    result = intelligence._preference_interest_topics(events)
+    topic = next(item for item in result["topics"] if item["anchor"] == "人妻")
+
+    assert result["work_count"] == 3
+    assert topic["support"] == 2
+    assert {item["name"] for item in topic["actors"]} == {"演员甲"}
+    assert {"邻居", "职场"} <= set(topic["categories"])
+    assert topic["recent_strength"] > 0
+
+
+def test_interest_topics_use_media_library_as_durable_long_term_baseline() -> None:
+    profiles = [
+        SimpleNamespace(code="AAA-001", confidence=95, facts={"media-library": {"in_library": True, "actors": ["演员甲"]}, "javdb": {"categories": [{"name": "人妻"}, {"name": "邻居"}]}}),
+        SimpleNamespace(code="AAA-002", confidence=90, facts={"media-library": {"in_library": True, "actors": ["演员甲"]}, "javdb": {"categories": [{"name": "人妻"}, {"name": "职场"}]}}),
+        SimpleNamespace(code="AAA-003", confidence=90, facts={"javdb": {"categories": [{"name": "运动"}]}}),
+    ]
+
+    result = intelligence._preference_interest_topics([], profiles=profiles)
+    topic = next(item for item in result["topics"] if item["anchor"] == "人妻")
+
+    assert result["version"] == 2
+    assert result["library_work_count"] == 2
+    assert result["behavior_work_count"] == 0
+    assert topic["support"] == 2
+    assert topic["confidence"] >= 0.33
+    assert topic["recent_strength"] == topic["strength"]
+    assert topic["recent_reliability"] == 0
+
+
+def test_profile_evidence_backfills_historical_events_without_male_cast_or_operational_tags() -> None:
+    profile = SimpleNamespace(facts={
+        "javdb": {
+            "actors": [{"name": "女优甲", "gender": "♀"}, {"name": "男优乙", "gender": "♂"}],
+            "categories": [{"name": "人妻"}, {"name": "巨乳"}],
+        },
+        "media-library": {
+            "actors": ["女优甲"],
+            "genres": ["人妻", "中文字幕", "片商名称"],
+        },
+    })
+
+    evidence = intelligence._profile_preference_evidence(profile)
+
+    assert evidence["actors"] == ["女优甲"]
+    assert "人妻" in evidence["categories"]
+    assert "巨乳" in evidence["categories"]
+    assert "中文字幕" not in evidence["categories"]
+
+
 def test_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch) -> None:
     asyncio.run(_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch))
 
