@@ -8,6 +8,7 @@ import json
 import re
 import unicodedata
 import math
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -28,6 +29,13 @@ _refresh_planner_task: asyncio.Task[None] | None = None
 _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[float, frozenset[str], dict[str, str], dict[str, str]] | None = None
+_similarity_cache: tuple[str, dict[str, Any]] | None = None
+WORK_SIMILARITY_VERSION = 4
+SIMILARITY_CATEGORY_STOPWORDS = {
+    "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
+    "身体", "本番", "作品", "影片", "电影", "独家", "推荐", "热门", "has_chinese",
+    "release_type", "release_type_key", "is_leaked", "is_cracked", "torrent",
+}
 SEMANTIC_PROFILE_VERSION = 8
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
@@ -84,11 +92,11 @@ def _actor_alias_data() -> tuple[frozenset[str], dict[str, str], dict[str, str]]
     path = data_path("media_actor_mappings.json")
     try:
         mtime = path.stat().st_mtime
-        if _actor_alias_cache and _actor_alias_cache[0] == mtime:
+        if _actor_alias_cache and len(_actor_alias_cache) == 4 and _actor_alias_cache[0] == mtime:
             return _actor_alias_cache[1], _actor_alias_cache[2], _actor_alias_cache[3]
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return frozenset(), {}
+        return frozenset(), {}, {}
     names: set[str] = set()
     identities: dict[str, str] = {}
     identity_keys: dict[str, str] = {}
@@ -373,6 +381,224 @@ def semantic_tokens(*values: Any) -> dict[str, Any]:
     for term in latin:
         weighted[term] = max(weighted.get(term, 0), 1.0)
     return {"version": SEMANTIC_PROFILE_VERSION, "latin": latin[:80], "cjk": list(dict.fromkeys(cjk))[:320], "weighted": dict(sorted(weighted.items(), key=lambda row: (-row[1], row[0]))[:400])}
+
+
+def _work_similarity_file():
+    return data_path("work_similarity_index.json")
+
+
+def _fact_names(facts: dict[str, Any], *keys: str) -> list[str]:
+    values: list[str] = []
+    for key in keys:
+        raw = facts.get(key)
+        rows = raw if isinstance(raw, list) else [raw] if raw else []
+        for row in rows:
+            name = str((row.get("name") or row.get("label") or "") if isinstance(row, dict) else row or "").strip()
+            if name and name not in values:
+                values.append(name)
+    return values
+
+
+def _work_similarity_features(profile: WorkProfile) -> tuple[dict[str, float], dict[str, str]]:
+    features: dict[str, float] = {}
+    labels: dict[str, str] = {}
+    for facts in (profile.facts or {}).values():
+        if not isinstance(facts, dict):
+            continue
+        actor_names = _fact_names(facts, "actors", "actresses")
+        actor_name_keys = {_normalize_actor_name(name) for name in actor_names}
+        groups = [
+            ("actor", actor_names, 4.2),
+            ("series", _fact_names(facts, "series"), 4.0),
+            ("director", _fact_names(facts, "director", "directors"), 3.0),
+            ("studio", _fact_names(facts, "maker", "publisher", "studio", "label"), 2.4),
+            ("category", _fact_names(facts, "categories", "genres", "tags"), 1.5),
+        ]
+        for kind, names, weight in groups:
+            for name in names[:20]:
+                actual_kind, actual_name, actual_weight = kind, name, weight
+                if kind == "category":
+                    normalized_label = unicodedata.normalize("NFKC", name).strip()
+                    prefix_match = re.match(r"^(?:系列|シリーズ)\s*[:：]\s*(.+)$", normalized_label, re.I)
+                    studio_match = re.match(r"^(?:片商|发行|發行|メーカー|レーベル)\s*[:：]\s*(.+)$", normalized_label, re.I)
+                    if prefix_match:
+                        actual_kind, actual_name, actual_weight = "series", prefix_match.group(1).strip(), 4.0
+                    elif studio_match:
+                        actual_kind, actual_name, actual_weight = "studio", studio_match.group(1).strip(), 2.4
+                    elif (
+                        normalized_label.casefold() in {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}
+                        or re.fullmatch(r"(?:has|is)_[a-z0-9_]+", normalized_label, re.I)
+                        or _normalize_actor_name(normalized_label) in actor_name_keys
+                    ):
+                        continue
+                value = actor_identity_key(actual_name) if actual_kind == "actor" else unicodedata.normalize("NFKC", actual_name).casefold()
+                key = f"{actual_kind}:{value}"
+                features[key] = max(features.get(key, 0), actual_weight)
+                labels[key] = canonical_actor_name(actual_name) if actual_kind == "actor" else actual_name
+    weighted_terms = (profile.tokens or {}).get("weighted") if isinstance(profile.tokens, dict) else {}
+    for term, raw_weight in sorted((weighted_terms or {}).items(), key=lambda row: float(row[1] or 0), reverse=True)[:80]:
+        normalized = unicodedata.normalize("NFKC", str(term)).casefold().strip()
+        if len(normalized) < 2 or normalized in {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}:
+            continue
+        key = f"semantic:{normalized}"
+        features[key] = max(features.get(key, 0), min(1.2, float(raw_weight or 0) * 0.55))
+        labels[key] = str(term)
+    return features, labels
+
+
+def _work_profile_candidate(profile: WorkProfile) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for facts in (profile.facts or {}).values():
+        if isinstance(facts, dict):
+            for key, value in facts.items():
+                if value not in (None, "", [], {}) and key not in merged:
+                    merged[key] = value
+    return {
+        "code": profile.code,
+        "title": profile.title or profile.translated_title or profile.original_title or profile.code,
+        "original_title": profile.original_title,
+        "actors": _fact_names(merged, "actors", "actresses"),
+        "categories": _fact_names(merged, "categories", "genres", "tags"),
+        "maker": (_fact_names(merged, "maker", "publisher", "studio", "label") or [""])[0],
+        "series": (_fact_names(merged, "series") or [""])[0],
+        "director": (_fact_names(merged, "director", "directors") or [""])[0],
+        "cover_url": str(merged.get("cover_url") or merged.get("poster_url") or merged.get("image") or ""),
+        "release_date": str(merged.get("release_date") or merged.get("date") or ""),
+        "confidence": int(profile.confidence or 0),
+    }
+
+
+async def build_work_similarity_index(*, force: bool = False, neighbor_limit: int = 24) -> dict[str, Any]:
+    """Build a durable sparse multi-relation work-neighborhood index."""
+    global _similarity_cache
+    async with async_session_maker() as db:
+        profiles = list((await db.execute(select(WorkProfile))).scalars())
+    latest = max((profile.updated_at for profile in profiles if profile.updated_at), default=None)
+    revision = f"{WORK_SIMILARITY_VERSION}:{SEMANTIC_PROFILE_VERSION}:{actor_alias_revision()}:{len(profiles)}:{latest.isoformat() if latest else 'none'}"
+    if not force and _similarity_cache and _similarity_cache[0] == revision:
+        return _similarity_cache[1]
+    path = _work_similarity_file()
+    if not force and path.exists():
+        with contextlib.suppress(OSError, json.JSONDecodeError):
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if saved.get("revision") == revision:
+                _similarity_cache = (revision, saved)
+                return saved
+
+    raw_features: dict[str, dict[str, float]] = {}
+    feature_labels: dict[str, str] = {}
+    postings: dict[str, list[str]] = defaultdict(list)
+    candidates: dict[str, dict[str, Any]] = {}
+    for profile in profiles:
+        code = canonical_work_code(profile.code)
+        if not code:
+            continue
+        features, labels = _work_similarity_features(profile)
+        combined = raw_features.setdefault(code, {})
+        for feature, weight in features.items():
+            combined[feature] = max(combined.get(feature, 0), weight)
+        feature_labels.update(labels)
+        current_candidate = candidates.get(code)
+        candidate = _work_profile_candidate(profile)
+        if current_candidate is None or int(candidate.get("confidence") or 0) > int(current_candidate.get("confidence") or 0):
+            candidates[code] = candidate
+    for code, features in raw_features.items():
+        for feature in features:
+            postings[feature].append(code)
+    work_count = max(len(raw_features), 1)
+    weighted: dict[str, dict[str, float]] = defaultdict(dict)
+    feature_cap = max(40, int(work_count * 0.15))
+    for feature, codes in postings.items():
+        document_frequency = len(set(codes))
+        if document_frequency < 2 or document_frequency > feature_cap:
+            continue
+        idf = math.log((work_count + 1) / (document_frequency + 1)) + 1
+        for code in set(codes):
+            weighted[code][feature] = raw_features[code][feature] * idf
+    norms = {code: math.sqrt(sum(value * value for value in values.values())) for code, values in weighted.items()}
+    dots: dict[tuple[str, str], float] = defaultdict(float)
+    shared: dict[tuple[str, str], list[tuple[float, str]]] = defaultdict(list)
+    for feature, codes in postings.items():
+        eligible = sorted({code for code in codes if feature in weighted.get(code, {})})
+        for index, left in enumerate(eligible):
+            for right in eligible[index + 1:]:
+                contribution = weighted[left][feature] * weighted[right][feature]
+                pair = (left, right)
+                dots[pair] += contribution
+                shared[pair].append((contribution, feature))
+    neighbors: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for (left, right), dot in dots.items():
+        denominator = norms.get(left, 0) * norms.get(right, 0)
+        if denominator <= 0:
+            continue
+        similarity = dot / denominator
+        if similarity < 0.08:
+            continue
+        reasons = []
+        for contribution, feature in sorted(shared[(left, right)], reverse=True)[:5]:
+            kind = feature.split(":", 1)[0]
+            reasons.append({"type": kind, "label": feature_labels.get(feature, feature.split(":", 1)[-1]), "weight": round(contribution, 3)})
+        row_left = {"code": right, "score": round(similarity * 100, 2), "reasons": reasons}
+        row_right = {"code": left, "score": round(similarity * 100, 2), "reasons": reasons}
+        neighbors[left].append(row_left)
+        neighbors[right].append(row_right)
+    for code in list(neighbors):
+        neighbors[code] = sorted(neighbors[code], key=lambda row: row["score"], reverse=True)[:neighbor_limit]
+    result = {
+        "version": WORK_SIMILARITY_VERSION,
+        "revision": revision,
+        "generated_at": utcnow().isoformat(),
+        "work_count": len(raw_features),
+        "feature_count": sum(1 for feature, codes in postings.items() if 2 <= len(set(codes)) <= feature_cap),
+        "linked_work_count": len(neighbors),
+        "neighbors": dict(neighbors),
+        "candidates": candidates,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
+    _similarity_cache = (revision, result)
+    return result
+
+
+async def work_similarity_candidates(seed_weights: dict[str, float], *, limit: int = 160) -> dict[str, Any]:
+    index = await build_work_similarity_index()
+    seeds = {canonical_work_code(code): float(weight) for code, weight in seed_weights.items() if canonical_work_code(code)}
+    scores: dict[str, float] = defaultdict(float)
+    evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for seed_code, seed_weight in sorted(seeds.items(), key=lambda row: row[1], reverse=True)[:80]:
+        for neighbor in (index.get("neighbors") or {}).get(seed_code, []):
+            code = neighbor["code"]
+            if code in seeds:
+                continue
+            contribution = float(neighbor.get("score") or 0) / 100 * max(0.1, seed_weight)
+            scores[code] += contribution
+            evidence[code].append({"seed_code": seed_code, "contribution": round(contribution, 3), "reasons": neighbor.get("reasons") or []})
+    ranked = sorted(scores, key=lambda code: scores[code], reverse=True)[:max(1, min(limit, 500))]
+    items = []
+    for code in ranked:
+        candidate = dict((index.get("candidates") or {}).get(code) or {"code": code, "title": code})
+        candidate["neighbor_score"] = round(scores[code], 3)
+        candidate["neighbor_evidence"] = sorted(evidence[code], key=lambda row: row["contribution"], reverse=True)[:5]
+        items.append(candidate)
+    return {"revision": index.get("revision"), "items": items, "seed_count": len(seeds), "linked_work_count": index.get("linked_work_count", 0)}
+
+
+def work_similarity_status() -> dict[str, Any]:
+    payload = _similarity_cache[1] if _similarity_cache else None
+    if payload is None:
+        with contextlib.suppress(OSError, json.JSONDecodeError):
+            payload = json.loads(_work_similarity_file().read_text(encoding="utf-8"))
+    payload = payload or {}
+    return {
+        "version": payload.get("version"),
+        "revision": payload.get("revision"),
+        "generated_at": payload.get("generated_at"),
+        "work_count": int(payload.get("work_count") or 0),
+        "feature_count": int(payload.get("feature_count") or 0),
+        "linked_work_count": int(payload.get("linked_work_count") or 0),
+    }
 
 
 async def upgrade_semantic_profiles() -> int:
@@ -734,6 +960,8 @@ async def _resource_refresh_planner() -> None:
     while not _refresh_planner_stop.is_set():
         with contextlib.suppress(Exception):
             await plan_resource_refreshes(limit=12)
+        with contextlib.suppress(Exception):
+            await build_work_similarity_index()
         try:
             await asyncio.wait_for(_refresh_planner_stop.wait(), timeout=3600)
         except asyncio.TimeoutError:

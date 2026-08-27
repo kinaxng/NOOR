@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.database import Base
 from app.knowledge import intelligence
+from app.knowledge.models import WorkProfile
 
 
 def test_canonical_work_code_collapses_local_version_marks() -> None:
@@ -31,6 +32,37 @@ def test_preference_outcome_model_uses_verified_funnel_with_smoothing() -> None:
     assert model["rate"] == 0.5
     assert model["categories"]["人妻"]["rate"] == 0.6
     assert model["categories"]["NTR"]["rate"] == 0.4
+
+
+def test_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch) -> None:
+    asyncio.run(_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch))
+
+
+async def _work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'neighbors.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(intelligence, "async_session_maker", sessions)
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    monkeypatch.setattr(intelligence, "_similarity_cache", None)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with sessions() as db:
+        db.add_all([
+            WorkProfile(code="AAA-001", title="邻居人妻秘密", facts={"test": {"actors": ["演员甲"], "categories": ["人妻", "邻居"]}}, tokens=intelligence.semantic_tokens("邻居人妻秘密"), confidence=90),
+            WorkProfile(code="AAA-002", title="隔壁人妻物语", facts={"test": {"actors": ["演员甲"], "categories": ["人妻", "邻居"]}}, tokens=intelligence.semantic_tokens("隔壁人妻物语"), confidence=88),
+            WorkProfile(code="BBB-001", title="运动员纪录", facts={"test": {"actors": ["演员乙"], "categories": ["运动"]}}, tokens=intelligence.semantic_tokens("运动员纪录"), confidence=80),
+        ])
+        await db.commit()
+
+    index = await intelligence.build_work_similarity_index(force=True)
+    recalled = await intelligence.work_similarity_candidates({"AAA-001": 1.0})
+
+    assert index["work_count"] == 3
+    assert index["linked_work_count"] == 2
+    assert index["neighbors"]["AAA-001"][0]["code"] == "AAA-002"
+    assert recalled["items"][0]["code"] == "AAA-002"
+    assert recalled["items"][0]["neighbor_evidence"][0]["reasons"]
+    await engine.dispose()
 
 
 def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:

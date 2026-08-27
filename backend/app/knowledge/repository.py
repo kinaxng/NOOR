@@ -359,7 +359,7 @@ class KnowledgeRepository:
         fresh_checked_works = {row.work_code for row in resource_rows if row.expires_at and row.expires_at > now}
         fresh_available_works = {row.work_code for row in resource_rows if row.available and row.expires_at and row.expires_at > now}
         provider_checks = sum(1 for row in resource_rows if str(row.status or "") in {"available", "empty", "error", "timeout"})
-        from app.knowledge.intelligence import actor_alias_stats, preference_learning_metrics
+        from app.knowledge.intelligence import actor_alias_stats, preference_learning_metrics, work_similarity_status
         learning = await preference_learning_metrics()
         return {
             'entities': {key: int(value) for key, value in entity_rows.all()},
@@ -388,5 +388,6 @@ class KnowledgeRepository:
             'preference_event_count': sum(preference_events.values()),
             'verified_outcomes': sum(preference_events.get(key, 0) for key in ('library_imported', 'upgrade_completed')),
             'preference_learning': learning,
+            'work_similarity': work_similarity_status(),
             'last_learned_at': last_learned_at.isoformat() if last_learned_at else None,
         }

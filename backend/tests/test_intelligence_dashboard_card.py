@@ -15,6 +15,8 @@ def test_dashboard_exposes_intelligence_core_overview_card() -> None:
     assert "intelligenceFreshness" in text
     assert "intelligenceAvailability" in text
     assert "intelligencePreferenceTrend" in text
+    assert "intelligenceLinkedWorks" in text
+    assert "作品邻域" in text
     assert "情报新鲜" in text
     assert "近期偏好" in text
     assert "intelligenceLastLearned" in text
