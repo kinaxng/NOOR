@@ -29,7 +29,7 @@ _refresh_workers: list[asyncio.Task[None]] = []
 _refresh_planner_task: asyncio.Task[None] | None = None
 _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
-_actor_alias_cache: tuple[float, frozenset[str], dict[str, str], dict[str, str]] | None = None
+_actor_alias_cache: tuple[str, frozenset[str], dict[str, str], dict[str, str]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
 _work_search_cache: dict[str, Any] = {"expires_at": 0.0, "documents": []}
 _work_search_lock = asyncio.Lock()
@@ -113,8 +113,8 @@ def _actor_alias_data() -> tuple[frozenset[str], dict[str, str], dict[str, str]]
     global _actor_alias_cache
     path = data_path("media_actor_mappings.json")
     try:
-        mtime = path.stat().st_mtime
-        if _actor_alias_cache and len(_actor_alias_cache) == 4 and _actor_alias_cache[0] == mtime:
+        revision = actor_alias_revision()
+        if _actor_alias_cache and len(_actor_alias_cache) == 4 and _actor_alias_cache[0] == revision:
             return _actor_alias_cache[1], _actor_alias_cache[2], _actor_alias_cache[3]
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -136,8 +136,22 @@ def _actor_alias_data() -> tuple[frozenset[str], dict[str, str], dict[str, str]]
                 normalized = _normalize_actor_name(value)
                 identities.setdefault(normalized, preferred)
                 identity_keys.setdefault(normalized, identity_key)
+    learned_path = data_path("intelligence_actor_aliases.json")
+    with contextlib.suppress(OSError, json.JSONDecodeError):
+        learned = json.loads(learned_path.read_text(encoding="utf-8"))
+        for record in learned.get("accepted") or []:
+            if not isinstance(record, dict) or float(record.get("confidence") or 0) < 0.8:
+                continue
+            alias = str(record.get("alias") or "").strip()
+            preferred = str(record.get("preferred") or alias).strip()
+            identity_key = str(record.get("identity") or "").strip()
+            normalized = _normalize_actor_name(alias)
+            if alias and preferred and identity_key and normalized and normalized not in identity_keys:
+                names.add(alias)
+                identities[normalized] = preferred
+                identity_keys[normalized] = identity_key
     result = frozenset(names)
-    _actor_alias_cache = (mtime, result, identities, identity_keys)
+    _actor_alias_cache = (revision, result, identities, identity_keys)
     return result, identities, identity_keys
 
 
@@ -148,21 +162,149 @@ def actor_alias_names() -> frozenset[str]:
 
 def actor_alias_revision() -> str:
     """Cheap cache revision that changes whenever the synchronized mapping changes."""
-    path = data_path("media_actor_mappings.json")
-    try:
-        stat = path.stat()
-        return f"{stat.st_mtime_ns}:{stat.st_size}"
-    except OSError:
-        return "missing"
+    revisions = []
+    for name in ("media_actor_mappings.json", "intelligence_actor_aliases.json"):
+        path = data_path(name)
+        try:
+            stat = path.stat()
+            revisions.append(f"{name}:{stat.st_mtime_ns}:{stat.st_size}")
+        except OSError:
+            revisions.append(f"{name}:missing")
+    return "|".join(revisions)
 
 
 def actor_alias_stats() -> dict[str, int | str]:
     names, _labels, identity_keys = _actor_alias_data()
+    learned = {"accepted": [], "candidates": []}
+    with contextlib.suppress(OSError, json.JSONDecodeError):
+        learned = json.loads(data_path("intelligence_actor_aliases.json").read_text(encoding="utf-8"))
     return {
         "identity_count": len(set(identity_keys.values())),
         "alias_count": len(names),
+        "learned_alias_count": len(learned.get("accepted") or []),
+        "alias_candidate_count": len(learned.get("candidates") or []),
         "revision": actor_alias_revision(),
     }
+
+
+def _base_actor_alias_index() -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+    """Read only the MDC-NG source, excluding aliases previously learned by Core."""
+    try:
+        payload = json.loads(data_path("media_actor_mappings.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}, {}
+    index: dict[str, dict[str, str]] = {}
+    labels: dict[str, str] = {}
+    for record in payload.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        values = [record.get("jp"), record.get("zh_cn"), record.get("zh_tw"), *(record.get("names") or []), *(record.get("aliases") or [])]
+        values = [str(value).strip() for value in values if str(value or "").strip()]
+        preferred = str(record.get("zh_cn") or record.get("jp") or record.get("zh_tw") or (values[0] if values else "")).strip()
+        record_id = str(record.get("id") or "").strip()
+        identity = f"mdc-ng:{record_id}" if record_id else f"name:{_normalize_actor_name(preferred)}"
+        labels.setdefault(identity, preferred)
+        for value in values:
+            normalized = _normalize_actor_name(value)
+            if normalized:
+                index.setdefault(normalized, {"identity": identity, "preferred": preferred, "name": value})
+    return index, labels
+
+
+def _actor_variant_similarity(left: str, right: str) -> float:
+    if not left or len(left) != len(right):
+        return 0.0
+    return sum(a == b for a, b in zip(left, right)) / len(left)
+
+
+def infer_actor_aliases(profiles: list[WorkProfile], *, minimum_works: int = 2) -> dict[str, Any]:
+    """Learn conservative title aliases for unambiguous MDC-NG actor identities."""
+    global _actor_alias_cache
+    base_index, identity_labels = _base_actor_alias_index()
+    votes: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    display_values: dict[str, str] = {}
+    similarities: dict[tuple[str, str], float] = {}
+    for profile in profiles:
+        code = canonical_work_code(profile.code)
+        mapped: dict[str, str] = {}
+        for facts in (profile.facts or {}).values():
+            if not isinstance(facts, dict):
+                continue
+            for actor in facts.get("actors") or facts.get("actresses") or []:
+                name = str(actor.get("name") if isinstance(actor, dict) else actor or "").strip()
+                row = base_index.get(_normalize_actor_name(name))
+                if row:
+                    mapped[row["identity"]] = row["preferred"]
+        # Multiple mapped performers make a title-level alias assignment
+        # ambiguous; those cases remain candidates for future explicit review.
+        if len(mapped) != 1:
+            continue
+        identity, preferred = next(iter(mapped.items()))
+        normalized_preferred = _normalize_actor_name(preferred)
+        length = len(normalized_preferred)
+        if length < 3 or length > 8:
+            continue
+        texts = [profile.title, profile.original_title, profile.translated_title, *(profile.aliases or [])]
+        for text in texts:
+            for run in re.findall(r"[\u3040-\u30ff\u3400-\u9fff]{3,80}", unicodedata.normalize("NFKC", str(text or ""))):
+                # Actor credits in scraped titles are normally a standalone
+                # token or the final token. Scanning every interior n-gram
+                # creates convincing-looking truncated names, so only these
+                # two boundary-safe shapes are eligible for auto-learning.
+                aliases = [run] if len(run) == length else [run[-length:]] if len(run) > length else []
+                for alias in aliases:
+                    normalized_alias = _normalize_actor_name(alias)
+                    if normalized_alias == normalized_preferred or normalized_alias in base_index:
+                        continue
+                    similarity = _actor_variant_similarity(normalized_alias, normalized_preferred)
+                    if similarity < 0.5:
+                        continue
+                    votes[normalized_alias][identity].add(code)
+                    display_values.setdefault(normalized_alias, alias)
+                    similarities[(normalized_alias, identity)] = max(similarities.get((normalized_alias, identity), 0), similarity)
+    accepted: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
+    for alias, targets in votes.items():
+        ranked = sorted(targets.items(), key=lambda row: (len(row[1]), row[0]), reverse=True)
+        identity, works = ranked[0]
+        competing_works = set().union(*(codes for _target, codes in ranked[1:])) if len(ranked) > 1 else set()
+        dominance = len(works) / max(1, len(works | competing_works))
+        similarity = similarities.get((alias, identity), 0.0)
+        row = {
+            "alias": display_values.get(alias, alias),
+            "identity": identity,
+            "preferred": identity_labels.get(identity, display_values.get(alias, alias)),
+            "work_count": len(works),
+            "works": sorted(works)[:12],
+            "dominance": round(dominance, 3),
+            "similarity": round(similarity, 3),
+            "confidence": round(min(0.99, 0.78 + min(0.12, len(works) * 0.025) + similarity * 0.1), 3),
+            "status": "accepted" if len(works) >= minimum_works and dominance >= 0.9 else "candidate",
+        }
+        (accepted if row["status"] == "accepted" else candidates).append(row)
+    accepted.sort(key=lambda row: (-row["work_count"], -row["confidence"], row["alias"]))
+    candidates.sort(key=lambda row: (-row["work_count"], -row["dominance"], row["alias"]))
+    core = {"version": 1, "accepted": accepted[:2000], "candidates": candidates[:2000]}
+    path = data_path("intelligence_actor_aliases.json")
+    existing_core = None
+    with contextlib.suppress(OSError, json.JSONDecodeError):
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        existing_core = {"version": existing.get("version"), "accepted": existing.get("accepted") or [], "candidates": existing.get("candidates") or []}
+    if existing_core != core:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {**core, "generated_at": utcnow().isoformat(), "profile_count": len(profiles)}
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+        _actor_alias_cache = None
+        _invalidate_work_search_cache(delay_seconds=0)
+    return {"accepted": len(accepted), "candidates": len(candidates), "changed": existing_core != core, "revision": actor_alias_revision()}
+
+
+async def build_actor_alias_inference(*, minimum_works: int = 2) -> dict[str, Any]:
+    async with async_session_maker() as db:
+        profiles = list((await db.execute(select(WorkProfile))).scalars())
+    return infer_actor_aliases(profiles, minimum_works=minimum_works)
 
 
 def canonical_actor_name(value: Any) -> str:
@@ -664,6 +806,7 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
     global _similarity_cache
     async with async_session_maker() as db:
         profiles = list((await db.execute(select(WorkProfile))).scalars())
+    alias_learning = infer_actor_aliases(profiles)
     latest = max((profile.updated_at for profile in profiles if profile.updated_at), default=None)
     revision = f"{WORK_SIMILARITY_VERSION}:{SEMANTIC_PROFILE_VERSION}:{actor_alias_revision()}:{len(profiles)}:{latest.isoformat() if latest else 'none'}"
     if not force and _similarity_cache and _similarity_cache[0] == revision:
@@ -755,6 +898,7 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         "feature_count": sum(1 for feature, codes in postings.items() if 2 <= len(set(codes)) <= feature_cap),
         "linked_work_count": len(neighbors),
         "mapped_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:mdc-ng:")),
+        "actor_alias_learning": alias_learning,
         "fallback_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:name:")),
         "neighbors": dict(neighbors),
         "candidates": candidates,
@@ -1334,6 +1478,7 @@ async def search_work_intelligence(query: str, *, limit: int = 30) -> dict[str, 
                     observations = list((await db.execute(
                         select(ResourceObservation).where(ResourceObservation.available.is_(True), ResourceObservation.resource_key != "__provider_check__")
                     )).scalars())
+                infer_actor_aliases(profiles)
                 _work_search_cache.update({"expires_at": time.monotonic() + 120, "documents": _prepare_work_search_documents(profiles, observations)})
     documents = list(_work_search_cache.get("documents") or [])
 

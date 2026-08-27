@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import database
 from app.core.database import get_db
 from app.knowledge.indexer import rebuild_knowledge_index
-from app.knowledge.intelligence import enqueue_resource_refresh, resource_refresh_status, search_work_intelligence, work_intelligence
+from app.knowledge.intelligence import build_actor_alias_inference, enqueue_resource_refresh, resource_refresh_status, search_work_intelligence, work_intelligence
 from app.knowledge.models import KnowledgeAnomaly, KnowledgeScore
 from app.knowledge.repository import KnowledgeRepository
 
@@ -134,6 +134,11 @@ async def stats(db: AsyncSession = Depends(get_db)):
 @router.get('/works/search')
 async def search_works(q: str = '', limit: int = Query(30, ge=1, le=100)):
     return await search_work_intelligence(q, limit=limit)
+
+
+@router.post('/actors/aliases/rebuild')
+async def rebuild_actor_aliases():
+    return {'ok': True, **await build_actor_alias_inference()}
 
 
 @router.get('/works/{code}')

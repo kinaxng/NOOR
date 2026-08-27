@@ -175,6 +175,31 @@ def test_work_search_cache_invalidation_is_debounced(monkeypatch) -> None:
     assert intelligence._work_search_cache["expires_at"] == 1030.0
 
 
+def test_actor_alias_inference_requires_repeated_unambiguous_title_evidence(monkeypatch, tmp_path) -> None:
+    (tmp_path / "media_actor_mappings.json").write_text(json.dumps({"records": [{
+        "id": "actor-1", "jp": "吉沢明歩", "zh_cn": "吉沢明歩", "names": ["吉沢明歩"],
+    }, {
+        "id": "actor-2", "jp": "其他演员", "zh_cn": "其他演员", "names": ["其他演员"],
+    }]}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
+    profiles = [
+        SimpleNamespace(code="AAA-001", title="中文标题 吉泽明步", original_title="", translated_title="", aliases=[], facts={"media-library": {"actors": ["吉沢明歩"]}}, confidence=90),
+        SimpleNamespace(code="AAA-002", title="另一标题 吉泽明步", original_title="", translated_title="", aliases=[], facts={"media-library": {"actors": ["吉沢明歩"]}}, confidence=90),
+        SimpleNamespace(code="AAA-003", title="证据不足 吉澤明步", original_title="", translated_title="", aliases=[], facts={"media-library": {"actors": ["吉沢明歩"]}}, confidence=90),
+        SimpleNamespace(code="AAA-004", title="多人作品 吉泽明步", original_title="", translated_title="", aliases=[], facts={"media-library": {"actors": ["吉沢明歩", "其他演员"]}}, confidence=90),
+    ]
+
+    result = intelligence.infer_actor_aliases(profiles)
+    learned = json.loads((tmp_path / "intelligence_actor_aliases.json").read_text(encoding="utf-8"))
+
+    assert result["accepted"] == 1
+    assert learned["accepted"][0]["alias"] == "吉泽明步"
+    assert learned["accepted"][0]["work_count"] == 2
+    assert learned["candidates"][0]["alias"] == "吉澤明步"
+    assert intelligence.actor_identity_key("吉泽明步") == "mdc-ng:actor-1"
+
+
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:
     asyncio.run(_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch))
 
