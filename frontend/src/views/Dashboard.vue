@@ -536,8 +536,16 @@ const intelligenceRefreshCounts = computed(() => intelligenceStats.value.refresh
 const intelligenceActiveTasks = computed(() => Number(intelligenceRefreshCounts.value.queued || 0) + Number(intelligenceRefreshCounts.value.running || 0))
 const intelligenceProviderCount = computed(() => Object.keys(intelligenceStats.value.resource_coverage?.providers || {}).length)
 const intelligenceCoverage = computed(() => Number(intelligenceStats.value.resource_coverage?.percent || 0))
+const intelligenceFreshness = computed(() => Number(intelligenceStats.value.resource_coverage?.quality?.freshness_rate || 0))
+const intelligenceAvailability = computed(() => Number(intelligenceStats.value.resource_coverage?.quality?.availability_rate || 0))
 const intelligenceActorIdentities = computed(() => Number(intelligenceStats.value.actor_mappings?.identity_count || 0))
 const intelligenceLastLearned = computed(() => intelligenceStats.value.last_learned_at ? formatDashboardRelativeTime.value(intelligenceStats.value.last_learned_at) : '等待首次学习')
+const intelligencePreferenceTrend = computed(() => {
+  const learning = intelligenceStats.value.preference_learning || {}
+  const actor = learning.rising_actors?.[0]?.name
+  const category = learning.rising_categories?.[0]?.name
+  return [actor, category].filter(Boolean).join(' · ') || '正在积累偏好证据'
+})
 
 const systemMetricsPayload = computed(() => {
   return systemMetricsWidget.value?.payload?.data || systemMetricsWidget.value?.payload || {}
@@ -889,6 +897,7 @@ const statsRingItems = computed(() => {
                 <div class="intelligence-card__signals">
                   <span>{{ formatCount(intelligenceActorIdentities) }} 演员身份</span>
                   <span>{{ intelligenceProviderCount }} 个资源源</span>
+                  <span>{{ intelligenceFreshness.toFixed(0) }}% 情报新鲜</span>
                 </div>
               </div>
             </div>
@@ -899,7 +908,7 @@ const statsRingItems = computed(() => {
               </div>
               <div>
                 <strong>{{ intelligenceCoverage.toFixed(1) }}%</strong>
-                <span>资源覆盖</span>
+                <span>可用资源覆盖</span>
               </div>
               <div>
                 <strong>{{ formatCount(intelligenceStats.preference_event_count || 0) }}</strong>
@@ -914,7 +923,7 @@ const statsRingItems = computed(() => {
               <span class="intelligence-card__pulse" :class="{ 'is-active': intelligenceActiveTasks > 0 }" />
               <div>
                 <strong>{{ intelligenceActiveTasks > 0 ? `后台确认 ${intelligenceActiveTasks} 项` : '情报已同步' }}</strong>
-                <span>{{ intelligenceActiveTasks > 0 ? '慢速源站不会阻塞页面' : `最近学习 ${intelligenceLastLearned}` }}</span>
+                <span>{{ intelligenceActiveTasks > 0 ? `已检查资源中 ${intelligenceAvailability.toFixed(0)}% 可用` : `近期偏好 ${intelligencePreferenceTrend} · 最近学习 ${intelligenceLastLearned}` }}</span>
               </div>
               <button type="button" :disabled="intelligenceLoading" @click="fetchIntelligenceOverview">
                 <BaseIcon name="refresh" />

@@ -54,6 +54,8 @@ PREFERENCE_EVENT_HALF_LIFE_DAYS = {
     "upgrade_completed": 365,
     "upgrade_cleanup_failed": 30,
 }
+OUTCOME_ATTEMPT_EVENTS = {"subscription", "download_intent", "download_submitted"}
+OUTCOME_VERIFIED_EVENTS = {"library_imported", "upgrade_completed"}
 
 
 def canonical_work_code(value: Any) -> str:
@@ -246,7 +248,92 @@ async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, A
         "actor_identities": actor_identities,
         "categories": categories,
         "event_count": len(events),
+        "outcomes": _preference_outcome_model(events),
         "revision": f"{len(events)}:{latest.isoformat() if latest else 'none'}",
+    }
+
+
+def _bayesian_rate(successes: int, trials: int) -> float:
+    return (max(0, successes) + 2) / (max(0, trials) + 4)
+
+
+def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
+    """Build a conservative conversion model from intent to verified outcomes."""
+    by_code: dict[str, dict[str, Any]] = {}
+    for event in events:
+        row = by_code.setdefault(event.work_code, {"attempt": False, "verified": False, "actors": set(), "categories": set()})
+        row["attempt"] = bool(row["attempt"] or event.event_type in OUTCOME_ATTEMPT_EVENTS)
+        row["verified"] = bool(row["verified"] or event.event_type in OUTCOME_VERIFIED_EVENTS)
+        row["actors"].update(actor_identity_key(actor) for actor in (event.actors or []) if actor_identity_key(actor))
+        row["categories"].update(str(category).strip() for category in (event.categories or []) if str(category or "").strip())
+    trials = {code for code, row in by_code.items() if row["attempt"] or row["verified"]}
+    verified = {code for code in trials if by_code[code]["verified"]}
+
+    def dimension_rates(key: str) -> dict[str, dict[str, float | int]]:
+        dimension_trials: dict[str, set[str]] = {}
+        dimension_verified: dict[str, set[str]] = {}
+        for code in trials:
+            for value in by_code[code][key]:
+                dimension_trials.setdefault(value, set()).add(code)
+                if code in verified:
+                    dimension_verified.setdefault(value, set()).add(code)
+        return {
+            value: {
+                "trials": len(codes),
+                "verified": len(dimension_verified.get(value, set())),
+                "rate": round(_bayesian_rate(len(dimension_verified.get(value, set())), len(codes)), 4),
+                "reliability": round(min(1.0, len(codes) / 6), 4),
+            }
+            for value, codes in dimension_trials.items()
+        }
+
+    return {
+        "trials": len(trials),
+        "verified": len(verified),
+        "rate": round(_bayesian_rate(len(verified), len(trials)), 4),
+        "actors": dimension_rates("actors"),
+        "categories": dimension_rates("categories"),
+    }
+
+
+async def preference_learning_metrics(*, window_days: int = 30) -> dict[str, Any]:
+    """Summarize outcome calibration and recent-vs-prior preference drift."""
+    now = utcnow()
+    cutoff = now - timedelta(days=window_days * 2)
+    async with async_session_maker() as db:
+        events = list((await db.execute(select(PreferenceEvent).where(PreferenceEvent.created_at >= cutoff))).scalars())
+    recent: dict[str, dict[str, float]] = {"actors": {}, "categories": {}}
+    prior: dict[str, dict[str, float]] = {"actors": {}, "categories": {}}
+    for event in events:
+        bucket = recent if event.created_at >= now - timedelta(days=window_days) else prior
+        values = {
+            "actors": [canonical_actor_name(actor) for actor in (event.actors or [])],
+            "categories": [str(category).strip() for category in (event.categories or [])],
+        }
+        for dimension, names in values.items():
+            for name in names:
+                if name:
+                    bucket[dimension][name] = bucket[dimension].get(name, 0.0) + float(event.weight or 0)
+
+    def rising(dimension: str) -> list[dict[str, Any]]:
+        recent_total = sum(recent[dimension].values()) or 1.0
+        prior_total = sum(prior[dimension].values()) or 1.0
+        rows = []
+        for name in set(recent[dimension]) | set(prior[dimension]):
+            current_share = recent[dimension].get(name, 0.0) / recent_total
+            previous_share = prior[dimension].get(name, 0.0) / prior_total
+            delta = current_share - previous_share
+            if current_share > 0 and delta > 0:
+                rows.append({"name": name, "share": round(current_share, 4), "delta": round(delta, 4)})
+        return sorted(rows, key=lambda row: (row["delta"], row["share"]), reverse=True)[:5]
+
+    return {
+        "window_days": window_days,
+        "recent_events": sum(1 for event in events if event.created_at >= now - timedelta(days=window_days)),
+        "prior_events": sum(1 for event in events if event.created_at < now - timedelta(days=window_days)),
+        "rising_actors": rising("actors"),
+        "rising_categories": rising("categories"),
+        "outcomes": _preference_outcome_model(events),
     }
 
 

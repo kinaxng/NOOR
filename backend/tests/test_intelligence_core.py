@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -14,6 +15,22 @@ def test_canonical_work_code_collapses_local_version_marks() -> None:
     assert intelligence.canonical_work_code("WAAA-615-U") == "WAAA-615"
     assert intelligence.canonical_work_code("FC2-PPV-4720819-C") == "FC2-PPV-4720819"
     assert intelligence.canonical_work_code("050126_001-1PON") == "1PON-050126-001"
+
+
+def test_preference_outcome_model_uses_verified_funnel_with_smoothing() -> None:
+    events = [
+        SimpleNamespace(work_code="AAA-001", event_type="subscription", actors=["测试演员"], categories=["人妻"]),
+        SimpleNamespace(work_code="AAA-001", event_type="library_imported", actors=["测试演员"], categories=["人妻"]),
+        SimpleNamespace(work_code="BBB-002", event_type="download_submitted", actors=["测试演员"], categories=["NTR"]),
+    ]
+
+    model = intelligence._preference_outcome_model(events)
+
+    assert model["trials"] == 2
+    assert model["verified"] == 1
+    assert model["rate"] == 0.5
+    assert model["categories"]["人妻"]["rate"] == 0.6
+    assert model["categories"]["NTR"]["rate"] == 0.4
 
 
 def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:

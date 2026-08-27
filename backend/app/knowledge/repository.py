@@ -339,6 +339,7 @@ class KnowledgeRepository:
         anomaly_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeAnomaly))).scalar_one())
         work_profile_count = int((await self.db.execute(select(func.count()).select_from(WorkProfile))).scalar_one())
         resource_observation_count = int((await self.db.execute(select(func.count()).select_from(ResourceObservation))).scalar_one())
+        resource_rows = list((await self.db.execute(select(ResourceObservation.work_code, ResourceObservation.available, ResourceObservation.status, ResourceObservation.expires_at))).all())
         resource_work_count = int((await self.db.execute(select(func.count(func.distinct(ResourceObservation.work_code))).where(ResourceObservation.available.is_(True)))).scalar_one())
         resource_provider_rows = await self.db.execute(select(ResourceObservation.provider_id, func.count(ResourceObservation.id)).where(ResourceObservation.available.is_(True)).group_by(ResourceObservation.provider_id))
         resource_refresh_count = int((await self.db.execute(select(func.count()).select_from(ResourceRefreshState).where(ResourceRefreshState.status.in_(['queued', 'running'])))).scalar_one())
@@ -352,7 +353,14 @@ class KnowledgeRepository:
             (await self.db.execute(select(func.max(PreferenceEvent.created_at)))).scalar_one_or_none(),
         ]
         last_learned_at = max((value for value in latest_values if value), default=None)
-        from app.knowledge.intelligence import actor_alias_stats
+        checked_works = {row.work_code for row in resource_rows}
+        available_works = {row.work_code for row in resource_rows if row.available}
+        now = utcnow()
+        fresh_checked_works = {row.work_code for row in resource_rows if row.expires_at and row.expires_at > now}
+        fresh_available_works = {row.work_code for row in resource_rows if row.available and row.expires_at and row.expires_at > now}
+        provider_checks = sum(1 for row in resource_rows if str(row.status or "") in {"available", "empty", "error", "timeout"})
+        from app.knowledge.intelligence import actor_alias_stats, preference_learning_metrics
+        learning = await preference_learning_metrics()
         return {
             'entities': {key: int(value) for key, value in entity_rows.all()},
             'edges': {key: int(value) for key, value in edge_rows.all()},
@@ -364,6 +372,14 @@ class KnowledgeRepository:
                 'works': resource_work_count,
                 'percent': round(resource_work_count / max(work_profile_count, 1) * 100, 1),
                 'providers': {key: int(value) for key, value in resource_provider_rows.all()},
+                'quality': {
+                    'checked_works': len(checked_works),
+                    'fresh_checked_works': len(fresh_checked_works),
+                    'fresh_available_works': len(fresh_available_works),
+                    'availability_rate': round(len(available_works) / max(len(checked_works), 1) * 100, 1),
+                    'freshness_rate': round(len(fresh_checked_works) / max(len(checked_works), 1) * 100, 1),
+                    'provider_checks': provider_checks,
+                },
             },
             'resource_refresh_pending': resource_refresh_count,
             'actor_mappings': actor_alias_stats(),
@@ -371,5 +387,6 @@ class KnowledgeRepository:
             'preference_sources': preference_sources,
             'preference_event_count': sum(preference_events.values()),
             'verified_outcomes': sum(preference_events.get(key, 0) for key in ('library_imported', 'upgrade_completed')),
+            'preference_learning': learning,
             'last_learned_at': last_learned_at.isoformat() if last_learned_at else None,
         }
