@@ -112,6 +112,16 @@ async def _index_jobs(repo: KnowledgeRepository) -> int:
 
 async def _index_plugin_contributions(repo: KnowledgeRepository, *, limit: int = 100, context: dict[str, Any] | None = None) -> dict[str, int]:
     stats = {"entities": 0, "edges": 0, "scores": 0, "anomalies": 0}
+    mutations_since_commit = 0
+
+    async def release_write_lock() -> None:
+        """Keep a large plugin snapshot from monopolizing SQLite."""
+        nonlocal mutations_since_commit
+        mutations_since_commit += 1
+        if mutations_since_commit >= 200:
+            await repo.db.commit()
+            mutations_since_commit = 0
+
     for item in await plugin_runtime.get_knowledge_contributions(limit=limit, context=context or {}):
         source = str(item.get("source") or item.get("source_plugin") or "plugin")
         await repo.upsert_source(source, str(item.get("source_name") or source), "plugin", data={"plugin_id": item.get("source_plugin")})
@@ -127,6 +137,7 @@ async def _index_plugin_contributions(repo: KnowledgeRepository, *, limit: int =
             entity_map[str(raw.get("alias") or f"{entity_type}:{key}")] = entity
             entity_map[f"{entity_type}:{key}"] = entity
             stats["entities"] += 1
+            await release_write_lock()
         for raw in item.get("edges") or []:
             if not isinstance(raw, dict):
                 continue
@@ -136,17 +147,22 @@ async def _index_plugin_contributions(repo: KnowledgeRepository, *, limit: int =
             if relation and source_entity and target_entity:
                 await repo.upsert_edge(source_entity.id, relation, target_entity.id, source=str(raw.get("edge_source") or item.get("source_plugin") or source), confidence=int(raw.get("confidence") or 80), data=raw.get("data") if isinstance(raw.get("data"), dict) else {})
                 stats["edges"] += 1
+                await release_write_lock()
         for raw in item.get("scores") or []:
             entity = entity_map.get(str(raw.get("entity") or raw.get("entity_ref") or "")) if isinstance(raw, dict) else None
             score_type = str(raw.get("type") or raw.get("score_type") or "") if isinstance(raw, dict) else ""
             if entity and score_type:
                 await repo.upsert_score(entity.id, score_type, int(raw.get("value") or 0), reason=raw.get("reason"), data=raw.get("data") if isinstance(raw.get("data"), dict) else {})
                 stats["scores"] += 1
+                await release_write_lock()
         for raw in item.get("anomalies") or []:
             entity = entity_map.get(str(raw.get("entity") or raw.get("entity_ref") or "")) if isinstance(raw, dict) else None
             if entity and raw.get("type") and raw.get("message"):
                 await repo.upsert_anomaly(entity.id, str(raw["type"]), str(raw["message"]), severity=str(raw.get("severity") or "info"), source=source, data=raw.get("data") if isinstance(raw.get("data"), dict) else {})
                 stats["anomalies"] += 1
+                await release_write_lock()
+    if mutations_since_commit:
+        await repo.db.commit()
     return stats
 
 

@@ -297,6 +297,9 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'intelligence.db'}")
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(intelligence, "async_session_maker", sessions)
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
+    monkeypatch.setattr(intelligence, "_work_search_cache", {"expires_at": 0.0, "documents": []})
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
 
