@@ -13,6 +13,8 @@ def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     assert "uncensored" in tokens["latin"]
     assert "隣人" in tokens["cjk"]
     assert "邻居" in tokens["cjk"]
+    assert tokens["version"] == intelligence.SEMANTIC_PROFILE_VERSION
+    assert tokens["weighted"]["隣人"] >= 0.7
 
 
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:

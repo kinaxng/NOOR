@@ -19,7 +19,8 @@ async def lifespan(app: FastAPI):
         await plugin_runtime.start_background_tasks()
     except Exception:
         pass
-    from app.knowledge.intelligence import start_resource_refresh_workers, stop_resource_refresh_workers
+    from app.knowledge.intelligence import start_resource_refresh_workers, stop_resource_refresh_workers, upgrade_semantic_profiles
+    await upgrade_semantic_profiles()
     await start_resource_refresh_workers()
     try:
         yield

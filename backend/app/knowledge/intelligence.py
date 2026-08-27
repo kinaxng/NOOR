@@ -6,6 +6,7 @@ import contextlib
 import itertools
 import json
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -20,21 +21,63 @@ _refresh_queue: asyncio.PriorityQueue[tuple[int, int, str]] = asyncio.PriorityQu
 _refresh_counter = itertools.count()
 _refresh_queued: set[str] = set()
 _refresh_workers: list[asyncio.Task[None]] = []
+SEMANTIC_PROFILE_VERSION = 5
+SEMANTIC_STOPWORDS = {
+    "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
+    "一个", "一种", "这个", "那个", "以及", "然后", "作品", "影片", "电影", "高清", "高画质",
+}
 
 
 def canonical_work_code(value: Any) -> str:
     return str(extract_video_code(str(value or "")) or "").upper()
 
 
-def semantic_tokens(*values: Any) -> dict[str, list[str]]:
-    text = " ".join(str(value or "") for value in values if value)
-    latin = list(dict.fromkeys(part.casefold() for part in re.findall(r"[A-Za-z][A-Za-z0-9_-]{1,}", text)))
-    cjk_runs = re.findall(r"[\u3040-\u30ff\u3400-\u9fff]{2,}", text)
+def semantic_tokens(*values: Any) -> dict[str, Any]:
+    text = unicodedata.normalize("NFKC", " ".join(str(value or "") for value in values if value))
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"\b(?:FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,10}[-_ ]?\d{2,7})\b", " ", text, flags=re.I)
+    text = re.sub(r"\b(?:4k|8k|fhd|uhd|1080p|2160p|hdr|60fps)\b", " ", text, flags=re.I)
+    latin = list(dict.fromkeys(part.casefold() for part in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", text)))
+    normalized_cjk = re.sub(r"(?:した|して|する|される|され|れる|られ|ない|です|ます|から|まで|より|そして|また|その|この|の|に|を|が|と|で|へ)", " ", text)
+    cjk_runs = re.findall(r"[\u3040-\u30ff\u3400-\u9fff]{2,16}", normalized_cjk)
     cjk: list[str] = []
+    weighted: dict[str, float] = {}
+    def informative(term: str) -> bool:
+        return len(re.findall(r"[\u30a0-\u30ff\u3400-\u9fffA-Za-z]", term)) >= 2
     for run in cjk_runs:
-        cjk.append(run)
-        cjk.extend(run[index:index + 2] for index in range(len(run) - 1))
-    return {"latin": latin[:80], "cjk": list(dict.fromkeys(cjk))[:240]}
+        pure_hiragana = bool(re.fullmatch(r"[\u3040-\u309f]+", run))
+        pure_katakana = bool(re.fullmatch(r"[\u30a0-\u30ff]+", run))
+        if pure_hiragana:
+            continue
+        if run not in SEMANTIC_STOPWORDS and informative(run):
+            cjk.append(run)
+            weighted[run] = max(weighted.get(run, 0), 1.8 if len(run) <= 8 else 1.2)
+        if pure_katakana:
+            continue
+        for size, weight in ((3, 1.15), (2, 0.72)):
+            for index in range(len(run) - size + 1):
+                term = run[index:index + size]
+                if term in SEMANTIC_STOPWORDS or not informative(term) or not re.search(r"[\u3400-\u9fff]", term):
+                    continue
+                cjk.append(term)
+                weighted[term] = max(weighted.get(term, 0), weight)
+    for term in latin:
+        weighted[term] = max(weighted.get(term, 0), 1.0)
+    return {"version": SEMANTIC_PROFILE_VERSION, "latin": latin[:80], "cjk": list(dict.fromkeys(cjk))[:320], "weighted": dict(sorted(weighted.items(), key=lambda row: (-row[1], row[0]))[:400])}
+
+
+async def upgrade_semantic_profiles() -> int:
+    upgraded = 0
+    async with async_session_maker() as db:
+        profiles = list((await db.execute(select(WorkProfile))).scalars())
+        for profile in profiles:
+            if int((profile.tokens or {}).get("version") or 0) >= SEMANTIC_PROFILE_VERSION:
+                continue
+            profile.tokens = semantic_tokens(profile.title, profile.original_title, profile.translated_title, *(profile.aliases or []))
+            upgraded += 1
+        if upgraded:
+            await db.commit()
+    return upgraded
 
 
 def _resource_key(item: dict[str, Any]) -> str:
