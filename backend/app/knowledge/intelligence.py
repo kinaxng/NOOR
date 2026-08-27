@@ -691,7 +691,7 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
     return result
 
 
-async def work_similarity_candidates(seed_weights: dict[str, float], *, limit: int = 160) -> dict[str, Any]:
+async def work_similarity_candidates(seed_weights: dict[str, float], *, negative_seed_weights: dict[str, float] | None = None, limit: int = 160) -> dict[str, Any]:
     index = await build_work_similarity_index()
     seeds = {canonical_work_code(code): float(weight) for code, weight in seed_weights.items() if canonical_work_code(code)}
     scores: dict[str, float] = defaultdict(float)
@@ -710,6 +710,23 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, limit: i
                 "relation_types": neighbor.get("relation_types") or [],
                 "reasons": neighbor.get("reasons") or [],
             })
+    negative_scores: dict[str, float] = defaultdict(float)
+    negative_evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    negative_seeds = {canonical_work_code(code): max(0.0, float(weight)) for code, weight in (negative_seed_weights or {}).items() if canonical_work_code(code)}
+    for seed_code, seed_weight in sorted(negative_seeds.items(), key=lambda row: row[1], reverse=True)[:80]:
+        for neighbor in (index.get("neighbors") or {}).get(seed_code, []):
+            code = neighbor["code"]
+            if code in seeds or code in negative_seeds:
+                continue
+            contribution = float(neighbor.get("score") or 0) / 100 * max(0.1, seed_weight)
+            negative_scores[code] += contribution
+            negative_evidence[code].append({
+                "seed_code": seed_code,
+                "contribution": round(contribution, 3),
+                "relation_confidence": float(neighbor.get("relation_confidence") or 0),
+                "relation_types": neighbor.get("relation_types") or [],
+                "reasons": neighbor.get("reasons") or [],
+            })
     ranked = sorted(scores, key=lambda code: scores[code], reverse=True)[:max(1, min(limit, 500))]
     items = []
     for code in ranked:
@@ -718,8 +735,10 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, limit: i
         candidate["neighbor_evidence"] = sorted(evidence[code], key=lambda row: row["contribution"], reverse=True)[:5]
         total_contribution = sum(float(row.get("contribution") or 0) for row in evidence[code]) or 1.0
         candidate["neighbor_confidence"] = round(sum(float(row.get("contribution") or 0) * float(row.get("relation_confidence") or 0) for row in evidence[code]) / total_contribution, 3)
+        candidate["neighbor_negative_score"] = round(negative_scores.get(code, 0.0), 3)
+        candidate["neighbor_negative_evidence"] = sorted(negative_evidence.get(code, []), key=lambda row: row["contribution"], reverse=True)[:3]
         items.append(candidate)
-    return {"revision": index.get("revision"), "items": items, "seed_count": len(seeds), "linked_work_count": index.get("linked_work_count", 0)}
+    return {"revision": index.get("revision"), "items": items, "seed_count": len(seeds), "negative_seed_count": len(negative_seeds), "linked_work_count": index.get("linked_work_count", 0)}
 
 
 def work_similarity_status() -> dict[str, Any]:
