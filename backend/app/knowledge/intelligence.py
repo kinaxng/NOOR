@@ -78,6 +78,16 @@ PREFERENCE_EVENT_STAGE_VALUES = {
 }
 
 
+def _invalidate_work_search_cache(*, delay_seconds: float = 30.0) -> None:
+    """Debounce index rebuilds while background providers continuously write facts."""
+    if not _work_search_cache.get("documents"):
+        _work_search_cache["expires_at"] = 0.0
+        return
+    scheduled = time.monotonic() + max(0.0, delay_seconds)
+    current = float(_work_search_cache.get("expires_at") or scheduled)
+    _work_search_cache["expires_at"] = min(current, scheduled)
+
+
 def canonical_work_code(value: Any) -> str:
     candidates = extract_video_code_candidates(str(value or ""))
     if not candidates:
@@ -942,7 +952,7 @@ async def record_resource_search(query: dict[str, Any], groups: list[dict[str, A
                     for key, value in values.items():
                         setattr(check, key, value)
         await db.commit()
-    _work_search_cache["expires_at"] = 0.0
+    _invalidate_work_search_cache()
     return written
 
 
@@ -981,7 +991,7 @@ async def record_work_metadata(code: str, data: dict[str, Any], *, source: str, 
             profile.source_evidence = evidence_rows[-60:]
             profile.confidence = max(int(profile.confidence or 0), confidence)
         await db.commit()
-    _work_search_cache["expires_at"] = 0.0
+    _invalidate_work_search_cache()
     return canonical
 
 

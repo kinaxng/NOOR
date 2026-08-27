@@ -166,6 +166,15 @@ def test_preference_drift_unifies_mdc_ng_aliases(monkeypatch, tmp_path) -> None:
     assert trends["categories"]["rising"][0]["name"] == "人妻"
 
 
+def test_work_search_cache_invalidation_is_debounced(monkeypatch) -> None:
+    monkeypatch.setattr(intelligence.time, "monotonic", lambda: 1000.0)
+    monkeypatch.setattr(intelligence, "_work_search_cache", {"documents": [{"code": "TEST-001"}], "expires_at": 1120.0})
+
+    intelligence._invalidate_work_search_cache(delay_seconds=30)
+
+    assert intelligence._work_search_cache["expires_at"] == 1030.0
+
+
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:
     asyncio.run(_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch))
 
