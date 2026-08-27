@@ -59,10 +59,22 @@ async def _work_similarity_index_builds_multi_relation_neighbors(tmp_path, monke
 
     assert index["work_count"] == 3
     assert index["linked_work_count"] == 2
+    assert index["fallback_actor_feature_count"] == 2
     assert index["neighbors"]["AAA-001"][0]["code"] == "AAA-002"
+    assert index["neighbors"]["AAA-001"][0]["relation_confidence"] > 0.8
+    assert "actor" in index["neighbors"]["AAA-001"][0]["relation_types"]
     assert recalled["items"][0]["code"] == "AAA-002"
+    assert recalled["items"][0]["neighbor_confidence"] > 0.8
     assert recalled["items"][0]["neighbor_evidence"][0]["reasons"]
     await engine.dispose()
+
+
+def test_semantic_only_relation_has_lower_confidence_than_mapped_actor() -> None:
+    semantic = intelligence._relation_confidence(0.5, [(10.0, "semantic:秘密")])
+    actor = intelligence._relation_confidence(0.5, [(10.0, "actor:mdc-ng:actor-1")])
+
+    assert semantic < 0.35
+    assert actor > 0.9
 
 
 def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:

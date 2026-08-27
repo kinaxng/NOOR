@@ -30,7 +30,7 @@ _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[float, frozenset[str], dict[str, str], dict[str, str]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
-WORK_SIMILARITY_VERSION = 4
+WORK_SIMILARITY_VERSION = 5
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
     "身体", "本番", "作品", "影片", "电影", "独家", "推荐", "热门", "has_chinese",
@@ -468,6 +468,35 @@ def _work_profile_candidate(profile: WorkProfile) -> dict[str, Any]:
     }
 
 
+def _relation_reliability(feature: str) -> float:
+    """Prior reliability for a shared relation, independent of cosine strength."""
+    kind = feature.split(":", 1)[0]
+    if kind == "actor":
+        return 0.99 if feature.startswith("actor:mdc-ng:") else 0.88
+    return {
+        "series": 0.95,
+        "director": 0.88,
+        "studio": 0.82,
+        "category": 0.66,
+        "semantic": 0.38,
+    }.get(kind, 0.45)
+
+
+def _relation_confidence(similarity: float, rows: list[tuple[float, str]]) -> float:
+    """Calibrate relation confidence so one loose title token cannot look authoritative."""
+    if not rows:
+        return 0.0
+    total = sum(max(0.0, contribution) for contribution, _feature in rows) or 1.0
+    prior = sum(max(0.0, contribution) * _relation_reliability(feature) for contribution, feature in rows) / total
+    kinds = {feature.split(":", 1)[0] for _contribution, feature in rows}
+    evidence_bonus = min(0.12, max(0, len(rows) - 1) * 0.035 + max(0, len(kinds) - 1) * 0.025)
+    cosine_reliability = 0.55 + 0.45 * min(1.0, similarity / 0.35)
+    confidence = prior * cosine_reliability + evidence_bonus
+    if kinds == {"semantic"}:
+        confidence *= 0.72
+    return max(0.05, min(0.99, confidence))
+
+
 async def build_work_similarity_index(*, force: bool = False, neighbor_limit: int = 24) -> dict[str, Any]:
     """Build a durable sparse multi-relation work-neighborhood index."""
     global _similarity_cache
@@ -534,12 +563,23 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         similarity = dot / denominator
         if similarity < 0.08:
             continue
+        strongest = sorted(shared[(left, right)], reverse=True)[:5]
+        relation_confidence = _relation_confidence(similarity, strongest)
         reasons = []
-        for contribution, feature in sorted(shared[(left, right)], reverse=True)[:5]:
+        for contribution, feature in strongest:
             kind = feature.split(":", 1)[0]
             reasons.append({"type": kind, "label": feature_labels.get(feature, feature.split(":", 1)[-1]), "weight": round(contribution, 3)})
-        row_left = {"code": right, "score": round(similarity * 100, 2), "reasons": reasons}
-        row_right = {"code": left, "score": round(similarity * 100, 2), "reasons": reasons}
+        calibrated_score = similarity * relation_confidence * 100
+        relation_types = sorted({reason["type"] for reason in reasons})
+        shared_payload = {
+            "score": round(calibrated_score, 2),
+            "cosine_similarity": round(similarity, 4),
+            "relation_confidence": round(relation_confidence, 3),
+            "relation_types": relation_types,
+            "reasons": reasons,
+        }
+        row_left = {"code": right, **shared_payload}
+        row_right = {"code": left, **shared_payload}
         neighbors[left].append(row_left)
         neighbors[right].append(row_right)
     for code in list(neighbors):
@@ -551,6 +591,8 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         "work_count": len(raw_features),
         "feature_count": sum(1 for feature, codes in postings.items() if 2 <= len(set(codes)) <= feature_cap),
         "linked_work_count": len(neighbors),
+        "mapped_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:mdc-ng:")),
+        "fallback_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:name:")),
         "neighbors": dict(neighbors),
         "candidates": candidates,
     }
@@ -574,13 +616,21 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, limit: i
                 continue
             contribution = float(neighbor.get("score") or 0) / 100 * max(0.1, seed_weight)
             scores[code] += contribution
-            evidence[code].append({"seed_code": seed_code, "contribution": round(contribution, 3), "reasons": neighbor.get("reasons") or []})
+            evidence[code].append({
+                "seed_code": seed_code,
+                "contribution": round(contribution, 3),
+                "relation_confidence": float(neighbor.get("relation_confidence") or 0),
+                "relation_types": neighbor.get("relation_types") or [],
+                "reasons": neighbor.get("reasons") or [],
+            })
     ranked = sorted(scores, key=lambda code: scores[code], reverse=True)[:max(1, min(limit, 500))]
     items = []
     for code in ranked:
         candidate = dict((index.get("candidates") or {}).get(code) or {"code": code, "title": code})
         candidate["neighbor_score"] = round(scores[code], 3)
         candidate["neighbor_evidence"] = sorted(evidence[code], key=lambda row: row["contribution"], reverse=True)[:5]
+        total_contribution = sum(float(row.get("contribution") or 0) for row in evidence[code]) or 1.0
+        candidate["neighbor_confidence"] = round(sum(float(row.get("contribution") or 0) * float(row.get("relation_confidence") or 0) for row in evidence[code]) / total_contribution, 3)
         items.append(candidate)
     return {"revision": index.get("revision"), "items": items, "seed_count": len(seeds), "linked_work_count": index.get("linked_work_count", 0)}
 
@@ -598,6 +648,8 @@ def work_similarity_status() -> dict[str, Any]:
         "work_count": int(payload.get("work_count") or 0),
         "feature_count": int(payload.get("feature_count") or 0),
         "linked_work_count": int(payload.get("linked_work_count") or 0),
+        "mapped_actor_feature_count": int(payload.get("mapped_actor_feature_count") or 0),
+        "fallback_actor_feature_count": int(payload.get("fallback_actor_feature_count") or 0),
     }
 
 

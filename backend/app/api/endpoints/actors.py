@@ -502,6 +502,23 @@ def _save_mapping_records(records: list[dict[str, Any]], source_path: Path, stat
     return {"path": str(_mapping_store_path()), "updated_at": payload["updated_at"], "stats": stats}
 
 
+async def _refresh_intelligence_actor_relations() -> dict[str, Any]:
+    """Make an actor mapping change visible to Core before sync reports success."""
+    try:
+        from app.knowledge.intelligence import build_work_similarity_index
+
+        index = await build_work_similarity_index(force=True)
+        return {
+            "ok": True,
+            "revision": index.get("revision"),
+            "linked_work_count": int(index.get("linked_work_count") or 0),
+            "mapped_actor_feature_count": int(index.get("mapped_actor_feature_count") or 0),
+            "fallback_actor_feature_count": int(index.get("fallback_actor_feature_count") or 0),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:500]}
+
+
 def _mapping_index(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     global _mapping_name_index_cache
     records = _mapping_records(config)
@@ -809,6 +826,7 @@ async def _sync_mapping_from_mdc_ng(*, force: bool = False) -> dict[str, Any]:
             "source_size": stat.st_size,
             "source_mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
         })
+        core_index = await _refresh_intelligence_actor_relations()
         state = {
             "running": False,
             "last_attempt_at": now,
@@ -817,9 +835,10 @@ async def _sync_mapping_from_mdc_ng(*, force: bool = False) -> dict[str, Any]:
             "source_path": str(source),
             "source_size": stat.st_size,
             "stats": stats,
+            "core_index": core_index,
         }
         _save_json(_mapping_sync_state_path(), state)
-        return {"ok": True, "mapping": mapping, "mdc_ng": state}
+        return {"ok": True, "mapping": mapping, "core_index": core_index, "mdc_ng": state}
     except Exception as exc:
         state.update({"running": False, "last_error": str(exc)})
         _save_json(_mapping_sync_state_path(), state)
@@ -913,6 +932,7 @@ async def import_latest_actor_mapping():
     try:
         records, stats = _parse_mapping_xml(path)
         result = _save_mapping_records(records, path, stats)
+        core_index = await _refresh_intelligence_actor_relations()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"导入演员映射表失败: {exc}") from exc
     SystemLogManager.get_instance().add_log(
@@ -920,7 +940,7 @@ async def import_latest_actor_mapping():
         f"[MediaLibrary] 已导入演员映射表: {stats.get('total', 0)} 条 · TMDB {stats.get('with_tmdb', 0)} 条",
         source="media_library.actors",
     )
-    return {"ok": True, "mapping": result}
+    return {"ok": True, "mapping": result, "core_index": core_index}
 
 
 @router.delete("/actors/mapping")

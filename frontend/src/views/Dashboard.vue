@@ -540,6 +540,11 @@ const intelligenceFreshness = computed(() => Number(intelligenceStats.value.reso
 const intelligenceAvailability = computed(() => Number(intelligenceStats.value.resource_coverage?.quality?.availability_rate || 0))
 const intelligenceActorIdentities = computed(() => Number(intelligenceStats.value.actor_mappings?.identity_count || 0))
 const intelligenceLinkedWorks = computed(() => Number(intelligenceStats.value.work_similarity?.linked_work_count || 0))
+const intelligenceMappedActorRate = computed(() => {
+  const mapped = Number(intelligenceStats.value.work_similarity?.mapped_actor_feature_count || 0)
+  const fallback = Number(intelligenceStats.value.work_similarity?.fallback_actor_feature_count || 0)
+  return mapped + fallback > 0 ? Math.round(mapped / (mapped + fallback) * 100) : 0
+})
 const intelligenceLastLearned = computed(() => intelligenceStats.value.last_learned_at ? formatDashboardRelativeTime.value(intelligenceStats.value.last_learned_at) : '等待首次学习')
 const intelligencePreferenceTrend = computed(() => {
   const learning = intelligenceStats.value.preference_learning || {}
@@ -900,6 +905,7 @@ const statsRingItems = computed(() => {
                   <span>{{ intelligenceProviderCount }} 个资源源</span>
                   <span>{{ intelligenceFreshness.toFixed(0) }}% 情报新鲜</span>
                   <span>{{ formatCount(intelligenceLinkedWorks) }} 作品邻域</span>
+                  <span>{{ intelligenceMappedActorRate }}% 演员关系已映射</span>
                 </div>
               </div>
             </div>
