@@ -21,10 +21,13 @@ _refresh_queue: asyncio.PriorityQueue[tuple[int, int, str]] = asyncio.PriorityQu
 _refresh_counter = itertools.count()
 _refresh_queued: set[str] = set()
 _refresh_workers: list[asyncio.Task[None]] = []
-SEMANTIC_PROFILE_VERSION = 7
+SEMANTIC_PROFILE_VERSION = 8
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
     "一个", "一种", "这个", "那个", "以及", "然后", "作品", "影片", "电影", "高清", "高画质",
+}
+SEMANTIC_LATIN_STOPWORDS = {
+    "fanza", "dmm", "javdb", "avdb", "video", "movie", "sample", "preview", "sex",
 }
 
 
@@ -37,7 +40,11 @@ def semantic_tokens(*values: Any) -> dict[str, Any]:
     text = re.sub(r"https?://\S+", " ", text)
     text = re.sub(r"\b(?:FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,10}[-_ ]?\d{2,7})\b", " ", text, flags=re.I)
     text = re.sub(r"\b(?:4k|8k|fhd|uhd|1080p|2160p|hdr|60fps)\b", " ", text, flags=re.I)
-    latin = list(dict.fromkeys(part.casefold() for part in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", text)))
+    latin = list(dict.fromkeys(
+        part.casefold()
+        for part in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", text)
+        if part.casefold() not in SEMANTIC_LATIN_STOPWORDS
+    ))
     normalized_cjk = re.sub(r"(?:した|して|する|される|され|れる|られ|ない|です|ます|から|まで|より|そして|また|その|この|の|に|を|が|と|で|へ|的|了|过|与)", " ", text)
     cjk_runs = re.findall(r"[\u3040-\u30ff\u3400-\u9fff]{2,16}", normalized_cjk)
     cjk: list[str] = []

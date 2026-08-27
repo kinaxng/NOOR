@@ -17,6 +17,7 @@ def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     assert tokens["weighted"]["隣人"] >= 0.7
     assert "子生徒" not in intelligence.semantic_tokens("女子生徒")["weighted"]
     assert "女子生徒" in intelligence.semantic_tokens("女子生徒")["weighted"]
+    assert "fanza" not in intelligence.semantic_tokens("FANZA限定 sample sex")["weighted"]
 
 
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:
