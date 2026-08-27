@@ -11,9 +11,10 @@ from sqlalchemy.orm import aliased
 
 from app.api.endpoints import media_library
 from app.api.endpoints.media_library_helpers import SUBTITLE_EXTS
-from app.core.models import Job
+from app.core.models import Job, utcnow
 from app.knowledge.codes import extract_video_code_candidates
-from app.knowledge.models import KnowledgeEdge, KnowledgeEntity
+from app.knowledge.intelligence import semantic_tokens
+from app.knowledge.models import KnowledgeEdge, KnowledgeEntity, WorkProfile
 from app.knowledge.repository import KnowledgeRepository
 from app.plugins.runtime import runtime as plugin_runtime
 
@@ -188,11 +189,41 @@ async def _index_media_item(repo: KnowledgeRepository, item: dict[str, Any], det
         "nfo": nfo,
     }, source="media-library")
     stats["entities"] += 1
-    for code_value in _video_codes(detail):
+    code_values = _video_codes(detail)
+    for code_value in code_values:
         target = await repo.upsert_entity("video_code", code_value, code_value, source="media-library")
         await repo.upsert_edge(media.id, "HAS_CODE", target.id, source="media-library")
         stats["entities"] += 1
         stats["edges"] += 1
+        profile = await repo.db.get(WorkProfile, code_value)
+        title = _media_label(detail)
+        original_title = str(nfo.get("originaltitle") or "").strip()
+        aliases = list(dict.fromkeys(value for value in (title, original_title, str(detail.get("name") or "")) if value))
+        evidence = {"source": "media-library", "observed_at": utcnow().isoformat(), "confidence": 95, "emby_item_id": detail.get("id") or item.get("id")}
+        library_facts = {
+            "actors": _clean_values((nfo.get("actors") or []) + (detail.get("actors") or [])),
+            "genres": _clean_values((detail.get("genres") or []) + (nfo.get("genres") or [])),
+            "tags": _clean_values(_nfo_tags(nfo) + _detail_user_tags(detail)),
+            "file_path": detail.get("file_path") or item.get("path"),
+            "in_library": True,
+        }
+        if profile is None:
+            repo.db.add(WorkProfile(code=code_value, title=title, original_title=original_title, aliases=aliases, tokens=semantic_tokens(*aliases), facts={"media-library": library_facts}, source_evidence=[evidence], confidence=95))
+        else:
+            merged_aliases = list(profile.aliases or [])
+            for alias in aliases:
+                if alias not in merged_aliases:
+                    merged_aliases.append(alias)
+            facts = dict(profile.facts or {})
+            facts["media-library"] = library_facts
+            source_evidence = [row for row in (profile.source_evidence or []) if isinstance(row, dict) and row.get("source") != "media-library"] + [evidence]
+            profile.title = title or profile.title
+            profile.original_title = original_title or profile.original_title
+            profile.aliases = merged_aliases[-60:]
+            profile.tokens = semantic_tokens(profile.title, profile.original_title, profile.translated_title, *profile.aliases)
+            profile.facts = facts
+            profile.source_evidence = source_evidence[-60:]
+            profile.confidence = max(int(profile.confidence or 0), 95)
     relation_sets = [
         ("HAS_ACTOR", "actor", _clean_values((nfo.get("actors") or []) + (detail.get("actors") or []))),
         ("HAS_STUDIO", "studio", _clean_values((detail.get("studios") or []) + [nfo.get("maker"), nfo.get("publisher")])),

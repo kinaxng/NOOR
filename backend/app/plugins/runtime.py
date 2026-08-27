@@ -204,7 +204,9 @@ class PluginRuntime:
             parameters = list(inspect.signature(callback).parameters)
             args = (action, config, payload) if len(parameters) >= 2 and parameters[1] == "config" else (action, payload, config)
             result = callback(*args)
-            return await result if asyncio.iscoroutine(result) else result
+            result = await result if asyncio.iscoroutine(result) else result
+            await self._record_action_intelligence(plugin_id, action, payload, result)
+            return result
         for name, args in (
             (action, (payload, config)),
             (action, (payload,)),
@@ -216,6 +218,23 @@ class PluginRuntime:
             except TypeError:
                 continue
         raise LookupError(f"Plugin action not found: {plugin_id}/{action}")
+
+    async def _record_action_intelligence(self, plugin_id: str, action: str, payload: dict[str, Any], result: Any) -> None:
+        if action not in {"video", "detail", "work"} or not isinstance(result, dict):
+            return
+        data = result.get("data") if isinstance(result.get("data"), dict) else result
+        if not isinstance(data, dict):
+            return
+        try:
+            from app.knowledge.intelligence import record_work_metadata
+            await record_work_metadata(
+                str(payload.get("code") or payload.get("number") or data.get("code") or data.get("number") or ""),
+                data,
+                source=plugin_id,
+                confidence=85,
+            )
+        except Exception:
+            pass
 
     async def get_rss_items(self, plugin_id: str, *, limit: int = 30, force_refresh: bool = False, include_images: bool = False) -> Any:
         manifest = self.get_manifest(plugin_id)
@@ -484,6 +503,14 @@ class PluginRuntime:
     ) -> dict[str, Any]:
         payload = {"keyword": str(query).strip()} if isinstance(query, str) else dict(query or {})
         payload, query_filters, query_sources, title_terms = self._parse_resource_query_filters(payload)
+        cache_mode = str(payload.pop("intelligence_cache", "") or "").strip().lower()
+        if cache_mode in {"prefer", "only"}:
+            from app.knowledge.intelligence import cached_resource_groups
+            search_text = str(payload.get("code") or payload.get("number") or payload.get("keyword") or payload.get("q") or "")
+            cached_groups = await cached_resource_groups(search_text, include_stale=False, limit_per_provider=limit_per_plugin)
+            if cached_groups or cache_mode == "only":
+                cached_items = [item for group in cached_groups for item in group.get("items") or []]
+                return {"ok": True, "query": payload, "groups": cached_groups, "items": cached_items, "downloaders": self.list_enabled_downloaders(), "from_intelligence_core": True}
         provider_filter = {str(x).strip() for x in (provider_ids or []) if str(x).strip()}
         if query_sources:
             provider_filter = provider_filter & query_sources if provider_filter else query_sources
@@ -554,14 +581,18 @@ class PluginRuntime:
                 with contextlib.suppress(Exception, asyncio.CancelledError):
                     await task
             raise
-        for result in results:
+        outcomes: list[dict[str, Any]] = []
+        for (provider_id, manifest), result in zip(providers, results):
             if isinstance(result, Exception):
+                outcomes.append({"provider": provider_id, "provider_label": manifest.get("name") or provider_id, "status": "failed", "error": str(result)})
                 continue
             group, normalized_items = result
             if group is None:
+                outcomes.append({"provider": provider_id, "provider_label": manifest.get("name") or provider_id, "status": "empty", "count": 0})
                 continue
             groups.append(group)
             items.extend(normalized_items)
+            outcomes.append({"provider": provider_id, "provider_label": manifest.get("name") or provider_id, "status": "available" if normalized_items else "empty", "count": len(normalized_items)})
         provider_priority = {"avdb": 0, "mteam-plugin": 1, "javdb": 2}
         groups.sort(key=lambda group: (provider_priority.get(str(group.get("provider") or ""), 99), str(group.get("provider") or "")))
         items.sort(key=lambda item: (provider_priority.get(str(item.get("provider") or ""), 99), str(item.get("provider") or "")))
@@ -569,6 +600,12 @@ class PluginRuntime:
         search_text = str(payload.get("code") or payload.get("number") or payload.get("keyword") or payload.get("q") or "")
         is_single_code_query = bool(re.search(r"\b(?:FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,8}[-_ ]?\d{2,7}|\d{6}[-_]\d{2,5})\b", search_text, re.I))
         await self._borrow_resource_covers_from_javdb(items, groups, enrich_missing_details=not is_single_code_query)
+        if is_single_code_query and providers:
+            try:
+                from app.knowledge.intelligence import record_resource_search
+                await record_resource_search(payload, groups, outcomes=outcomes)
+            except Exception:
+                pass
         return {
             "ok": True,
             "query": payload,

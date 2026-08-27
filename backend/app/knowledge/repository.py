@@ -14,6 +14,9 @@ from app.knowledge.models import (
     KnowledgeEdge,
     KnowledgeEntity,
     KnowledgeIndexRun,
+    ResourceObservation,
+    ResourceRefreshState,
+    WorkProfile,
     KnowledgeScore,
     KnowledgeSource,
     stable_id,
@@ -28,6 +31,9 @@ class KnowledgeRepository:
         return await self.db.get(KnowledgeEntity, entity_id)
 
     async def clear(self) -> None:
+        # A graph rebuild must never erase the durable Intelligence Core.
+        # Work profiles and resource observations evolve independently and are
+        # refreshed source-by-source.
         for model in (KnowledgeActionState, KnowledgeAnomaly, KnowledgeScore, KnowledgeEdge, KnowledgeEntity, KnowledgeSource):
             await self.db.execute(delete(model))
         await self.db.commit()
@@ -330,9 +336,15 @@ class KnowledgeRepository:
         edge_rows = await self.db.execute(select(KnowledgeEdge.relation_type, func.count(KnowledgeEdge.id)).group_by(KnowledgeEdge.relation_type))
         score_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeScore))).scalar_one())
         anomaly_count = int((await self.db.execute(select(func.count()).select_from(KnowledgeAnomaly))).scalar_one())
+        work_profile_count = int((await self.db.execute(select(func.count()).select_from(WorkProfile))).scalar_one())
+        resource_observation_count = int((await self.db.execute(select(func.count()).select_from(ResourceObservation))).scalar_one())
+        resource_refresh_count = int((await self.db.execute(select(func.count()).select_from(ResourceRefreshState).where(ResourceRefreshState.status.in_(['queued', 'running'])))).scalar_one())
         return {
             'entities': {key: int(value) for key, value in entity_rows.all()},
             'edges': {key: int(value) for key, value in edge_rows.all()},
             'scores': score_count,
             'anomalies': anomaly_count,
+            'work_profiles': work_profile_count,
+            'resource_observations': resource_observation_count,
+            'resource_refresh_pending': resource_refresh_count,
         }

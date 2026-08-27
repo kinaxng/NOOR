@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import database
 from app.core.database import get_db
 from app.knowledge.indexer import rebuild_knowledge_index
+from app.knowledge.intelligence import enqueue_resource_refresh, resource_refresh_status, work_intelligence
 from app.knowledge.models import KnowledgeAnomaly, KnowledgeScore
 from app.knowledge.repository import KnowledgeRepository
 
@@ -128,3 +129,23 @@ async def action_states(status: str = Query('done,hidden'), limit: int = Query(2
 @router.get('/stats')
 async def stats(db: AsyncSession = Depends(get_db)):
     return await KnowledgeRepository(db).stats()
+
+
+@router.get('/works/{code}')
+async def get_work_intelligence(code: str, include_stale: bool = True):
+    result = await work_intelligence(code, include_stale=include_stale)
+    if result is None:
+        raise HTTPException(status_code=404, detail='work intelligence not found')
+    return result
+
+
+@router.post('/resources/refresh')
+async def refresh_resources(payload: dict = Body(default_factory=dict)):
+    codes = payload.get('codes') or [payload.get('code')]
+    accepted = await enqueue_resource_refresh([str(code) for code in codes if code], priority=int(payload.get('priority') or 50))
+    return {'ok': True, 'accepted': accepted}
+
+
+@router.get('/resources/refresh/status')
+async def refresh_resources_status():
+    return await resource_refresh_status()

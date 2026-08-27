@@ -1,5 +1,26 @@
 # Architecture
 
+## Intelligence Core
+
+NOOR uses a system-level Intelligence Core rather than a standalone graph UI. It is the shared memory used by the media library, resource search, work details, subscriptions and recommendations.
+
+For every canonical work code the Core maintains:
+
+- a continuously enriched work profile, including multilingual titles, aliases, semantic tokens and provider-scoped facts;
+- source evidence and confidence, so conflicting provider facts are preserved rather than silently overwritten;
+- provider-scoped resource observations with separate availability, features, first/last seen and expiry fields;
+- a persistent refresh state used by background workers when page-time resource checks cannot finish.
+
+Single-code resource searches are observations, not disposable responses. Results are written back to the Core and reused across NOOR. Work-detail actions also contribute identity and metadata. Recommendation cards read the same observations and enqueue unfinished checks for background completion, keeping page rendering independent from slow providers.
+
+Core endpoints currently include:
+
+- `GET /api/knowledge/works/{code}` — merged work profile and resource intelligence;
+- `POST /api/knowledge/resources/refresh` — enqueue one or more work codes;
+- `GET /api/knowledge/resources/refresh/status` — inspect persistent refresh progress.
+
+The Agent layer is intentionally not part of the Core. A future optional Agent plugin can consume these APIs without making NOOR dependent on a language model.
+
 NOOR 将稳定的通用能力保留在 Core，把可替换的服务集成与独立业务功能放入插件。
 
 ## Core

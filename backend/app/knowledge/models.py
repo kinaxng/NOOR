@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -123,3 +123,60 @@ class KnowledgeIndexRun(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     stats: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class WorkProfile(Base):
+    """Canonical, continuously enriched identity and semantic portrait of a work."""
+
+    __tablename__ = "knowledge_work_profiles"
+
+    code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str] = mapped_column(String(1024), default="")
+    original_title: Mapped[str] = mapped_column(String(1024), default="")
+    translated_title: Mapped[str] = mapped_column(String(1024), default="")
+    aliases: Mapped[list] = mapped_column(JSON, default=list)
+    tokens: Mapped[dict] = mapped_column(JSON, default=dict)
+    facts: Mapped[dict] = mapped_column(JSON, default=dict)
+    source_evidence: Mapped[list] = mapped_column(JSON, default=list)
+    confidence: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class ResourceObservation(Base):
+    """A provider-scoped resource fact; absence, failure and success stay distinct."""
+
+    __tablename__ = "knowledge_resource_observations"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    work_code: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    provider_label: Mapped[str] = mapped_column(String(256), default="")
+    resource_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    title: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(32), index=True, default="available")
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    confidence: Mapped[int] = mapped_column(Integer, default=80)
+    features: Mapped[dict] = mapped_column(JSON, default=dict)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("work_code", "provider_id", "resource_key", name="uq_resource_observation_identity"),
+    )
+
+
+class ResourceRefreshState(Base):
+    __tablename__ = "knowledge_resource_refresh_states"
+
+    work_code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32), index=True, default="queued")
+    priority: Mapped[int] = mapped_column(Integer, default=50, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str] = mapped_column(Text, default="")
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

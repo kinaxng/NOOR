@@ -102,7 +102,7 @@ def test_plugin_manager_refreshes_shared_sidebar_after_lifecycle_changes() -> No
     text = source.read_text(encoding="utf-8")
 
     assert "loadPlugins: refreshSidebarPlugins" in text
-    assert text.count("refreshSidebarPlugins(true)") == 3
+    assert text.count("refreshSidebarPlugins(true)") == 4
 
 
 def test_official_plugins_use_explicit_private_storage_ids() -> None:
