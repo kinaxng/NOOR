@@ -323,6 +323,25 @@ def actor_identity_key(value: Any) -> str:
     return _actor_alias_data()[2].get(normalized, f"name:{normalized}")
 
 
+def canonical_actor_entity(value: Any) -> dict[str, str]:
+    """Describe the canonical graph identity for an actor name.
+
+    The mapping id is deliberately used as the entity key.  This lets Emby,
+    MDC-NG and resource plugins converge on one graph node even when each
+    source publishes a different script or alias for the same performer.
+    """
+    original = str(value or "").strip()
+    identity = actor_identity_key(original)
+    if not identity:
+        return {"key": "", "label": "", "identity": "", "alias": ""}
+    return {
+        "key": identity,
+        "label": canonical_actor_name(original),
+        "identity": identity,
+        "alias": original,
+    }
+
+
 async def record_preference_event(
     code: str,
     event_type: str,
@@ -401,7 +420,10 @@ async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, A
             if isinstance(cached, dict):
                 return cached
         result = await _preference_behavior_summary_uncached(max_age_days=max_age_days)
-        _preference_summary_cache.update({"expires_at": time.monotonic() + 15, "key": cache_key, "value": result})
+        # Preference events invalidate this snapshot synchronously, so a
+        # one-minute read TTL only shields SQLite from background maintenance;
+        # it does not delay user feedback becoming effective.
+        _preference_summary_cache.update({"expires_at": time.monotonic() + 60, "key": cache_key, "value": result})
         return result
 
 

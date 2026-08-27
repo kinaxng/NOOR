@@ -3,11 +3,12 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import utcnow
+from app.knowledge.intelligence import canonical_actor_entity
 from app.knowledge.models import (
     KnowledgeActionState,
     KnowledgeAnomaly,
@@ -51,6 +52,17 @@ class KnowledgeRepository:
         return source
 
     async def upsert_entity(self, entity_type: str, key: str, label: str, **values: Any) -> KnowledgeEntity:
+        if entity_type == 'actor':
+            actor = canonical_actor_entity(label or key)
+            if actor['key']:
+                key = actor['key']
+                label = actor['label']
+                data = dict(values.get('data') or {})
+                aliases = [str(item).strip() for item in data.get('aliases') or [] if str(item or '').strip()]
+                if actor['alias'] and actor['alias'] != label and actor['alias'] not in aliases:
+                    aliases.append(actor['alias'])
+                data.update({'identity': actor['identity'], 'aliases': aliases})
+                values['data'] = data
         entity_id = stable_id('entity', entity_type, key)
         entity = await self.db.get(KnowledgeEntity, entity_id)
         if entity is None:
@@ -59,6 +71,13 @@ class KnowledgeRepository:
         else:
             entity.label = label
             for name, value in values.items():
+                if entity_type == 'actor' and name == 'data':
+                    existing = dict(entity.data or {})
+                    aliases = list(dict.fromkeys([
+                        *[str(item).strip() for item in existing.get('aliases') or [] if str(item or '').strip()],
+                        *[str(item).strip() for item in (value or {}).get('aliases') or [] if str(item or '').strip()],
+                    ]))
+                    value = {**existing, **(value or {}), 'aliases': aliases}
                 setattr(entity, name, value)
         return entity
 
@@ -103,7 +122,12 @@ class KnowledgeRepository:
             stmt = stmt.where(KnowledgeEntity.entity_type == entity_type)
         if q.strip():
             like = f'%{q.strip().lower()}%'
-            stmt = stmt.where(or_(func.lower(KnowledgeEntity.label).like(like), func.lower(KnowledgeEntity.key).like(like)))
+            actor_key = canonical_actor_entity(q.strip())['key']
+            stmt = stmt.where(or_(
+                func.lower(KnowledgeEntity.label).like(like),
+                func.lower(KnowledgeEntity.key).like(like),
+                and_(KnowledgeEntity.entity_type == 'actor', KnowledgeEntity.key == actor_key),
+            ))
         if filter_kind in {'missing_subtitle', 'missing_subtitle_with_candidate', 'has_anomaly'}:
             anomaly_query = select(KnowledgeAnomaly.entity_id).where(KnowledgeAnomaly.anomaly_type == 'missing_subtitle')
             if filter_kind == 'has_anomaly':

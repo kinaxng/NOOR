@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.database import Base
 from app.knowledge import intelligence
 from app.knowledge.models import WorkProfile
+from app.knowledge.repository import KnowledgeRepository
 
 
 def test_canonical_work_code_collapses_local_version_marks() -> None:
@@ -173,6 +174,41 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     assert intelligence.actor_alias_revision() != "missing"
     assert intelligence.actor_alias_stats()["identity_count"] == 1
     assert intelligence.actor_alias_stats()["alias_count"] == 4
+
+
+def test_actor_entities_use_mdc_ng_identity_and_preserve_source_aliases(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.knowledge.repository.canonical_actor_entity",
+        lambda value: {
+            "key": "mdc-ng:actor-1",
+            "label": "吉沢明歩",
+            "identity": "mdc-ng:actor-1",
+            "alias": str(value),
+        },
+    )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.entity = None
+
+        async def get(self, _model, _entity_id):
+            return self.entity
+
+        def add(self, entity) -> None:
+            self.entity = entity
+
+    async def scenario() -> None:
+        db = FakeSession()
+        repo = KnowledgeRepository(db)  # type: ignore[arg-type]
+        first = await repo.upsert_entity("actor", "吉泽明步", "吉泽明步", source="javdb", data={})
+        second = await repo.upsert_entity("actor", "吉澤明步", "吉澤明步", source="media-library", data={})
+        assert first is second
+        assert second.key == "mdc-ng:actor-1"
+        assert second.label == "吉沢明歩"
+        assert second.data["identity"] == "mdc-ng:actor-1"
+        assert second.data["aliases"] == ["吉泽明步", "吉澤明步"]
+
+    asyncio.run(scenario())
 
 
 def test_preference_drift_unifies_mdc_ng_aliases(monkeypatch, tmp_path) -> None:
