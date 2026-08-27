@@ -74,6 +74,16 @@ def actor_alias_names() -> frozenset[str]:
     return _actor_alias_data()[0]
 
 
+def actor_alias_revision() -> str:
+    """Cheap cache revision that changes whenever the synchronized mapping changes."""
+    path = data_path("media_actor_mappings.json")
+    try:
+        stat = path.stat()
+        return f"{stat.st_mtime_ns}:{stat.st_size}"
+    except OSError:
+        return "missing"
+
+
 def canonical_actor_name(value: Any) -> str:
     """Resolve any MDC-NG alias to one stable display name."""
     name = str(value or "").strip()
