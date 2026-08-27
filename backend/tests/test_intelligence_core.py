@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -18,6 +19,18 @@ def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     assert "子生徒" not in intelligence.semantic_tokens("女子生徒")["weighted"]
     assert "女子生徒" in intelligence.semantic_tokens("女子生徒")["weighted"]
     assert "fanza" not in intelligence.semantic_tokens("FANZA限定 sample sex")["weighted"]
+
+
+def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
+    mapping = tmp_path / "media_actor_mappings.json"
+    mapping.write_text(json.dumps({"records": [{
+        "jp": "三宮つばき", "zh_cn": "三宫椿", "zh_tw": "三宮椿",
+        "names": ["三宮つばき", "三宫椿"], "aliases": ["旧名"],
+    }]}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(intelligence, "data_path", lambda *_parts: mapping)
+    monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
+
+    assert intelligence.actor_alias_names() == frozenset({"三宮つばき", "三宫椿", "三宮椿", "旧名"})
 
 
 def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:

@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.core.database import async_session_maker
 from app.core.models import utcnow
+from app.core.runtime_paths import data_path
 from app.knowledge.codes import extract_video_code
 from app.knowledge.models import ResourceObservation, ResourceRefreshState, WorkProfile, stable_id
 
@@ -21,6 +22,7 @@ _refresh_queue: asyncio.PriorityQueue[tuple[int, int, str]] = asyncio.PriorityQu
 _refresh_counter = itertools.count()
 _refresh_queued: set[str] = set()
 _refresh_workers: list[asyncio.Task[None]] = []
+_actor_alias_cache: tuple[float, frozenset[str]] | None = None
 SEMANTIC_PROFILE_VERSION = 8
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
@@ -33,6 +35,28 @@ SEMANTIC_LATIN_STOPWORDS = {
 
 def canonical_work_code(value: Any) -> str:
     return str(extract_video_code(str(value or "")) or "").upper()
+
+
+def actor_alias_names() -> frozenset[str]:
+    """Return all known actor names from the synchronized MDC-NG mapping."""
+    global _actor_alias_cache
+    path = data_path("media_actor_mappings.json")
+    try:
+        mtime = path.stat().st_mtime
+        if _actor_alias_cache and _actor_alias_cache[0] == mtime:
+            return _actor_alias_cache[1]
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return frozenset()
+    names: set[str] = set()
+    for record in payload.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        values = [record.get("jp"), record.get("zh_cn"), record.get("zh_tw"), *(record.get("names") or []), *(record.get("aliases") or [])]
+        names.update(str(value).strip() for value in values if str(value or "").strip())
+    result = frozenset(names)
+    _actor_alias_cache = (mtime, result)
+    return result
 
 
 def semantic_tokens(*values: Any) -> dict[str, Any]:
