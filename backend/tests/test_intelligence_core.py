@@ -79,10 +79,10 @@ def test_interest_topics_use_media_library_as_durable_long_term_baseline() -> No
 
 
 def test_profile_evidence_backfills_historical_events_without_male_cast_or_operational_tags() -> None:
-    profile = SimpleNamespace(facts={
+    profile = SimpleNamespace(code="MIDA-001", facts={
         "javdb": {
             "actors": [{"name": "女优甲", "gender": "♀"}, {"name": "男优乙", "gender": "♂"}],
-            "categories": [{"name": "人妻"}, {"name": "巨乳"}],
+            "categories": [{"name": "人妻"}, {"name": "巨乳"}, {"name": "MIDA"}],
         },
         "media-library": {
             "actors": ["女优甲"],
@@ -95,6 +95,7 @@ def test_profile_evidence_backfills_historical_events_without_male_cast_or_opera
     assert evidence["actors"] == ["女优甲"]
     assert "人妻" in evidence["categories"]
     assert "巨乳" in evidence["categories"]
+    assert "MIDA" not in evidence["categories"]
     assert "中文字幕" not in evidence["categories"]
 
 

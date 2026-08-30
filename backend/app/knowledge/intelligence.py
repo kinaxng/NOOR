@@ -273,6 +273,19 @@ def canonical_preference_category(value: Any) -> str:
     return PREFERENCE_CATEGORY_ALIASES.get(name, name)
 
 
+def _clean_preference_categories(code: Any, values: Any, *, limit: int = 24) -> list[str]:
+    prefix = canonical_work_code(code).split("-", 1)[0].casefold()
+    stopwords = {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}
+    result: list[str] = []
+    for value in values if isinstance(values, list) else []:
+        raw = str((value.get("name") or value.get("label") or "") if isinstance(value, dict) else value or "").strip()
+        name = canonical_preference_category(raw)
+        if not name or name.casefold() == prefix or name.casefold() in stopwords or name in result:
+            continue
+        result.append(name)
+    return result[:limit]
+
+
 def _actor_alias_data() -> tuple[frozenset[str], dict[str, str], dict[str, str]]:
     """Load MDC-NG actor aliases and their preferred NOOR display names."""
     global _actor_alias_cache
@@ -610,15 +623,9 @@ async def record_preference_event(
         in_cooldown = bool(latest and latest.created_at >= now - cooldown)
         profile = await db.get(WorkProfile, canonical)
         if profile:
-            for facts in (profile.facts or {}).values():
-                if not isinstance(facts, dict):
-                    continue
-                if not actors:
-                    actors = list(facts.get("actors") or facts.get("actresses") or [])
-                if not categories:
-                    categories = list(facts.get("categories") or facts.get("genres") or facts.get("tags") or [])
-                if actors and categories:
-                    break
+            profile_evidence = _profile_preference_evidence(profile)
+            actors = actors or list(profile_evidence.get("actors") or [])
+            categories = categories or list(profile_evidence.get("categories") or [])
         def evidence_name(value: Any) -> str:
             if isinstance(value, dict):
                 return str(value.get("name") or value.get("label") or "").strip()
@@ -632,7 +639,7 @@ async def record_preference_event(
             for value in (actors or [])
             if evidence_name(value) and preference_actor(value)
         ))[:12]
-        category_names = list(dict.fromkeys(canonical_preference_category(evidence_name(value)) for value in (categories or []) if evidence_name(value)))[:20]
+        category_names = _clean_preference_categories(canonical, categories, limit=20)
         if not duplicate_evidence and not in_cooldown:
             event = PreferenceEvent(
                 id=event_id,
@@ -694,17 +701,15 @@ async def _preference_behavior_summary_uncached(*, max_age_days: int = 365) -> d
     profile_evidence = {canonical_work_code(profile.code): _profile_preference_evidence(profile) for profile in profiles}
     enriched_events: list[PreferenceEvent] = []
     for event in events:
-        evidence = profile_evidence.get(canonical_work_code(event.work_code)) or {}
-        if (event.actors or []) and (event.categories or []):
-            enriched_events.append(event)
-            continue
+        code = canonical_work_code(event.work_code)
+        evidence = profile_evidence.get(code) or {}
         enriched = SimpleNamespace(
-            work_code=event.work_code,
+            work_code=code or event.work_code,
             event_type=event.event_type,
             source=event.source,
             weight=event.weight,
             actors=list(event.actors or evidence.get("actors") or []),
-            categories=list(event.categories or evidence.get("categories") or []),
+            categories=_clean_preference_categories(code, list(event.categories or evidence.get("categories") or [])),
             created_at=event.created_at,
         )
         enriched_events.append(enriched)
@@ -786,14 +791,12 @@ def _profile_preference_evidence(profile: WorkProfile) -> dict[str, list[str]]:
     # operational tags than a media-library genre list.
     provider_sources = [source for key, source in facts.items() if key != "media-library" and isinstance(source, dict)]
     category_sources = provider_sources if any(names(source.get("categories") or source.get("genres") or []) for source in provider_sources) else [library]
-    category_stopwords = {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}
     for source in category_sources:
         if not isinstance(source, dict):
             continue
-        for name in names(source.get("categories") or source.get("genres") or []):
-            canonical = canonical_preference_category(name)
-            if canonical.casefold() not in category_stopwords and canonical not in categories:
-                categories.append(canonical)
+        for name in _clean_preference_categories(getattr(profile, "code", ""), names(source.get("categories") or source.get("genres") or [])):
+            if name not in categories:
+                categories.append(name)
     return {"actors": actors[:12], "categories": categories[:24]}
 
 
