@@ -726,6 +726,29 @@ def test_consolidate_local_version_profiles_is_conservative(tmp_path, monkeypatc
     asyncio.run(_consolidate_local_version_profiles_is_conservative(tmp_path, monkeypatch))
 
 
+def test_preference_event_preserves_historical_observed_time(tmp_path, monkeypatch) -> None:
+    asyncio.run(_preference_event_preserves_historical_observed_time(tmp_path, monkeypatch))
+
+
+async def _preference_event_preserves_historical_observed_time(tmp_path, monkeypatch) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'historical-event.db'}")
+    session = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(intelligence, "async_session_maker", session)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    observed = "2026-08-20T10:00:00+00:00"
+
+    assert await intelligence.record_preference_event(
+        "DVAJ-727", "subscription", source="subscription-core",
+        data={"evidence_id": "sub-1:subscription", "observed_at": observed},
+        enqueue_refresh=False,
+    )
+    async with session() as db:
+        event = (await db.execute(intelligence.select(intelligence.PreferenceEvent))).scalar_one()
+        assert event.created_at.isoformat() == "2026-08-20T10:00:00"
+    await engine.dispose()
+
+
 async def _consolidate_local_version_profiles_is_conservative(tmp_path, monkeypatch) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'consolidate-profiles.db'}")
     session = async_sessionmaker(engine, expire_on_commit=False)

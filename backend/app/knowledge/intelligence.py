@@ -594,6 +594,7 @@ async def record_preference_event(
     if not canonical or kind not in PREFERENCE_EVENT_WEIGHTS:
         return False
     now = utcnow()
+    observed_at = _parse_historical_time((data or {}).get("observed_at")) or now
     cooldown = timedelta(hours=6 if kind == "detail_view" else 24)
     created = False
     async with async_session_maker() as db:
@@ -642,7 +643,7 @@ async def record_preference_event(
                 actors=actor_names,
                 categories=category_names,
                 data=data or {},
-                created_at=now,
+                created_at=observed_at,
             )
             db.add(event)
             await db.commit()
