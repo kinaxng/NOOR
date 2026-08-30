@@ -2692,6 +2692,68 @@ async def prune_resource_only_work_profiles() -> int:
     return removed
 
 
+async def consolidate_local_version_work_profiles() -> int:
+    """Fold safe local -C/-U profile variants into the canonical work row.
+
+    Other one-letter suffixes remain untouched: they may be a real catalogue
+    suffix rather than NOOR's local Chinese/uncensored marker.
+    """
+    global _similarity_cache
+    merged = 0
+    async with async_session_maker() as db:
+        profiles = list((await db.execute(select(WorkProfile))).scalars())
+        by_code = {profile.code: profile for profile in profiles}
+        for variant in profiles:
+            match = re.fullmatch(r"(.+)-(C|U)", str(variant.code or ""), re.IGNORECASE)
+            if not match:
+                continue
+            canonical = canonical_work_code(variant.code)
+            if not canonical or canonical == variant.code:
+                continue
+            target = by_code.get(canonical)
+            if target is None:
+                variant.code = canonical
+                by_code[canonical] = variant
+                merged += 1
+                continue
+
+            aliases = list(target.aliases or [])
+            for value in [variant.title, variant.original_title, variant.translated_title, *(variant.aliases or [])]:
+                value = str(value or "").strip()
+                if value and value not in aliases:
+                    aliases.append(value)
+            facts = dict(target.facts or {})
+            for source, incoming in (variant.facts or {}).items():
+                current = facts.get(source)
+                if isinstance(current, dict) and isinstance(incoming, dict):
+                    facts[source] = {**incoming, **current}
+                elif source not in facts:
+                    facts[source] = incoming
+            evidence = list(target.source_evidence or [])
+            seen = {json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) for row in evidence}
+            for row in variant.source_evidence or []:
+                marker = json.dumps(row, ensure_ascii=False, sort_keys=True, default=str)
+                if marker not in seen:
+                    evidence.append(row)
+                    seen.add(marker)
+            target.title = target.title or variant.title
+            target.original_title = target.original_title or variant.original_title
+            target.translated_title = target.translated_title or variant.translated_title
+            target.aliases = aliases[-60:]
+            target.facts = facts
+            target.source_evidence = evidence[-100:]
+            target.confidence = max(int(target.confidence or 0), int(variant.confidence or 0))
+            target.tokens = semantic_tokens(target.title, target.original_title, target.translated_title, *target.aliases)
+            await db.delete(variant)
+            merged += 1
+        if merged:
+            await db.commit()
+    if merged:
+        _similarity_cache = None
+        _invalidate_work_search_cache()
+    return merged
+
+
 async def record_work_metadata(code: str, data: dict[str, Any], *, source: str, confidence: int = 80) -> str | None:
     canonical = canonical_work_code(code or data.get("code") or data.get("number") or data.get("title"))
     if not canonical:

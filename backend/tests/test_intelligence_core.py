@@ -701,6 +701,35 @@ def test_prune_resource_only_profiles_keeps_real_portraits(tmp_path, monkeypatch
     asyncio.run(_prune_resource_only_profiles_keeps_real_portraits(tmp_path, monkeypatch))
 
 
+def test_consolidate_local_version_profiles_is_conservative(tmp_path, monkeypatch) -> None:
+    asyncio.run(_consolidate_local_version_profiles_is_conservative(tmp_path, monkeypatch))
+
+
+async def _consolidate_local_version_profiles_is_conservative(tmp_path, monkeypatch) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'consolidate-profiles.db'}")
+    session = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(intelligence, "async_session_maker", session)
+    monkeypatch.setattr(intelligence, "_similarity_cache", ("old", {"neighbors": {}}))
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with session() as db:
+        db.add(intelligence.WorkProfile(code="DVAJ-727", title="base", aliases=["base"], facts={"library": {"actors": ["A"]}}, source_evidence=[{"source": "library"}], confidence=90))
+        db.add(intelligence.WorkProfile(code="DVAJ-727-C", title="local", aliases=["local"], facts={"nfo": {"categories": ["C"]}}, source_evidence=[{"source": "nfo"}], confidence=95))
+        db.add(intelligence.WorkProfile(code="SOE-695-W", title="keep", confidence=80))
+        await db.commit()
+
+    assert await intelligence.consolidate_local_version_work_profiles() == 1
+    async with session() as db:
+        base = await db.get(intelligence.WorkProfile, "DVAJ-727")
+        assert base is not None
+        assert await db.get(intelligence.WorkProfile, "DVAJ-727-C") is None
+        assert await db.get(intelligence.WorkProfile, "SOE-695-W") is not None
+        assert set(base.facts) == {"library", "nfo"}
+        assert "local" in base.aliases
+        assert base.confidence == 95
+    await engine.dispose()
+
+
 async def _prune_resource_only_profiles_keeps_real_portraits(tmp_path, monkeypatch) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'prune-resource-profiles.db'}")
     sessions = async_sessionmaker(engine, expire_on_commit=False)

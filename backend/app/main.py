@@ -14,7 +14,8 @@ async def lifespan(app: FastAPI):
     await init_db()
     from app.tasks.manager import job_manager
     await job_manager.recover_queued_jobs()
-    from app.knowledge.intelligence import prune_resource_only_work_profiles, start_resource_refresh_workers, stop_resource_refresh_workers, upgrade_semantic_profiles
+    from app.knowledge.intelligence import consolidate_local_version_work_profiles, prune_resource_only_work_profiles, start_resource_refresh_workers, stop_resource_refresh_workers, upgrade_semantic_profiles
+    await consolidate_local_version_work_profiles()
     await prune_resource_only_work_profiles()
     await upgrade_semantic_profiles()
     from app.plugins.runtime import runtime as plugin_runtime
