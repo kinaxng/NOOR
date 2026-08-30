@@ -5,7 +5,7 @@ adds columns that are absent from legacy ``jobs`` tables.
 """
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -15,13 +15,31 @@ from app.core.database_paths import prepare_sqlite_database
 
 settings = get_settings()
 database_url = prepare_sqlite_database(settings.database_url, noor_data_dir=settings.noor_data_dir)
-engine = create_async_engine(database_url, echo=False)
+_is_sqlite = database_url.startswith("sqlite")
+_connect_args = {"timeout": 15} if _is_sqlite else {}
+engine = create_async_engine(database_url, echo=False, connect_args=_connect_args)
 async_session_maker = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
 _sync_url = database_url.replace("+aiosqlite", "")
-_sync_engine = create_engine(_sync_url, echo=False, pool_pre_ping=True)
+_sync_engine = create_engine(_sync_url, echo=False, pool_pre_ping=True, connect_args=_connect_args)
 SessionLocal = sessionmaker(bind=_sync_engine, expire_on_commit=False)
+
+
+def _configure_sqlite_connection(dbapi_connection, _connection_record=None) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA busy_timeout=15000")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
+
+
+if _is_sqlite:
+    event.listen(engine.sync_engine, "connect", _configure_sqlite_connection)
+    event.listen(_sync_engine, "connect", _configure_sqlite_connection)
 
 
 class Base(DeclarativeBase):
