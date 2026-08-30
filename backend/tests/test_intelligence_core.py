@@ -297,7 +297,16 @@ def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths
         "negative_restart_probability": 0.8,
         "multi_hop_candidates": 1,
         "relation_weights": {},
+        "seed_limit": 160,
     }
+
+
+def test_equal_weight_seed_order_uses_stable_hash_not_code_prefix() -> None:
+    weights = {f"AAA-{index:03d}": 0.75 for index in range(200)}
+    selected = intelligence._rank_seed_weights(weights, 20)
+
+    assert selected == intelligence._rank_seed_weights(dict(reversed(list(weights.items()))), 20)
+    assert [code for code, _weight in selected] != sorted(weights)[:20]
 
 
 def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeypatch) -> None:

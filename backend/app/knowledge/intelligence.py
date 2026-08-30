@@ -1583,6 +1583,14 @@ def _edge_relation_factor(edge: dict[str, Any], relation_weights: dict[str, floa
     return max(0.75, min(1.25, factor))
 
 
+def _rank_seed_weights(source_weights: dict[str, float], limit: int) -> list[tuple[str, float]]:
+    """Keep strong signals first and break equal library baselines without code-prefix bias."""
+    return sorted(
+        source_weights.items(),
+        key=lambda row: (-float(row[1]), hashlib.sha256(str(row[0]).encode()).hexdigest()),
+    )[:max(1, int(limit))]
+
+
 async def work_similarity_candidates(seed_weights: dict[str, float], *, negative_seed_weights: dict[str, float] | None = None, relation_weights: dict[str, float] | None = None, limit: int = 160) -> dict[str, Any]:
     index = await build_work_similarity_index()
     seeds = {canonical_work_code(code): float(weight) for code, weight in seed_weights.items() if canonical_work_code(code)}
@@ -1594,7 +1602,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
         propagated_scores: dict[str, float] = defaultdict(float)
         propagated_evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
         blocked = set(seeds) | set(negative_seeds)
-        for seed_code, seed_weight in sorted(source_weights.items(), key=lambda row: row[1], reverse=True)[:80]:
+        for seed_code, seed_weight in _rank_seed_weights(source_weights, 160):
             first_neighbors = neighbors_by_code.get(seed_code, [])
             for first in first_neighbors:
                 intermediate = first["code"]
@@ -1666,6 +1674,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
             "negative_restart_probability": 0.80,
             "multi_hop_candidates": sum(1 for code in ranked if any(int(row.get("hop_count") or 1) > 1 for row in evidence[code])),
             "relation_weights": {kind: round(float(weight), 3) for kind, weight in sorted((relation_weights or {}).items())},
+            "seed_limit": 160,
         },
     }
 
@@ -1675,7 +1684,7 @@ async def work_similarity_recall_evaluation(
     seed_weights: dict[str, float] | None = None,
     *,
     target_limit: int = 240,
-    seed_limit: int = 80,
+    seed_limit: int = 160,
 ) -> dict[str, Any]:
     """Run a bounded leave-one-out audit over the user's known works.
 
@@ -1712,7 +1721,7 @@ async def work_similarity_recall_evaluation(
         return dict(cached)
 
     blocked_seed_codes = set(weights)
-    seed_rows = sorted(weights.items(), key=lambda row: (-row[1], row[0]))
+    seed_rows = _rank_seed_weights(weights, len(weights))
     hits = {10: 0, 20: 0, 50: 0}
     eligible = 0
     reciprocal_rank_sum = 0.0
