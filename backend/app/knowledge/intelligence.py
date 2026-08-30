@@ -824,6 +824,8 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
     category_codes: dict[str, set[str]] = defaultdict(set)
     actor_category: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     category_pairs: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    actor_category_codes: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    category_pair_codes: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     for code, row in by_code.items():
         weight = float(row["weight"])
         recent_weight = float(row["recent_weight"])
@@ -837,9 +839,11 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
             category_codes[category].add(code)
             for actor in actors:
                 actor_category[category][actor] += weight
+                actor_category_codes[category][actor].add(code)
             for related in categories:
                 if related != category:
                     category_pairs[category][related] += weight
+                    category_pair_codes[category][related].add(code)
     total_weight = sum(category_weights.values()) or 1.0
     recent_total = sum(category_recent.values()) or 1.0
     candidates: list[dict[str, Any]] = []
@@ -847,8 +851,16 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
         support = len(category_codes[anchor])
         if support < 1 or weight <= 0:
             continue
-        related = sorted(category_pairs[anchor].items(), key=lambda row: row[1], reverse=True)[:4]
-        actors = sorted(actor_category[anchor].items(), key=lambda row: row[1], reverse=True)[:4]
+        related = [
+            (name, score, len(category_pair_codes[anchor][name]))
+            for name, score in sorted(category_pairs[anchor].items(), key=lambda row: row[1], reverse=True)
+            if len(category_pair_codes[anchor][name]) >= 2
+        ][:4]
+        actors = [
+            (identity, score, len(actor_category_codes[anchor][identity]))
+            for identity, score in sorted(actor_category[anchor].items(), key=lambda row: row[1], reverse=True)
+            if len(actor_category_codes[anchor][identity]) >= 2
+        ][:4]
         share = weight / total_weight
         raw_recent_share = category_recent.get(anchor, 0.0) / recent_total
         recent_support = len(category_recent_codes[anchor])
@@ -856,18 +868,40 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
         recent_share = share + (raw_recent_share - share) * recent_reliability
         actor_coverage = (float(actors[0][1]) / weight) if actors and weight > 0 else 0.0
         category_coverage = (float(related[0][1]) / weight) if related and weight > 0 else 0.0
-        actor_rows = [{"identity": identity, "name": actor_labels.get(identity, identity), "weight": round(score, 3)} for identity, score in actors]
+        actor_rows = [
+            {
+                "identity": identity,
+                "name": actor_labels.get(identity, identity),
+                "weight": round(score, 3),
+                "support": relation_support,
+                "confidence": round(min(0.95, relation_support / (relation_support + 4)), 3),
+            }
+            for identity, score, relation_support in actors
+        ]
+        relation_type = "anchor"
+        relation_support = support
+        relation_confidence = min(0.95, support / (support + 4))
+        relation_evidence_codes = set(category_codes[anchor])
         if actor_rows and actor_coverage >= 0.25:
             topic_label = f"{actor_rows[0]['name']} · {anchor}"
+            relation_type = "actor_category"
+            relation_support = int(actor_rows[0]["support"])
+            relation_confidence = float(actor_rows[0]["confidence"])
+            relation_evidence_codes = actor_category_codes[anchor][actor_rows[0]["identity"]]
         elif related and category_coverage >= 0.25:
             topic_label = f"{anchor} · {related[0][0]}"
+            relation_type = "category_pair"
+            relation_support = int(related[0][2])
+            relation_confidence = min(0.95, relation_support / (relation_support + 4))
+            relation_evidence_codes = category_pair_codes[anchor][related[0][0]]
         else:
             topic_label = anchor
+        anchor_confidence = min(0.95, support / (support + 4))
         candidates.append({
             "id": stable_id("preference-topic", anchor)[:16],
             "label": topic_label,
             "anchor": anchor,
-            "categories": [anchor, *[name for name, _score in related]],
+            "categories": [anchor, *[name for name, _score, _support in related]],
             "actors": actor_rows,
             "support": support,
             "strength": round(share, 4),
@@ -877,8 +911,12 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
             "recent_reliability": round(recent_reliability, 3),
             "actor_coverage": round(actor_coverage, 3),
             "category_coverage": round(category_coverage, 3),
-            "confidence": round(min(0.95, support / (support + 4)), 3),
-            "evidence_codes": sorted(category_codes[anchor])[:8],
+            "anchor_confidence": round(anchor_confidence, 3),
+            "relation_type": relation_type,
+            "relation_support": relation_support,
+            "relation_confidence": round(relation_confidence, 3),
+            "confidence": round(min(anchor_confidence, relation_confidence), 3),
+            "evidence_codes": sorted(relation_evidence_codes)[:8],
         })
     candidates.sort(key=lambda row: (float(row["strength"]) + max(0.0, float(row["momentum"])) * 0.7) * float(row["confidence"]), reverse=True)
     selected: list[dict[str, Any]] = []
@@ -897,8 +935,8 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
         selected.append(topic)
         if len(selected) >= max_topics:
             break
-    revision_payload = json.dumps({"version": 2, "topics": selected, "library_work_count": len(library_codes)}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return {"version": 2, "revision": hashlib.sha256(revision_payload.encode("utf-8")).hexdigest()[:20], "topics": selected, "work_count": len(by_code), "library_work_count": len(library_codes), "behavior_work_count": len({canonical_work_code(event.work_code) for event in events if canonical_work_code(event.work_code)}), "generated_at": now.isoformat()}
+    revision_payload = json.dumps({"version": 3, "topics": selected, "library_work_count": len(library_codes)}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {"version": 3, "revision": hashlib.sha256(revision_payload.encode("utf-8")).hexdigest()[:20], "topics": selected, "work_count": len(by_code), "library_work_count": len(library_codes), "behavior_work_count": len({canonical_work_code(event.work_code) for event in events if canonical_work_code(event.work_code)}), "generated_at": now.isoformat()}
 
 
 def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:

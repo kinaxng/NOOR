@@ -42,16 +42,20 @@ def test_interest_topics_deduplicate_funnel_stages_and_capture_recent_combinatio
         SimpleNamespace(work_code="AAA-001", event_type="detail_view", weight=0.18, actors=["演员甲"], categories=["人妻", "邻居"], created_at=now - dt.timedelta(days=2)),
         SimpleNamespace(work_code="AAA-001", event_type="library_imported", weight=4.0, actors=["演员甲"], categories=["人妻", "邻居"], created_at=now - dt.timedelta(days=1)),
         SimpleNamespace(work_code="AAA-002", event_type="subscription", weight=1.8, actors=["演员甲"], categories=["人妻", "职场"], created_at=now - dt.timedelta(days=4)),
+        SimpleNamespace(work_code="AAA-003", event_type="subscription", weight=1.8, actors=["演员乙"], categories=["人妻", "邻居"], created_at=now - dt.timedelta(days=5)),
         SimpleNamespace(work_code="BBB-001", event_type="library_imported", weight=4.0, actors=["演员乙"], categories=["运动"], created_at=now - dt.timedelta(days=80)),
     ]
 
     result = intelligence._preference_interest_topics(events)
     topic = next(item for item in result["topics"] if item["anchor"] == "人妻")
 
-    assert result["work_count"] == 3
-    assert topic["support"] == 2
+    assert result["work_count"] == 4
+    assert topic["support"] == 3
     assert {item["name"] for item in topic["actors"]} == {"演员甲"}
-    assert {"邻居", "职场"} <= set(topic["categories"])
+    assert "邻居" in topic["categories"]
+    assert "职场" not in topic["categories"]
+    assert topic["relation_support"] == 2
+    assert topic["relation_confidence"] <= topic["anchor_confidence"]
     assert topic["recent_strength"] > 0
 
 
@@ -65,7 +69,7 @@ def test_interest_topics_use_media_library_as_durable_long_term_baseline() -> No
     result = intelligence._preference_interest_topics([], profiles=profiles)
     topic = next(item for item in result["topics"] if item["anchor"] == "人妻")
 
-    assert result["version"] == 2
+    assert result["version"] == 3
     assert result["library_work_count"] == 2
     assert result["behavior_work_count"] == 0
     assert topic["support"] == 2
