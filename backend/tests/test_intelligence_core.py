@@ -491,6 +491,7 @@ def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monk
 def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     tokens = intelligence.semantic_tokens("隣人の秘密", "邻居的秘密", "uncensored leak")
     assert not ({"uncensored", "leak"} & set(tokens["latin"]))
+    assert "torrent" not in intelligence.semantic_tokens("TORRENT")["weighted"]
     assert "隣人" in tokens["cjk"]
     assert "邻居" in tokens["cjk"]
     assert tokens["version"] == intelligence.SEMANTIC_PROFILE_VERSION

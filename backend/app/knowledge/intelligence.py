@@ -45,7 +45,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 16
+WORK_SIMILARITY_VERSION = 17
 WORK_PROFILE_FUSION_VERSION = 1
 
 
@@ -146,7 +146,7 @@ SIMILARITY_CATEGORY_STOPWORDS = {
     "DMM独家", "ハイビジョン", "高清晰", "高解析度",
     "破解", "中文字幕", "中字", "中文", "4K", "8K", "独占配信", "独家配信", "配信限定",
 }
-SEMANTIC_PROFILE_VERSION = 10
+SEMANTIC_PROFILE_VERSION = 11
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
     "一个", "一种", "这个", "那个", "以及", "然后", "作品", "影片", "电影", "高清", "高画质",
@@ -156,7 +156,7 @@ SEMANTIC_LATIN_STOPWORDS = {
 }
 SEMANTIC_RELATION_STOPWORDS = {
     "mp4", "mkv", "web-dl", "webdl", "aac2", "mteam", "m-team", "uncensored-hd", "uncensored",
-    "removed", "mosaic", "onejav", "com", "best", "premium", "hfr", "c_gg5", "bod", "mgs", "sod", "leak", "leaked",
+    "removed", "mosaic", "onejav", "com", "best", "premium", "hfr", "c_gg5", "bod", "mgs", "sod", "leak", "leaked", "torrent",
     "无码破解", "新模型无码破解", "自提征用", "第一會所新片", "第一会所新片", "ダスッ",
 }
 SEMANTIC_RELATION_STOPWORD_KEYS = {re.sub(r"[\s_.]+", "", value) for value in SEMANTIC_RELATION_STOPWORDS}
