@@ -235,6 +235,9 @@ def test_semantic_only_relation_has_lower_confidence_than_mapped_actor() -> None
 
     assert semantic < 0.35
     assert actor > 0.9
+    assert not intelligence._relation_edge_allowed(0.08, semantic, {"semantic"})
+    assert intelligence._relation_edge_allowed(0.5, semantic, {"semantic"})
+    assert intelligence._relation_edge_allowed(0.08, actor, {"actor"})
 
 
 def test_relation_factor_applies_bounded_contribution_weighting() -> None:

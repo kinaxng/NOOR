@@ -9,7 +9,7 @@ import re
 import unicodedata
 import math
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,7 +45,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 11
+WORK_SIMILARITY_VERSION = 12
 WORK_PROFILE_FUSION_VERSION = 1
 
 
@@ -1577,6 +1577,13 @@ def _relation_confidence(similarity: float, rows: list[tuple[float, str]]) -> fl
     return max(0.05, min(0.99, confidence))
 
 
+def _relation_edge_allowed(similarity: float, confidence: float, kinds: set[str]) -> bool:
+    """Reject evidence too weak to support a user-visible related-work edge."""
+    if kinds == {"semantic"}:
+        return similarity >= 0.16 and confidence >= 0.22
+    return True
+
+
 def _work_profiles_content_revision(profiles: list[WorkProfile]) -> str:
     """Fingerprint graph inputs while ignoring ordering and operational metadata."""
     fact_keys = {
@@ -1711,6 +1718,7 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
                 dots[pair] += contribution
                 shared[pair].append((contribution, feature))
     neighbors: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    edge_quality: Counter = Counter()
     for pair_index, ((left, right), dot) in enumerate(dots.items()):
         if pair_index and pair_index % 256 == 0:
             await asyncio.sleep(0)
@@ -1732,6 +1740,11 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
             reasons.append({"type": kind, "label": feature_labels.get(feature, feature.split(":", 1)[-1]), "weight": round(contribution, 3)})
         calibrated_score = similarity * relation_confidence * 100
         relation_types = sorted({reason["type"] for reason in reasons})
+        edge_quality["evaluated_pairs"] += 1
+        if not _relation_edge_allowed(similarity, relation_confidence, set(relation_types)):
+            edge_quality["pruned_semantic_only"] += 1
+            continue
+        edge_quality["retained_pairs"] += 1
         shared_payload = {
             "score": round(calibrated_score, 2),
             "cosine_similarity": round(similarity, 4),
@@ -1768,6 +1781,7 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         "actor_alias_learning": alias_learning,
         "fallback_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:name:")),
         "feature_quality": feature_quality,
+        "edge_quality": {key: int(value) for key, value in edge_quality.items()},
         "neighbors": dict(neighbors),
         "candidates": candidates,
     }
@@ -1901,6 +1915,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
         "isolated_work_count": index.get("isolated_work_count", 0),
         "featureless_work_count": index.get("featureless_work_count", 0),
         "graph_coverage_percent": index.get("graph_coverage_percent", 0),
+        "edge_quality": dict(index.get("edge_quality") or {}),
         "feature_quality": dict(index.get("feature_quality") or {}),
         "propagation": {
             "max_hops": 2,
@@ -2329,6 +2344,7 @@ def work_similarity_status() -> dict[str, Any]:
         "mapped_actor_feature_count": int(payload.get("mapped_actor_feature_count") or 0),
         "fallback_actor_feature_count": int(payload.get("fallback_actor_feature_count") or 0),
         "feature_quality": dict(payload.get("feature_quality") or {}),
+        "edge_quality": dict(payload.get("edge_quality") or {}),
         "rebuilding": bool(_similarity_rebuild_task and not _similarity_rebuild_task.done()),
         "pending_revision": _similarity_pending_revision,
     }
