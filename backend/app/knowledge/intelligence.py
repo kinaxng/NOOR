@@ -2219,7 +2219,9 @@ async def work_similarity_recall_evaluation(
             gaps.append("maker")
         return gaps
 
-    for target in targets:
+    for target_index, target in enumerate(targets):
+        if target_index and target_index % 4 == 0:
+            await asyncio.sleep(0)
         active_seeds = [(code, weight) for code, weight in seed_rows if code != target][:seed_limit]
         scores: dict[str, float] = defaultdict(float)
         relation_components: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -2268,13 +2270,15 @@ async def work_similarity_recall_evaluation(
 
     evaluated = len(targets)
 
-    def counterfactual_metrics(relation_weights: dict[str, float]) -> dict[str, dict[str, Any]]:
+    async def counterfactual_metrics(relation_weights: dict[str, float]) -> dict[str, dict[str, Any]]:
         cohorts = {
             "overall": {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0},
             "train": {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0},
             "validation": {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0},
         }
-        for target, base_scores, relation_components in audit_cases:
+        for case_index, (target, base_scores, relation_components) in enumerate(audit_cases):
+            if case_index and case_index % 8 == 0:
+                await asyncio.sleep(0)
             cohort_name = "train" if int(hashlib.sha256(target.encode()).hexdigest()[:2], 16) % 2 == 0 else "validation"
             variant_scores = dict(base_scores)
             for code, components in relation_components.items():
@@ -2310,13 +2314,13 @@ async def work_similarity_recall_evaluation(
             }
         return result_by_cohort
 
-    baseline_counterfactual = counterfactual_metrics({})
+    baseline_counterfactual = await counterfactual_metrics({})
     relation_trials: dict[str, dict[str, Any]] = {}
     recommended_relation_weights: dict[str, float] = {}
     for relation_type in ("actor", "series", "director", "studio", "category", "semantic"):
         trials = {
-            "up": counterfactual_metrics({relation_type: 1.15}),
-            "down": counterfactual_metrics({relation_type: 0.85}),
+            "up": await counterfactual_metrics({relation_type: 1.15}),
+            "down": await counterfactual_metrics({relation_type: 0.85}),
         }
         baseline_train = float(baseline_counterfactual["train"]["utility"])
         baseline_validation = float(baseline_counterfactual["validation"]["utility"])
@@ -2349,11 +2353,11 @@ async def work_similarity_recall_evaluation(
             and float(metrics["validation"]["hit_at_20"]) >= float(baseline_counterfactual["validation"]["hit_at_20"]) - 0.004
         )
 
-    recommended_evaluation = counterfactual_metrics(recommended_relation_weights)
+    recommended_evaluation = await counterfactual_metrics(recommended_relation_weights)
     if recommended_relation_weights and not recommendation_passes(recommended_evaluation):
         single_candidates: list[tuple[float, str, dict[str, dict[str, Any]]]] = []
         for relation_type, weight in recommended_relation_weights.items():
-            metrics = counterfactual_metrics({relation_type: weight})
+            metrics = await counterfactual_metrics({relation_type: weight})
             if recommendation_passes(metrics):
                 minimum_gain = min(
                     float(metrics["train"]["utility"]) - float(baseline_counterfactual["train"]["utility"]),
