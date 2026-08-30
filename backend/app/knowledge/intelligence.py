@@ -2719,12 +2719,18 @@ async def enqueue_resource_refresh(codes: list[str], *, priority: int = 50) -> i
     accepted = 0
     priority = max(0, min(int(priority), 100))
     now = utcnow()
+    normalized_codes = list(dict.fromkeys(
+        code for raw in codes if (code := canonical_work_code(raw))
+    ))
+    if not normalized_codes:
+        return 0
     async with async_session_maker() as db:
-        for raw in codes:
-            code = canonical_work_code(raw)
-            if not code:
-                continue
-            state = await db.get(ResourceRefreshState, code)
+        rows = await db.execute(
+            select(ResourceRefreshState).where(ResourceRefreshState.work_code.in_(normalized_codes))
+        )
+        states = {state.work_code: state for state in rows.scalars().all()}
+        for code in normalized_codes:
+            state = states.get(code)
             if code in _refresh_queued:
                 if state and priority < int(state.priority or 100):
                     state.priority = priority

@@ -198,6 +198,29 @@ def test_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeyp
     asyncio.run(_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch))
 
 
+def test_resource_refresh_enqueue_deduplicates_codes_in_one_batch(tmp_path, monkeypatch) -> None:
+    asyncio.run(_resource_refresh_enqueue_deduplicates_codes_in_one_batch(tmp_path, monkeypatch))
+
+
+async def _resource_refresh_enqueue_deduplicates_codes_in_one_batch(tmp_path, monkeypatch) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'resource-refresh.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(intelligence, "async_session_maker", sessions)
+    monkeypatch.setattr(intelligence, "_refresh_queued", set())
+    monkeypatch.setattr(intelligence, "_refresh_queue", asyncio.PriorityQueue())
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    accepted = await intelligence.enqueue_resource_refresh(["AAA-001", "aaa-001", "BBB-002"], priority=20)
+
+    assert accepted == 2
+    assert intelligence._refresh_queue.qsize() == 2
+    async with sessions() as db:
+        assert (await db.get(intelligence.ResourceRefreshState, "AAA-001")).priority == 20
+        assert (await db.get(intelligence.ResourceRefreshState, "BBB-002")).status == "queued"
+    await engine.dispose()
+
+
 async def _work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'neighbors.db'}")
     sessions = async_sessionmaker(engine, expire_on_commit=False)
