@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from app.knowledge import intelligence
 from app.plugins.runtime import PluginRuntime
 
 
@@ -31,7 +32,11 @@ class _FilteredHandler:
         ]}
 
 
-def test_resource_search_prioritizes_avdb_then_mteam_then_javdb() -> None:
+def test_resource_search_prioritizes_avdb_then_mteam_then_javdb(monkeypatch) -> None:
+    async def ignore_observation(*_args, **_kwargs):
+        return 0
+
+    monkeypatch.setattr(intelligence, "record_resource_search", ignore_observation)
     runtime = PluginRuntime()
     runtime._manifests = {
         provider: {"id": provider, "name": provider, "capabilities": ["resource_search"]}
@@ -47,7 +52,11 @@ def test_resource_search_prioritizes_avdb_then_mteam_then_javdb() -> None:
     assert [item["provider"] for item in result["items"]] == ["avdb", "mteam-plugin", "javdb"]
 
 
-def test_resource_search_enriches_missing_cover_from_javdb_detail() -> None:
+def test_resource_search_enriches_missing_cover_from_javdb_detail(monkeypatch) -> None:
+    async def ignore_metadata(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(intelligence, "record_work_metadata", ignore_metadata)
     runtime = PluginRuntime()
     items = [{"provider": "avdb", "query_key": "TEST-012", "title": "TEST-012", "cover_url": "", "metadata": {}}]
     runtime._handlers["javdb"] = _CoverHandler()
