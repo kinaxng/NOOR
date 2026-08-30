@@ -32,7 +32,7 @@ _refresh_planner_task: asyncio.Task[None] | None = None
 _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[str, frozenset[str], dict[str, str], dict[str, str]] | None = None
-_actor_mention_cache: tuple[str, dict[str, list[tuple[str, str, str]]]] | None = None
+_actor_mention_cache: tuple[str, dict[str, list[tuple[str, str, str, str]]]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
 _similarity_rebuild_task: asyncio.Task[dict[str, Any]] | None = None
 _similarity_pending_revision = ""
@@ -45,7 +45,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 10
+WORK_SIMILARITY_VERSION = 11
 WORK_PROFILE_FUSION_VERSION = 1
 
 
@@ -428,31 +428,61 @@ def actor_mentions(value: Any, *, limit: int = 4) -> list[dict[str, str]]:
         return []
     revision = actor_alias_revision()
     if not _actor_mention_cache or _actor_mention_cache[0] != revision:
-        names, labels, identities = _actor_alias_data()
-        buckets: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
-        for alias in names:
-            normalized = _normalize_actor_name(alias)
-            identity = identities.get(normalized, "")
-            if len(normalized) < 3 or not identity:
+        try:
+            payload = json.loads(data_path("media_actor_mappings.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {"records": []}
+        aliases: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+        for record in payload.get("records") or []:
+            if not isinstance(record, dict):
                 continue
-            buckets[normalized[0]].append((normalized, identity, labels.get(normalized, str(alias))))
+            primary_values = [record.get("jp"), record.get("zh_cn"), record.get("zh_tw"), *(record.get("names") or [])]
+            weak_values = list(record.get("aliases") or [])
+            all_values = [str(item).strip() for item in [*primary_values, *weak_values] if str(item or "").strip()]
+            preferred = str(record.get("zh_cn") or record.get("jp") or record.get("zh_tw") or (all_values[0] if all_values else "")).strip()
+            record_id = str(record.get("id") or "").strip()
+            identity = f"mdc-ng:{record_id}" if record_id else f"name:{_normalize_actor_name(preferred)}"
+            primary_keys = {_normalize_actor_name(item) for item in primary_values if str(item or "").strip()}
+            for alias in all_values:
+                normalized = _normalize_actor_name(alias)
+                kind = "primary" if normalized in primary_keys else "alias"
+                # Short stage names are often ordinary words inside Japanese
+                # titles. They remain valid for explicit structured fields but
+                # are unsafe for substring inference.
+                if len(normalized) < 3 or (kind == "alias" and len(normalized) < 4):
+                    continue
+                aliases[normalized].append((identity, preferred or alias, kind))
+        buckets: dict[str, list[tuple[str, str, str, str]]] = defaultdict(list)
+        for normalized, rows in aliases.items():
+            identities = {row[0] for row in rows}
+            # An alias shared by multiple MDC-NG identities cannot safely
+            # identify one performer from title text alone.
+            if len(identities) != 1:
+                continue
+            identity, label, kind = rows[0]
+            buckets[normalized[0]].append((normalized, identity, label, kind))
         for rows in buckets.values():
             rows.sort(key=lambda row: len(row[0]), reverse=True)
         _actor_mention_cache = (revision, buckets)
-    matches: list[tuple[int, str, str, str]] = []
+    matches: list[tuple[int, int, int, str, str, str, str]] = []
     seen_aliases: set[tuple[str, str]] = set()
     for initial in set(normalized_text):
-        for alias, identity, label in _actor_mention_cache[1].get(initial, []):
+        for alias, identity, label, kind in _actor_mention_cache[1].get(initial, []):
             if alias in normalized_text and (identity, alias) not in seen_aliases:
-                matches.append((len(alias), identity, label, alias))
+                start = normalized_text.find(alias)
+                matches.append((len(alias), start, start + len(alias), identity, label, alias, kind))
                 seen_aliases.add((identity, alias))
     result: list[dict[str, str]] = []
     seen_identities: set[str] = set()
-    for _length, identity, label, alias in sorted(matches, reverse=True):
+    occupied: list[tuple[int, int]] = []
+    for _length, start, end, identity, label, alias, kind in sorted(matches, key=lambda row: (-row[0], row[1], row[3])):
         if identity in seen_identities:
             continue
+        if any(start < used_end and end > used_start for used_start, used_end in occupied):
+            continue
         seen_identities.add(identity)
-        result.append({"name": label, "identity": identity, "alias": alias, "source": "mdc-ng-title"})
+        occupied.append((start, end))
+        result.append({"name": label, "identity": identity, "alias": alias, "source": "mdc-ng-title", "match_kind": kind})
         if len(result) >= limit:
             break
     return result
@@ -1368,6 +1398,23 @@ def _work_similarity_features(profile: WorkProfile, diagnostics: dict[str, int] 
                 key = f"{actual_kind}:{value}"
                 features[key] = max(features.get(key, 0), actual_weight)
                 labels[key] = canonical_actor_name(actual_name) if actual_kind == "actor" else actual_name
+    if not actor_identity_keys:
+        title_text = " ".join(str(value or "") for value in (
+            profile.title, profile.original_title, profile.translated_title, *(profile.aliases or []),
+        ))
+        for mention in actor_mentions(title_text, limit=4):
+            identity = str(mention.get("identity") or "")
+            label = str(mention.get("name") or "")
+            if not identity or not label:
+                continue
+            key = f"actor:{identity}"
+            # Title inference is useful for recall but remains weaker than a
+            # structured actor credit (4.2) until another provider confirms it.
+            features[key] = max(features.get(key, 0), 3.2)
+            labels[key] = label
+            actor_identity_keys.add(identity)
+            if diagnostics is not None:
+                diagnostics["title_inferred_actor_features"] = int(diagnostics.get("title_inferred_actor_features") or 0) + 1
     weighted_terms = (profile.tokens or {}).get("weighted") if isinstance(profile.tokens, dict) else {}
     for term, raw_weight in sorted((weighted_terms or {}).items(), key=lambda row: float(row[1] or 0), reverse=True)[:80]:
         normalized = unicodedata.normalize("NFKC", str(term)).casefold().strip()
@@ -1709,9 +1756,14 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         "profile_fusion_version": WORK_PROFILE_FUSION_VERSION,
         "revision": revision,
         "generated_at": utcnow().isoformat(),
+        "source_profile_count": len(profiles),
         "work_count": len(raw_features),
+        "duplicate_profile_count": max(0, len(profiles) - len(raw_features)),
         "feature_count": sum(1 for feature, codes in postings.items() if 2 <= len(set(codes)) <= feature_cap),
         "linked_work_count": len(neighbors),
+        "isolated_work_count": max(0, len(raw_features) - len(neighbors)),
+        "featureless_work_count": sum(not values for values in raw_features.values()),
+        "graph_coverage_percent": round(len(neighbors) / max(len(raw_features), 1) * 100, 1),
         "mapped_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:mdc-ng:")),
         "actor_alias_learning": alias_learning,
         "fallback_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:name:")),
@@ -1842,7 +1894,13 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
         "items": items,
         "seed_count": len(seeds),
         "negative_seed_count": len(negative_seeds),
+        "source_profile_count": index.get("source_profile_count", 0),
+        "work_count": index.get("work_count", 0),
+        "duplicate_profile_count": index.get("duplicate_profile_count", 0),
         "linked_work_count": index.get("linked_work_count", 0),
+        "isolated_work_count": index.get("isolated_work_count", 0),
+        "featureless_work_count": index.get("featureless_work_count", 0),
+        "graph_coverage_percent": index.get("graph_coverage_percent", 0),
         "feature_quality": dict(index.get("feature_quality") or {}),
         "propagation": {
             "max_hops": 2,
@@ -2260,9 +2318,14 @@ def work_similarity_status() -> dict[str, Any]:
         "profile_fusion_version": payload.get("profile_fusion_version") or WORK_PROFILE_FUSION_VERSION,
         "revision": payload.get("revision"),
         "generated_at": payload.get("generated_at"),
+        "source_profile_count": int(payload.get("source_profile_count") or 0),
         "work_count": int(payload.get("work_count") or 0),
+        "duplicate_profile_count": int(payload.get("duplicate_profile_count") or 0),
         "feature_count": int(payload.get("feature_count") or 0),
         "linked_work_count": int(payload.get("linked_work_count") or 0),
+        "isolated_work_count": int(payload.get("isolated_work_count") or 0),
+        "featureless_work_count": int(payload.get("featureless_work_count") or 0),
+        "graph_coverage_percent": float(payload.get("graph_coverage_percent") or 0),
         "mapped_actor_feature_count": int(payload.get("mapped_actor_feature_count") or 0),
         "fallback_actor_feature_count": int(payload.get("fallback_actor_feature_count") or 0),
         "feature_quality": dict(payload.get("feature_quality") or {}),

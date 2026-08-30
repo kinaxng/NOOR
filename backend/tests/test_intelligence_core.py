@@ -268,6 +268,21 @@ def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkey
     assert diagnostics == {"dropped_code_prefix_categories": 1, "dropped_actor_alias_terms": 1, "dropped_actor_variant_terms": 1}
 
 
+def test_similarity_features_use_lower_weight_title_actor_when_credit_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr(intelligence, "actor_mentions", lambda value, limit=4: [{
+        "name": "吉泽明步", "identity": "mdc-ng:actor-1", "alias": "吉沢明歩",
+        "source": "mdc-ng-title", "match_kind": "primary",
+    }])
+    profile = WorkProfile(code="AAA-011", title="吉沢明歩 最新作品", facts={}, tokens={"weighted": {}})
+    diagnostics = {}
+
+    features, labels = intelligence._work_similarity_features(profile, diagnostics)
+
+    assert features["actor:mdc-ng:actor-1"] == 3.2
+    assert labels["actor:mdc-ng:actor-1"] == "吉泽明步"
+    assert diagnostics["title_inferred_actor_features"] == 1
+
+
 def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths(monkeypatch, tmp_path) -> None:
     async def fake_index(**_kwargs):
         def edge(code: str, score: float, label: str):
@@ -460,12 +475,14 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
         "id": "name:三宫椿",
         "jp": "三宮つばき", "zh_cn": "三宫椿", "zh_tw": "三宮椿",
         "names": ["三宮つばき", "三宫椿"], "aliases": ["旧名"],
+    }, {
+        "id": "name:つばき", "jp": "つばき", "zh_cn": "椿子", "names": ["つばき"],
     }]}, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(intelligence, "data_path", lambda *_parts: mapping)
     monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
     monkeypatch.setattr(intelligence, "_actor_mention_cache", None)
 
-    assert intelligence.actor_alias_names() == frozenset({"三宮つばき", "三宫椿", "三宮椿", "旧名"})
+    assert intelligence.actor_alias_names() == frozenset({"三宮つばき", "三宫椿", "三宮椿", "旧名", "つばき", "椿子"})
     assert intelligence.canonical_actor_name("三宮つばき") == "三宫椿"
     assert intelligence.canonical_actor_name("三宮 椿") == "三宫椿"
     assert intelligence.actor_identity_key("三宮つばき") == "mdc-ng:name:三宫椿"
@@ -473,10 +490,10 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     assert intelligence.actor_identity_key("未收录演员") == "name:未收录演员"
     assert intelligence.canonical_actor_name("未收录演员") == "未收录演员"
     assert intelligence.actor_alias_revision() != "missing"
-    assert intelligence.actor_alias_stats()["identity_count"] == 1
-    assert intelligence.actor_alias_stats()["alias_count"] == 4
+    assert intelligence.actor_alias_stats()["identity_count"] == 2
+    assert intelligence.actor_alias_stats()["alias_count"] == 6
     assert intelligence.actor_mentions("新作 三宮つばき 完全版") == [{
-        "name": "三宫椿", "identity": "mdc-ng:name:三宫椿", "alias": "三宮つばき", "source": "mdc-ng-title",
+        "name": "三宫椿", "identity": "mdc-ng:name:三宫椿", "alias": "三宮つばき", "source": "mdc-ng-title", "match_kind": "primary",
     }]
     assert intelligence.actor_mentions("普通标题 旧名") == []
 
