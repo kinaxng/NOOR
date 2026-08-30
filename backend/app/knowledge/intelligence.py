@@ -2189,7 +2189,7 @@ async def work_similarity_recall_evaluation(
     cached = _similarity_evaluation_cache.get(fingerprint)
     if cached is not None:
         return dict(cached)
-    persisted = _load_offline_evaluation("recall", fingerprint)
+    persisted = await asyncio.to_thread(_load_offline_evaluation, "recall", fingerprint)
     if persisted is not None:
         _similarity_evaluation_cache[fingerprint] = persisted
         return dict(persisted)
@@ -2220,8 +2220,8 @@ async def work_similarity_recall_evaluation(
         return gaps
 
     for target_index, target in enumerate(targets):
-        if target_index and target_index % 4 == 0:
-            await asyncio.sleep(0)
+        if target_index % 2 == 0:
+            await asyncio.sleep(0.001)
         active_seeds = [(code, weight) for code, weight in seed_rows if code != target][:seed_limit]
         scores: dict[str, float] = defaultdict(float)
         relation_components: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -2277,8 +2277,8 @@ async def work_similarity_recall_evaluation(
             "validation": {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0},
         }
         for case_index, (target, base_scores, relation_components) in enumerate(audit_cases):
-            if case_index and case_index % 8 == 0:
-                await asyncio.sleep(0)
+            if case_index % 2 == 0:
+                await asyncio.sleep(0.001)
             cohort_name = "train" if int(hashlib.sha256(target.encode()).hexdigest()[:2], 16) % 2 == 0 else "validation"
             variant_scores = dict(base_scores)
             for code, components in relation_components.items():
@@ -2374,8 +2374,11 @@ async def work_similarity_recall_evaluation(
         cohort: round(float(recommended_evaluation[cohort]["utility"]) - float(baseline_counterfactual[cohort]["utility"]), 5)
         for cohort in ("overall", "train", "validation")
     }
-    relation_policy = _stabilize_relation_policy(
-        str(index.get("revision") or ""), recommended_relation_weights, context_key=evaluation_context,
+    relation_policy = await asyncio.to_thread(
+        _stabilize_relation_policy,
+        str(index.get("revision") or ""),
+        recommended_relation_weights,
+        context_key=evaluation_context,
     )
 
     result = {
@@ -2406,7 +2409,9 @@ async def work_similarity_recall_evaluation(
         "interpretation": "结构召回健康度；目标作品画像保留在索引中，不等同于未来点击率",
     }
     _similarity_evaluation_cache[fingerprint] = result
-    _save_offline_evaluation("recall", fingerprint, result)
+    # The persisted diagnostics file can grow beyond a megabyte. Keep its
+    # JSON parse/serialization and atomic write off the HTTP event loop.
+    await asyncio.to_thread(_save_offline_evaluation, "recall", fingerprint, result)
     if len(_similarity_evaluation_cache) > 4:
         _similarity_evaluation_cache.pop(next(iter(_similarity_evaluation_cache)))
     return dict(result)
