@@ -257,7 +257,7 @@ def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkey
         code="MIDA-727",
         title="百田光稀 秘密",
         facts={"javdb": {"actors": ["百田光希"], "categories": ["MIDA", "人妻"]}},
-        tokens={"weighted": {"百田光稀": 1.8, "百田光穗": 1.7, "秘密": 1.8, "web-dl": 1.2}},
+        tokens={"version": intelligence.SEMANTIC_PROFILE_VERSION, "weighted": {"百田光稀": 1.8, "百田光穗": 1.7, "秘密": 1.8, "web-dl": 1.2}},
     )
 
     features, _labels = intelligence._work_similarity_features(profile, diagnostics)
@@ -498,6 +498,13 @@ def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     assert "子生徒" not in intelligence.semantic_tokens("女子生徒")["weighted"]
     assert "女子生徒" in intelligence.semantic_tokens("女子生徒")["weighted"]
     assert "fanza" not in intelligence.semantic_tokens("FANZA限定 sample sex")["weighted"]
+    long_japanese = intelligence.semantic_tokens("花の長い脚星宫一ストッキング誘惑シリーズ")["weighted"]
+    assert "ーズ" not in long_japanese
+    assert "シリーズ" in long_japanese
+    assert "ストッキング誘惑" in long_japanese
+    obfuscated = intelligence.semantic_tokens("女子校生孕ませレ●プ中出し20連発")["weighted"]
+    assert "レイプ" in obfuscated
+    assert "プ中出し" not in obfuscated
 
 
 def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:

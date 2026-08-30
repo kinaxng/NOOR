@@ -45,7 +45,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 14
+WORK_SIMILARITY_VERSION = 15
 WORK_PROFILE_FUSION_VERSION = 1
 
 
@@ -146,7 +146,7 @@ SIMILARITY_CATEGORY_STOPWORDS = {
     "DMM独家", "ハイビジョン", "高清晰", "高解析度",
     "破解", "中文字幕", "中字", "中文", "4K", "8K", "独占配信", "独家配信", "配信限定",
 }
-SEMANTIC_PROFILE_VERSION = 8
+SEMANTIC_PROFILE_VERSION = 9
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
     "一个", "一种", "这个", "那个", "以及", "然后", "作品", "影片", "电影", "高清", "高画质",
@@ -1377,8 +1377,27 @@ async def record_search_intent(query: Any, *, source: str = "resource-search", n
     return {"recorded": True, "actors": actors, "categories": categories, "terms": terms}
 
 
+def _cjk_semantic_segments(run: str) -> list[str]:
+    groups = re.findall(r"[\u3400-\u9fff]+|[\u3040-\u309f]+|[\u30a0-\u30ffー]+", run)
+    if len(run) <= 16 and len(groups) <= 2:
+        return [run]
+    useful = [group for group in groups if len(group) >= 2 and not re.fullmatch(r"[\u3040-\u309f]+", group)]
+    combined = [
+        left + right
+        for left, right in zip(groups, groups[1:])
+        if len(left) >= 2 and len(right) >= 2 and len(left + right) <= 12
+        and not (re.fullmatch(r"[\u3040-\u309f]+", left) and re.fullmatch(r"[\u3040-\u309f]+", right))
+    ]
+    known = [
+        term for term in set(PREFERENCE_CATEGORY_ALIASES) | set(PREFERENCE_CATEGORY_ALIASES.values())
+        if len(term) >= 2 and term in run
+    ]
+    return list(dict.fromkeys([*useful, *combined, *known]))
+
+
 def semantic_tokens(*values: Any) -> dict[str, Any]:
     text = unicodedata.normalize("NFKC", " ".join(str(value or "") for value in values if value))
+    text = re.sub(r"レ[●○×xX*＊]プ", "レイプ", text)
     text = re.sub(r"https?://\S+", " ", text)
     text = re.sub(r"\b(?:FC2[-_ ]?(?:PPV[-_ ]?)?\d{4,9}|[A-Z]{2,10}[-_ ]?\d{2,7})\b", " ", text, flags=re.I)
     text = re.sub(r"\b(?:4k|8k|fhd|uhd|1080p|2160p|hdr|60fps)\b", " ", text, flags=re.I)
@@ -1388,7 +1407,7 @@ def semantic_tokens(*values: Any) -> dict[str, Any]:
         if part.casefold() not in SEMANTIC_LATIN_STOPWORDS
     ))
     normalized_cjk = re.sub(r"(?:した|して|する|される|され|れる|られ|ない|です|ます|から|まで|より|そして|また|その|この|の|に|を|が|と|で|へ|的|了|过|与)", " ", text)
-    cjk_runs = re.findall(r"[\u3040-\u30ff\u3400-\u9fff]{2,16}", normalized_cjk)
+    cjk_runs = [segment for run in re.findall(r"[\u3040-\u30ff\u3400-\u9fff]{2,}", normalized_cjk) for segment in _cjk_semantic_segments(run)]
     cjk: list[str] = []
     weighted: dict[str, float] = {}
     def informative(term: str) -> bool:
@@ -1482,7 +1501,10 @@ def _work_similarity_features(profile: WorkProfile, diagnostics: dict[str, int] 
             actor_identity_keys.add(identity)
             if diagnostics is not None:
                 diagnostics["title_inferred_actor_features"] = int(diagnostics.get("title_inferred_actor_features") or 0) + 1
-    weighted_terms = (profile.tokens or {}).get("weighted") if isinstance(profile.tokens, dict) else {}
+    tokens = profile.tokens if isinstance(profile.tokens, dict) else {}
+    if int(tokens.get("version") or 0) < SEMANTIC_PROFILE_VERSION:
+        tokens = semantic_tokens(profile.title, profile.original_title, profile.translated_title, *(profile.aliases or []))
+    weighted_terms = tokens.get("weighted") if isinstance(tokens, dict) else {}
     for term, raw_weight in sorted((weighted_terms or {}).items(), key=lambda row: float(row[1] or 0), reverse=True)[:80]:
         normalized = unicodedata.normalize("NFKC", str(term)).casefold().strip()
         if len(normalized) < 2 or normalized in {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}:
@@ -1507,9 +1529,15 @@ def _work_similarity_features(profile: WorkProfile, diagnostics: dict[str, int] 
             _actor_variant_similarity(normalized_actor_term, actor_name_key) >= 0.75
             for actor_name_key in structured_actor_name_keys
         )
-        if mapped_actor_duplicate or inferred_actor_variant:
+        inferred_actor_fragment = any(
+            min(len(normalized_actor_term), len(actor_name_key)) >= 3
+            and (actor_name_key.startswith(normalized_actor_term) or normalized_actor_term.startswith(actor_name_key))
+            and min(len(normalized_actor_term), len(actor_name_key)) / max(len(normalized_actor_term), len(actor_name_key)) >= 0.6
+            for actor_name_key in structured_actor_name_keys
+        )
+        if mapped_actor_duplicate or inferred_actor_variant or inferred_actor_fragment:
             if diagnostics is not None:
-                key = "dropped_actor_alias_terms" if mapped_actor_duplicate else "dropped_actor_variant_terms"
+                key = "dropped_actor_alias_terms" if mapped_actor_duplicate else "dropped_actor_variant_terms" if inferred_actor_variant else "dropped_actor_fragment_terms"
                 diagnostics[key] = int(diagnostics.get(key) or 0) + 1
             continue
         key = f"semantic:{normalized}"
