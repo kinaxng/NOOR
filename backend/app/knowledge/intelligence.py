@@ -46,7 +46,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 17
+WORK_SIMILARITY_VERSION = 18
 WORK_PROFILE_FUSION_VERSION = 1
 
 
@@ -622,7 +622,15 @@ async def record_preference_event(
             if isinstance(value, dict):
                 return str(value.get("name") or value.get("label") or "").strip()
             return str(value or "").strip()
-        actor_names = list(dict.fromkeys(canonical_actor_name(evidence_name(value)) for value in (actors or []) if evidence_name(value)))[:12]
+        def preference_actor(value: Any) -> bool:
+            if not isinstance(value, dict):
+                return True
+            return str(value.get("gender") or "").strip().casefold() not in {"♂", "male", "m", "男"}
+        actor_names = list(dict.fromkeys(
+            canonical_actor_name(evidence_name(value))
+            for value in (actors or [])
+            if evidence_name(value) and preference_actor(value)
+        ))[:12]
         category_names = list(dict.fromkeys(canonical_preference_category(evidence_name(value)) for value in (categories or []) if evidence_name(value)))[:20]
         if not duplicate_evidence and not in_cooldown:
             event = PreferenceEvent(
@@ -1510,6 +1518,26 @@ def _fact_names(facts: dict[str, Any], *keys: str) -> list[str]:
     return values
 
 
+def _fact_actor_groups(facts: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Split preference performers from explicitly male co-cast."""
+    preference: list[str] = []
+    male_cast: list[str] = []
+    raw = facts.get("actors") or facts.get("actresses") or []
+    for value in raw if isinstance(raw, list) else [raw]:
+        if isinstance(value, dict):
+            name = str(value.get("name") or value.get("label") or "").strip()
+            gender = str(value.get("gender") or "").strip().casefold()
+        else:
+            name = str(value or "").strip()
+            gender = ""
+        if not name:
+            continue
+        target = male_cast if gender in {"♂", "male", "m", "男"} else preference
+        if name not in target:
+            target.append(name)
+    return preference, male_cast
+
+
 def _work_similarity_features(profile: WorkProfile, diagnostics: dict[str, int] | None = None) -> tuple[dict[str, float], dict[str, str]]:
     features: dict[str, float] = {}
     labels: dict[str, str] = {}
@@ -1519,12 +1547,13 @@ def _work_similarity_features(profile: WorkProfile, diagnostics: dict[str, int] 
     for facts in (profile.facts or {}).values():
         if not isinstance(facts, dict):
             continue
-        actor_names = _fact_names(facts, "actors", "actresses")
+        actor_names, male_cast_names = _fact_actor_groups(facts)
         actor_name_keys = {_normalize_actor_name(name) for name in actor_names}
         structured_actor_name_keys.update(actor_name_keys)
         actor_identity_keys.update(actor_identity_key(name) for name in actor_names if actor_identity_key(name))
         groups = [
             ("actor", actor_names, 4.2),
+            ("cast", male_cast_names, 0.6),
             ("series", _fact_names(facts, "series"), 4.0),
             ("director", _fact_names(facts, "director", "directors"), 3.0),
             ("studio", _fact_names(facts, "maker", "publisher", "studio", "label"), 2.4),
@@ -1754,6 +1783,8 @@ def _relation_confidence(similarity: float, rows: list[tuple[float, str]]) -> fl
 
 def _relation_edge_allowed(similarity: float, confidence: float, kinds: set[str]) -> bool:
     """Reject evidence too weak to support a user-visible related-work edge."""
+    if kinds == {"cast"}:
+        return False
     if kinds == {"semantic"}:
         return similarity >= 0.16 and confidence >= 0.22
     return True
@@ -1924,7 +1955,8 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         relation_types = sorted({reason["type"] for reason in reasons})
         edge_quality["evaluated_pairs"] += 1
         if not _relation_edge_allowed(similarity, relation_confidence, set(relation_types)):
-            edge_quality["pruned_semantic_only"] += 1
+            rejected_kind = "cast" if relation_types == ["cast"] else "semantic"
+            edge_quality[f"pruned_{rejected_kind}_only"] += 1
             continue
         edge_quality["retained_pairs"] += 1
         shared_payload = {

@@ -280,6 +280,8 @@ def test_semantic_only_relation_has_lower_confidence_than_mapped_actor() -> None
     assert not intelligence._relation_edge_allowed(0.08, semantic, {"semantic"})
     assert intelligence._relation_edge_allowed(0.5, semantic, {"semantic"})
     assert intelligence._relation_edge_allowed(0.08, actor, {"actor"})
+    assert not intelligence._relation_edge_allowed(1.0, 0.99, {"cast"})
+    assert intelligence._relation_edge_allowed(0.08, actor, {"actor", "cast"})
 
 
 def test_relation_factor_applies_bounded_contribution_weighting() -> None:
@@ -312,6 +314,25 @@ def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkey
     assert "category:mida" not in features
     assert "category:人妻" in features
     assert diagnostics == {"dropped_code_prefix_categories": 1, "dropped_actor_alias_terms": 1, "dropped_actor_variant_terms": 1, "dropped_operational_semantic_terms": 1}
+
+
+def test_similarity_features_treat_explicit_male_credits_as_weak_cast() -> None:
+    profile = WorkProfile(
+        code="AAA-010",
+        title="测试作品",
+        facts={"javdb": {"actors": [
+            {"name": "女优甲", "gender": "♀"},
+            {"name": "男优乙", "gender": "♂"},
+        ]}},
+        tokens={"weighted": {}},
+    )
+
+    features, labels = intelligence._work_similarity_features(profile)
+
+    assert features["actor:name:女优甲"] == 4.2
+    assert features["cast:男优乙"] == 0.6
+    assert "actor:name:男优乙" not in features
+    assert labels["cast:男优乙"] == "男优乙"
 
 
 def test_similarity_features_use_lower_weight_title_actor_when_credit_is_missing(monkeypatch) -> None:
