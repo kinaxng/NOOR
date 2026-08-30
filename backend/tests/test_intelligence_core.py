@@ -490,7 +490,7 @@ def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monk
 
 def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     tokens = intelligence.semantic_tokens("隣人の秘密", "邻居的秘密", "uncensored leak")
-    assert "uncensored" in tokens["latin"]
+    assert not ({"uncensored", "leak"} & set(tokens["latin"]))
     assert "隣人" in tokens["cjk"]
     assert "邻居" in tokens["cjk"]
     assert tokens["version"] == intelligence.SEMANTIC_PROFILE_VERSION
@@ -498,6 +498,7 @@ def test_semantic_tokens_preserve_terms_and_cjk_context() -> None:
     assert "子生徒" not in intelligence.semantic_tokens("女子生徒")["weighted"]
     assert "女子生徒" in intelligence.semantic_tokens("女子生徒")["weighted"]
     assert "fanza" not in intelligence.semantic_tokens("FANZA限定 sample sex")["weighted"]
+    assert not ({"bod", "mteam", "web-dl"} & set(intelligence.semantic_tokens("BOD MTEAM WEB-DL")["weighted"]))
     long_japanese = intelligence.semantic_tokens("花の長い脚星宫一ストッキング誘惑シリーズ")["weighted"]
     assert "ーズ" not in long_japanese
     assert "シリーズ" in long_japanese

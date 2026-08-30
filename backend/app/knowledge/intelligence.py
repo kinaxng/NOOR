@@ -45,7 +45,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 15
+WORK_SIMILARITY_VERSION = 16
 WORK_PROFILE_FUSION_VERSION = 1
 
 
@@ -146,7 +146,7 @@ SIMILARITY_CATEGORY_STOPWORDS = {
     "DMM独家", "ハイビジョン", "高清晰", "高解析度",
     "破解", "中文字幕", "中字", "中文", "4K", "8K", "独占配信", "独家配信", "配信限定",
 }
-SEMANTIC_PROFILE_VERSION = 9
+SEMANTIC_PROFILE_VERSION = 10
 SEMANTIC_STOPWORDS = {
     "これ", "それ", "この", "その", "ため", "から", "まで", "より", "そして", "また", "作品", "動画",
     "一个", "一种", "这个", "那个", "以及", "然后", "作品", "影片", "电影", "高清", "高画质",
@@ -156,7 +156,7 @@ SEMANTIC_LATIN_STOPWORDS = {
 }
 SEMANTIC_RELATION_STOPWORDS = {
     "mp4", "mkv", "web-dl", "webdl", "aac2", "mteam", "m-team", "uncensored-hd", "uncensored",
-    "removed", "mosaic", "onejav", "com", "best", "premium", "hfr", "c_gg5", "bod", "mgs", "sod",
+    "removed", "mosaic", "onejav", "com", "best", "premium", "hfr", "c_gg5", "bod", "mgs", "sod", "leak", "leaked",
     "无码破解", "新模型无码破解", "自提征用", "第一會所新片", "第一会所新片", "ダスッ",
 }
 SEMANTIC_RELATION_STOPWORD_KEYS = {re.sub(r"[\s_.]+", "", value) for value in SEMANTIC_RELATION_STOPWORDS}
@@ -1405,6 +1405,8 @@ def semantic_tokens(*values: Any) -> dict[str, Any]:
         part.casefold()
         for part in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", text)
         if part.casefold() not in SEMANTIC_LATIN_STOPWORDS
+        and part.casefold() not in SEMANTIC_RELATION_STOPWORDS
+        and re.sub(r"[\s_.]+", "", part.casefold()) not in SEMANTIC_RELATION_STOPWORD_KEYS
     ))
     normalized_cjk = re.sub(r"(?:した|して|する|される|され|れる|られ|ない|です|ます|から|まで|より|そして|また|その|この|の|に|を|が|と|で|へ|的|了|过|与)", " ", text)
     cjk_runs = [segment for run in re.findall(r"[\u3040-\u30ff\u3400-\u9fff]{2,}", normalized_cjk) for segment in _cjk_semantic_segments(run)]
@@ -1416,7 +1418,7 @@ def semantic_tokens(*values: Any) -> dict[str, Any]:
         pure_hiragana = bool(re.fullmatch(r"[\u3040-\u309f]+", run))
         if pure_hiragana:
             continue
-        if run not in SEMANTIC_STOPWORDS and informative(run):
+        if run not in SEMANTIC_STOPWORDS and run.casefold() not in SEMANTIC_RELATION_STOPWORDS and informative(run):
             cjk.append(run)
             weighted[run] = max(weighted.get(run, 0), 1.8 if len(run) <= 8 else 1.2)
     for term in latin:
