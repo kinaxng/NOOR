@@ -56,6 +56,21 @@ def test_preference_outcome_model_keeps_recent_attempts_pending() -> None:
     assert "人妻" not in model["categories"]
 
 
+def test_preference_outcome_model_does_not_treat_download_intent_as_failed_delivery() -> None:
+    event = SimpleNamespace(
+        work_code="AAA-001", event_type="download_intent", actors=["演员甲"], categories=["人妻"],
+        created_at=intelligence.utcnow() - dt.timedelta(days=30),
+    )
+
+    model = intelligence._preference_outcome_model([event])
+
+    assert model["trials"] == 0
+    assert model["pending"] == 0
+    assert model["mature_unverified"] == 0
+    assert model["actors"] == {}
+    assert model["categories"] == {}
+
+
 def test_interest_topics_deduplicate_funnel_stages_and_capture_recent_combinations() -> None:
     now = intelligence.utcnow()
     events = [

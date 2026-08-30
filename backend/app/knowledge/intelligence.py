@@ -210,7 +210,7 @@ PREFERENCE_EVENT_HALF_LIFE_DAYS = {
     "upgrade_completed": 365,
     "upgrade_cleanup_failed": 30,
 }
-OUTCOME_ATTEMPT_EVENTS = {"subscription", "download_intent", "download_submitted"}
+OUTCOME_ATTEMPT_EVENTS = {"subscription", "download_submitted"}
 OUTCOME_VERIFIED_EVENTS = {"library_imported", "upgrade_completed"}
 OUTCOME_MATURITY_DAYS = 7
 PREFERENCE_EVENT_STAGE_VALUES = {
