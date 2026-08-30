@@ -469,7 +469,37 @@ async def uninstall_plugin(plugin_id: str, purge_data: bool = Query(default=True
 @router.post('/{plugin_id}/downloads')
 async def submit_plugin_download(plugin_id: str, payload: PluginDownloadPayload):
     try:
-        return await runtime.submit_download(plugin_id, payload.payload)
+        result = await runtime.submit_download(plugin_id, payload.payload)
+        failed = isinstance(result, dict) and (
+            result.get('ok') is False
+            or _progress_value(result.get('failure_count')) > 0
+            or str(result.get('status') or '').lower() in {'failed', 'error'}
+        )
+        if not failed:
+            with contextlib.suppress(Exception):
+                from app.knowledge.intelligence import canonical_work_code, record_preference_event
+                raw_code = next((
+                    payload.payload.get(key) for key in ('code', 'number', 'rename', 'title', 'name')
+                    if str(payload.payload.get(key) or '').strip()
+                ), '')
+                code = canonical_work_code(raw_code)
+                if code:
+                    result_data = result if isinstance(result, dict) else {}
+                    evidence = next((
+                        str(result_data.get(key) or '').strip() for key in ('task_id', 'id', 'hash', 'info_hash')
+                        if str(result_data.get(key) or '').strip()
+                    ), '')
+                    await record_preference_event(
+                        code,
+                        'download_submitted',
+                        source=f'downloader:{plugin_id}',
+                        data={
+                            'evidence_id': f'{plugin_id}:{evidence}' if evidence else '',
+                            'downloader_id': plugin_id,
+                            'source_plugin': str(payload.payload.get('source_plugin') or ''),
+                        },
+                    )
+        return result
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

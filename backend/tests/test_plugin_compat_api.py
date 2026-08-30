@@ -209,8 +209,47 @@ def test_resource_resolve_download_route_requires_provider():
         "/api/plugins/resources/resolve-download",
         json={"item": {"url": "magnet:?xt=urn:btih:test"}},
     )
-
     assert response.status_code == 400
+
+
+def test_successful_downloader_submission_records_core_outcome(monkeypatch):
+    recorded: list[tuple[str, str, str, dict]] = []
+
+    async def fake_submit(plugin_id: str, payload: dict):
+        return {"ok": True, "task_id": "task-1"}
+
+    async def fake_record(code: str, event_type: str, *, source: str, data: dict, **_kwargs):
+        recorded.append((code, event_type, source, data))
+        return True
+
+    monkeypatch.setattr(plugins.runtime, "submit_download", fake_submit)
+    monkeypatch.setattr(intelligence, "record_preference_event", fake_record)
+    response = TestClient(_app()).post(
+        "/api/plugins/qbittorrent/downloads",
+        json={"payload": {"rename": "PRED-878-破解", "source_plugin": "javdb", "url": "magnet:?xt=urn:btih:test"}},
+    )
+
+    assert response.status_code == 200
+    assert recorded == [("PRED-878", "download_submitted", "downloader:qbittorrent", {
+        "evidence_id": "qbittorrent:task-1", "downloader_id": "qbittorrent", "source_plugin": "javdb",
+    })]
+
+
+def test_failed_downloader_submission_does_not_record_core_outcome(monkeypatch):
+    async def fake_submit(_plugin_id: str, _payload: dict):
+        return {"ok": False, "failure_count": 1}
+
+    async def fail_if_recorded(*_args, **_kwargs):
+        raise AssertionError("failed download must not become preference evidence")
+
+    monkeypatch.setattr(plugins.runtime, "submit_download", fake_submit)
+    monkeypatch.setattr(intelligence, "record_preference_event", fail_if_recorded)
+    response = TestClient(_app()).post(
+        "/api/plugins/qbittorrent/downloads",
+        json={"payload": {"title": "PRED-878", "url": "magnet:?xt=urn:btih:test"}},
+    )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
