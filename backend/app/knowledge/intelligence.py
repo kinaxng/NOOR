@@ -32,6 +32,7 @@ _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[str, frozenset[str], dict[str, str], dict[str, str]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
+_similarity_evaluation_cache: dict[str, dict[str, Any]] = {}
 _work_search_cache: dict[str, Any] = {"expires_at": 0.0, "documents": []}
 _work_search_lock = asyncio.Lock()
 _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "value": None}
@@ -1612,6 +1613,116 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
             "multi_hop_candidates": sum(1 for code in ranked if any(int(row.get("hop_count") or 1) > 1 for row in evidence[code])),
         },
     }
+
+
+async def work_similarity_recall_evaluation(
+    target_codes: list[str] | set[str],
+    seed_weights: dict[str, float] | None = None,
+    *,
+    target_limit: int = 240,
+    seed_limit: int = 80,
+) -> dict[str, Any]:
+    """Run a bounded leave-one-out audit over the user's known works.
+
+    This measures whether the sparse Core neighborhood can structurally recover
+    a held-out library work. It is intentionally reported separately from live
+    conversion evaluation: the held-out item's own profile remains in the item
+    index, so this is a retrieval health check rather than a CTR estimate.
+    """
+    index = await build_work_similarity_index()
+    neighbors_by_code = index.get("neighbors") or {}
+    candidates = index.get("candidates") or {}
+    targets = sorted({canonical_work_code(code) for code in target_codes if canonical_work_code(code)} & set(candidates))
+    weights = {
+        canonical_work_code(code): max(0.05, float(weight))
+        for code, weight in (seed_weights or {}).items()
+        if canonical_work_code(code)
+    }
+    for code in targets:
+        weights.setdefault(code, 1.0)
+    target_limit = max(10, min(int(target_limit or 240), 500))
+    seed_limit = max(10, min(int(seed_limit or 80), 160))
+    if len(targets) > target_limit:
+        revision = str(index.get("revision") or "")
+        targets = sorted(targets, key=lambda code: hashlib.sha256(f"{revision}:{code}".encode()).hexdigest())[:target_limit]
+    fingerprint = hashlib.sha256(json.dumps({
+        "revision": index.get("revision"),
+        "targets": targets,
+        "weights": sorted((code, round(weight, 4)) for code, weight in weights.items()),
+        "seed_limit": seed_limit,
+    }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    cached = _similarity_evaluation_cache.get(fingerprint)
+    if cached is not None:
+        return dict(cached)
+
+    blocked_seed_codes = set(weights)
+    seed_rows = sorted(weights.items(), key=lambda row: (-row[1], row[0]))
+    hits = {10: 0, 20: 0, 50: 0}
+    eligible = 0
+    reciprocal_rank_sum = 0.0
+    ranks: list[int] = []
+    relation_hits: dict[str, int] = defaultdict(int)
+    misses: list[dict[str, Any]] = []
+    for target in targets:
+        active_seeds = [(code, weight) for code, weight in seed_rows if code != target][:seed_limit]
+        scores: dict[str, float] = defaultdict(float)
+        evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        blocked = blocked_seed_codes - {target}
+        for seed_code, seed_weight in active_seeds:
+            for neighbor in neighbors_by_code.get(seed_code, []):
+                code = canonical_work_code(neighbor.get("code"))
+                if not code or code in blocked:
+                    continue
+                contribution = float(neighbor.get("score") or 0) / 100 * seed_weight
+                scores[code] += contribution
+                if code == target:
+                    evidence[code].append({
+                        "seed_code": seed_code,
+                        "contribution": round(contribution, 4),
+                        "relation_types": list(neighbor.get("relation_types") or []),
+                    })
+        target_score = float(scores.get(target) or 0)
+        if target_score <= 0:
+            misses.append({"code": target, "reason": "no_neighbor_path"})
+            continue
+        eligible += 1
+        ordered = sorted(scores, key=lambda code: (-scores[code], code))
+        rank = ordered.index(target) + 1
+        ranks.append(rank)
+        reciprocal_rank_sum += 1 / rank
+        for cutoff in hits:
+            hits[cutoff] += int(rank <= cutoff)
+        if rank <= 50:
+            for relation_type in set(
+                relation_type
+                for row in evidence.get(target, [])
+                for relation_type in row.get("relation_types") or []
+            ):
+                relation_hits[str(relation_type)] += 1
+        elif len(misses) < 20:
+            misses.append({"code": target, "reason": "rank_above_50", "rank": rank, "score": round(target_score, 4)})
+
+    evaluated = len(targets)
+    result = {
+        "method": "leave_one_out_direct_core_neighborhood",
+        "revision": index.get("revision"),
+        "evaluated": evaluated,
+        "eligible": eligible,
+        "coverage": round(eligible / max(evaluated, 1), 4),
+        "hit_rate": {f"@{cutoff}": round(count / max(evaluated, 1), 4) for cutoff, count in hits.items()},
+        "eligible_hit_rate": {f"@{cutoff}": round(count / max(eligible, 1), 4) for cutoff, count in hits.items()},
+        "mrr": round(reciprocal_rank_sum / max(evaluated, 1), 4),
+        "eligible_mrr": round(reciprocal_rank_sum / max(eligible, 1), 4),
+        "median_rank": sorted(ranks)[len(ranks) // 2] if ranks else 0,
+        "relation_hits_at_50": dict(sorted(relation_hits.items(), key=lambda row: (-row[1], row[0]))),
+        "sample_misses": misses[:20],
+        "limits": {"targets": target_limit, "seeds_per_holdout": seed_limit},
+        "interpretation": "结构召回健康度；目标作品画像保留在索引中，不等同于未来点击率",
+    }
+    _similarity_evaluation_cache[fingerprint] = result
+    if len(_similarity_evaluation_cache) > 4:
+        _similarity_evaluation_cache.pop(next(iter(_similarity_evaluation_cache)))
+    return dict(result)
 
 
 def work_similarity_status() -> dict[str, Any]:

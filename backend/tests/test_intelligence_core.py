@@ -292,6 +292,38 @@ def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths
     }
 
 
+def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeypatch) -> None:
+    def edge(code: str, score: float, relation: str = "actor") -> dict:
+        return {"code": code, "score": score, "relation_types": [relation]}
+
+    async def fake_index(**_kwargs):
+        return {
+            "revision": "evaluation-test",
+            "neighbors": {
+                "AAA-001": [edge("BBB-001", 90), edge("XXX-001", 80, "category")],
+                "BBB-001": [edge("AAA-001", 90), edge("CCC-001", 70)],
+                "CCC-001": [edge("BBB-001", 70)],
+                "XXX-001": [edge("AAA-001", 80, "category")],
+            },
+            "candidates": {code: {"code": code} for code in ("AAA-001", "BBB-001", "CCC-001", "XXX-001")},
+        }
+
+    monkeypatch.setattr(intelligence, "build_work_similarity_index", fake_index)
+    monkeypatch.setattr(intelligence, "_similarity_evaluation_cache", {})
+    result = asyncio.run(intelligence.work_similarity_recall_evaluation(
+        {"AAA-001", "BBB-001", "CCC-001"},
+        {"AAA-001": 1, "BBB-001": 1, "CCC-001": 1},
+    ))
+
+    assert result["evaluated"] == 3
+    assert result["eligible"] == 3
+    assert result["coverage"] == 1.0
+    assert result["hit_rate"]["@10"] == 1.0
+    assert result["mrr"] == 0.8333
+    assert result["median_rank"] == 1
+    assert result["relation_hits_at_50"] == {"actor": 3}
+
+
 def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
     monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
