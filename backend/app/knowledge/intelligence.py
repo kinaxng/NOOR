@@ -39,7 +39,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 7
+WORK_SIMILARITY_VERSION = 8
 WORK_PROFILE_FUSION_VERSION = 1
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
@@ -1486,6 +1486,10 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         if similarity < 0.08:
             continue
         strongest = sorted(shared[(left, right)], reverse=True)[:5]
+        contributions_by_type: dict[str, float] = defaultdict(float)
+        for contribution, feature in shared[(left, right)]:
+            contributions_by_type[feature.split(":", 1)[0]] += max(0.0, contribution)
+        contribution_total = sum(contributions_by_type.values()) or 1.0
         relation_confidence = _relation_confidence(similarity, strongest)
         reasons = []
         for contribution, feature in strongest:
@@ -1498,6 +1502,10 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
             "cosine_similarity": round(similarity, 4),
             "relation_confidence": round(relation_confidence, 3),
             "relation_types": relation_types,
+            "relation_contributions": {
+                kind: round(value / contribution_total, 4)
+                for kind, value in sorted(contributions_by_type.items())
+            },
             "reasons": reasons,
         }
         row_left = {"code": right, **shared_payload}
@@ -1529,7 +1537,21 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
     return result
 
 
-async def work_similarity_candidates(seed_weights: dict[str, float], *, negative_seed_weights: dict[str, float] | None = None, limit: int = 160) -> dict[str, Any]:
+def _edge_relation_factor(edge: dict[str, Any], relation_weights: dict[str, float] | None) -> float:
+    if not relation_weights:
+        return 1.0
+    shares = edge.get("relation_contributions") if isinstance(edge.get("relation_contributions"), dict) else {}
+    if not shares:
+        relation_types = [str(kind) for kind in edge.get("relation_types") or [] if str(kind or "")]
+        shares = {kind: 1 / len(relation_types) for kind in relation_types} if relation_types else {}
+    covered = min(1.0, sum(max(0.0, float(share or 0)) for share in shares.values()))
+    factor = 1.0 - covered
+    for kind, share in shares.items():
+        factor += max(0.0, float(share or 0)) * max(0.75, min(1.25, float(relation_weights.get(str(kind)) or 1.0)))
+    return max(0.75, min(1.25, factor))
+
+
+async def work_similarity_candidates(seed_weights: dict[str, float], *, negative_seed_weights: dict[str, float] | None = None, relation_weights: dict[str, float] | None = None, limit: int = 160) -> dict[str, Any]:
     index = await build_work_similarity_index()
     seeds = {canonical_work_code(code): float(weight) for code, weight in seed_weights.items() if canonical_work_code(code)}
     negative_seeds = {canonical_work_code(code): max(0.0, float(weight)) for code, weight in (negative_seed_weights or {}).items() if canonical_work_code(code)}
@@ -1546,7 +1568,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
                 intermediate = first["code"]
                 if (source_weights is seeds and intermediate in negative_seeds) or (source_weights is negative_seeds and intermediate in seeds):
                     continue
-                direct_strength = float(first.get("score") or 0) / 100
+                direct_strength = float(first.get("score") or 0) / 100 * _edge_relation_factor(first, relation_weights)
                 if intermediate not in blocked:
                     contribution = direct_strength * max(0.1, seed_weight)
                     propagated_scores[intermediate] += contribution
@@ -1565,7 +1587,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
                     code = second["code"]
                     if code in blocked or code in {seed_code, intermediate}:
                         continue
-                    path_strength = direct_strength * (float(second.get("score") or 0) / 100)
+                    path_strength = direct_strength * (float(second.get("score") or 0) / 100) * _edge_relation_factor(second, relation_weights)
                     contribution = path_strength * max(0.1, seed_weight) * continuation / hub_penalty
                     if contribution < 0.002:
                         continue
@@ -1611,6 +1633,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
             "positive_restart_probability": 0.65,
             "negative_restart_probability": 0.80,
             "multi_hop_candidates": sum(1 for code in ranked if any(int(row.get("hop_count") or 1) > 1 for row in evidence[code])),
+            "relation_weights": {kind: round(float(weight), 3) for kind, weight in sorted((relation_weights or {}).items())},
         },
     }
 
@@ -1664,6 +1687,7 @@ async def work_similarity_recall_evaluation(
     ranks: list[int] = []
     relation_hits: dict[str, int] = defaultdict(int)
     misses: list[dict[str, Any]] = []
+    audit_cases: list[tuple[str, dict[str, float], dict[str, dict[str, float]]]] = []
 
     def profile_gaps(code: str) -> list[str]:
         candidate = candidates.get(code) if isinstance(candidates.get(code), dict) else {}
@@ -1683,6 +1707,7 @@ async def work_similarity_recall_evaluation(
     for target in targets:
         active_seeds = [(code, weight) for code, weight in seed_rows if code != target][:seed_limit]
         scores: dict[str, float] = defaultdict(float)
+        relation_components: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
         evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
         blocked = blocked_seed_codes - {target}
         for seed_code, seed_weight in active_seeds:
@@ -1692,12 +1717,19 @@ async def work_similarity_recall_evaluation(
                     continue
                 contribution = float(neighbor.get("score") or 0) / 100 * seed_weight
                 scores[code] += contribution
+                shares = neighbor.get("relation_contributions") if isinstance(neighbor.get("relation_contributions"), dict) else {}
+                if not shares:
+                    relation_types = [str(kind) for kind in neighbor.get("relation_types") or [] if str(kind or "")]
+                    shares = {kind: 1 / len(relation_types) for kind in relation_types} if relation_types else {}
+                for relation_type, share in shares.items():
+                    relation_components[code][str(relation_type)] += contribution * max(0.0, float(share or 0))
                 if code == target:
                     evidence[code].append({
                         "seed_code": seed_code,
                         "contribution": round(contribution, 4),
                         "relation_types": list(neighbor.get("relation_types") or []),
                     })
+        audit_cases.append((target, dict(scores), {code: dict(values) for code, values in relation_components.items()}))
         target_score = float(scores.get(target) or 0)
         if target_score <= 0:
             misses.append({"code": target, "reason": "no_neighbor_path", "profile_gaps": profile_gaps(target)})
@@ -1720,6 +1752,81 @@ async def work_similarity_recall_evaluation(
             misses.append({"code": target, "reason": "rank_above_50", "rank": rank, "score": round(target_score, 4), "profile_gaps": profile_gaps(target)})
 
     evaluated = len(targets)
+
+    def counterfactual_metrics(relation_weights: dict[str, float]) -> dict[str, dict[str, Any]]:
+        cohorts = {
+            "overall": {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0},
+            "train": {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0},
+            "validation": {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0},
+        }
+        for target, base_scores, relation_components in audit_cases:
+            cohort_name = "train" if int(hashlib.sha256(target.encode()).hexdigest()[:2], 16) % 2 == 0 else "validation"
+            variant_scores = dict(base_scores)
+            for code, components in relation_components.items():
+                adjustment = sum(
+                    float(contribution) * (max(0.75, min(1.25, float(relation_weights.get(kind) or 1.0))) - 1)
+                    for kind, contribution in components.items()
+                )
+                variant_scores[code] = max(0.0, float(variant_scores.get(code) or 0) + adjustment)
+            target_score = float(variant_scores.get(target) or 0)
+            rank = 0
+            if target_score > 0:
+                rank = sorted(variant_scores, key=lambda code: (-variant_scores[code], code)).index(target) + 1
+            for name in ("overall", cohort_name):
+                metric = cohorts[name]
+                metric["evaluated"] += 1
+                metric["eligible"] += int(rank > 0)
+                metric["hit20"] += int(0 < rank <= 20)
+                metric["hit50"] += int(0 < rank <= 50)
+                metric["rr"] += 1 / rank if rank > 0 else 0.0
+        result_by_cohort: dict[str, dict[str, Any]] = {}
+        for name, metric in cohorts.items():
+            sample = int(metric["evaluated"])
+            hit20 = int(metric["hit20"]) / max(sample, 1)
+            hit50 = int(metric["hit50"]) / max(sample, 1)
+            mrr = float(metric["rr"]) / max(sample, 1)
+            result_by_cohort[name] = {
+                "evaluated": sample,
+                "coverage": round(int(metric["eligible"]) / max(sample, 1), 4),
+                "hit_at_20": round(hit20, 4),
+                "hit_at_50": round(hit50, 4),
+                "mrr": round(mrr, 4),
+                "utility": round(hit20 * 0.45 + hit50 * 0.35 + mrr * 0.20, 5),
+            }
+        return result_by_cohort
+
+    baseline_counterfactual = counterfactual_metrics({})
+    relation_trials: dict[str, dict[str, Any]] = {}
+    recommended_relation_weights: dict[str, float] = {}
+    for relation_type in ("actor", "series", "director", "studio", "category", "semantic"):
+        trials = {
+            "up": counterfactual_metrics({relation_type: 1.15}),
+            "down": counterfactual_metrics({relation_type: 0.85}),
+        }
+        baseline_train = float(baseline_counterfactual["train"]["utility"])
+        baseline_validation = float(baseline_counterfactual["validation"]["utility"])
+        qualified: list[tuple[float, str]] = []
+        for direction, trial in trials.items():
+            train_delta = float(trial["train"]["utility"]) - baseline_train
+            validation_delta = float(trial["validation"]["utility"]) - baseline_validation
+            trial["delta"] = {
+                "train": round(train_delta, 5),
+                "validation": round(validation_delta, 5),
+                "overall": round(float(trial["overall"]["utility"]) - float(baseline_counterfactual["overall"]["utility"]), 5),
+            }
+            if (
+                trial["train"]["evaluated"] >= 30
+                and trial["validation"]["evaluated"] >= 30
+                and train_delta >= 0.0025
+                and validation_delta >= 0.001
+                and float(trial["validation"]["hit_at_20"]) >= float(baseline_counterfactual["validation"]["hit_at_20"]) - 0.004
+            ):
+                qualified.append((min(train_delta, validation_delta), direction))
+        if qualified:
+            _gain, direction = max(qualified)
+            recommended_relation_weights[relation_type] = 1.075 if direction == "up" else 0.925
+        relation_trials[relation_type] = trials
+
     result = {
         "method": "leave_one_out_direct_core_neighborhood",
         "revision": index.get("revision"),
@@ -1732,6 +1839,13 @@ async def work_similarity_recall_evaluation(
         "eligible_mrr": round(reciprocal_rank_sum / max(eligible, 1), 4),
         "median_rank": sorted(ranks)[len(ranks) // 2] if ranks else 0,
         "relation_hits_at_50": dict(sorted(relation_hits.items(), key=lambda row: (-row[1], row[0]))),
+        "relation_counterfactual": {
+            "method": "stable_hash_train_validation_plus_minus_15_percent",
+            "baseline": baseline_counterfactual,
+            "trials": relation_trials,
+            "recommended_weights": recommended_relation_weights,
+            "applied_shrinkage": "±7.5%",
+        },
         "sample_misses": misses[:20],
         "limits": {"targets": target_limit, "seeds_per_holdout": seed_limit},
         "interpretation": "结构召回健康度；目标作品画像保留在索引中，不等同于未来点击率",

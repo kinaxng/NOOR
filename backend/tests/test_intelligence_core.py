@@ -220,6 +220,7 @@ async def _work_similarity_index_builds_multi_relation_neighbors(tmp_path, monke
     assert {row["code"] for row in index["neighbors"]["AAA-001"]} >= {"AAA-002", "AAA-003"}
     assert index["neighbors"]["AAA-001"][0]["relation_confidence"] > 0.8
     assert "actor" in index["neighbors"]["AAA-001"][0]["relation_types"]
+    assert 0.99 <= sum(index["neighbors"]["AAA-001"][0]["relation_contributions"].values()) <= 1.01
     recalled_002 = next(item for item in recalled["items"] if item["code"] == "AAA-002")
     assert recalled_002["neighbor_confidence"] > 0.8
     assert recalled_002["neighbor_evidence"][0]["reasons"]
@@ -234,6 +235,12 @@ def test_semantic_only_relation_has_lower_confidence_than_mapped_actor() -> None
 
     assert semantic < 0.35
     assert actor > 0.9
+
+
+def test_relation_factor_applies_bounded_contribution_weighting() -> None:
+    edge = {"relation_contributions": {"actor": 0.8, "category": 0.2}}
+    assert round(intelligence._edge_relation_factor(edge, {"actor": 0.925}), 3) == 0.94
+    assert round(intelligence._edge_relation_factor(edge, {"actor": 9, "category": -2}), 3) == 1.15
 
 
 def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkeypatch, tmp_path) -> None:
@@ -289,6 +296,7 @@ def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths
         "positive_restart_probability": 0.65,
         "negative_restart_probability": 0.8,
         "multi_hop_candidates": 1,
+        "relation_weights": {},
     }
 
 
