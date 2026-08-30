@@ -1663,6 +1663,22 @@ async def work_similarity_recall_evaluation(
     ranks: list[int] = []
     relation_hits: dict[str, int] = defaultdict(int)
     misses: list[dict[str, Any]] = []
+
+    def profile_gaps(code: str) -> list[str]:
+        candidate = candidates.get(code) if isinstance(candidates.get(code), dict) else {}
+        completeness = candidate.get("completeness") if isinstance(candidate.get("completeness"), dict) else {}
+        gaps: list[str] = []
+        if not candidate.get("actors") and not completeness.get("actors"):
+            gaps.append("actors")
+        if not candidate.get("categories") and not completeness.get("categories"):
+            gaps.append("categories")
+        title = str(candidate.get("title") or "").strip()
+        if (not title or title == code) and not completeness.get("title"):
+            gaps.append("title")
+        if not str(candidate.get("maker") or "").strip():
+            gaps.append("maker")
+        return gaps
+
     for target in targets:
         active_seeds = [(code, weight) for code, weight in seed_rows if code != target][:seed_limit]
         scores: dict[str, float] = defaultdict(float)
@@ -1683,7 +1699,7 @@ async def work_similarity_recall_evaluation(
                     })
         target_score = float(scores.get(target) or 0)
         if target_score <= 0:
-            misses.append({"code": target, "reason": "no_neighbor_path"})
+            misses.append({"code": target, "reason": "no_neighbor_path", "profile_gaps": profile_gaps(target)})
             continue
         eligible += 1
         ordered = sorted(scores, key=lambda code: (-scores[code], code))
@@ -1700,7 +1716,7 @@ async def work_similarity_recall_evaluation(
             ):
                 relation_hits[str(relation_type)] += 1
         elif len(misses) < 20:
-            misses.append({"code": target, "reason": "rank_above_50", "rank": rank, "score": round(target_score, 4)})
+            misses.append({"code": target, "reason": "rank_above_50", "rank": rank, "score": round(target_score, 4), "profile_gaps": profile_gaps(target)})
 
     evaluated = len(targets)
     result = {

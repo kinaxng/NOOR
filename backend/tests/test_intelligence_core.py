@@ -305,23 +305,27 @@ def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeyp
                 "CCC-001": [edge("BBB-001", 70)],
                 "XXX-001": [edge("AAA-001", 80, "category")],
             },
-            "candidates": {code: {"code": code} for code in ("AAA-001", "BBB-001", "CCC-001", "XXX-001")},
+            "candidates": {code: {"code": code} for code in ("AAA-001", "BBB-001", "CCC-001", "DDD-001", "XXX-001")},
         }
 
     monkeypatch.setattr(intelligence, "build_work_similarity_index", fake_index)
     monkeypatch.setattr(intelligence, "_similarity_evaluation_cache", {})
     result = asyncio.run(intelligence.work_similarity_recall_evaluation(
-        {"AAA-001", "BBB-001", "CCC-001"},
-        {"AAA-001": 1, "BBB-001": 1, "CCC-001": 1},
+        {"AAA-001", "BBB-001", "CCC-001", "DDD-001"},
+        {"AAA-001": 1, "BBB-001": 1, "CCC-001": 1, "DDD-001": 1},
     ))
 
-    assert result["evaluated"] == 3
+    assert result["evaluated"] == 4
     assert result["eligible"] == 3
-    assert result["coverage"] == 1.0
-    assert result["hit_rate"]["@10"] == 1.0
-    assert result["mrr"] == 0.8333
+    assert result["coverage"] == 0.75
+    assert result["hit_rate"]["@10"] == 0.75
+    assert result["mrr"] == 0.625
     assert result["median_rank"] == 1
     assert result["relation_hits_at_50"] == {"actor": 3}
+    assert result["sample_misses"] == [{
+        "code": "DDD-001", "reason": "no_neighbor_path",
+        "profile_gaps": ["actors", "categories", "title", "maker"],
+    }]
 
 
 def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monkeypatch, tmp_path) -> None:
