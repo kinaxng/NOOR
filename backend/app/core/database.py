@@ -30,7 +30,6 @@ def _configure_sqlite_connection(dbapi_connection, _connection_record=None) -> N
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("PRAGMA busy_timeout=15000")
-        cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA foreign_keys=ON")
     finally:
@@ -47,6 +46,9 @@ class Base(DeclarativeBase):
 
 
 async def init_db() -> None:
+    if _is_sqlite:
+        async with engine.connect() as conn:
+            await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_jobs_schema)

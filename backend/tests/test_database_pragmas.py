@@ -21,7 +21,6 @@ def test_sqlite_connections_enable_concurrent_runtime_pragmas() -> None:
 
     assert statements == [
         "PRAGMA busy_timeout=15000",
-        "PRAGMA journal_mode=WAL",
         "PRAGMA synchronous=NORMAL",
         "PRAGMA foreign_keys=ON",
         "CLOSE",

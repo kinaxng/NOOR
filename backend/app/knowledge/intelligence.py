@@ -36,6 +36,7 @@ _actor_mention_cache: tuple[str, dict[str, list[tuple[str, str, str, str]]]] | N
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
 _similarity_rebuild_task: asyncio.Task[dict[str, Any]] | None = None
 _similarity_pending_revision = ""
+_similarity_rebuild_error = ""
 _similarity_evaluation_cache: dict[str, dict[str, Any]] = {}
 _similarity_temporal_cache: dict[str, dict[str, Any]] = {}
 _similarity_candidate_cache: dict[str, dict[str, Any]] = {}
@@ -1829,9 +1830,16 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
                 _similarity_pending_revision = revision
                 if _similarity_rebuild_task is None or _similarity_rebuild_task.done():
                     async def rebuild() -> dict[str, Any]:
-                        global _similarity_rebuild_task, _similarity_pending_revision
+                        global _similarity_rebuild_task, _similarity_pending_revision, _similarity_rebuild_error
                         try:
-                            return await build_work_similarity_index(force=True, neighbor_limit=neighbor_limit)
+                            result = await build_work_similarity_index(force=True, neighbor_limit=neighbor_limit)
+                            _similarity_rebuild_error = ""
+                            return result
+                        except Exception as exc:
+                            # The complete previous graph remains valid while a
+                            # transient SQLite writer owns the database.
+                            _similarity_rebuild_error = str(exc)[:500]
+                            return saved
                         finally:
                             _similarity_pending_revision = ""
                             _similarity_rebuild_task = None
@@ -2528,6 +2536,7 @@ def work_similarity_status() -> dict[str, Any]:
         "edge_quality": dict(payload.get("edge_quality") or {}),
         "rebuilding": bool(_similarity_rebuild_task and not _similarity_rebuild_task.done()),
         "pending_revision": _similarity_pending_revision,
+        "rebuild_error": _similarity_rebuild_error,
     }
 
 
