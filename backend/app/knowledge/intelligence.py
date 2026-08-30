@@ -38,7 +38,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 6
+WORK_SIMILARITY_VERSION = 7
 WORK_PROFILE_FUSION_VERSION = 1
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
@@ -1210,14 +1210,19 @@ def _fact_names(facts: dict[str, Any], *keys: str) -> list[str]:
     return values
 
 
-def _work_similarity_features(profile: WorkProfile) -> tuple[dict[str, float], dict[str, str]]:
+def _work_similarity_features(profile: WorkProfile, diagnostics: dict[str, int] | None = None) -> tuple[dict[str, float], dict[str, str]]:
     features: dict[str, float] = {}
     labels: dict[str, str] = {}
+    actor_identity_keys: set[str] = set()
+    structured_actor_name_keys: set[str] = set()
+    code_prefix = canonical_work_code(profile.code).split("-", 1)[0].casefold()
     for facts in (profile.facts or {}).values():
         if not isinstance(facts, dict):
             continue
         actor_names = _fact_names(facts, "actors", "actresses")
         actor_name_keys = {_normalize_actor_name(name) for name in actor_names}
+        structured_actor_name_keys.update(actor_name_keys)
+        actor_identity_keys.update(actor_identity_key(name) for name in actor_names if actor_identity_key(name))
         groups = [
             ("actor", actor_names, 4.2),
             ("series", _fact_names(facts, "series"), 4.0),
@@ -1240,7 +1245,10 @@ def _work_similarity_features(profile: WorkProfile) -> tuple[dict[str, float], d
                         normalized_label.casefold() in {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}
                         or re.fullmatch(r"(?:has|is)_[a-z0-9_]+", normalized_label, re.I)
                         or _normalize_actor_name(normalized_label) in actor_name_keys
+                        or normalized_label.casefold() == code_prefix
                     ):
+                        if diagnostics is not None and normalized_label.casefold() == code_prefix:
+                            diagnostics["dropped_code_prefix_categories"] = int(diagnostics.get("dropped_code_prefix_categories") or 0) + 1
                         continue
                 value = actor_identity_key(actual_name) if actual_kind == "actor" else unicodedata.normalize("NFKC", actual_name).casefold()
                 key = f"{actual_kind}:{value}"
@@ -1250,6 +1258,21 @@ def _work_similarity_features(profile: WorkProfile) -> tuple[dict[str, float], d
     for term, raw_weight in sorted((weighted_terms or {}).items(), key=lambda row: float(row[1] or 0), reverse=True)[:80]:
         normalized = unicodedata.normalize("NFKC", str(term)).casefold().strip()
         if len(normalized) < 2 or normalized in {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}:
+            continue
+        # Titles frequently contain a different script or historical alias for
+        # an actor already present in structured facts. MDC-NG resolves both to
+        # one identity; counting that alias again as semantics would give the
+        # same performer two independent votes in cosine similarity.
+        normalized_actor_term = _normalize_actor_name(term)
+        mapped_actor_duplicate = actor_identity_key(term) in actor_identity_keys
+        inferred_actor_variant = any(
+            _actor_variant_similarity(normalized_actor_term, actor_name_key) >= 0.75
+            for actor_name_key in structured_actor_name_keys
+        )
+        if mapped_actor_duplicate or inferred_actor_variant:
+            if diagnostics is not None:
+                key = "dropped_actor_alias_terms" if mapped_actor_duplicate else "dropped_actor_variant_terms"
+                diagnostics[key] = int(diagnostics.get(key) or 0) + 1
             continue
         key = f"semantic:{normalized}"
         features[key] = max(features.get(key, 0), min(1.2, float(raw_weight or 0) * 0.55))
@@ -1415,11 +1438,12 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
     feature_labels: dict[str, str] = {}
     postings: dict[str, list[str]] = defaultdict(list)
     candidates: dict[str, dict[str, Any]] = {}
+    feature_quality: dict[str, int] = {}
     for profile in profiles:
         code = canonical_work_code(profile.code)
         if not code:
             continue
-        features, labels = _work_similarity_features(profile)
+        features, labels = _work_similarity_features(profile, feature_quality)
         combined = raw_features.setdefault(code, {})
         for feature, weight in features.items():
             combined[feature] = max(combined.get(feature, 0), weight)
@@ -1492,6 +1516,7 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         "mapped_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:mdc-ng:")),
         "actor_alias_learning": alias_learning,
         "fallback_actor_feature_count": sum(1 for feature in postings if feature.startswith("actor:name:")),
+        "feature_quality": feature_quality,
         "neighbors": dict(neighbors),
         "candidates": candidates,
     }
@@ -1579,6 +1604,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
         "seed_count": len(seeds),
         "negative_seed_count": len(negative_seeds),
         "linked_work_count": index.get("linked_work_count", 0),
+        "feature_quality": dict(index.get("feature_quality") or {}),
         "propagation": {
             "max_hops": 2,
             "positive_restart_probability": 0.65,
@@ -1604,6 +1630,7 @@ def work_similarity_status() -> dict[str, Any]:
         "linked_work_count": int(payload.get("linked_work_count") or 0),
         "mapped_actor_feature_count": int(payload.get("mapped_actor_feature_count") or 0),
         "fallback_actor_feature_count": int(payload.get("fallback_actor_feature_count") or 0),
+        "feature_quality": dict(payload.get("feature_quality") or {}),
     }
 
 

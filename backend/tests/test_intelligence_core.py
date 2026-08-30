@@ -236,6 +236,31 @@ def test_semantic_only_relation_has_lower_confidence_than_mapped_actor() -> None
     assert actor > 0.9
 
 
+def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkeypatch, tmp_path) -> None:
+    (tmp_path / "media_actor_mappings.json").write_text(json.dumps({"records": [{
+        "id": "actor-1", "jp": "百田光希", "zh_cn": "百田光希", "names": ["百田光希", "百田光稀"],
+    }]}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
+    diagnostics = {}
+    profile = WorkProfile(
+        code="MIDA-727",
+        title="百田光稀 秘密",
+        facts={"javdb": {"actors": ["百田光希"], "categories": ["MIDA", "人妻"]}},
+        tokens={"weighted": {"百田光稀": 1.8, "百田光穗": 1.7, "秘密": 1.8}},
+    )
+
+    features, _labels = intelligence._work_similarity_features(profile, diagnostics)
+
+    assert "actor:mdc-ng:actor-1" in features
+    assert "semantic:百田光稀" not in features
+    assert "semantic:百田光穗" not in features
+    assert "semantic:秘密" in features
+    assert "category:mida" not in features
+    assert "category:人妻" in features
+    assert diagnostics == {"dropped_code_prefix_categories": 1, "dropped_actor_alias_terms": 1, "dropped_actor_variant_terms": 1}
+
+
 def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths(monkeypatch) -> None:
     async def fake_index(**_kwargs):
         def edge(code: str, score: float, label: str):
