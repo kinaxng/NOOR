@@ -93,6 +93,15 @@ PREFERENCE_EVENT_STAGE_VALUES = {
 }
 SEARCH_INTENT_HALF_LIFE_SECONDS = 3 * 60 * 60
 SEARCH_INTENT_MAX_AGE_SECONDS = 12 * 60 * 60
+SEARCH_INTENT_EVALUATION_RETENTION_SECONDS = 30 * 24 * 60 * 60
+SEARCH_INTENT_CONVERSION_VALUES = {
+    "detail_view": 0.25,
+    "subscription": 0.70,
+    "download_intent": 0.82,
+    "download_submitted": 0.90,
+    "library_imported": 1.0,
+    "upgrade_completed": 1.0,
+}
 SEARCH_INTENT_OPERATIONAL_TERMS = {
     "破解", "中文", "中字", "字幕", "流出", "无码", "無碼", "有码", "有碼", "pt",
     "avdb", "javdb", "mteam", "m-team", "source", "来源", "資源", "资源", "下载", "下載",
@@ -383,19 +392,18 @@ async def record_preference_event(
         return False
     now = utcnow()
     cooldown = timedelta(hours=6 if kind == "detail_view" else 24)
+    created = False
     async with async_session_maker() as db:
         evidence_id = str((data or {}).get("evidence_id") or "").strip()
         event_id = stable_id("preference-event", source, kind, evidence_id) if evidence_id else stable_id("preference-event", canonical, kind, source, now.isoformat())
-        if evidence_id and await db.get(PreferenceEvent, event_id):
-            return False
+        duplicate_evidence = bool(evidence_id and await db.get(PreferenceEvent, event_id))
         latest = (await db.execute(
             select(PreferenceEvent)
             .where(PreferenceEvent.work_code == canonical, PreferenceEvent.event_type == kind, PreferenceEvent.source == source)
             .order_by(PreferenceEvent.created_at.desc())
             .limit(1)
         )).scalar_one_or_none()
-        if latest and latest.created_at >= now - cooldown:
-            return False
+        in_cooldown = bool(latest and latest.created_at >= now - cooldown)
         profile = await db.get(WorkProfile, canonical)
         if profile:
             for facts in (profile.facts or {}).values():
@@ -413,24 +421,34 @@ async def record_preference_event(
             return str(value or "").strip()
         actor_names = list(dict.fromkeys(canonical_actor_name(evidence_name(value)) for value in (actors or []) if evidence_name(value)))[:12]
         category_names = list(dict.fromkeys(canonical_preference_category(evidence_name(value)) for value in (categories or []) if evidence_name(value)))[:20]
-        event = PreferenceEvent(
-            id=event_id,
-            work_code=canonical,
-            event_type=kind,
-            source=source,
-            weight=PREFERENCE_EVENT_WEIGHTS[kind],
-            actors=actor_names,
-            categories=category_names,
-            data=data or {},
-            created_at=now,
-        )
-        db.add(event)
-        await db.commit()
-    _preference_summary_cache["expires_at"] = 0.0
+        if not duplicate_evidence and not in_cooldown:
+            event = PreferenceEvent(
+                id=event_id,
+                work_code=canonical,
+                event_type=kind,
+                source=source,
+                weight=PREFERENCE_EVENT_WEIGHTS[kind],
+                actors=actor_names,
+                categories=category_names,
+                data=data or {},
+                created_at=now,
+            )
+            db.add(event)
+            await db.commit()
+            created = True
+    if created:
+        _preference_summary_cache["expires_at"] = 0.0
+    await attribute_search_intent_conversion(
+        canonical,
+        kind,
+        actors=actor_names,
+        categories=category_names,
+        title=str(profile.title or "") if profile else "",
+    )
     refresh_priority = {"subscription": 5, "download_intent": 8, "detail_view": 24}.get(kind)
-    if enqueue_refresh and refresh_priority is not None:
+    if created and enqueue_refresh and refresh_priority is not None:
         await enqueue_resource_refresh([canonical], priority=refresh_priority)
-    return True
+    return created
 
 
 async def preference_behavior_summary(*, max_age_days: int = 365) -> dict[str, Any]:
@@ -866,14 +884,81 @@ def _search_actor_alias_terms() -> list[str]:
     return terms
 
 
+def _search_event_conversion_value(event: dict[str, Any]) -> float:
+    return max((float(row.get("value") or 0) for row in (event.get("conversions") or {}).values() if isinstance(row, dict)), default=0.0)
+
+
+def _aware_search_time(value: datetime | None = None) -> datetime:
+    current = value or utcnow()
+    return current if current.tzinfo is not None else current.replace(tzinfo=timezone.utc)
+
+
+def _search_signal_metrics(events: list[dict[str, Any]], current: datetime) -> dict[str, Any]:
+    current = _aware_search_time(current)
+    metrics: dict[str, dict[str, Any]] = {}
+    eligible_events = qualified_events = verified_events = 0
+    for event in events:
+        with contextlib.suppress(ValueError, TypeError):
+            created_at = datetime.fromisoformat(str(event.get("created_at") or ""))
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            age = max(0.0, (current - created_at).total_seconds())
+            conversion = _search_event_conversion_value(event)
+            if age < SEARCH_INTENT_MAX_AGE_SECONDS and conversion < 0.6:
+                continue
+            eligible_events += 1
+            qualified_events += int(conversion >= 0.6)
+            verified_events += int(conversion >= 0.95)
+            qualified_matches = {
+                str(signal)
+                for row in (event.get("conversions") or {}).values()
+                if isinstance(row, dict) and float(row.get("value") or 0) >= 0.6
+                for signal in row.get("matched") or []
+            }
+            verified_matches = {
+                str(signal)
+                for row in (event.get("conversions") or {}).values()
+                if isinstance(row, dict) and float(row.get("value") or 0) >= 0.95
+                for signal in row.get("matched") or []
+            }
+            signals: list[tuple[str, str, str]] = []
+            signals.extend((f"actor:{row['identity']}", "actor", str(row.get("label") or row["identity"])) for row in event.get("actors") or [] if isinstance(row, dict) and row.get("identity"))
+            signals.extend((f"category:{name}", "category", str(name)) for name in event.get("categories") or [] if name)
+            signals.extend((f"term:{name}", "term", str(name)) for name in event.get("terms") or [] if name)
+            for key, kind, label in dict.fromkeys(signals):
+                row = metrics.setdefault(key, {"type": kind, "label": label, "exposed": 0, "qualified": 0, "verified": 0})
+                row["exposed"] += 1
+                row["qualified"] += int(key in qualified_matches)
+                row["verified"] += int(key in verified_matches)
+    adaptive_signals = 0
+    for row in metrics.values():
+        exposed = int(row["exposed"])
+        posterior = (int(row["qualified"]) + 2) / (exposed + 4)
+        active = exposed >= 8
+        row["posterior_rate"] = round(posterior, 4)
+        row["weight"] = round(max(0.7, min(1.3, 1 + (posterior - 0.5) * 0.8)), 3) if active else 1.0
+        row["adaptation_status"] = "active" if active else "collecting"
+        adaptive_signals += int(active)
+    return {
+        "eligible_events": eligible_events,
+        "qualified_events": qualified_events,
+        "verified_events": verified_events,
+        "adaptive_signals": adaptive_signals,
+        "signals": metrics,
+    }
+
+
 def search_intent_summary(*, now: datetime | None = None) -> dict[str, Any]:
-    current = now or utcnow()
+    current = _aware_search_time(now)
     actors: dict[str, float] = defaultdict(float)
     actor_labels: dict[str, str] = {}
     categories: dict[str, float] = defaultdict(float)
     terms: dict[str, float] = defaultdict(float)
     retained: list[dict[str, Any]] = []
-    for event in _load_search_intents().get("events") or []:
+    all_events = [event for event in (_load_search_intents().get("events") or []) if isinstance(event, dict)]
+    evaluation = _search_signal_metrics(all_events, current)
+    signal_metrics = evaluation["signals"]
+    for event in all_events:
         if not isinstance(event, dict):
             continue
         with contextlib.suppress(ValueError, TypeError):
@@ -889,15 +974,21 @@ def search_intent_summary(*, now: datetime | None = None) -> dict[str, Any]:
                 if not isinstance(actor, dict) or not actor.get("identity"):
                     continue
                 identity = str(actor["identity"])
-                actors[identity] += effective
+                actors[identity] += effective * float((signal_metrics.get(f"actor:{identity}") or {}).get("weight") or 1.0)
                 actor_labels[identity] = str(actor.get("label") or identity)
             for category in event.get("categories") or []:
                 if category:
-                    categories[str(category)] += effective
+                    name = str(category)
+                    categories[name] += effective * float((signal_metrics.get(f"category:{name}") or {}).get("weight") or 1.0)
             for term in event.get("terms") or []:
                 if term:
-                    terms[str(term)] += effective
+                    name = str(term)
+                    terms[name] += effective * float((signal_metrics.get(f"term:{name}") or {}).get("weight") or 1.0)
     latest = max((str(event.get("created_at") or "") for event in retained), default="")
+    conversion_revision = max(
+        (str(row.get("at") or "") for event in all_events for row in (event.get("conversions") or {}).values() if isinstance(row, dict)),
+        default="",
+    )
     return {
         "event_count": len(retained),
         "actors": dict(actors),
@@ -905,13 +996,65 @@ def search_intent_summary(*, now: datetime | None = None) -> dict[str, Any]:
         "categories": dict(categories),
         "terms": dict(terms),
         "latest_at": latest or None,
-        "revision": hashlib.sha256(f"{len(retained)}:{latest}".encode("utf-8")).hexdigest()[:16],
+        "evaluation": evaluation,
+        "revision": hashlib.sha256(f"{len(retained)}:{latest}:{conversion_revision}:{evaluation['eligible_events']}:{evaluation['qualified_events']}".encode("utf-8")).hexdigest()[:16],
     }
+
+
+async def attribute_search_intent_conversion(
+    code: Any,
+    event_type: str,
+    *,
+    actors: list[Any] | None = None,
+    categories: list[Any] | None = None,
+    title: str = "",
+    now: datetime | None = None,
+) -> int:
+    value = float(SEARCH_INTENT_CONVERSION_VALUES.get(str(event_type or "")) or 0)
+    canonical = canonical_work_code(code)
+    if value <= 0 or not canonical:
+        return 0
+    current = _aware_search_time(now)
+    actor_ids = {actor_identity_key(actor) for actor in actors or [] if actor_identity_key(actor)}
+    category_names = {canonical_preference_category(category) for category in categories or [] if canonical_preference_category(category)}
+    title_terms = set((semantic_tokens(title).get("weighted") or {}).keys())
+    updated = 0
+    async with _search_intent_lock:
+        data = _load_search_intents()
+        for event in data.get("events") or []:
+            if not isinstance(event, dict):
+                continue
+            with contextlib.suppress(ValueError, TypeError):
+                created_at = datetime.fromisoformat(str(event.get("created_at") or ""))
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                age = max(0.0, (current - created_at).total_seconds())
+                if age > SEARCH_INTENT_MAX_AGE_SECONDS:
+                    continue
+                event_actor_ids = {str(row.get("identity") or "") for row in event.get("actors") or [] if isinstance(row, dict)}
+                event_categories = {str(name) for name in event.get("categories") or []}
+                event_terms = {str(name) for name in event.get("terms") or []}
+                matched = sorted(
+                    [f"actor:{name}" for name in actor_ids & event_actor_ids]
+                    + [f"category:{name}" for name in category_names & event_categories]
+                    + [f"term:{name}" for name in title_terms & event_terms]
+                )
+                if not matched:
+                    continue
+                conversions = event.setdefault("conversions", {})
+                previous = conversions.get(canonical) if isinstance(conversions.get(canonical), dict) else {}
+                if float(previous.get("value") or 0) >= value:
+                    continue
+                conversions[canonical] = {"stage": event_type, "value": value, "at": current.isoformat(), "matched": matched[:12]}
+                updated += 1
+        if updated:
+            _save_search_intents(data)
+    return updated
 
 
 async def record_search_intent(query: Any, *, source: str = "resource-search", now: datetime | None = None) -> dict[str, Any]:
     raw = unicodedata.normalize("NFKC", str(query or "")).strip()
-    current = now or utcnow()
+    current = _aware_search_time(now)
     if len(raw) < 2 or extract_video_code_candidates(raw):
         return {"recorded": False, "reason": "empty-or-code"}
     cleaned = re.sub(r"(?:来源|source)[:：]\S+", " ", raw, flags=re.I)
@@ -966,7 +1109,7 @@ async def record_search_intent(query: Any, *, source: str = "resource-search", n
                 if created_at.tzinfo is None:
                     created_at = created_at.replace(tzinfo=timezone.utc)
                 age = max(0.0, (current - created_at).total_seconds())
-                if age <= SEARCH_INTENT_MAX_AGE_SECONDS:
+                if age <= SEARCH_INTENT_EVALUATION_RETENTION_SECONDS:
                     events.append(event)
                     if event.get("fingerprint") == fingerprint and age < 5 * 60:
                         duplicate = True

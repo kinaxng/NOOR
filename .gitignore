@@ -21,6 +21,7 @@ data/subscription_core/
 frontend/node_modules/
 frontend/dist/
 data/noor.db
+data/*.db-*
 data/*.bak
 forensics/reconstructed-manager-20260625.py
 data/runtime/

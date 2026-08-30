@@ -441,6 +441,10 @@ class KnowledgeRepository:
                     for name, weight in sorted(search_intent['terms'].items(), key=lambda row: row[1], reverse=True)[:5]
                 ],
                 'latest_at': search_intent['latest_at'],
+                'evaluation': {
+                    key: search_intent['evaluation'][key]
+                    for key in ('eligible_events', 'qualified_events', 'verified_events', 'adaptive_signals')
+                },
             },
             'work_similarity': work_similarity_status(),
             'last_learned_at': last_learned_at.isoformat() if last_learned_at else None,

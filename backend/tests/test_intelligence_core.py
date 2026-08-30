@@ -125,6 +125,38 @@ async def _search_intent_uses_core_identities_filters_operations_and_decays(tmp_
     aged = intelligence.search_intent_summary(now=now + dt.timedelta(hours=3))
     assert fresh["actors"]["mdc-ng:吉沢明歩"] == 1.0
     assert aged["actors"]["mdc-ng:吉沢明歩"] == 0.5
+    original_revision = fresh["revision"]
+    assert await intelligence.attribute_search_intent_conversion(
+        "AAA-001", "detail_view", actors=["吉沢明歩"], categories=["人妻"], title="秘密の人妻", now=now + dt.timedelta(minutes=5),
+    ) == 1
+    detail = intelligence.search_intent_summary(now=now + dt.timedelta(minutes=5))
+    assert detail["evaluation"]["eligible_events"] == 0
+    assert await intelligence.attribute_search_intent_conversion(
+        "AAA-001", "subscription", actors=["吉泽明步"], categories=["已婚妇女"], title="秘密の人妻", now=now + dt.timedelta(minutes=6),
+    ) == 1
+    converted = intelligence.search_intent_summary(now=now + dt.timedelta(minutes=6))
+    assert converted["evaluation"]["eligible_events"] == 1
+    assert converted["evaluation"]["qualified_events"] == 1
+    assert converted["revision"] != original_revision
+
+
+def test_search_signal_calibration_waits_for_mature_samples() -> None:
+    now = dt.datetime(2026, 8, 28, 16, 0, tzinfo=dt.timezone.utc)
+
+    def events(value: float) -> list[dict]:
+        return [{
+            "created_at": (now - dt.timedelta(hours=13, minutes=index)).isoformat(),
+            "actors": [{"identity": "actor:one", "label": "演员一"}],
+            "categories": [], "terms": [],
+            "conversions": {"AAA-001": {"value": value, "matched": ["actor:actor:one"]}} if value else {},
+        } for index in range(8)]
+
+    collecting = intelligence._search_signal_metrics(events(0)[:7], now)["signals"]["actor:actor:one"]
+    fading = intelligence._search_signal_metrics(events(0), now)["signals"]["actor:actor:one"]
+    strengthened = intelligence._search_signal_metrics(events(0.7), now)["signals"]["actor:actor:one"]
+    assert collecting["adaptation_status"] == "collecting" and collecting["weight"] == 1.0
+    assert fading["adaptation_status"] == "active" and fading["weight"] < 1.0
+    assert strengthened["adaptation_status"] == "active" and strengthened["weight"] > 1.0
 
 
 def test_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch) -> None:
@@ -436,6 +468,7 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     assert searched["items"][0]["code"] == "PRED-878"
     assert {item["kind"] for item in searched["items"][0]["match_evidence"]} == {"actor", "resource"}
     assert searched["items"][0]["resource_summary"]["has_cracked"] is True
+    assert (await intelligence.record_search_intent("剧情"))["recorded"] is True
     assert await intelligence.record_preference_event(
         "PRED-878", "detail_view", source="av-recommend", actors=["测试演员"], categories=["剧情"], enqueue_refresh=False,
     ) is True
@@ -451,6 +484,10 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     assert await intelligence.record_preference_event(
         "PRED-878", "library_imported", source="subscription-core", data={"evidence_id": "sub-1:media-1"},
     ) is False
+    search_learning = intelligence.search_intent_summary()["evaluation"]
+    assert search_learning["eligible_events"] == 1
+    assert search_learning["qualified_events"] == 1
+    assert search_learning["verified_events"] == 1
     behavior = await intelligence.preference_behavior_summary()
     assert behavior["event_count"] == 3
     assert behavior["codes"]["PRED-878"] > 5.9
