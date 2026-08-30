@@ -268,7 +268,7 @@ def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkey
     assert diagnostics == {"dropped_code_prefix_categories": 1, "dropped_actor_alias_terms": 1, "dropped_actor_variant_terms": 1}
 
 
-def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths(monkeypatch) -> None:
+def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths(monkeypatch, tmp_path) -> None:
     async def fake_index(**_kwargs):
         def edge(code: str, score: float, label: str):
             return {"code": code, "score": score, "relation_confidence": 0.9, "relation_types": ["actor"], "reasons": [{"type": "actor", "label": label, "weight": 1.0}]}
@@ -284,6 +284,8 @@ def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths
         }
 
     monkeypatch.setattr(intelligence, "build_work_similarity_index", fake_index)
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    monkeypatch.setattr(intelligence, "_similarity_candidate_cache", {})
     result = asyncio.run(intelligence.work_similarity_candidates({"AAA-001": 1.0}, negative_seed_weights={"DDD-001": 1.0}))
     by_code = {item["code"]: item for item in result["items"]}
 
@@ -299,6 +301,11 @@ def test_work_similarity_candidates_propagates_bounded_explainable_two_hop_paths
         "relation_weights": {},
         "seed_limit": 160,
     }
+    intelligence._similarity_candidate_cache = {}
+    persisted = asyncio.run(intelligence.work_similarity_candidates({"AAA-001": 1.0}, negative_seed_weights={"DDD-001": 1.0}))
+    assert persisted == result
+    cache_payload = json.loads((tmp_path / "intelligence_offline_evaluations.json").read_text(encoding="utf-8"))
+    assert len(cache_payload["entries"]["candidates"]) == 1
 
 
 def test_equal_weight_seed_order_uses_stable_hash_not_code_prefix() -> None:
@@ -309,7 +316,21 @@ def test_equal_weight_seed_order_uses_stable_hash_not_code_prefix() -> None:
     assert [code for code, _weight in selected] != sorted(weights)[:20]
 
 
-def test_temporal_backtest_uses_historical_cutoffs_and_requires_cross_split_gain(monkeypatch) -> None:
+def test_work_profile_revision_ignores_touch_timestamp_but_tracks_content() -> None:
+    base = {
+        "code": "AAA-001", "title": "作品", "original_title": "", "translated_title": "",
+        "aliases": [], "tokens": {"weighted": {"作品": 1.0}},
+        "facts": {"javdb": {"actors": ["演员甲"], "categories": ["人妻"]}}, "source_evidence": [], "confidence": 80,
+    }
+    first = SimpleNamespace(**base, updated_at=dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc))
+    touched = SimpleNamespace(**base, updated_at=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+    changed = SimpleNamespace(**{**base, "facts": {"javdb": {"actors": ["演员乙"], "categories": ["人妻"]}}}, updated_at=touched.updated_at)
+
+    assert intelligence._work_profiles_content_revision([first]) == intelligence._work_profiles_content_revision([touched])
+    assert intelligence._work_profiles_content_revision([first]) != intelligence._work_profiles_content_revision([changed])
+
+
+def test_temporal_backtest_uses_historical_cutoffs_and_requires_cross_split_gain(monkeypatch, tmp_path) -> None:
     codes = [f"AAA-{index:03d}" for index in range(100)]
 
     async def fake_index(**_kwargs):
@@ -323,6 +344,7 @@ def test_temporal_backtest_uses_historical_cutoffs_and_requires_cross_split_gain
         }
 
     monkeypatch.setattr(intelligence, "build_work_similarity_index", fake_index)
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
     monkeypatch.setattr(intelligence, "_similarity_temporal_cache", {})
     start = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
     timeline = {
@@ -341,7 +363,7 @@ def test_temporal_backtest_uses_historical_cutoffs_and_requires_cross_split_gain
     assert result["recommended_policy"] == "durable"
 
 
-def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeypatch) -> None:
+def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeypatch, tmp_path) -> None:
     def edge(code: str, score: float, relation: str = "actor") -> dict:
         return {"code": code, "score": score, "relation_types": [relation]}
 
@@ -358,6 +380,7 @@ def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeyp
         }
 
     monkeypatch.setattr(intelligence, "build_work_similarity_index", fake_index)
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
     monkeypatch.setattr(intelligence, "_similarity_evaluation_cache", {})
     result = asyncio.run(intelligence.work_similarity_recall_evaluation(
         {"AAA-001", "BBB-001", "CCC-001", "DDD-001"},
@@ -377,6 +400,17 @@ def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeyp
         "code": "DDD-001", "reason": "no_neighbor_path",
         "profile_gaps": ["actors", "categories", "title", "maker"],
     }]
+
+
+def test_offline_evaluation_cache_survives_process_memory_reset(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    value = {"revision": "core-r1", "evaluated": 160, "recommended_policy": "temporal"}
+    intelligence._save_offline_evaluation("temporal", "fingerprint-a", value)
+
+    assert intelligence._load_offline_evaluation("temporal", "fingerprint-a") == value
+    payload = json.loads((tmp_path / "intelligence_offline_evaluations.json").read_text(encoding="utf-8"))
+    assert payload["version"] == 1
+    assert payload["entries"]["temporal"]["fingerprint-a"]["value"] == value
 
 
 def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monkeypatch, tmp_path) -> None:

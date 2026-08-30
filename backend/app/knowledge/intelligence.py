@@ -11,6 +11,7 @@ import math
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -32,16 +33,50 @@ _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[str, frozenset[str], dict[str, str], dict[str, str]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
+_similarity_rebuild_task: asyncio.Task[dict[str, Any]] | None = None
+_similarity_pending_revision = ""
 _similarity_evaluation_cache: dict[str, dict[str, Any]] = {}
 _similarity_temporal_cache: dict[str, dict[str, Any]] = {}
+_similarity_candidate_cache: dict[str, dict[str, Any]] = {}
 _work_search_cache: dict[str, Any] = {"expires_at": 0.0, "documents": []}
 _work_search_lock = asyncio.Lock()
 _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "value": None}
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 9
+WORK_SIMILARITY_VERSION = 10
 WORK_PROFILE_FUSION_VERSION = 1
+
+
+def _offline_evaluation_cache_file() -> Path:
+    return data_path("intelligence_offline_evaluations.json")
+
+
+def _load_offline_evaluation(kind: str, fingerprint: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(_offline_evaluation_cache_file().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    row = ((payload.get("entries") or {}).get(kind) or {}).get(fingerprint)
+    value = row.get("value") if isinstance(row, dict) else None
+    return dict(value) if isinstance(value, dict) else None
+
+
+def _save_offline_evaluation(kind: str, fingerprint: str, value: dict[str, Any]) -> None:
+    path = _offline_evaluation_cache_file()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = {"version": 1, "entries": {}}
+    entries = payload.setdefault("entries", {}).setdefault(kind, {})
+    entries[fingerprint] = {"saved_at": utcnow().isoformat(), "value": value}
+    # Retain a few historical revisions for diagnostics without allowing the
+    # runtime file to grow indefinitely.
+    payload["entries"][kind] = dict(sorted(entries.items(), key=lambda row: str((row[1] or {}).get("saved_at") or ""), reverse=True)[:4])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
     "身体", "本番", "作品", "影片", "电影", "独家", "推荐", "热门", "has_chinese",
@@ -1450,14 +1485,60 @@ def _relation_confidence(similarity: float, rows: list[tuple[float, str]]) -> fl
     return max(0.05, min(0.99, confidence))
 
 
+def _work_profiles_content_revision(profiles: list[WorkProfile]) -> str:
+    """Fingerprint graph inputs while ignoring ordering and operational metadata."""
+    fact_keys = {
+        "actors", "actresses", "categories", "genres", "tags", "maker", "publisher", "studio", "label",
+        "series", "director", "directors", "release_date", "date", "cover_url", "fanart_url",
+    }
+
+    def stable(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {str(key): stable(item) for key, item in sorted(value.items(), key=lambda row: str(row[0]))}
+        if isinstance(value, (list, tuple, set)):
+            rows = [stable(item) for item in value]
+            keyed = {json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str): item for item in rows}
+            return [keyed[key] for key in sorted(keyed)]
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    digest = hashlib.sha256()
+    for profile in sorted(profiles, key=lambda row: canonical_work_code(row.code)):
+        facts = {
+            str(source): {str(key): stable(value) for key, value in values.items() if str(key) in fact_keys}
+            for source, values in (profile.facts or {}).items()
+            if isinstance(values, dict)
+        }
+        evidence = [
+            {"source": str(row.get("source") or ""), "confidence": int(row.get("confidence") or 0), "fields": stable(row.get("fields") or [])}
+            for row in profile.source_evidence or []
+            if isinstance(row, dict)
+        ]
+        payload = {
+            "code": canonical_work_code(profile.code),
+            "title": str(profile.title or "").strip(),
+            "original_title": str(profile.original_title or "").strip(),
+            "translated_title": str(profile.translated_title or "").strip(),
+            "aliases": stable(profile.aliases or []),
+            "tokens": stable(profile.tokens or {}),
+            "facts": stable(facts),
+            "evidence": stable(evidence),
+            "confidence": int(profile.confidence or 0),
+        }
+        digest.update(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()[:24]
+
+
 async def build_work_similarity_index(*, force: bool = False, neighbor_limit: int = 24) -> dict[str, Any]:
     """Build a durable sparse multi-relation work-neighborhood index."""
-    global _similarity_cache
+    global _similarity_cache, _similarity_rebuild_task, _similarity_pending_revision
     async with async_session_maker() as db:
         profiles = list((await db.execute(select(WorkProfile))).scalars())
     alias_learning = infer_actor_aliases(profiles)
-    latest = max((profile.updated_at for profile in profiles if profile.updated_at), default=None)
-    revision = f"{WORK_SIMILARITY_VERSION}:{SEMANTIC_PROFILE_VERSION}:{actor_alias_revision()}:{len(profiles)}:{latest.isoformat() if latest else 'none'}"
+    content_revision = _work_profiles_content_revision(profiles)
+    revision = f"{WORK_SIMILARITY_VERSION}:{SEMANTIC_PROFILE_VERSION}:{actor_alias_revision()}:{len(profiles)}:{content_revision}"
     if not force and _similarity_cache and _similarity_cache[0] == revision:
         return _similarity_cache[1]
     path = _work_similarity_file()
@@ -1467,13 +1548,32 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
             if saved.get("revision") == revision:
                 _similarity_cache = (revision, saved)
                 return saved
+            # A complete previous index is safer and dramatically faster than
+            # rebuilding the whole graph inside an interactive request. Serve
+            # it now and atomically publish the new revision in the background.
+            if int(saved.get("version") or 0) == WORK_SIMILARITY_VERSION and saved.get("neighbors"):
+                _similarity_cache = (str(saved.get("revision") or "stale"), saved)
+                _similarity_pending_revision = revision
+                if _similarity_rebuild_task is None or _similarity_rebuild_task.done():
+                    async def rebuild() -> dict[str, Any]:
+                        global _similarity_rebuild_task, _similarity_pending_revision
+                        try:
+                            return await build_work_similarity_index(force=True, neighbor_limit=neighbor_limit)
+                        finally:
+                            _similarity_pending_revision = ""
+                            _similarity_rebuild_task = None
+
+                    _similarity_rebuild_task = asyncio.create_task(rebuild())
+                return saved
 
     raw_features: dict[str, dict[str, float]] = {}
     feature_labels: dict[str, str] = {}
     postings: dict[str, list[str]] = defaultdict(list)
     candidates: dict[str, dict[str, Any]] = {}
     feature_quality: dict[str, int] = {}
-    for profile in profiles:
+    for profile_index, profile in enumerate(profiles):
+        if profile_index and profile_index % 48 == 0:
+            await asyncio.sleep(0)
         code = canonical_work_code(profile.code)
         if not code:
             continue
@@ -1486,13 +1586,17 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         candidate = _work_profile_candidate(profile)
         if current_candidate is None or int(candidate.get("confidence") or 0) > int(current_candidate.get("confidence") or 0):
             candidates[code] = candidate
-    for code, features in raw_features.items():
+    for profile_index, (code, features) in enumerate(raw_features.items()):
+        if profile_index and profile_index % 96 == 0:
+            await asyncio.sleep(0)
         for feature in features:
             postings[feature].append(code)
     work_count = max(len(raw_features), 1)
     weighted: dict[str, dict[str, float]] = defaultdict(dict)
     feature_cap = max(40, int(work_count * 0.15))
-    for feature, codes in postings.items():
+    for feature_index, (feature, codes) in enumerate(postings.items()):
+        if feature_index and feature_index % 96 == 0:
+            await asyncio.sleep(0)
         document_frequency = len(set(codes))
         if document_frequency < 2 or document_frequency > feature_cap:
             continue
@@ -1502,16 +1606,22 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
     norms = {code: math.sqrt(sum(value * value for value in values.values())) for code, values in weighted.items()}
     dots: dict[tuple[str, str], float] = defaultdict(float)
     shared: dict[tuple[str, str], list[tuple[float, str]]] = defaultdict(list)
+    pair_operations = 0
     for feature, codes in postings.items():
         eligible = sorted({code for code in codes if feature in weighted.get(code, {})})
         for index, left in enumerate(eligible):
             for right in eligible[index + 1:]:
+                pair_operations += 1
+                if pair_operations % 256 == 0:
+                    await asyncio.sleep(0)
                 contribution = weighted[left][feature] * weighted[right][feature]
                 pair = (left, right)
                 dots[pair] += contribution
                 shared[pair].append((contribution, feature))
     neighbors: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for (left, right), dot in dots.items():
+    for pair_index, ((left, right), dot) in enumerate(dots.items()):
+        if pair_index and pair_index % 256 == 0:
+            await asyncio.sleep(0)
         denominator = norms.get(left, 0) * norms.get(right, 0)
         if denominator <= 0:
             continue
@@ -1545,7 +1655,9 @@ async def build_work_similarity_index(*, force: bool = False, neighbor_limit: in
         row_right = {"code": left, **shared_payload}
         neighbors[left].append(row_left)
         neighbors[right].append(row_right)
-    for code in list(neighbors):
+    for neighbor_index, code in enumerate(list(neighbors)):
+        if neighbor_index and neighbor_index % 128 == 0:
+            await asyncio.sleep(0)
         neighbors[code] = sorted(neighbors[code], key=lambda row: row["score"], reverse=True)[:neighbor_limit]
     result = {
         "version": WORK_SIMILARITY_VERSION,
@@ -1594,9 +1706,27 @@ def _rank_seed_weights(source_weights: dict[str, float], limit: int) -> list[tup
 
 async def work_similarity_candidates(seed_weights: dict[str, float], *, negative_seed_weights: dict[str, float] | None = None, relation_weights: dict[str, float] | None = None, limit: int = 160) -> dict[str, Any]:
     index = await build_work_similarity_index()
-    seeds = {canonical_work_code(code): float(weight) for code, weight in seed_weights.items() if canonical_work_code(code)}
-    negative_seeds = {canonical_work_code(code): max(0.0, float(weight)) for code, weight in (negative_seed_weights or {}).items() if canonical_work_code(code)}
+    # Recommendation behavior weights decay continuously. Quantizing to one
+    # percent prevents meaningless per-second changes from invalidating an
+    # otherwise identical graph walk, while still reacting to real preference,
+    # seed-set, relation-weight and Core-revision changes.
+    seeds = {canonical_work_code(code): round(float(weight), 2) for code, weight in seed_weights.items() if canonical_work_code(code)}
+    negative_seeds = {canonical_work_code(code): round(max(0.0, float(weight)), 2) for code, weight in (negative_seed_weights or {}).items() if canonical_work_code(code)}
     neighbors_by_code = index.get("neighbors") or {}
+    fingerprint = hashlib.sha256(json.dumps({
+        "revision": index.get("revision"),
+        "seeds": sorted((code, round(weight, 4)) for code, weight in seeds.items()),
+        "negative_seeds": sorted((code, round(weight, 4)) for code, weight in negative_seeds.items()),
+        "relation_weights": sorted((str(kind), round(float(weight), 4)) for kind, weight in (relation_weights or {}).items()),
+        "limit": max(1, min(limit, 500)),
+    }, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    cached = _similarity_candidate_cache.get(fingerprint)
+    if cached is not None:
+        return dict(cached)
+    persisted = _load_offline_evaluation("candidates", fingerprint)
+    if persisted is not None:
+        _similarity_candidate_cache[fingerprint] = persisted
+        return dict(persisted)
 
     def propagate(source_weights: dict[str, float], *, continuation: float) -> tuple[dict[str, float], dict[str, list[dict[str, Any]]]]:
         """Two-hop personalized walk with a strong restart and hub penalty."""
@@ -1662,7 +1792,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
         candidate["neighbor_negative_score"] = round(negative_scores.get(code, 0.0), 3)
         candidate["neighbor_negative_evidence"] = sorted(negative_evidence.get(code, []), key=lambda row: row["contribution"], reverse=True)[:3]
         items.append(candidate)
-    return {
+    result = {
         "revision": index.get("revision"),
         "items": items,
         "seed_count": len(seeds),
@@ -1678,6 +1808,11 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
             "seed_limit": 160,
         },
     }
+    _similarity_candidate_cache[fingerprint] = result
+    _save_offline_evaluation("candidates", fingerprint, result)
+    if len(_similarity_candidate_cache) > 4:
+        _similarity_candidate_cache.pop(next(iter(_similarity_candidate_cache)))
+    return dict(result)
 
 
 async def work_similarity_recall_evaluation(
@@ -1699,7 +1834,7 @@ async def work_similarity_recall_evaluation(
     candidates = index.get("candidates") or {}
     targets = sorted({canonical_work_code(code) for code in target_codes if canonical_work_code(code)} & set(candidates))
     weights = {
-        canonical_work_code(code): max(0.05, float(weight))
+        canonical_work_code(code): round(max(0.05, float(weight)), 2)
         for code, weight in (seed_weights or {}).items()
         if canonical_work_code(code)
     }
@@ -1720,6 +1855,10 @@ async def work_similarity_recall_evaluation(
     cached = _similarity_evaluation_cache.get(fingerprint)
     if cached is not None:
         return dict(cached)
+    persisted = _load_offline_evaluation("recall", fingerprint)
+    if persisted is not None:
+        _similarity_evaluation_cache[fingerprint] = persisted
+        return dict(persisted)
 
     blocked_seed_codes = set(weights)
     seed_rows = _rank_seed_weights(weights, len(weights))
@@ -1924,6 +2063,7 @@ async def work_similarity_recall_evaluation(
         "interpretation": "结构召回健康度；目标作品画像保留在索引中，不等同于未来点击率",
     }
     _similarity_evaluation_cache[fingerprint] = result
+    _save_offline_evaluation("recall", fingerprint, result)
     if len(_similarity_evaluation_cache) > 4:
         _similarity_evaluation_cache.pop(next(iter(_similarity_evaluation_cache)))
     return dict(result)
@@ -1978,6 +2118,10 @@ async def work_similarity_temporal_backtest(
     }, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
     if fingerprint in _similarity_temporal_cache:
         return dict(_similarity_temporal_cache[fingerprint])
+    persisted = _load_offline_evaluation("temporal", fingerprint)
+    if persisted is not None:
+        _similarity_temporal_cache[fingerprint] = persisted
+        return dict(persisted)
 
     metrics = {
         policy: {cohort: {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0} for cohort in ("overall", "train", "validation")}
@@ -2054,6 +2198,7 @@ async def work_similarity_temporal_backtest(
         "interpretation": "行为时间截断回测；作品关系使用当前 Core 元数据快照",
     }
     _similarity_temporal_cache[fingerprint] = result
+    _save_offline_evaluation("temporal", fingerprint, result)
     if len(_similarity_temporal_cache) > 4:
         _similarity_temporal_cache.pop(next(iter(_similarity_temporal_cache)))
     return dict(result)
@@ -2076,6 +2221,8 @@ def work_similarity_status() -> dict[str, Any]:
         "mapped_actor_feature_count": int(payload.get("mapped_actor_feature_count") or 0),
         "fallback_actor_feature_count": int(payload.get("fallback_actor_feature_count") or 0),
         "feature_quality": dict(payload.get("feature_quality") or {}),
+        "rebuilding": bool(_similarity_rebuild_task and not _similarity_rebuild_task.done()),
+        "pending_revision": _similarity_pending_revision,
     }
 
 
@@ -2136,17 +2283,16 @@ async def record_resource_search(query: dict[str, Any], groups: list[dict[str, A
                 profile = await db.get(WorkProfile, code)
                 evidence = {"source": provider_id, "observed_at": now.isoformat(), "title": title}
                 if profile is None:
-                    profile = WorkProfile(code=code, title=work_title, aliases=[title] if title and title != work_title else [], tokens=semantic_tokens(work_title, title), facts={}, source_evidence=[evidence], confidence=55)
+                    # A release/torrent title describes one resource version,
+                    # not the canonical work. Keep it in ResourceObservation
+                    # and source evidence; using it as a work alias pollutes
+                    # semantic profiles and changes the graph on every search.
+                    profile = WorkProfile(code=code, title=work_title, aliases=[], tokens=semantic_tokens(work_title), facts={}, source_evidence=[evidence], confidence=55)
                     db.add(profile)
                 else:
-                    aliases = list(profile.aliases or [])
-                    if title and title not in aliases:
-                        aliases.append(title)
                     evidence_rows = [row for row in (profile.source_evidence or []) if isinstance(row, dict) and row.get("source") != provider_id]
                     evidence_rows.append(evidence)
-                    profile.title = profile.title or title
-                    profile.aliases = aliases[-40:]
-                    profile.tokens = semantic_tokens(profile.title, *profile.aliases)
+                    profile.title = profile.title or work_title
                     profile.source_evidence = evidence_rows[-40:]
                     profile.confidence = max(int(profile.confidence or 0), 70)
 
