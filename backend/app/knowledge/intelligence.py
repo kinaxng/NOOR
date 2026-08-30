@@ -212,6 +212,7 @@ PREFERENCE_EVENT_HALF_LIFE_DAYS = {
 }
 OUTCOME_ATTEMPT_EVENTS = {"subscription", "download_intent", "download_submitted"}
 OUTCOME_VERIFIED_EVENTS = {"library_imported", "upgrade_completed"}
+OUTCOME_MATURITY_DAYS = 7
 PREFERENCE_EVENT_STAGE_VALUES = {
     "detail_view": 0.15,
     "subscription": 0.60,
@@ -983,14 +984,30 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
 
 def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
     """Build a conservative conversion model from intent to verified outcomes."""
+    now = utcnow()
+    now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
     by_code: dict[str, dict[str, Any]] = {}
     for event in events:
-        row = by_code.setdefault(event.work_code, {"attempt": False, "verified": False, "actors": set(), "categories": set()})
+        code = canonical_work_code(event.work_code) or event.work_code
+        row = by_code.setdefault(code, {"attempt": False, "attempt_at": None, "verified": False, "actors": set(), "categories": set()})
         row["attempt"] = bool(row["attempt"] or event.event_type in OUTCOME_ATTEMPT_EVENTS)
         row["verified"] = bool(row["verified"] or event.event_type in OUTCOME_VERIFIED_EVENTS)
+        if event.event_type in OUTCOME_ATTEMPT_EVENTS:
+            observed = getattr(event, "created_at", None)
+            if isinstance(observed, datetime):
+                observed = observed.replace(tzinfo=timezone.utc) if observed.tzinfo is None else observed.astimezone(timezone.utc)
+                row["attempt_at"] = max(filter(None, (row["attempt_at"], observed)), default=observed)
         row["actors"].update(actor_identity_key(actor) for actor in (event.actors or []) if actor_identity_key(actor))
         row["categories"].update(canonical_preference_category(category) for category in (event.categories or []) if canonical_preference_category(category))
-    trials = {code for code, row in by_code.items() if row["attempt"] or row["verified"]}
+    maturity = timedelta(days=OUTCOME_MATURITY_DAYS)
+    pending = {
+        code for code, row in by_code.items()
+        if row["attempt"] and not row["verified"] and isinstance(row.get("attempt_at"), datetime) and now - row["attempt_at"] < maturity
+    }
+    trials = {
+        code for code, row in by_code.items()
+        if row["verified"] or (row["attempt"] and code not in pending)
+    }
     verified = {code for code in trials if by_code[code]["verified"]}
 
     def dimension_rates(key: str) -> dict[str, dict[str, float | int]]:
@@ -1014,6 +1031,9 @@ def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
     return {
         "trials": len(trials),
         "verified": len(verified),
+        "pending": len(pending),
+        "mature_unverified": len(trials - verified),
+        "maturity_days": OUTCOME_MATURITY_DAYS,
         "rate": round(_bayesian_rate(len(verified), len(trials)), 4),
         "actors": dimension_rates("actors"),
         "categories": dimension_rates("categories"),

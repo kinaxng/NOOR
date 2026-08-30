@@ -21,10 +21,11 @@ def test_canonical_work_code_collapses_local_version_marks() -> None:
 
 
 def test_preference_outcome_model_uses_verified_funnel_with_smoothing() -> None:
+    mature = intelligence.utcnow() - dt.timedelta(days=8)
     events = [
-        SimpleNamespace(work_code="AAA-001", event_type="subscription", actors=["测试演员"], categories=["人妻"]),
-        SimpleNamespace(work_code="AAA-001", event_type="library_imported", actors=["测试演员"], categories=["人妻"]),
-        SimpleNamespace(work_code="BBB-002", event_type="download_submitted", actors=["测试演员"], categories=["NTR"]),
+        SimpleNamespace(work_code="AAA-001", event_type="subscription", actors=["测试演员"], categories=["人妻"], created_at=mature),
+        SimpleNamespace(work_code="AAA-001", event_type="library_imported", actors=["测试演员"], categories=["人妻"], created_at=mature),
+        SimpleNamespace(work_code="BBB-002", event_type="download_submitted", actors=["测试演员"], categories=["NTR"], created_at=mature),
     ]
 
     model = intelligence._preference_outcome_model(events)
@@ -34,6 +35,25 @@ def test_preference_outcome_model_uses_verified_funnel_with_smoothing() -> None:
     assert model["rate"] == 0.5
     assert model["categories"]["人妻"]["rate"] == 0.6
     assert model["categories"]["NTR"]["rate"] == 0.4
+
+
+def test_preference_outcome_model_keeps_recent_attempts_pending() -> None:
+    now = intelligence.utcnow()
+    events = [
+        SimpleNamespace(work_code="AAA-001", event_type="download_submitted", actors=["演员甲"], categories=["人妻"], created_at=now - dt.timedelta(days=2)),
+        SimpleNamespace(work_code="BBB-002", event_type="download_submitted", actors=["演员乙"], categories=["剧情"], created_at=now - dt.timedelta(days=8)),
+        SimpleNamespace(work_code="CCC-003", event_type="subscription", actors=["演员丙"], categories=["巨乳"], created_at=now - dt.timedelta(hours=2)),
+        SimpleNamespace(work_code="CCC-003", event_type="library_imported", actors=["演员丙"], categories=["巨乳"], created_at=now - dt.timedelta(hours=1)),
+    ]
+
+    model = intelligence._preference_outcome_model(events)
+
+    assert model["trials"] == 2
+    assert model["verified"] == 1
+    assert model["pending"] == 1
+    assert model["mature_unverified"] == 1
+    assert model["maturity_days"] == 7
+    assert "人妻" not in model["categories"]
 
 
 def test_interest_topics_deduplicate_funnel_stages_and_capture_recent_combinations() -> None:
