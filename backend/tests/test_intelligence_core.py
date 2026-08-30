@@ -69,7 +69,7 @@ def test_interest_topics_use_media_library_as_durable_long_term_baseline() -> No
     result = intelligence._preference_interest_topics([], profiles=profiles)
     topic = next(item for item in result["topics"] if item["anchor"] == "人妻")
 
-    assert result["version"] == 3
+    assert result["version"] == 4
     assert result["library_work_count"] == 2
     assert result["behavior_work_count"] == 0
     assert topic["support"] == 2

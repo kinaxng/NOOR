@@ -879,18 +879,22 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
             for identity, score, relation_support in actors
         ]
         relation_type = "anchor"
+        relation_actor_identity = ""
+        relation_category = ""
         relation_support = support
         relation_confidence = min(0.95, support / (support + 4))
         relation_evidence_codes = set(category_codes[anchor])
         if actor_rows and actor_coverage >= 0.25:
             topic_label = f"{actor_rows[0]['name']} · {anchor}"
             relation_type = "actor_category"
+            relation_actor_identity = str(actor_rows[0]["identity"])
             relation_support = int(actor_rows[0]["support"])
             relation_confidence = float(actor_rows[0]["confidence"])
             relation_evidence_codes = actor_category_codes[anchor][actor_rows[0]["identity"]]
         elif related and category_coverage >= 0.25:
             topic_label = f"{anchor} · {related[0][0]}"
             relation_type = "category_pair"
+            relation_category = str(related[0][0])
             relation_support = int(related[0][2])
             relation_confidence = min(0.95, relation_support / (relation_support + 4))
             relation_evidence_codes = category_pair_codes[anchor][related[0][0]]
@@ -913,6 +917,8 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
             "category_coverage": round(category_coverage, 3),
             "anchor_confidence": round(anchor_confidence, 3),
             "relation_type": relation_type,
+            "relation_actor_identity": relation_actor_identity,
+            "relation_category": relation_category,
             "relation_support": relation_support,
             "relation_confidence": round(relation_confidence, 3),
             "confidence": round(min(anchor_confidence, relation_confidence), 3),
@@ -935,8 +941,8 @@ def _preference_interest_topics(events: list[PreferenceEvent], *, profiles: list
         selected.append(topic)
         if len(selected) >= max_topics:
             break
-    revision_payload = json.dumps({"version": 3, "topics": selected, "library_work_count": len(library_codes)}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return {"version": 3, "revision": hashlib.sha256(revision_payload.encode("utf-8")).hexdigest()[:20], "topics": selected, "work_count": len(by_code), "library_work_count": len(library_codes), "behavior_work_count": len({canonical_work_code(event.work_code) for event in events if canonical_work_code(event.work_code)}), "generated_at": now.isoformat()}
+    revision_payload = json.dumps({"version": 4, "topics": selected, "library_work_count": len(library_codes)}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {"version": 4, "revision": hashlib.sha256(revision_payload.encode("utf-8")).hexdigest()[:20], "topics": selected, "work_count": len(by_code), "library_work_count": len(library_codes), "behavior_work_count": len({canonical_work_code(event.work_code) for event in events if canonical_work_code(event.work_code)}), "generated_at": now.isoformat()}
 
 
 def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
