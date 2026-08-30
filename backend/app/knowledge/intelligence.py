@@ -1643,8 +1643,9 @@ async def work_similarity_recall_evaluation(
     target_limit = max(10, min(int(target_limit or 240), 500))
     seed_limit = max(10, min(int(seed_limit or 80), 160))
     if len(targets) > target_limit:
-        revision = str(index.get("revision") or "")
-        targets = sorted(targets, key=lambda code: hashlib.sha256(f"{revision}:{code}".encode()).hexdigest())[:target_limit]
+        # Keep the holdout cohort stable across index revisions so before/after
+        # coverage changes reflect the model rather than a different sample.
+        targets = sorted(targets, key=lambda code: hashlib.sha256(code.encode()).hexdigest())[:target_limit]
     fingerprint = hashlib.sha256(json.dumps({
         "revision": index.get("revision"),
         "targets": targets,
