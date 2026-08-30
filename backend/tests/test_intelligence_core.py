@@ -202,6 +202,21 @@ def test_resource_refresh_enqueue_deduplicates_codes_in_one_batch(tmp_path, monk
     asyncio.run(_resource_refresh_enqueue_deduplicates_codes_in_one_batch(tmp_path, monkeypatch))
 
 
+def test_latest_similarity_evaluation_prefers_requested_revision(tmp_path, monkeypatch) -> None:
+    cache_file = tmp_path / "evaluations.json"
+    cache_file.write_text(json.dumps({"version": 1, "entries": {"recall": {
+        "old": {"saved_at": "2026-01-01T00:00:00", "value": {"revision": "graph-a", "coverage": 0.7}},
+        "new": {"saved_at": "2026-01-02T00:00:00", "value": {"revision": "graph-b", "coverage": 0.8}},
+    }}}), encoding="utf-8")
+    monkeypatch.setattr(intelligence, "_offline_evaluation_cache_file", lambda: cache_file)
+
+    exact = intelligence.latest_work_similarity_evaluation("recall", revision="graph-a")
+    fallback = intelligence.latest_work_similarity_evaluation("recall", revision="missing")
+
+    assert exact["coverage"] == 0.7 and exact["stale"] is False
+    assert fallback["coverage"] == 0.8 and fallback["stale"] is True
+
+
 async def _resource_refresh_enqueue_deduplicates_codes_in_one_batch(tmp_path, monkeypatch) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'resource-refresh.db'}")
     sessions = async_sessionmaker(engine, expire_on_commit=False)

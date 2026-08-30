@@ -63,6 +63,29 @@ def _load_offline_evaluation(kind: str, fingerprint: str) -> dict[str, Any] | No
     return dict(value) if isinstance(value, dict) else None
 
 
+def latest_work_similarity_evaluation(kind: str, *, revision: str | None = None) -> dict[str, Any]:
+    """Return the newest persisted diagnostic without recomputing it inline."""
+    if kind not in {"temporal", "recall", "candidates"}:
+        return {}
+    try:
+        payload = json.loads(_offline_evaluation_cache_file().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    rows = ((payload.get("entries") or {}).get(kind) or {}).values()
+    candidates = [row for row in rows if isinstance(row, dict) and isinstance(row.get("value"), dict)]
+    if revision:
+        exact = [row for row in candidates if str((row.get("value") or {}).get("revision") or "") == revision]
+        if exact:
+            candidates = exact
+    if not candidates:
+        return {}
+    latest = max(candidates, key=lambda row: str(row.get("saved_at") or ""))
+    value = dict(latest.get("value") or {})
+    value["persisted_at"] = str(latest.get("saved_at") or "")
+    value["stale"] = bool(revision and str(value.get("revision") or "") != revision)
+    return value
+
+
 def _save_offline_evaluation(kind: str, fingerprint: str, value: dict[str, Any]) -> None:
     path = _offline_evaluation_cache_file()
     try:
