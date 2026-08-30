@@ -534,14 +534,8 @@ async function fetchIntelligenceOverview() {
 const intelligenceStats = computed(() => intelligenceOverview.value || {})
 const intelligenceRefreshCounts = computed(() => intelligenceStats.value.refresh?.counts || {})
 const intelligenceActiveTasks = computed(() => Number(intelligenceRefreshCounts.value.queued || 0) + Number(intelligenceRefreshCounts.value.running || 0))
-const intelligenceProviderCount = computed(() => Object.keys(intelligenceStats.value.resource_coverage?.providers || {}).length)
 const intelligenceCoverage = computed(() => Number(intelligenceStats.value.resource_coverage?.percent || 0))
-const intelligenceFreshness = computed(() => Number(intelligenceStats.value.resource_coverage?.quality?.freshness_rate || 0))
 const intelligenceAvailability = computed(() => Number(intelligenceStats.value.resource_coverage?.quality?.availability_rate || 0))
-const intelligenceActorIdentities = computed(() => Number(intelligenceStats.value.actor_mappings?.identity_count || 0))
-const intelligenceLearnedActorAliases = computed(() => Number(intelligenceStats.value.actor_mappings?.learned_alias_count || 0))
-const intelligenceSearchIntentCount = computed(() => Number(intelligenceStats.value.search_intent?.event_count || 0))
-const intelligenceAdaptiveSearchSignals = computed(() => Number(intelligenceStats.value.search_intent?.evaluation?.adaptive_signals || 0))
 const intelligenceLinkedWorks = computed(() => Number(intelligenceStats.value.work_similarity?.linked_work_count || 0))
 const intelligenceProfileCompleteness = computed(() => Number(intelligenceStats.value.work_profile_quality?.complete?.percent || 0))
 const intelligenceMappedActorRate = computed(() => {
@@ -899,21 +893,14 @@ const statsRingItems = computed(() => {
         <div class="dashboard-grid-card__body">
           <div class="intelligence-card" :class="{ 'is-loading': intelligenceLoading }">
             <div class="intelligence-card__identity">
-              <span class="intelligence-card__mark"><BaseIcon name="sparkles" /></span>
+              <span class="intelligence-card__mark" :style="metricRingStyle(intelligenceProfileCompleteness, '#74c9ff')"><i>{{ intelligenceProfileCompleteness.toFixed(0) }}<small>%</small></i></span>
               <div>
                 <span class="intelligence-card__eyebrow">NOOR PERSONAL INTELLIGENCE</span>
-                <h3>正在持续理解你的媒体世界</h3>
-                <p>统一汇集媒体库、作品详情、资源源站与行为结果的长期情报。</p>
+                <h3>Intelligence Core</h3>
+                <p>知识画像、关系召回与真实结果正在形成同一个长期智能闭环。</p>
                 <div class="intelligence-card__signals">
-                  <span>{{ formatCount(intelligenceActorIdentities) }} 演员身份</span>
-                  <span v-if="intelligenceLearnedActorAliases">{{ formatCount(intelligenceLearnedActorAliases) }} 个学习别名</span>
-                  <span v-if="intelligenceSearchIntentCount">{{ formatCount(intelligenceSearchIntentCount) }} 个即时搜索信号</span>
-                  <span v-if="intelligenceAdaptiveSearchSignals">{{ formatCount(intelligenceAdaptiveSearchSignals) }} 个搜索方向已校准</span>
-                  <span>{{ intelligenceProviderCount }} 个资源源</span>
-                  <span>{{ intelligenceFreshness.toFixed(0) }}% 情报新鲜</span>
-                  <span>{{ formatCount(intelligenceLinkedWorks) }} 作品邻域</span>
-                  <span>{{ intelligenceMappedActorRate }}% 演员关系已映射</span>
-                  <span>{{ intelligenceProfileCompleteness.toFixed(0) }}% 画像完整</span>
+                  <span><i />{{ formatCount(intelligenceLinkedWorks) }} 作品已进入关系邻域</span>
+                  <span><i />{{ intelligenceMappedActorRate }}% 演员关系完成身份映射</span>
                 </div>
               </div>
             </div>
@@ -924,11 +911,7 @@ const statsRingItems = computed(() => {
               </div>
               <div>
                 <strong>{{ intelligenceCoverage.toFixed(1) }}%</strong>
-                <span>可用资源覆盖</span>
-              </div>
-              <div>
-                <strong>{{ formatCount(intelligenceStats.preference_event_count || 0) }}</strong>
-                <span>学习事件</span>
+                <span>资源覆盖</span>
               </div>
               <div>
                 <strong>{{ formatCount(intelligenceStats.verified_outcomes || 0) }}</strong>
@@ -938,12 +921,12 @@ const statsRingItems = computed(() => {
             <div class="intelligence-card__state">
               <span class="intelligence-card__pulse" :class="{ 'is-active': intelligenceActiveTasks > 0 }" />
               <div>
-                <strong>{{ intelligenceActiveTasks > 0 ? `后台确认 ${intelligenceActiveTasks} 项` : '情报已同步' }}</strong>
+                <strong>{{ intelligenceActiveTasks > 0 ? `Core 正在处理 ${intelligenceActiveTasks} 项` : 'Core 已同步' }}</strong>
                 <span>{{ intelligenceActiveTasks > 0 ? `已检查资源中 ${intelligenceAvailability.toFixed(0)}% 可用` : `近期偏好 ${intelligencePreferenceTrend} · 最近学习 ${intelligenceLastLearned}` }}</span>
               </div>
+              <RouterLink class="intelligence-card__enter" to="/plugins/av-recommend">进入推荐中心</RouterLink>
               <button type="button" :disabled="intelligenceLoading" @click="fetchIntelligenceOverview">
                 <BaseIcon name="refresh" />
-                刷新
               </button>
             </div>
           </div>
@@ -1455,27 +1438,30 @@ const statsRingItems = computed(() => {
   width: 3.35rem;
   height: 3.35rem;
   place-items: center;
-  border-radius: 1rem;
+  position: relative;
+  border-radius: 50%;
   color: #8fceff;
-  background: linear-gradient(145deg, rgba(0, 117, 255, 0.2), rgba(115, 87, 255, 0.15));
+  padding: 4px;
   box-shadow: inset 0 0 0 1px rgba(126, 205, 255, 0.2), 0 14px 36px rgba(0, 80, 210, 0.14);
 }
-.intelligence-card__mark :deep(svg) { width: 1.6rem; height: 1.6rem; }
+.intelligence-card__mark::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: #101827; }
+.intelligence-card__mark i { position: relative; z-index: 1; color: rgba(225,244,255,.92); font: 700 .8rem/1 var(--font-display); font-style: normal; }
+.intelligence-card__mark small { color: rgba(170,218,255,.55); font-size: .48rem; }
 .intelligence-card__eyebrow { color: rgba(126, 205, 255, 0.66); font: 650 0.61rem/1 var(--font-display); letter-spacing: 0.14em; }
 .intelligence-card h3 { margin: 0.38rem 0 0; color: rgba(255,255,255,.94); font: 600 clamp(.98rem, 1.35vw, 1.18rem)/1.2 var(--font-display); letter-spacing: -.02em; }
 .intelligence-card p { margin: 0.42rem 0 0; color: rgba(255,255,255,.43); font: 400 .72rem/1.45 var(--font-display); }
 .intelligence-card__signals { display: flex; flex-wrap: wrap; gap: .38rem; margin-top: .62rem; }
-.intelligence-card__signals span { padding: .3rem .48rem; border: 1px solid rgba(126,205,255,.11); border-radius: 999px; color: rgba(178,220,255,.62); background: rgba(75,145,230,.07); font: 500 .61rem/1 var(--font-display); }
+.intelligence-card__signals span { display:flex;align-items:center;gap:.35rem;color: rgba(178,220,255,.58); font: 500 .61rem/1 var(--font-display); }
+.intelligence-card__signals i { width:.28rem;height:.28rem;border-radius:50%;background:rgba(100,194,255,.75);box-shadow:0 0 8px rgba(75,174,255,.45); }
 
-.intelligence-card__metrics { display: grid; grid-template-columns: repeat(2, minmax(5.4rem, 1fr)); justify-content: center; gap: .9rem clamp(.8rem, 1.7vw, 1.5rem); }
+.intelligence-card__metrics { display: grid; grid-template-columns: repeat(3, minmax(5.4rem, 1fr)); justify-content: center; gap: .9rem clamp(.8rem, 1.7vw, 1.5rem); }
 .intelligence-card__metrics div { min-width: 5.4rem; }
 .intelligence-card__metrics strong { display: block; color: rgba(255,255,255,.94); font: 650 1.35rem/1 var(--font-display); letter-spacing: -.035em; }
 .intelligence-card__metrics span { display: block; margin-top: .42rem; color: rgba(255,255,255,.42); font: 500 .66rem/1 var(--font-display); }
 
 .intelligence-card__state { justify-content: flex-end; gap: .65rem; }
 .intelligence-card__pulse { width: .48rem; height: .48rem; flex: 0 0 auto; border-radius: 999px; background: #55d69b; box-shadow: 0 0 0 5px rgba(85,214,155,.08), 0 0 16px rgba(85,214,155,.36); }
-.intelligence-card__pulse.is-active { background: #64b5ff; box-shadow: 0 0 0 5px rgba(100,181,255,.08), 0 0 16px rgba(100,181,255,.36); animation: intelligence-pulse 1.4s ease-in-out infinite; }
-@keyframes intelligence-pulse { 50% { opacity: .48; transform: scale(.82); } }
+.intelligence-card__pulse.is-active { background: #64b5ff; box-shadow: 0 0 0 5px rgba(100,181,255,.08), 0 0 16px rgba(100,181,255,.36); }
 .intelligence-card__state div { min-width: 0; margin-right: auto; }
 .intelligence-card__state strong,
 .intelligence-card__state span { display: block; white-space: nowrap; }
@@ -1483,6 +1469,7 @@ const statsRingItems = computed(() => {
 .intelligence-card__state span { margin-top: .32rem; overflow: hidden; color: rgba(255,255,255,.38); font: 400 .63rem/1.15 var(--font-display); text-overflow: ellipsis; }
 .intelligence-card__state button { display: inline-flex; align-items: center; gap: .35rem; padding: .48rem .62rem; border: 1px solid rgba(255,255,255,.09); border-radius: .65rem; color: rgba(255,255,255,.58); background: rgba(255,255,255,.035); font: 500 .66rem/1 var(--font-display); }
 .intelligence-card__state button :deep(svg) { width: .78rem; height: .78rem; }
+.intelligence-card__enter { flex:0 0 auto;padding:.5rem .68rem;border:1px solid rgba(102,190,255,.14);border-radius:.65rem;color:rgba(164,218,255,.78);background:rgba(55,145,225,.075);font:550 .64rem/1 var(--font-display);text-decoration:none; }
 
 @media (max-width: 980px) {
   .intelligence-card { grid-template-columns: 1fr 1fr; }
