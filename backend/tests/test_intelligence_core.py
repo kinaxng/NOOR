@@ -124,6 +124,7 @@ async def _search_intent_uses_core_identities_filters_operations_and_decays(tmp_
     fresh = intelligence.search_intent_summary(now=now)
     aged = intelligence.search_intent_summary(now=now + dt.timedelta(hours=3))
     assert fresh["actors"]["mdc-ng:吉沢明歩"] == 1.0
+    assert list(fresh["combination_labels"].values()) == ["吉沢明歩 × 人妻"]
     assert aged["actors"]["mdc-ng:吉沢明歩"] == 0.5
     original_revision = fresh["revision"]
     assert await intelligence.attribute_search_intent_conversion(
@@ -137,6 +138,8 @@ async def _search_intent_uses_core_identities_filters_operations_and_decays(tmp_
     converted = intelligence.search_intent_summary(now=now + dt.timedelta(minutes=6))
     assert converted["evaluation"]["eligible_events"] == 1
     assert converted["evaluation"]["qualified_events"] == 1
+    combination = next(row for row in converted["evaluation"]["signals"].values() if row["type"] == "combination")
+    assert combination["qualified"] == 1
     assert converted["revision"] != original_revision
 
 
@@ -157,6 +160,34 @@ def test_search_signal_calibration_waits_for_mature_samples() -> None:
     assert collecting["adaptation_status"] == "collecting" and collecting["weight"] == 1.0
     assert fading["adaptation_status"] == "active" and fading["weight"] < 1.0
     assert strengthened["adaptation_status"] == "active" and strengthened["weight"] > 1.0
+
+
+def test_search_combination_requires_same_conversion_to_match_both_signals() -> None:
+    now = dt.datetime(2026, 8, 28, 16, 0, tzinfo=dt.timezone.utc)
+
+    def events(matched: list[str]) -> list[dict]:
+        return [{
+            "created_at": (now - dt.timedelta(hours=13, minutes=index)).isoformat(),
+            "actors": [{"identity": "actor:one", "label": "演员一"}],
+            "categories": ["人妻"], "terms": [],
+            "conversions": {f"AAA-{index:03d}": {"value": 0.7, "matched": matched}},
+        } for index in range(6)]
+
+    category_only = intelligence._search_signal_metrics(events(["category:人妻"]), now)
+    both = intelligence._search_signal_metrics(events(["actor:actor:one", "category:人妻"]), now)
+    split_events = events([])
+    for index, event in enumerate(split_events):
+        event["conversions"] = {
+            f"AAA-{index:03d}": {"value": 0.7, "matched": ["actor:actor:one"]},
+            f"BBB-{index:03d}": {"value": 0.7, "matched": ["category:人妻"]},
+        }
+    split = intelligence._search_signal_metrics(split_events, now)
+    weak_combo = next(row for row in category_only["signals"].values() if row["type"] == "combination")
+    strong_combo = next(row for row in both["signals"].values() if row["type"] == "combination")
+    split_combo = next(row for row in split["signals"].values() if row["type"] == "combination")
+    assert weak_combo["qualified"] == 0 and weak_combo["weight"] < 1.0
+    assert split_combo["qualified"] == 0 and split_combo["weight"] < 1.0
+    assert strong_combo["qualified"] == 6 and strong_combo["weight"] > 1.0
 
 
 def test_work_similarity_index_builds_multi_relation_neighbors(tmp_path, monkeypatch) -> None:

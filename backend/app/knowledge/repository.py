@@ -440,6 +440,10 @@ class KnowledgeRepository:
                     {'name': name, 'weight': round(weight, 3)}
                     for name, weight in sorted(search_intent['terms'].items(), key=lambda row: row[1], reverse=True)[:5]
                 ],
+                'combinations': [
+                    {'name': search_intent['combination_labels'].get(key, key), 'weight': round(weight, 3)}
+                    for key, weight in sorted(search_intent['combinations'].items(), key=lambda row: row[1], reverse=True)[:5]
+                ],
                 'latest_at': search_intent['latest_at'],
                 'evaluation': {
                     key: search_intent['evaluation'][key]

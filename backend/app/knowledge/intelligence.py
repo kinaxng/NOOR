@@ -893,6 +893,25 @@ def _aware_search_time(value: datetime | None = None) -> datetime:
     return current if current.tzinfo is not None else current.replace(tzinfo=timezone.utc)
 
 
+def _search_event_signals(event: dict[str, Any]) -> list[tuple[str, str, str]]:
+    signals: list[tuple[str, str, str]] = []
+    signals.extend((f"actor:{row['identity']}", "actor", str(row.get("label") or row["identity"])) for row in event.get("actors") or [] if isinstance(row, dict) and row.get("identity"))
+    signals.extend((f"category:{name}", "category", str(name)) for name in event.get("categories") or [] if name)
+    signals.extend((f"term:{name}", "term", str(name)) for name in event.get("terms") or [] if name)
+    return list(dict.fromkeys(signals))
+
+
+def _search_signal_combinations(signals: list[tuple[str, str, str]]) -> list[tuple[str, str, str, tuple[str, str]]]:
+    pairs: list[tuple[str, str, str, tuple[str, str]]] = []
+    for left, right in itertools.combinations(signals, 2):
+        if left[1] == right[1]:
+            continue
+        ordered = sorted((left, right), key=lambda row: (row[1], row[0]))
+        keys = (ordered[0][0], ordered[1][0])
+        pairs.append((f"combo:{keys[0]}|{keys[1]}", "combination", f"{ordered[0][2]} × {ordered[1][2]}", keys))
+    return pairs[:12]
+
+
 def _search_signal_metrics(events: list[dict[str, Any]], current: datetime) -> dict[str, Any]:
     current = _aware_search_time(current)
     metrics: dict[str, dict[str, Any]] = {}
@@ -921,22 +940,34 @@ def _search_signal_metrics(events: list[dict[str, Any]], current: datetime) -> d
                 if isinstance(row, dict) and float(row.get("value") or 0) >= 0.95
                 for signal in row.get("matched") or []
             }
-            signals: list[tuple[str, str, str]] = []
-            signals.extend((f"actor:{row['identity']}", "actor", str(row.get("label") or row["identity"])) for row in event.get("actors") or [] if isinstance(row, dict) and row.get("identity"))
-            signals.extend((f"category:{name}", "category", str(name)) for name in event.get("categories") or [] if name)
-            signals.extend((f"term:{name}", "term", str(name)) for name in event.get("terms") or [] if name)
-            for key, kind, label in dict.fromkeys(signals):
+            signals = _search_event_signals(event)
+            combinations = _search_signal_combinations(signals)
+            qualified_combinations: set[str] = set()
+            verified_combinations: set[str] = set()
+            for conversion_row in (event.get("conversions") or {}).values():
+                if not isinstance(conversion_row, dict):
+                    continue
+                row_matches = {str(signal) for signal in conversion_row.get("matched") or []}
+                row_value = float(conversion_row.get("value") or 0)
+                for key, _kind, _label, members in combinations:
+                    if row_value >= 0.6 and set(members) <= row_matches:
+                        qualified_combinations.add(key)
+                    if row_value >= 0.95 and set(members) <= row_matches:
+                        verified_combinations.add(key)
+            for key, kind, label in [*signals, *((key, kind, label) for key, kind, label, _members in combinations)]:
                 row = metrics.setdefault(key, {"type": kind, "label": label, "exposed": 0, "qualified": 0, "verified": 0})
                 row["exposed"] += 1
-                row["qualified"] += int(key in qualified_matches)
-                row["verified"] += int(key in verified_matches)
+                row["qualified"] += int(key in (qualified_combinations if kind == "combination" else qualified_matches))
+                row["verified"] += int(key in (verified_combinations if kind == "combination" else verified_matches))
     adaptive_signals = 0
     for row in metrics.values():
         exposed = int(row["exposed"])
-        posterior = (int(row["qualified"]) + 2) / (exposed + 4)
-        active = exposed >= 8
+        is_combination = row["type"] == "combination"
+        posterior = (int(row["qualified"]) + (3 if is_combination else 2)) / (exposed + (6 if is_combination else 4))
+        active = exposed >= (6 if is_combination else 8)
         row["posterior_rate"] = round(posterior, 4)
-        row["weight"] = round(max(0.7, min(1.3, 1 + (posterior - 0.5) * 0.8)), 3) if active else 1.0
+        lower, upper, slope = (0.8, 1.2, 0.6) if is_combination else (0.7, 1.3, 0.8)
+        row["weight"] = round(max(lower, min(upper, 1 + (posterior - 0.5) * slope)), 3) if active else 1.0
         row["adaptation_status"] = "active" if active else "collecting"
         adaptive_signals += int(active)
     return {
@@ -954,6 +985,8 @@ def search_intent_summary(*, now: datetime | None = None) -> dict[str, Any]:
     actor_labels: dict[str, str] = {}
     categories: dict[str, float] = defaultdict(float)
     terms: dict[str, float] = defaultdict(float)
+    combinations: dict[str, float] = defaultdict(float)
+    combination_labels: dict[str, str] = {}
     retained: list[dict[str, Any]] = []
     all_events = [event for event in (_load_search_intents().get("events") or []) if isinstance(event, dict)]
     evaluation = _search_signal_metrics(all_events, current)
@@ -984,6 +1017,9 @@ def search_intent_summary(*, now: datetime | None = None) -> dict[str, Any]:
                 if term:
                     name = str(term)
                     terms[name] += effective * float((signal_metrics.get(f"term:{name}") or {}).get("weight") or 1.0)
+            for key, _kind, label, _members in _search_signal_combinations(_search_event_signals(event)):
+                combinations[key] += effective * float((signal_metrics.get(key) or {}).get("weight") or 1.0)
+                combination_labels[key] = label
     latest = max((str(event.get("created_at") or "") for event in retained), default="")
     conversion_revision = max(
         (str(row.get("at") or "") for event in all_events for row in (event.get("conversions") or {}).values() if isinstance(row, dict)),
@@ -995,6 +1031,8 @@ def search_intent_summary(*, now: datetime | None = None) -> dict[str, Any]:
         "actor_labels": actor_labels,
         "categories": dict(categories),
         "terms": dict(terms),
+        "combinations": dict(combinations),
+        "combination_labels": combination_labels,
         "latest_at": latest or None,
         "evaluation": evaluation,
         "revision": hashlib.sha256(f"{len(retained)}:{latest}:{conversion_revision}:{evaluation['eligible_events']}:{evaluation['qualified_events']}".encode("utf-8")).hexdigest()[:16],
