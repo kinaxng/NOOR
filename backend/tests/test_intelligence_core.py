@@ -330,6 +330,8 @@ def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeyp
     assert result["mrr"] == 0.625
     assert result["median_rank"] == 1
     assert result["relation_hits_at_50"] == {"actor": 3}
+    assert result["relation_counterfactual"]["recommended_weights"] == {}
+    assert result["relation_counterfactual"]["recommended_delta"] == {"overall": 0.0, "train": 0.0, "validation": 0.0}
     assert result["sample_misses"] == [{
         "code": "DDD-001", "reason": "no_neighbor_path",
         "profile_gaps": ["actors", "categories", "title", "maker"],

@@ -39,7 +39,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 8
+WORK_SIMILARITY_VERSION = 9
 WORK_PROFILE_FUSION_VERSION = 1
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
@@ -1827,6 +1827,35 @@ async def work_similarity_recall_evaluation(
             recommended_relation_weights[relation_type] = 1.075 if direction == "up" else 0.925
         relation_trials[relation_type] = trials
 
+    def recommendation_passes(metrics: dict[str, dict[str, Any]]) -> bool:
+        return (
+            float(metrics["train"]["utility"]) - float(baseline_counterfactual["train"]["utility"]) >= 0.0025
+            and float(metrics["validation"]["utility"]) - float(baseline_counterfactual["validation"]["utility"]) >= 0.001
+            and float(metrics["validation"]["hit_at_20"]) >= float(baseline_counterfactual["validation"]["hit_at_20"]) - 0.004
+        )
+
+    recommended_evaluation = counterfactual_metrics(recommended_relation_weights)
+    if recommended_relation_weights and not recommendation_passes(recommended_evaluation):
+        single_candidates: list[tuple[float, str, dict[str, dict[str, Any]]]] = []
+        for relation_type, weight in recommended_relation_weights.items():
+            metrics = counterfactual_metrics({relation_type: weight})
+            if recommendation_passes(metrics):
+                minimum_gain = min(
+                    float(metrics["train"]["utility"]) - float(baseline_counterfactual["train"]["utility"]),
+                    float(metrics["validation"]["utility"]) - float(baseline_counterfactual["validation"]["utility"]),
+                )
+                single_candidates.append((minimum_gain, relation_type, metrics))
+        if single_candidates:
+            _gain, relation_type, recommended_evaluation = max(single_candidates)
+            recommended_relation_weights = {relation_type: recommended_relation_weights[relation_type]}
+        else:
+            recommended_relation_weights = {}
+            recommended_evaluation = baseline_counterfactual
+    recommended_delta = {
+        cohort: round(float(recommended_evaluation[cohort]["utility"]) - float(baseline_counterfactual[cohort]["utility"]), 5)
+        for cohort in ("overall", "train", "validation")
+    }
+
     result = {
         "method": "leave_one_out_direct_core_neighborhood",
         "revision": index.get("revision"),
@@ -1844,6 +1873,8 @@ async def work_similarity_recall_evaluation(
             "baseline": baseline_counterfactual,
             "trials": relation_trials,
             "recommended_weights": recommended_relation_weights,
+            "recommended_evaluation": recommended_evaluation,
+            "recommended_delta": recommended_delta,
             "applied_shrinkage": "±7.5%",
         },
         "sample_misses": misses[:20],
