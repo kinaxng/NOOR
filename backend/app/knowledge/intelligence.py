@@ -32,6 +32,7 @@ _refresh_planner_task: asyncio.Task[None] | None = None
 _refresh_planner_stop: asyncio.Event | None = None
 _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[str, frozenset[str], dict[str, str], dict[str, str]] | None = None
+_actor_mention_cache: tuple[str, dict[str, list[tuple[str, str, str]]]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
 _similarity_rebuild_task: asyncio.Task[dict[str, Any]] | None = None
 _similarity_pending_revision = ""
@@ -292,7 +293,7 @@ def _actor_variant_similarity(left: str, right: str) -> float:
 
 def infer_actor_aliases(profiles: list[WorkProfile], *, minimum_works: int = 2) -> dict[str, Any]:
     """Learn conservative title aliases for unambiguous MDC-NG actor identities."""
-    global _actor_alias_cache
+    global _actor_alias_cache, _actor_mention_cache
     base_index, identity_labels = _base_actor_alias_index()
     votes: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     display_values: dict[str, str] = {}
@@ -370,6 +371,7 @@ def infer_actor_aliases(profiles: list[WorkProfile], *, minimum_works: int = 2) 
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
         _actor_alias_cache = None
+        _actor_mention_cache = None
         _invalidate_work_search_cache(delay_seconds=0)
     return {"accepted": len(accepted), "candidates": len(candidates), "changed": existing_core != core, "revision": actor_alias_revision()}
 
@@ -411,6 +413,49 @@ def canonical_actor_entity(value: Any) -> dict[str, str]:
         "identity": identity,
         "alias": original,
     }
+
+
+def actor_mentions(value: Any, *, limit: int = 4) -> list[dict[str, str]]:
+    """Resolve conservative actor mentions in an unstructured title.
+
+    MDC-NG contains short aliases that are also ordinary title words. Only
+    aliases with at least three normalized characters participate, and the
+    longest spelling for each stable identity wins.
+    """
+    global _actor_mention_cache
+    normalized_text = _normalize_actor_name(value)
+    if len(normalized_text) < 3 or limit <= 0:
+        return []
+    revision = actor_alias_revision()
+    if not _actor_mention_cache or _actor_mention_cache[0] != revision:
+        names, labels, identities = _actor_alias_data()
+        buckets: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+        for alias in names:
+            normalized = _normalize_actor_name(alias)
+            identity = identities.get(normalized, "")
+            if len(normalized) < 3 or not identity:
+                continue
+            buckets[normalized[0]].append((normalized, identity, labels.get(normalized, str(alias))))
+        for rows in buckets.values():
+            rows.sort(key=lambda row: len(row[0]), reverse=True)
+        _actor_mention_cache = (revision, buckets)
+    matches: list[tuple[int, str, str, str]] = []
+    seen_aliases: set[tuple[str, str]] = set()
+    for initial in set(normalized_text):
+        for alias, identity, label in _actor_mention_cache[1].get(initial, []):
+            if alias in normalized_text and (identity, alias) not in seen_aliases:
+                matches.append((len(alias), identity, label, alias))
+                seen_aliases.add((identity, alias))
+    result: list[dict[str, str]] = []
+    seen_identities: set[str] = set()
+    for _length, identity, label, alias in sorted(matches, reverse=True):
+        if identity in seen_identities:
+            continue
+        seen_identities.add(identity)
+        result.append({"name": label, "identity": identity, "alias": alias, "source": "mdc-ng-title"})
+        if len(result) >= limit:
+            break
+    return result
 
 
 async def record_preference_event(

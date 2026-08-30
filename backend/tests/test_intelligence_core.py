@@ -463,6 +463,7 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     }]}, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(intelligence, "data_path", lambda *_parts: mapping)
     monkeypatch.setattr(intelligence, "_actor_alias_cache", None)
+    monkeypatch.setattr(intelligence, "_actor_mention_cache", None)
 
     assert intelligence.actor_alias_names() == frozenset({"三宮つばき", "三宫椿", "三宮椿", "旧名"})
     assert intelligence.canonical_actor_name("三宮つばき") == "三宫椿"
@@ -474,6 +475,10 @@ def test_actor_alias_names_loads_mdc_ng_mapping(monkeypatch, tmp_path) -> None:
     assert intelligence.actor_alias_revision() != "missing"
     assert intelligence.actor_alias_stats()["identity_count"] == 1
     assert intelligence.actor_alias_stats()["alias_count"] == 4
+    assert intelligence.actor_mentions("新作 三宮つばき 完全版") == [{
+        "name": "三宫椿", "identity": "mdc-ng:name:三宫椿", "alias": "三宮つばき", "source": "mdc-ng-title",
+    }]
+    assert intelligence.actor_mentions("普通标题 旧名") == []
 
 
 def test_actor_entities_use_mdc_ng_identity_and_preserve_source_aliases(monkeypatch) -> None:
