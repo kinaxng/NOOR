@@ -431,6 +431,29 @@ def test_offline_evaluation_cache_survives_process_memory_reset(monkeypatch, tmp
     assert payload["entries"]["temporal"]["fingerprint-a"]["value"] == value
 
 
+def test_relation_policy_requires_two_new_revisions_before_replacement(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
+    actor = {"actor": 0.925}
+    category = {"category": 1.075}
+
+    first = intelligence._stabilize_relation_policy("r1", actor)
+    assert first["stable_weights"] == actor and first["status"] == "bootstrapped"
+
+    pending = intelligence._stabilize_relation_policy("r2", category)
+    assert pending["stable_weights"] == actor
+    assert pending["candidate_weights"] == category and pending["confirmations"] == 1
+    repeated_same_revision = intelligence._stabilize_relation_policy("r2", category)
+    assert repeated_same_revision["confirmations"] == 1
+
+    promoted = intelligence._stabilize_relation_policy("r3", category)
+    assert promoted["stable_weights"] == category and promoted["status"] == "promoted"
+
+    retiring = intelligence._stabilize_relation_policy("r4", {})
+    assert retiring["stable_weights"] == category and retiring["confirmations"] == 1
+    retired = intelligence._stabilize_relation_policy("r5", {})
+    assert retired["stable_weights"] == {} and retired["status"] == "promoted"
+
+
 def test_fused_work_profile_resolves_sources_and_preserves_image_candidates(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(intelligence, "data_path", lambda *parts: tmp_path.joinpath(*parts))
     monkeypatch.setattr(intelligence, "_actor_alias_cache", None)

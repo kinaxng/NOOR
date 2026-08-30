@@ -78,6 +78,62 @@ def _save_offline_evaluation(kind: str, fingerprint: str, value: dict[str, Any])
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     tmp.replace(path)
+
+
+def _relation_policy_file() -> Path:
+    return data_path("intelligence_relation_policy.json")
+
+
+def _stabilize_relation_policy(revision: str, proposed: dict[str, float]) -> dict[str, Any]:
+    """Persist a validated policy and require repeated revisions before replacement."""
+    path = _relation_policy_file()
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        state = {}
+    stable = {str(key): round(float(value), 3) for key, value in (state.get("stable_weights") or {}).items()}
+    proposed = {str(key): round(float(value), 3) for key, value in proposed.items()}
+    previous_revision = str(state.get("last_revision") or "")
+    status = "stable"
+    promoted = False
+    if not state:
+        stable = dict(proposed)
+        candidate: dict[str, float] = {}
+        confirmations = 0
+        status = "bootstrapped" if stable else "collecting"
+        promoted = bool(stable)
+    else:
+        candidate = {str(key): round(float(value), 3) for key, value in (state.get("candidate_weights") or {}).items()}
+        confirmations = int(state.get("confirmations") or 0)
+        if revision != previous_revision:
+            if proposed == stable:
+                candidate, confirmations, status = {}, 0, "stable"
+            elif proposed == candidate:
+                confirmations += 1
+                status = "confirming"
+                if confirmations >= 2:
+                    stable, candidate, confirmations = dict(proposed), {}, 0
+                    status, promoted = "promoted", True
+            else:
+                candidate, confirmations, status = dict(proposed), 1, "confirming"
+        elif proposed != stable:
+            status = "confirming"
+    payload = {
+        "version": 1,
+        "stable_weights": stable,
+        "candidate_weights": candidate,
+        "confirmations": confirmations,
+        "required_confirmations": 2,
+        "last_revision": revision,
+        "updated_at": utcnow().isoformat(),
+        "status": status,
+        "promoted": promoted,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return payload
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
     "身体", "本番", "作品", "影片", "电影", "独家", "推荐", "热门", "has_chinese",
@@ -1825,6 +1881,7 @@ async def work_similarity_candidates(seed_weights: dict[str, float], *, negative
     negative_seeds = {canonical_work_code(code): round(max(0.0, float(weight)), 2) for code, weight in (negative_seed_weights or {}).items() if canonical_work_code(code)}
     neighbors_by_code = index.get("neighbors") or {}
     fingerprint = hashlib.sha256(json.dumps({
+        "evaluation_version": 2,
         "revision": index.get("revision"),
         "seeds": sorted((code, round(weight, 4)) for code, weight in seeds.items()),
         "negative_seeds": sorted((code, round(weight, 4)) for code, weight in negative_seeds.items()),
@@ -2154,6 +2211,7 @@ async def work_similarity_recall_evaluation(
         cohort: round(float(recommended_evaluation[cohort]["utility"]) - float(baseline_counterfactual[cohort]["utility"]), 5)
         for cohort in ("overall", "train", "validation")
     }
+    relation_policy = _stabilize_relation_policy(str(index.get("revision") or ""), recommended_relation_weights)
 
     result = {
         "method": "leave_one_out_direct_core_neighborhood",
@@ -2171,9 +2229,11 @@ async def work_similarity_recall_evaluation(
             "method": "stable_hash_train_validation_plus_minus_15_percent",
             "baseline": baseline_counterfactual,
             "trials": relation_trials,
-            "recommended_weights": recommended_relation_weights,
+            "recommended_weights": dict(relation_policy.get("stable_weights") or {}),
+            "proposed_weights": recommended_relation_weights,
             "recommended_evaluation": recommended_evaluation,
             "recommended_delta": recommended_delta,
+            "policy": relation_policy,
             "applied_shrinkage": "±7.5%",
         },
         "sample_misses": misses[:20],
