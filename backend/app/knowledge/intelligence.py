@@ -33,6 +33,7 @@ _refresh_planner_last: dict[str, Any] = {}
 _actor_alias_cache: tuple[str, frozenset[str], dict[str, str], dict[str, str]] | None = None
 _similarity_cache: tuple[str, dict[str, Any]] | None = None
 _similarity_evaluation_cache: dict[str, dict[str, Any]] = {}
+_similarity_temporal_cache: dict[str, dict[str, Any]] = {}
 _work_search_cache: dict[str, Any] = {"expires_at": 0.0, "documents": []}
 _work_search_lock = asyncio.Lock()
 _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "value": None}
@@ -1925,6 +1926,136 @@ async def work_similarity_recall_evaluation(
     _similarity_evaluation_cache[fingerprint] = result
     if len(_similarity_evaluation_cache) > 4:
         _similarity_evaluation_cache.pop(next(iter(_similarity_evaluation_cache)))
+    return dict(result)
+
+
+def _parse_historical_time(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value or "").strip().replace("Z", "+00:00")
+        text = re.sub(r"(\.\d{6})\d+(?=[+-]|$)", r"\1", text)
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+
+async def work_similarity_temporal_backtest(
+    acquisition_times: dict[str, Any],
+    *,
+    target_limit: int = 160,
+    seed_limit: int = 160,
+    minimum_history: int = 20,
+) -> dict[str, Any]:
+    """Compare durable and recency-aware seeds on a historical acquisition timeline."""
+    index = await build_work_similarity_index()
+    neighbors = index.get("neighbors") or {}
+    known_candidates = set(index.get("candidates") or {})
+    timeline = sorted(
+        (parsed, canonical_work_code(code))
+        for code, value in acquisition_times.items()
+        if canonical_work_code(code) in known_candidates and (parsed := _parse_historical_time(value)) is not None
+    )
+    deduped: list[tuple[datetime, str]] = []
+    seen: set[str] = set()
+    for acquired_at, code in timeline:
+        if code not in seen:
+            seen.add(code)
+            deduped.append((acquired_at, code))
+    timeline = deduped
+    eligible_indices = [index for index in range(minimum_history, len(timeline)) if len(timeline) - index >= 20]
+    target_limit = max(20, min(int(target_limit or 160), 320))
+    if len(eligible_indices) > target_limit:
+        step = (len(eligible_indices) - 1) / max(target_limit - 1, 1)
+        eligible_indices = sorted({eligible_indices[round(position * step)] for position in range(target_limit)})
+    fingerprint = hashlib.sha256(json.dumps({
+        "revision": index.get("revision"),
+        "timeline": [(value.isoformat(), code) for value, code in timeline],
+        "indices": eligible_indices,
+        "seed_limit": seed_limit,
+    }, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    if fingerprint in _similarity_temporal_cache:
+        return dict(_similarity_temporal_cache[fingerprint])
+
+    metrics = {
+        policy: {cohort: {"evaluated": 0, "eligible": 0, "hit20": 0, "hit50": 0, "rr": 0.0} for cohort in ("overall", "train", "validation")}
+        for policy in ("durable", "temporal")
+    }
+    split_at = int(len(eligible_indices) * 0.7)
+    for fold_position, timeline_index in enumerate(eligible_indices):
+        cutoff, target = timeline[timeline_index]
+        prior = timeline[:timeline_index]
+        future_codes = {code for _time, code in timeline[timeline_index:]}
+        cohort = "train" if fold_position < split_at else "validation"
+        policy_weights = {
+            "durable": {code: 1.0 for _time, code in prior},
+            "temporal": {
+                code: 1.0 if (age_days := max(0.0, (cutoff - acquired_at).total_seconds() / 86400)) <= 60
+                else max(0.75, 0.75 + 0.25 * math.pow(0.5, (age_days - 60) / 180))
+                for acquired_at, code in prior
+            },
+        }
+        for policy, weights in policy_weights.items():
+            scores: dict[str, float] = defaultdict(float)
+            for seed_code, seed_weight in _rank_seed_weights(weights, seed_limit):
+                for neighbor in neighbors.get(seed_code, []):
+                    code = canonical_work_code(neighbor.get("code"))
+                    if code in future_codes:
+                        scores[code] += float(neighbor.get("score") or 0) / 100 * seed_weight
+            target_score = float(scores.get(target) or 0)
+            rank = 0
+            if target_score > 0:
+                rank = sorted(scores, key=lambda code: (-scores[code], code)).index(target) + 1
+            for cohort_name in ("overall", cohort):
+                row = metrics[policy][cohort_name]
+                row["evaluated"] += 1
+                row["eligible"] += int(rank > 0)
+                row["hit20"] += int(0 < rank <= 20)
+                row["hit50"] += int(0 < rank <= 50)
+                row["rr"] += 1 / rank if rank else 0.0
+
+    summarized: dict[str, dict[str, dict[str, Any]]] = {}
+    for policy, cohorts in metrics.items():
+        summarized[policy] = {}
+        for cohort, row in cohorts.items():
+            sample = int(row["evaluated"])
+            hit20 = int(row["hit20"]) / max(sample, 1)
+            hit50 = int(row["hit50"]) / max(sample, 1)
+            mrr = float(row["rr"]) / max(sample, 1)
+            summarized[policy][cohort] = {
+                "evaluated": sample,
+                "coverage": round(int(row["eligible"]) / max(sample, 1), 4),
+                "hit_at_20": round(hit20, 4),
+                "hit_at_50": round(hit50, 4),
+                "mrr": round(mrr, 4),
+                "utility": round(hit20 * 0.45 + hit50 * 0.35 + mrr * 0.20, 5),
+            }
+    deltas = {
+        cohort: round(float(summarized["temporal"][cohort]["utility"]) - float(summarized["durable"][cohort]["utility"]), 5)
+        for cohort in ("overall", "train", "validation")
+    }
+    enough = summarized["temporal"]["train"]["evaluated"] >= 30 and summarized["temporal"]["validation"]["evaluated"] >= 20
+    recommended_policy = "temporal" if (
+        enough and deltas["train"] >= 0.001 and deltas["validation"] >= 0.001
+        and summarized["temporal"]["validation"]["hit_at_20"] >= summarized["durable"]["validation"]["hit_at_20"] - 0.004
+    ) else "durable" if enough else "collecting"
+    result = {
+        "method": "historical_library_acquisition_behavior_cutoff",
+        "metadata_snapshot": "current_core_profile",
+        "timeline_works": len(timeline),
+        "evaluated": len(eligible_indices),
+        "split": {"train": split_at, "validation": len(eligible_indices) - split_at},
+        "policies": summarized,
+        "utility_delta": deltas,
+        "recommended_policy": recommended_policy,
+        "limits": {"targets": target_limit, "seeds_per_cutoff": seed_limit, "minimum_history": minimum_history},
+        "interpretation": "行为时间截断回测；作品关系使用当前 Core 元数据快照",
+    }
+    _similarity_temporal_cache[fingerprint] = result
+    if len(_similarity_temporal_cache) > 4:
+        _similarity_temporal_cache.pop(next(iter(_similarity_temporal_cache)))
     return dict(result)
 
 

@@ -309,6 +309,38 @@ def test_equal_weight_seed_order_uses_stable_hash_not_code_prefix() -> None:
     assert [code for code, _weight in selected] != sorted(weights)[:20]
 
 
+def test_temporal_backtest_uses_historical_cutoffs_and_requires_cross_split_gain(monkeypatch) -> None:
+    codes = [f"AAA-{index:03d}" for index in range(100)]
+
+    async def fake_index(**_kwargs):
+        neighbors = {code: [] for code in codes}
+        for index, code in enumerate(codes[:-1]):
+            neighbors[code].append({"code": codes[index + 1], "score": 90})
+        return {
+            "revision": "temporal-test",
+            "neighbors": neighbors,
+            "candidates": {code: {"code": code} for code in codes},
+        }
+
+    monkeypatch.setattr(intelligence, "build_work_similarity_index", fake_index)
+    monkeypatch.setattr(intelligence, "_similarity_temporal_cache", {})
+    start = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
+    timeline = {
+        code: (start + dt.timedelta(days=index)).isoformat().replace("+00:00", ".0000000Z")
+        for index, code in enumerate(codes)
+    }
+    result = asyncio.run(intelligence.work_similarity_temporal_backtest(
+        timeline, target_limit=80, minimum_history=10,
+    ))
+
+    assert result["timeline_works"] == 100
+    assert result["evaluated"] == 71
+    assert result["split"] == {"train": 49, "validation": 22}
+    assert result["policies"]["durable"]["overall"]["hit_at_20"] == 1.0
+    assert result["policies"]["temporal"]["overall"]["hit_at_20"] == 1.0
+    assert result["recommended_policy"] == "durable"
+
+
 def test_work_similarity_recall_evaluation_reports_leave_one_out_metrics(monkeypatch) -> None:
     def edge(code: str, score: float, relation: str = "actor") -> dict:
         return {"code": code, "score": score, "relation_types": [relation]}
