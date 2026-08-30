@@ -14,13 +14,14 @@ async def lifespan(app: FastAPI):
     await init_db()
     from app.tasks.manager import job_manager
     await job_manager.recover_queued_jobs()
+    from app.knowledge.intelligence import prune_resource_only_work_profiles, start_resource_refresh_workers, stop_resource_refresh_workers, upgrade_semantic_profiles
+    await prune_resource_only_work_profiles()
+    await upgrade_semantic_profiles()
     from app.plugins.runtime import runtime as plugin_runtime
     try:
         await plugin_runtime.start_background_tasks()
     except Exception:
         pass
-    from app.knowledge.intelligence import start_resource_refresh_workers, stop_resource_refresh_workers, upgrade_semantic_profiles
-    await upgrade_semantic_profiles()
     await start_resource_refresh_workers()
     try:
         yield

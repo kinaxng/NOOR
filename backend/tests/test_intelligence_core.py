@@ -697,6 +697,40 @@ def test_resource_observations_build_shared_work_intelligence(tmp_path, monkeypa
     asyncio.run(_resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch))
 
 
+def test_prune_resource_only_profiles_keeps_real_portraits(tmp_path, monkeypatch) -> None:
+    asyncio.run(_prune_resource_only_profiles_keeps_real_portraits(tmp_path, monkeypatch))
+
+
+async def _prune_resource_only_profiles_keeps_real_portraits(tmp_path, monkeypatch) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'prune-resource-profiles.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(intelligence, "async_session_maker", sessions)
+    monkeypatch.setattr(intelligence, "_similarity_cache", ("old", {"neighbors": {}}))
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with sessions() as db:
+        db.add_all([
+            WorkProfile(
+                code="EMPTY-001", title="EMPTY-001", aliases=[], tokens=intelligence.semantic_tokens("EMPTY-001"), facts={},
+                source_evidence=[{"source": "avdb", "observed_at": "2026-01-01", "title": "EMPTY-001 torrent"}], confidence=70,
+            ),
+            WorkProfile(
+                code="REAL-001", title="真实标题", aliases=[], tokens=intelligence.semantic_tokens("真实标题"),
+                facts={"javdb": {"categories": ["剧情"]}}, source_evidence=[{"source": "javdb", "fields": ["categories"]}], confidence=80,
+            ),
+        ])
+        await db.commit()
+
+    removed = await intelligence.prune_resource_only_work_profiles()
+
+    assert removed == 1
+    assert intelligence._similarity_cache is None
+    async with sessions() as db:
+        assert await db.get(WorkProfile, "EMPTY-001") is None
+        assert await db.get(WorkProfile, "REAL-001") is not None
+    await engine.dispose()
+
+
 async def _resource_observations_build_shared_work_intelligence(tmp_path, monkeypatch) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'intelligence.db'}")
     sessions = async_sessionmaker(engine, expire_on_commit=False)
@@ -733,7 +767,7 @@ async def _resource_observations_build_shared_work_intelligence(tmp_path, monkey
     assert portrait["resources"]["has_subtitle"] is True
     assert {row["provider"]: row["status"] for row in portrait["resources"]["provider_checks"]} == {"avdb": "available", "missing": "empty"}
     assert [group["provider"] for group in portrait["resources"]["groups"]] == ["avdb", "mteam-plugin"]
-    assert portrait["profile"]["tokens"]
+    assert portrait["profile"] is None
 
     await intelligence.record_work_metadata(
         "PRED-878",

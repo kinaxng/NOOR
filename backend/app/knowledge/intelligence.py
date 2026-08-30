@@ -2596,14 +2596,14 @@ async def record_resource_search(query: dict[str, Any], groups: list[dict[str, A
                 work_title = str(metadata.get("video_title") or code).strip()
                 profile = await db.get(WorkProfile, code)
                 evidence = {"source": provider_id, "observed_at": now.isoformat(), "title": title}
-                if profile is None:
+                if profile is None and work_title != code:
                     # A release/torrent title describes one resource version,
                     # not the canonical work. Keep it in ResourceObservation
                     # and source evidence; using it as a work alias pollutes
                     # semantic profiles and changes the graph on every search.
                     profile = WorkProfile(code=code, title=work_title, aliases=[], tokens=semantic_tokens(work_title), facts={}, source_evidence=[evidence], confidence=55)
                     db.add(profile)
-                else:
+                elif profile is not None:
                     evidence_rows = [row for row in (profile.source_evidence or []) if isinstance(row, dict) and row.get("source") != provider_id]
                     evidence_rows.append(evidence)
                     profile.title = profile.title or work_title
@@ -2657,6 +2657,39 @@ async def record_resource_search(query: dict[str, Any], groups: list[dict[str, A
         await db.commit()
     _invalidate_work_search_cache()
     return written
+
+
+async def prune_resource_only_work_profiles() -> int:
+    """Remove empty graph nodes accidentally created from torrent observations."""
+    global _similarity_cache
+    removed = 0
+    async with async_session_maker() as db:
+        profiles = list((await db.execute(select(WorkProfile))).scalars())
+        for profile in profiles:
+            code = canonical_work_code(profile.code)
+            evidence = [row for row in (profile.source_evidence or []) if isinstance(row, dict)]
+            resource_only_evidence = bool(evidence) and all(
+                "title" in row and not row.get("fields") for row in evidence
+            )
+            weighted = (profile.tokens or {}).get("weighted") if isinstance(profile.tokens, dict) else {}
+            if (
+                code
+                and str(profile.title or "").strip() == code
+                and not str(profile.original_title or "").strip()
+                and not str(profile.translated_title or "").strip()
+                and not (profile.aliases or [])
+                and not (profile.facts or {})
+                and not (weighted or {})
+                and resource_only_evidence
+            ):
+                await db.delete(profile)
+                removed += 1
+        if removed:
+            await db.commit()
+    if removed:
+        _similarity_cache = None
+        _invalidate_work_search_cache()
+    return removed
 
 
 async def record_work_metadata(code: str, data: dict[str, Any], *, source: str, confidence: int = 80) -> str | None:
