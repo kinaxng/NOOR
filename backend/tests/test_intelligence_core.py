@@ -449,6 +449,10 @@ def test_relation_policy_requires_two_new_revisions_before_replacement(monkeypat
     promoted = intelligence._stabilize_relation_policy("r3", category)
     assert promoted["stable_weights"] == category and promoted["status"] == "promoted"
 
+    isolated = intelligence._stabilize_relation_policy("r1", actor, context_key="durable")
+    assert isolated["stable_weights"] == actor
+    assert intelligence._stabilize_relation_policy("r3", category)["stable_weights"] == category
+
     retiring = intelligence._stabilize_relation_policy("r4", {})
     assert retiring["stable_weights"] == category and retiring["confirmations"] == 1
     retired = intelligence._stabilize_relation_policy("r5", {})

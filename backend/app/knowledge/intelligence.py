@@ -84,13 +84,15 @@ def _relation_policy_file() -> Path:
     return data_path("intelligence_relation_policy.json")
 
 
-def _stabilize_relation_policy(revision: str, proposed: dict[str, float]) -> dict[str, Any]:
-    """Persist a validated policy and require repeated revisions before replacement."""
+def _stabilize_relation_policy(revision: str, proposed: dict[str, float], *, context_key: str = "default") -> dict[str, Any]:
+    """Persist an evaluation-scoped policy and require repeated revisions before replacement."""
     path = _relation_policy_file()
     try:
-        state = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        state = {}
+        payload = {}
+    policies = payload.get("policies") if int(payload.get("version") or 0) >= 2 and isinstance(payload.get("policies"), dict) else {}
+    state = policies.get(context_key) if isinstance(policies.get(context_key), dict) else {}
     stable = {str(key): round(float(value), 3) for key, value in (state.get("stable_weights") or {}).items()}
     proposed = {str(key): round(float(value), 3) for key, value in proposed.items()}
     previous_revision = str(state.get("last_revision") or "")
@@ -118,8 +120,7 @@ def _stabilize_relation_policy(revision: str, proposed: dict[str, float]) -> dic
                 candidate, confirmations, status = dict(proposed), 1, "confirming"
         elif proposed != stable:
             status = "confirming"
-    payload = {
-        "version": 1,
+    policy = {
         "stable_weights": stable,
         "candidate_weights": candidate,
         "confirmations": confirmations,
@@ -128,12 +129,16 @@ def _stabilize_relation_policy(revision: str, proposed: dict[str, float]) -> dic
         "updated_at": utcnow().isoformat(),
         "status": status,
         "promoted": promoted,
+        "context_key": context_key,
     }
+    policies[context_key] = policy
+    policies = dict(sorted(policies.items(), key=lambda row: str((row[1] or {}).get("updated_at") or ""), reverse=True)[:6])
+    payload = {"version": 2, "policies": policies}
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
-    return payload
+    return policy
 SIMILARITY_CATEGORY_STOPWORDS = {
     "单体作品", "精选综合", "高清", "高画质", "有码", "无码", "中文字幕", "字幕", "中文",
     "身体", "本番", "作品", "影片", "电影", "独家", "推荐", "热门", "has_chinese",
@@ -2037,12 +2042,13 @@ async def work_similarity_recall_evaluation(
         # Keep the holdout cohort stable across index revisions so before/after
         # coverage changes reflect the model rather than a different sample.
         targets = sorted(targets, key=lambda code: hashlib.sha256(code.encode()).hexdigest())[:target_limit]
-    fingerprint = hashlib.sha256(json.dumps({
-        "revision": index.get("revision"),
+    evaluation_context = hashlib.sha256(json.dumps({
+        "evaluation_version": 3,
         "targets": targets,
         "weights": sorted((code, round(weight, 4)) for code, weight in weights.items()),
         "seed_limit": seed_limit,
-    }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:20]
+    fingerprint = hashlib.sha256(f"{index.get('revision')}:{evaluation_context}".encode()).hexdigest()
     cached = _similarity_evaluation_cache.get(fingerprint)
     if cached is not None:
         return dict(cached)
@@ -2227,7 +2233,9 @@ async def work_similarity_recall_evaluation(
         cohort: round(float(recommended_evaluation[cohort]["utility"]) - float(baseline_counterfactual[cohort]["utility"]), 5)
         for cohort in ("overall", "train", "validation")
     }
-    relation_policy = _stabilize_relation_policy(str(index.get("revision") or ""), recommended_relation_weights)
+    relation_policy = _stabilize_relation_policy(
+        str(index.get("revision") or ""), recommended_relation_weights, context_key=evaluation_context,
+    )
 
     result = {
         "method": "leave_one_out_direct_core_neighborhood",
