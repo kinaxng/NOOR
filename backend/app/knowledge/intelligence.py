@@ -763,47 +763,74 @@ def _preference_outcome_model(events: list[PreferenceEvent]) -> dict[str, Any]:
 
 
 def _preference_drift_model(events: list[PreferenceEvent], *, window_days: int = 30) -> dict[str, Any]:
-    """Contrast recent and prior tastes using stable MDC-NG actor identities."""
+    """Build support-shrunk 14/90/365-day taste momentum by unique work."""
     now = utcnow()
-    boundary = now - timedelta(days=window_days)
-    cutoff = boundary - timedelta(days=window_days)
-    buckets: dict[str, dict[str, dict[str, float]]] = {
-        "recent": {"actors": {}, "categories": {}},
-        "prior": {"actors": {}, "categories": {}},
+    scale_specs = {
+        "current": {"half_life": 14.0, "max_age": 60.0},
+        "medium": {"half_life": 90.0, "max_age": 365.0},
+        "durable": {"half_life": 365.0, "max_age": 1095.0},
     }
     actor_labels: dict[str, str] = {}
-    for event in events:
-        if event.created_at < cutoff:
+    by_work: dict[str, dict[str, Any]] = {}
+    for index, event in enumerate(events):
+        age_days = max(0.0, (now - event.created_at).total_seconds() / 86400)
+        if age_days > scale_specs["durable"]["max_age"]:
             continue
-        bucket = buckets["recent" if event.created_at >= boundary else "prior"]
+        code = canonical_work_code(getattr(event, "work_code", "")) or f"event:{index}"
+        row = by_work.setdefault(code, {"actors": set(), "categories": set(), "weights": {}})
         for actor in event.actors or []:
             identity = actor_identity_key(actor)
             if identity:
-                bucket["actors"][identity] = bucket["actors"].get(identity, 0.0) + float(event.weight or 0)
+                row["actors"].add(identity)
                 actor_labels.setdefault(identity, canonical_actor_name(actor))
         for category in event.categories or []:
             name = canonical_preference_category(category)
             if name:
-                bucket["categories"][name] = bucket["categories"].get(name, 0.0) + float(event.weight or 0)
+                row["categories"].add(name)
+        for scale, spec in scale_specs.items():
+            if age_days <= spec["max_age"]:
+                effective = float(event.weight or 0) * math.pow(0.5, age_days / spec["half_life"])
+                row["weights"][scale] = max(float(row["weights"].get(scale) or 0), effective)
+
+    aggregates: dict[str, dict[str, dict[str, float]]] = {
+        scale: {"actors": defaultdict(float), "categories": defaultdict(float)} for scale in scale_specs
+    }
+    supports: dict[str, dict[str, dict[str, set[str]]]] = {
+        scale: {"actors": defaultdict(set), "categories": defaultdict(set)} for scale in scale_specs
+    }
+    scale_work_counts = {scale: 0 for scale in scale_specs}
+    for code, row in by_work.items():
+        for scale, weight in row["weights"].items():
+            if weight <= 0:
+                continue
+            scale_work_counts[scale] += 1
+            for dimension_name in ("actors", "categories"):
+                for value in row[dimension_name]:
+                    aggregates[scale][dimension_name][value] += weight
+                    supports[scale][dimension_name][value].add(code)
 
     def dimension(name: str) -> dict[str, Any]:
-        recent = buckets["recent"][name]
-        prior = buckets["prior"][name]
-        recent_total = sum(recent.values()) or 1.0
-        prior_total = sum(prior.values()) or 1.0
+        totals = {scale: sum(aggregates[scale][name].values()) or 1.0 for scale in scale_specs}
         deltas: dict[str, float] = {}
         rows: list[dict[str, Any]] = []
-        for key in set(recent) | set(prior):
-            current_share = recent.get(key, 0.0) / recent_total
-            previous_share = prior.get(key, 0.0) / prior_total
-            delta = current_share - previous_share
+        keys = set().union(*(set(aggregates[scale][name]) for scale in scale_specs))
+        for key in keys:
+            shares = {scale: aggregates[scale][name].get(key, 0.0) / totals[scale] for scale in scale_specs}
+            support = len(supports["current"][name].get(key, set()) | supports["medium"][name].get(key, set()))
+            global_reliability = scale_work_counts["current"] / (scale_work_counts["current"] + 12)
+            reliability = support / (support + 4) * global_reliability
+            raw_delta = (shares["current"] - shares["durable"]) * 0.7 + (shares["medium"] - shares["durable"]) * 0.3
+            delta = raw_delta * reliability
             deltas[key] = round(delta, 6)
             rows.append({
                 "name": actor_labels.get(key, key),
                 "identity": key if name == "actors" else "",
-                "share": round(current_share, 4),
-                "previous_share": round(previous_share, 4),
+                "share": round(shares["current"], 4),
+                "previous_share": round(shares["durable"], 4),
+                "medium_share": round(shares["medium"], 4),
                 "delta": round(delta, 4),
+                "support": support,
+                "reliability": round(reliability, 3),
             })
         return {
             "deltas": deltas,
@@ -812,9 +839,14 @@ def _preference_drift_model(events: list[PreferenceEvent], *, window_days: int =
         }
 
     return {
+        "version": 2,
         "window_days": window_days,
-        "recent_events": sum(1 for event in events if event.created_at >= boundary),
-        "prior_events": sum(1 for event in events if cutoff <= event.created_at < boundary),
+        "recent_events": scale_work_counts["current"],
+        "prior_events": max(0, scale_work_counts["medium"] - scale_work_counts["current"]),
+        "scales": {
+            scale: {"work_count": scale_work_counts[scale], **spec}
+            for scale, spec in scale_specs.items()
+        },
         "actors": dimension("actors"),
         "categories": dimension("categories"),
     }
