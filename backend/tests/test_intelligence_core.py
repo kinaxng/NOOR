@@ -257,7 +257,7 @@ def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkey
         code="MIDA-727",
         title="百田光稀 秘密",
         facts={"javdb": {"actors": ["百田光希"], "categories": ["MIDA", "人妻"]}},
-        tokens={"weighted": {"百田光稀": 1.8, "百田光穗": 1.7, "秘密": 1.8}},
+        tokens={"weighted": {"百田光稀": 1.8, "百田光穗": 1.7, "秘密": 1.8, "web-dl": 1.2}},
     )
 
     features, _labels = intelligence._work_similarity_features(profile, diagnostics)
@@ -266,9 +266,10 @@ def test_similarity_features_do_not_double_count_mdc_alias_or_code_prefix(monkey
     assert "semantic:百田光稀" not in features
     assert "semantic:百田光穗" not in features
     assert "semantic:秘密" in features
+    assert "semantic:web-dl" not in features
     assert "category:mida" not in features
     assert "category:人妻" in features
-    assert diagnostics == {"dropped_code_prefix_categories": 1, "dropped_actor_alias_terms": 1, "dropped_actor_variant_terms": 1}
+    assert diagnostics == {"dropped_code_prefix_categories": 1, "dropped_actor_alias_terms": 1, "dropped_actor_variant_terms": 1, "dropped_operational_semantic_terms": 1}
 
 
 def test_similarity_features_use_lower_weight_title_actor_when_credit_is_missing(monkeypatch) -> None:

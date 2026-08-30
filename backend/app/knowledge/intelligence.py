@@ -45,7 +45,7 @@ _preference_summary_cache: dict[str, Any] = {"expires_at": 0.0, "key": "", "valu
 _preference_summary_lock = asyncio.Lock()
 _search_intent_lock = asyncio.Lock()
 _search_actor_terms_cache: tuple[str, list[str]] | None = None
-WORK_SIMILARITY_VERSION = 12
+WORK_SIMILARITY_VERSION = 14
 WORK_PROFILE_FUSION_VERSION = 1
 
 
@@ -149,6 +149,12 @@ SEMANTIC_STOPWORDS = {
 SEMANTIC_LATIN_STOPWORDS = {
     "fanza", "dmm", "javdb", "avdb", "video", "movie", "sample", "preview", "sex",
 }
+SEMANTIC_RELATION_STOPWORDS = {
+    "mp4", "mkv", "web-dl", "webdl", "aac2", "mteam", "m-team", "uncensored-hd", "uncensored",
+    "removed", "mosaic", "onejav", "com", "best", "premium", "hfr", "c_gg5", "bod", "mgs", "sod",
+    "无码破解", "新模型无码破解", "自提征用", "第一會所新片", "第一会所新片", "ダスッ",
+}
+SEMANTIC_RELATION_STOPWORD_KEYS = {re.sub(r"[\s_.]+", "", value) for value in SEMANTIC_RELATION_STOPWORDS}
 PREFERENCE_CATEGORY_ALIASES = {
     "中出し": "中出", "中出": "中出",
     "已婚妇女": "人妻", "人妻": "人妻",
@@ -1475,6 +1481,16 @@ def _work_similarity_features(profile: WorkProfile, diagnostics: dict[str, int] 
     for term, raw_weight in sorted((weighted_terms or {}).items(), key=lambda row: float(row[1] or 0), reverse=True)[:80]:
         normalized = unicodedata.normalize("NFKC", str(term)).casefold().strip()
         if len(normalized) < 2 or normalized in {value.casefold() for value in SIMILARITY_CATEGORY_STOPWORDS}:
+            continue
+        compact = re.sub(r"[\s_.]+", "", normalized)
+        if (
+            normalized in SEMANTIC_RELATION_STOPWORDS
+            or compact in SEMANTIC_RELATION_STOPWORD_KEYS
+            or re.fullmatch(r"(?:x|h)26[45]|hevc|avc|aac\d*|flac|(?:720|1080|2160|4320)p|[48]k|web-?dl", normalized)
+            or normalized.startswith("ー")
+        ):
+            if diagnostics is not None:
+                diagnostics["dropped_operational_semantic_terms"] = int(diagnostics.get("dropped_operational_semantic_terms") or 0) + 1
             continue
         # Titles frequently contain a different script or historical alias for
         # an actor already present in structured facts. MDC-NG resolves both to
